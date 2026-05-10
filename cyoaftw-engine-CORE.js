@@ -1,21 +1,3 @@
-// ── EXPOSE IMPORTED FUNCTIONS ────────────────────────────────────
-
-window.buildRoomInstance           = (...a) => worldData.buildRoomInstance(...a);
-window.getRoomTemplate             = (...a) => worldData.getRoomTemplate(...a);
-window.getZoneTemplate             = (...a) => worldData.getZoneTemplate(...a);
-window.getRoomImage                = (...a) => worldData.getRoomImage(...a);
-
-window.getRandomPersonalityProfile = (...a) => npcData.getRandomPersonalityProfile(...a);
-window.getRandomAge                = (...a) => npcData.getRandomAge(...a);
-window.getAgeCategoryForRole       = (...a) => npcData.getAgeCategoryForRole(...a);
-window.generateNPCBehavior         = (...a) => npcData.generateNPCBehavior(...a);
-window.generatePostureOrAction     = (...a) => npcData.generatePostureOrAction(...a);
-
-window.buildPrompt                   = (...a) => contextBuilder.buildPrompt(...a);
-window.buildLocationNarrativeContext = (...a) => contextBuilder.buildLocationNarrativeContext(...a);
-window.serializeSceneBlock           = (...a) => contextBuilder.serializeSceneBlock(...a);
-window.buildNPCPersonaBlock          = (...a) => contextBuilder.buildNPCPersonaBlock(...a);
-
 // ── GAME STATE ───────────────────────────────────────────────────
 
 window.G = {
