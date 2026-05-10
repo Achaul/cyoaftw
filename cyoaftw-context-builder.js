@@ -1,6 +1,3 @@
-<!--https://perchance.org/cyoa-context-builder-->
-<script>
-
 // ── DERIVE ROOM CONTEXT ──────────────────────────────────────────
 function deriveRoomContext(room) {
     const ctx = {
@@ -275,5 +272,3 @@ function buildPrompt(room, npc, instruction) {
         `INSTRUCTION: ${instruction}`
     ].filter(Boolean).join("\n\n");
 }
-
-</script>

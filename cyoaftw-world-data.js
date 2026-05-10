@@ -1,6 +1,4 @@
-<!--https://perchance.org/cyoaftw-world-data-->
-<script>
-    // ── ZONE TEMPLATES ───────────────────────────────────────────────
+// ── ZONE TEMPLATES ───────────────────────────────────────────────
 
 const ZONE_TEMPLATES = [
     {
@@ -601,5 +599,3 @@ function buildRoomInstance(roomType, zoneName) {
         exits: {}
     };
 }
-
-</script>

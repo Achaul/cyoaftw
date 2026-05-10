@@ -1,6 +1,3 @@
-<!--https://perchance.org/cyoaftw-engine-core-->
-<script>
-
 // ── EXPOSE IMPORTED FUNCTIONS ────────────────────────────────────
 
 window.buildRoomInstance           = (...a) => worldData.buildRoomInstance(...a);
@@ -513,5 +510,3 @@ function showSpinner(msg) {
 function hideSpinner() {
     document.getElementById("loadingSpinner").classList.remove("active");
 }
-
-</script>

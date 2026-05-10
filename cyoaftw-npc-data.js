@@ -1,6 +1,3 @@
-<!--https://perchance.org/cyoa-mpc-data-->
-<script>
-
 // ── DATA ARRAYS ──────────────────────────────────────────────────
 
 const ARCHETYPES = [
@@ -234,5 +231,3 @@ function generatePostureOrAction(temperament) {
 
     return _rand(actions);
 }
-
-</script>
