@@ -1,0 +1,279 @@
+<!--https://perchance.org/cyoa-context-builder-->
+<script>
+
+// ── DERIVE ROOM CONTEXT ──────────────────────────────────────────
+function deriveRoomContext(room) {
+    const ctx = {
+        privacy: "public",
+        noise: "moderate",
+        danger: "safe",
+        socialExpectation: "casual",
+        function: "transit"
+    };
+
+    if (!room) return ctx;
+
+    const type = String(room.type || "").toLowerCase();
+    const zones = Array.isArray(room.allowedZones) ? room.allowedZones.map(z => z.toLowerCase()) : [];
+    const cluster = Array.isArray(room.parentCluster) ? room.parentCluster.map(c => c.toLowerCase()) : [];
+    const isConnector = !!room.isConnector;
+
+    const is = (v) => type.includes(v);
+    const inZone = (v) => zones.includes(v);
+    const inCluster = (v) => cluster.includes(v);
+
+    if (is("gate") || is("street") || is("avenue")) {
+        ctx.privacy = "public";
+        ctx.noise = "moderate";
+        ctx.socialExpectation = is("gate") ? "formal" : "casual";
+        ctx.function = "transit";
+        ctx.danger = is("gate") ? "tense" : "safe";
+    }
+
+    if (is("square") || is("market")) {
+        ctx.privacy = "public";
+        ctx.noise = "loud";
+        ctx.function = "social";
+    }
+
+    if (is("tavern") || is("taproom") || inCluster("tavern")) {
+        ctx.privacy = "semi-private";
+        ctx.noise = "loud";
+        ctx.function = "social";
+    }
+
+    if (is("back room") || is("private") || is("parlour")) {
+        ctx.privacy = "private";
+        ctx.noise = "quiet";
+        ctx.socialExpectation = "intimate";
+    }
+
+    if (is("inn") || inCluster("inn")) {
+        ctx.privacy = is("common") ? "semi-private" : "private";
+        ctx.noise = is("common") ? "moderate" : "quiet";
+        ctx.function = "rest";
+    }
+
+    if (is("guild") || is("quest board") || inCluster("guild")) {
+        ctx.socialExpectation = "formal";
+        ctx.function = "work";
+    }
+
+    if (is("watch") || is("barracks")) {
+        ctx.socialExpectation = "formal";
+        ctx.danger = "tense";
+        ctx.function = "work";
+    }
+
+    if (is("shrine") || is("library")) {
+        ctx.privacy = "private";
+        ctx.noise = "quiet";
+        ctx.socialExpectation = "formal";
+        ctx.function = is("shrine") ? "ritual" : "work";
+    }
+
+    if (inZone("dungeon") || inZone("ruins") || is("trap") || is("tunnel") || is("cavern")) {
+        ctx.danger = "hostile";
+        ctx.noise = "quiet";
+        ctx.socialExpectation = "formal";
+        ctx.function = "transit";
+    }
+
+    if (is("cell") || is("vault")) {
+        ctx.privacy = "private";
+        ctx.noise = "quiet";
+    }
+
+    if (isConnector) {
+        ctx.function = "transit";
+    }
+
+    return ctx;
+}
+
+// ── BUILD LOCATION NARRATIVE CONTEXT ────────────────────────────
+function buildLocationNarrativeContext(room) {
+    if (!room) return null;
+
+    const ctx = deriveRoomContext(room);
+
+    const creatures = Array.isArray(room.creatures)
+        ? room.creatures.filter(n => n && !n.unconscious)
+        : [];
+
+    const structural = Array.isArray(room.structural)
+        ? room.structural
+        : [];
+
+    const items = Array.isArray(room.items)
+        ? room.items.filter(i => i && !i.unconscious && !i.isUnconsciousBody)
+        : [];
+
+    const rolesPresent = {};
+    const speciesPresent = {};
+
+    for (const npc of creatures) {
+        if (npc.role) rolesPresent[npc.role] = (rolesPresent[npc.role] || 0) + 1;
+        if (npc.species) speciesPresent[npc.species] = (speciesPresent[npc.species] || 0) + 1;
+    }
+
+    const anchoredInteractions = creatures
+        .filter(n => n.memory?.anchorObjectId)
+        .map(n => ({ role: n.role, anchor: n.memory.anchorObjectId }));
+
+    return {
+        room: {
+            type: room.type,
+            role: room.role,
+            name: room.displayName || room.name || room.type,
+            baseDescription: room.baseDescription || null,
+            description: room.description || null
+        },
+        environment: {
+            privacy: ctx.privacy,
+            noise: ctx.noise,
+            danger: ctx.danger,
+            function: ctx.function,
+            socialExpectation: ctx.socialExpectation
+        },
+        structure: structural.map(s => ({
+            id: s.id,
+            name: s.name,
+            tags: s.tags || []
+        })),
+        npcs: {
+            count: creatures.length,
+            roles: rolesPresent,
+            species: speciesPresent,
+            anchored: anchoredInteractions
+        },
+        items: {
+            count: items.length
+        }
+    };
+}
+
+// ── SERIALIZE SCENE BLOCK ────────────────────────────────────────
+function serializeSceneBlock(locCtx) {
+    if (!locCtx) return "";
+
+    const room = locCtx.room;
+    const env = locCtx.environment;
+    const npcs = locCtx.npcs;
+    const items = locCtx.items;
+    const structure = locCtx.structure;
+
+    const lines = [];
+
+    lines.push(`LOCATION: ${room.name} (${room.type})`);
+
+    if (room.baseDescription) {
+        lines.push(`DESCRIPTION: ${room.baseDescription}`);
+    }
+
+    lines.push(`ATMOSPHERE: ${env.privacy}, ${env.noise}, ${env.danger}, ${env.function}, ${env.socialExpectation}`);
+
+    if (npcs.count > 0) {
+        const roleList = Object.entries(npcs.roles)
+            .map(([role, count]) => `${count} ${role}`)
+            .join(", ");
+        const speciesList = Object.entries(npcs.species)
+            .map(([species, count]) => `${count} ${species}`)
+            .join(", ");
+        lines.push(`PRESENT: ${roleList} (${speciesList})`);
+    } else {
+        lines.push(`PRESENT: nobody else is here`);
+    }
+
+    if (structure.length > 0) {
+        lines.push(`OBJECTS: ${structure.map(s => s.name).join(", ")}`);
+    }
+
+    if (items.count > 0) {
+        lines.push(`ITEMS: ${items.count} item(s) visible`);
+    }
+
+    return lines.join("\n");
+}
+
+// ── BUILD NPC PERSONA BLOCK ──────────────────────────────────────
+function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
+    if (!npc) return "";
+
+    const gender = npc.gender || "unknown";
+    let pronoun = "they";
+    if (gender === "female") pronoun = "she";
+    else if (gender === "male") pronoun = "he";
+
+    const profile = npc.personalityProfile || {};
+    const temperament = profile.temperament || npc.temperament || "neutral";
+    const archetype = profile.archetype || "";
+    const traits = Array.isArray(profile.traits) && profile.traits.length
+        ? profile.traits
+        : [];
+
+    const quirks = Array.isArray(profile.quirks) && profile.quirks.length
+        ? profile.quirks : [];
+    let quirksLine = "";
+    if (quirks.length && Math.random() < 0.3) {
+        quirksLine = `- Quirk: ${quirks[Math.floor(Math.random() * quirks.length)]} (occasional, do not repeat every line)`;
+    }
+
+    const mood = npc.memory?.lastMood || npc.mood || "neutral";
+    const favorability = typeof npc.memory?.favorability === "number"
+        ? npc.memory.favorability : 0;
+    const hostility = typeof npc.hostility === "number"
+        ? npc.hostility : 0;
+
+    function favorLabel(v) {
+        if (v >= 80) return "trusted";
+        if (v >= 60) return "liked";
+        if (v >= 40) return "neutral";
+        if (v >= 20) return "untrusted";
+        return "disliked";
+    }
+    function hostLabel(v) {
+        if (v >= 80) return "angry";
+        if (v >= 60) return "upset";
+        if (v >= 40) return "wary";
+        if (v >= 20) return "somewhat wary";
+        return "neutral";
+    }
+
+    const speechStyle = npc.speechStyle || profile.speechStyle || "";
+
+    const lines = [
+        `${title}:`,
+        `- Name: ${npc.name || "Unknown"}`,
+        `- Role: ${npc.role || "unknown"}`,
+        `- Species: ${npc.species || "unknown"}, ${gender} (pronoun: ${pronoun})`,
+        npc.age ? `- Age: ${npc.age} (${npc.ageCategory || ""})` : "",
+        `- Temperament: ${temperament}`,
+        archetype ? `- Archetype: ${archetype}` : "",
+        traits.length ? `- Traits: ${traits.join(", ")}` : "",
+        quirksLine,
+        speechStyle ? `- Speech style: ${speechStyle}` : "",
+        `- Mood: ${mood}`,
+        `- Favorability toward player: ${favorability}/100 (${favorLabel(favorability)})`,
+        `- Hostility toward player: ${hostility}/100 (${hostLabel(hostility)})`,
+        npc.backstory ? `- Backstory: ${String(npc.backstory).slice(0, 200)}` : "",
+        npc.action ? `- Currently: ${npc.action}` : ""
+    ].filter(Boolean);
+
+    return lines.join("\n");
+}
+
+// ── MASTER PROMPT BUILDER ────────────────────────────────────────
+function buildPrompt(room, npc, instruction) {
+    const locCtx = buildLocationNarrativeContext(room);
+    const sceneBlock = serializeSceneBlock(locCtx);
+    const npcBlock = npc ? buildNPCPersonaBlock(npc) : "";
+
+    return [
+        sceneBlock,
+        npcBlock,
+        `INSTRUCTION: ${instruction}`
+    ].filter(Boolean).join("\n\n");
+}
+
+</script>
