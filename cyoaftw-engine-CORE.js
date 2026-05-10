@@ -220,14 +220,16 @@ function movePlayer(direction) {
     const room = G.activeRoom;
     if (!room || !room.exits[direction]) return;
 
-    const newCoords   = room.exits[direction];
-    const zone        = G.activeRoom.zone || "Town";
+    const newCoords    = room.exits[direction];
+    const zone         = G.activeRoom.zone || "Town";
     const zoneTemplate = getZoneTemplate(zone);
-    const roomType    = zoneTemplate ? rand(zoneTemplate.roomTypes) : "Street";
+    const roomType     = zoneTemplate ? rand(zoneTemplate.roomTypes) : "Street";
 
     G.player.coords = newCoords;
-    G.activeRoom    = getOrCreateRoom(newCoords, zone, roomType);
-    G.activeNPC     = null;
+    const newRoom = getOrCreateRoom(newCoords, zone, roomType);
+    if (!newRoom) { console.warn("Room creation failed for", newCoords); return; } // ← guard
+    G.activeRoom = newRoom;
+    G.activeNPC  = null;
 
     renderRoom();
     schedulePrefetch();
