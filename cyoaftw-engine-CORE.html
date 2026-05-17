@@ -198,17 +198,14 @@ body {
 }
 
 #roomImageWrapEl {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    min-height: 200px; /* adjust to taste */
     position: relative;
-    width: 100%;
-    flex-shrink: 0;
 }
 
-#roomImageEl {
-    width: 100%;
-    max-height: 340px;
-    object-fit: cover;
-    display: block;
-}
+
 
 #roomNameEl {
     position: absolute;
@@ -720,7 +717,6 @@ body {
     <!-- Center: Room + chat -->
     <div id="centerPanel">
         <div id="roomImageWrapEl">
-            <img id="roomImageEl" src="" alt="" />
             <div id="roomNameEl"></div>
         </div>
         <div id="roomDescEl"></div>

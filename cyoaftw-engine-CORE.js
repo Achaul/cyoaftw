@@ -376,10 +376,13 @@ function renderRoom() {
     const room = G.activeRoom;
     if (!room) return;
 
-    const imgEl = document.getElementById("roomImageEl");
-    if (imgEl) {
-        if (room.image) { imgEl.src = room.image; imgEl.style.display = "block"; }
-        else imgEl.style.display = "none";
+    const wrapEl = document.getElementById("roomImageWrapEl");
+    if (wrapEl) {
+        if (room.image) {
+            wrapEl.style.backgroundImage = `url('${room.image}')`;
+        } else {
+            wrapEl.style.backgroundImage = "";
+        }
     }
 
     const nameEl = document.getElementById("roomNameEl");
