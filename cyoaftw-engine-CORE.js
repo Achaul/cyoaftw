@@ -376,7 +376,7 @@ function renderRoom() {
     const room = G.activeRoom;
     if (!room) return;
 
-    const wrapEl = document.getElementById("roomImageWrapEl");
+    const wrapEl = document.getElementById("centerPanel");
     if (wrapEl) {
         if (room.image) {
             wrapEl.style.backgroundImage = `url('${room.image}')`;
