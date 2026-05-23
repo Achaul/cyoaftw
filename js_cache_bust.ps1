@@ -7,20 +7,20 @@ $UtcStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss")
 
 Write-Host "Using UTC cache version: $UtcStamp"
 
-# Read file as raw text
+# Read file
 $content = [System.IO.File]::ReadAllText($FilePath)
 
-# Replace placeholder
+# Replace placeholder OR existing timestamp
 $content = $content -replace '\?\{\{UTC\}\}\}\}', "?v=$UtcStamp"
+$content = $content -replace '\?v=\d+', "?v=$UtcStamp"
 
-# Replace existing timestamps
-$content = $content -replace '\?v=\d{14}', "?v=$UtcStamp"
+# Write UTF8 without BOM
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-# Write UTF-8 without BOM
 [System.IO.File]::WriteAllText(
     $FilePath,
     $content,
-    (New-Object System.Text.UTF8Encoding($false))
+    $utf8NoBom
 )
 
-Write-Host "Updated cache-buster timestamps."
+Write-Host "Updated cache-buster timestamps successfully."

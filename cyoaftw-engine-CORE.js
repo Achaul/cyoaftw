@@ -174,7 +174,6 @@ function saveGameState() {
 
 
 
-
 // ── ROOM GENERATION ──────────────────────────────────────────────
 
 function getOrCreateRoom(coords, zoneName, roomType) {
