@@ -198,33 +198,60 @@ body {
 }
 
 #roomImageWrapEl {
+    position: relative;
+    width: 100%;
+    min-height: 220px;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    min-height: 200px; /* adjust to taste */
-    position: relative;
+    background-color: #111; /* fallback when no image */
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    overflow: hidden;
+    border-radius: 6px;
 }
 
-
+/* dark overlay so text is always readable */
+#roomImageWrapEl::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 0;
+}
 
 #roomNameEl {
-    position: absolute;
-    top: 12px;
-    left: 0; right: 0;
-    text-align: center;
-    font-size: 16px;
+    position: relative;
+    z-index: 1;
     font-weight: bold;
+    font-size: 1.1em;
+    text-align: center;
+    padding: 10px 16px 4px;
     color: #fff;
-    text-shadow: 0 1px 4px #000;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
 }
 
 #roomDescEl {
-    padding: 10px 16px;
-    font-size: 12px;
-    color: #999;
+    position: relative;
+    z-index: 1;
+    font-size: 0.95em;
     text-align: center;
-    border-bottom: 1px solid #1e1e1e;
-    background: #111;
+    padding: 8px 24px 16px;
+    color: #eee;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+}
+
+#narrationEl {
+    position: relative;
+    z-index: 1;
+    font-size: 0.9em;
+    text-align: center;
+    padding: 4px 24px 12px;
+    color: #ddd;
+    font-style: italic;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.9);
 }
 
 #npcListEl {
@@ -719,8 +746,9 @@ body {
     <div id="centerPanel">
         <div id="roomImageWrapEl">
             <div id="roomNameEl"></div>
+            <div id="roomDescEl"></div>
+            <div id="narrationEl"></div>
         </div>
-        <div id="roomDescEl"></div>
         <div id="npcListEl"></div>
         <div id="exitGridEl">
             <button class="exit-btn" id="exit-NW"></button>

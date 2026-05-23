@@ -119,6 +119,62 @@ function beginAdventure() {
     );
 }
 
+// 
+
+// ── SAVE / LOAD HELPERS ──────────────────────────────────────────
+
+function hasSavedGame() {
+    try {
+        const raw = localStorage.getItem("cyoaftwSave");
+        if (!raw) return false;
+
+        const save = JSON.parse(raw);
+
+        return !!(
+            save &&
+            save.version === 1 &&
+            save.player &&
+            save.roomMap &&
+            save.player.coords &&
+            save.roomMap[save.player.coords]
+        );
+    } catch (err) {
+        console.warn("Saved game check failed:", err);
+        return false;
+    }
+}
+
+function saveGameState() {
+    try {
+        const saveData = {
+            version: 1,
+
+            player: G.player,
+
+            roomMap: G.roomMap,
+
+            meta: {
+                savedAt: Date.now()
+            }
+        };
+
+        localStorage.setItem(
+            "cyoaftwSave",
+            JSON.stringify(saveData)
+        );
+
+        console.log("Game saved.");
+        return true;
+
+    } catch (err) {
+        console.error("Save failed:", err);
+        return false;
+    }
+}
+
+
+
+
 // ── ROOM GENERATION ──────────────────────────────────────────────
 
 function getOrCreateRoom(coords, zoneName, roomType) {
@@ -376,9 +432,10 @@ function renderRoom() {
     const room = G.activeRoom;
     if (!room) return;
 
-    const wrapEl = document.getElementById("centerPanel");
+    const wrapEl = document.getElementById("roomImageWrapEl");
     if (wrapEl) {
         if (room.image) {
+            console.log("Setting bg image:", room.image);
             wrapEl.style.backgroundImage = `url('${room.image}')`;
         } else {
             wrapEl.style.backgroundImage = "";
