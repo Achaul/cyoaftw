@@ -749,6 +749,14 @@ body {
             <div id="roomDescEl"></div>
             <div id="narrationEl"></div>
         </div>
+        <div id="chatPanelEl">
+            <div id="chatLogEl"></div>
+            <div id="chatInputWrapEl">
+                <input id="chatInputEl" type="text" placeholder="Say something..."
+                    onkeydown="if(event.key==='Enter') sendChat()" />
+                <button id="chatSendBtn" onclick="sendChat()">Send</button>
+            </div>
+        </div>
         <div id="npcListEl"></div>
         <div id="exitGridEl">
             <button class="exit-btn" id="exit-NW"></button>
@@ -760,14 +768,6 @@ body {
             <button class="exit-btn" id="exit-SW"></button>
             <button class="exit-btn" id="exit-S"></button>
             <button class="exit-btn" id="exit-SE"></button>
-        </div>
-        <div id="chatPanelEl">
-            <div id="chatLogEl"></div>
-            <div id="chatInputWrapEl">
-                <input id="chatInputEl" type="text" placeholder="Say something..."
-                    onkeydown="if(event.key==='Enter') sendChat()" />
-                <button id="chatSendBtn" onclick="sendChat()">Send</button>
-            </div>
         </div>
     </div>
 

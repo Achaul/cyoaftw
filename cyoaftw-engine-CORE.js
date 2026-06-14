@@ -17,6 +17,7 @@ window.G = {
     roomMap: {},
     activeRoom: null,
     activeNPC: null,
+    story: createStoryDirectorState(),
     prefetchCache: {},
     prefetchQueue: [],
     isPrefetching: false
@@ -41,6 +42,146 @@ function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 function getRoom(coords) { return G.roomMap[coords] || null; }
 function setRoom(coords, room) { G.roomMap[coords] = room; }
+
+// ── STORY DIRECTOR ───────────────────────────────────────────────
+
+function createStoryDirectorState() {
+    return {
+        act: 1,
+        tension: 15,
+        activeThreads: [],
+        discoveredFacts: [],
+        recentEvents: [],
+        unresolvedQuestions: []
+    };
+}
+
+function clampStoryTension(value) {
+    return Math.max(0, Math.min(100, value));
+}
+
+function rememberStoryEvent(type, text, weight = 0) {
+    if (!G.story) G.story = createStoryDirectorState();
+
+    G.story.recentEvents.unshift({
+        type,
+        text,
+        room: G.activeRoom?.displayName || G.activeRoom?.name || null,
+        turn: Date.now()
+    });
+
+    G.story.recentEvents = G.story.recentEvents.slice(0, 8);
+    G.story.tension = clampStoryTension((G.story.tension || 0) + weight);
+}
+
+function addStoryFact(text) {
+    if (!G.story) G.story = createStoryDirectorState();
+    if (!text || G.story.discoveredFacts.includes(text)) return;
+    G.story.discoveredFacts.push(text);
+    G.story.discoveredFacts = G.story.discoveredFacts.slice(-12);
+}
+
+function addStoryQuestion(text) {
+    if (!G.story) G.story = createStoryDirectorState();
+    if (!text || G.story.unresolvedQuestions.includes(text)) return;
+    G.story.unresolvedQuestions.push(text);
+    G.story.unresolvedQuestions = G.story.unresolvedQuestions.slice(-8);
+}
+
+function ensureStoryThread(seed) {
+    if (!G.story) G.story = createStoryDirectorState();
+    if (!seed?.id) return null;
+
+    let thread = G.story.activeThreads.find(t => t.id === seed.id);
+    if (!thread) {
+        thread = {
+            id: seed.id,
+            title: seed.title,
+            status: "active",
+            intensity: seed.intensity || 20,
+            beats: []
+        };
+        G.story.activeThreads.push(thread);
+    }
+
+    return thread;
+}
+
+function addStoryBeat(threadId, text, intensityDelta = 0) {
+    const thread = ensureStoryThread({
+        id: threadId,
+        title: threadId.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    });
+    if (!thread || !text) return;
+
+    thread.beats.push({
+        text,
+        room: G.activeRoom?.displayName || G.activeRoom?.name || null,
+        turn: Date.now()
+    });
+    thread.beats = thread.beats.slice(-6);
+    thread.intensity = clampStoryTension((thread.intensity || 0) + intensityDelta);
+}
+
+function updateStoryOnAdventureStart(zone, roomType) {
+    G.story = createStoryDirectorState();
+
+    const title = `${zone} Rumblings`;
+    ensureStoryThread({
+        id: `local-${String(zone).toLowerCase()}`,
+        title,
+        intensity: 20
+    });
+
+    addStoryFact(`${G.player.name} began their adventure in ${zone}.`);
+    addStoryQuestion(`What is unsettled beneath the ordinary life of ${zone}?`);
+    rememberStoryEvent("start", `The adventure began in ${roomType}.`, 5);
+}
+
+function updateStoryOnRoomEntered(room, direction) {
+    if (!room) return;
+
+    const danger = deriveRoomContext(room).danger;
+    const roomName = room.displayName || room.name || room.type || "an unknown place";
+    const hasNPCs = Array.isArray(room.creatures) && room.creatures.length > 0;
+
+    let weight = danger === "hostile" ? 12 : danger === "tense" ? 6 : -1;
+    if (hasNPCs) weight += 2;
+
+    rememberStoryEvent("movement", `${G.player.name} moved ${direction} into ${roomName}.`, weight);
+
+    if (danger === "hostile") {
+        addStoryQuestion(`What danger is waiting in ${roomName}?`);
+        addStoryBeat("local-danger", `${roomName} felt dangerous.`, 8);
+    } else if (hasNPCs) {
+        addStoryBeat("local-encounters", `${roomName} held someone worth noticing.`, 3);
+    }
+
+    if ((G.story.tension || 0) >= 70 && G.story.act < 2) {
+        G.story.act = 2;
+        rememberStoryEvent("act-shift", "The story pressure rose into a more dangerous phase.", 0);
+    }
+}
+
+function updateStoryOnNpcInteraction(npc, playerInput, responseText) {
+    if (!npc) return;
+
+    const npcName = npc.name || "Someone";
+    const summary = `${G.player.name} spoke with ${npcName}: "${playerInput.slice(0, 80)}"`;
+    rememberStoryEvent("conversation", summary, 2);
+
+    if (!npc.memory.metPlayer) {
+        addStoryFact(`${G.player.name} met ${npcName}.`);
+        addStoryBeat("local-encounters", `${npcName} entered the story.`, 4);
+    }
+
+    const lowerInput = playerInput.toLowerCase();
+    const lowerResponse = String(responseText || "").toLowerCase();
+    if (lowerInput.includes("rumor") || lowerInput.includes("secret") || lowerResponse.includes("secret")) {
+        addStoryQuestion(`What does ${npcName} know that has not been said plainly?`);
+        addStoryBeat("local-rumors", `${npcName} hinted that there may be more to learn.`, 6);
+    }
+}
 
 // ── SETUP FLOW ───────────────────────────────────────────────────
 
@@ -108,6 +249,7 @@ function beginAdventure() {
 
     showSpinner("Preparing your adventure...");
     G.activeRoom = getOrCreateRoom("0,0", zone, room);
+    updateStoryOnAdventureStart(zone, room);
     hideSpinner();
 
     renderRoom();
@@ -152,6 +294,8 @@ function saveGameState() {
             player: G.player,
 
             roomMap: G.roomMap,
+
+            story: G.story,
 
             meta: {
                 savedAt: Date.now()
@@ -285,6 +429,7 @@ function movePlayer(direction) {
     if (!newRoom) { console.warn("Room creation failed for", newCoords); return; } // ← guard
     G.activeRoom = newRoom;
     G.activeNPC  = null;
+    updateStoryOnRoomEntered(newRoom, direction);
 
     renderRoom();
     schedulePrefetch();
@@ -362,6 +507,7 @@ Speak only as ${npc.name} would speak.
 
     const responseText = typeof result === "string" ? result : result.text || "";
     addChatMessage("left", npc.name, responseText);
+    updateStoryOnNpcInteraction(npc, playerInput, responseText);
 
     npc.memory.metPlayer = true;
     npc.memory.lastMood  = "neutral";

@@ -193,6 +193,53 @@ function serializeSceneBlock(locCtx) {
     return lines.join("\n");
 }
 
+// ── SERIALIZE STORY DIRECTOR BLOCK ──────────────────────────────
+function serializeStoryDirectorBlock(story) {
+    if (!story) return "";
+
+    const lines = [
+        `STORY STATE: act ${story.act || 1}, tension ${story.tension || 0}/100`
+    ];
+
+    const threads = Array.isArray(story.activeThreads)
+        ? story.activeThreads.filter(t => t && t.status !== "resolved").slice(0, 4)
+        : [];
+
+    if (threads.length) {
+        lines.push("ACTIVE THREADS:");
+        threads.forEach(thread => {
+            const lastBeat = Array.isArray(thread.beats) && thread.beats.length
+                ? thread.beats[thread.beats.length - 1].text
+                : "new thread";
+            lines.push(`- ${thread.title || thread.id}: ${lastBeat} (intensity ${thread.intensity || 0}/100)`);
+        });
+    }
+
+    const facts = Array.isArray(story.discoveredFacts)
+        ? story.discoveredFacts.slice(-5)
+        : [];
+    if (facts.length) {
+        lines.push(`KNOWN FACTS: ${facts.join("; ")}`);
+    }
+
+    const questions = Array.isArray(story.unresolvedQuestions)
+        ? story.unresolvedQuestions.slice(-4)
+        : [];
+    if (questions.length) {
+        lines.push(`UNRESOLVED QUESTIONS: ${questions.join("; ")}`);
+    }
+
+    const events = Array.isArray(story.recentEvents)
+        ? story.recentEvents.slice(0, 5)
+        : [];
+    if (events.length) {
+        lines.push("RECENT EVENTS:");
+        events.forEach(event => lines.push(`- ${event.text}`));
+    }
+
+    return lines.join("\n");
+}
+
 // ── BUILD NPC PERSONA BLOCK ──────────────────────────────────────
 function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
     if (!npc) return "";
@@ -264,10 +311,12 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
 function buildPrompt(room, npc, instruction) {
     const locCtx = buildLocationNarrativeContext(room);
     const sceneBlock = serializeSceneBlock(locCtx);
+    const storyBlock = serializeStoryDirectorBlock(window.G?.story);
     const npcBlock = npc ? buildNPCPersonaBlock(npc) : "";
 
     return [
         sceneBlock,
+        storyBlock,
         npcBlock,
         `INSTRUCTION: ${instruction}`
     ].filter(Boolean).join("\n\n");
