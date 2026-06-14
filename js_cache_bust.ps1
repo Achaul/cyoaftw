@@ -11,8 +11,8 @@ Write-Host "Using UTC cache version: $UtcStamp"
 $content = [System.IO.File]::ReadAllText($FilePath)
 
 # Replace placeholder OR existing timestamp
-$content = $content -replace '\?\{\{UTC\}\}\}\}', "?v=$UtcStamp"
-$content = $content -replace '\?v=\d+', "?v=$UtcStamp"
+$content = $content -replace '\?\{\{UTC\}\}\}\}', "?$UtcStamp"
+$content = $content -replace '\?\d+', "?$UtcStamp"
 
 # Write UTF8 without BOM
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
