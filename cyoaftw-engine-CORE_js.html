@@ -44,6 +44,186 @@ function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) 
 function getRoom(coords) { return G.roomMap[coords] || null; }
 function setRoom(coords, room) { G.roomMap[coords] = room; }
 
+const ROOM_DIRECTIONS = ["N","S","E","W","NE","NW","SE","SW"];
+const OPPOSITE_DIRECTIONS = {
+    N: "S", S: "N",
+    E: "W", W: "E",
+    NE: "SW", SW: "NE",
+    NW: "SE", SE: "NW"
+};
+const DIRECTION_ALIASES = {
+    NORTH: "N",
+    SOUTH: "S",
+    EAST: "E",
+    WEST: "W",
+    NORTHEAST: "NE",
+    NORTHWEST: "NW",
+    SOUTHEAST: "SE",
+    SOUTHWEST: "SW"
+};
+
+function normalizeDirection(direction) {
+    const value = String(direction || "").toUpperCase();
+    if (OPPOSITE_DIRECTIONS[value]) return value;
+    return DIRECTION_ALIASES[value] || null;
+}
+
+function oppositeDirection(direction) {
+    const dir = normalizeDirection(direction);
+    return dir ? OPPOSITE_DIRECTIONS[dir] : null;
+}
+
+function parseCoords(coords) {
+    if (typeof coords !== "string") return null;
+
+    const parts = coords.split(",");
+    if (parts.length !== 2) return null;
+
+    const x = Number(parts[0]);
+    const y = Number(parts[1]);
+    if (!isFinite(x) || !isFinite(y)) return null;
+
+    return {
+        x,
+        y,
+        key: `${x},${y}`
+    };
+}
+
+function getAdjacentCoords(coords, direction) {
+    const origin = parseCoords(coords);
+    const dir = normalizeDirection(direction);
+    if (!origin || !dir) return null;
+
+    const off = dirToOffset(dir);
+    return `${origin.x + off.x},${origin.y + off.y}`;
+}
+
+function getBuildableRoomTypesForZone(zoneName) {
+    const zoneTemplate = getZoneTemplate(zoneName);
+    const roomTypes = zoneTemplate && Array.isArray(zoneTemplate.roomTypes)
+        ? zoneTemplate.roomTypes
+        : [];
+
+    return roomTypes.filter(roomType => !!getRoomTemplate(roomType));
+}
+
+function chooseRoomTypeForZone(zoneName, fallbackRoomType) {
+    const buildableTypes = getBuildableRoomTypesForZone(zoneName);
+    if (buildableTypes.length > 0) return rand(buildableTypes);
+
+    if (fallbackRoomType && getRoomTemplate(fallbackRoomType)) {
+        return fallbackRoomType;
+    }
+
+    if (getRoomTemplate("Street")) return "Street";
+    if (getRoomTemplate("Corridor")) return "Corridor";
+    return fallbackRoomType || "Street";
+}
+
+function ensureRoomExits(room) {
+    if (!room) return null;
+
+    if (!room.exits || typeof room.exits !== "object" || Array.isArray(room.exits)) {
+        room.exits = {};
+    }
+
+    return room.exits;
+}
+
+function setRoomExit(room, direction, targetCoords) {
+    const exits = ensureRoomExits(room);
+    const dir = normalizeDirection(direction);
+    const target = parseCoords(targetCoords);
+    if (!exits || !dir || !target) return false;
+
+    if (exits[dir] === target.key) return false;
+    exits[dir] = target.key;
+    return true;
+}
+
+function repairRoomExits(room) {
+    if (!room) return false;
+
+    const origin = parseCoords(room.coords);
+    const exits = ensureRoomExits(room);
+    let changed = false;
+
+    if (!origin || !exits) return changed;
+
+    Object.keys(exits).forEach(originalDir => {
+        const dir = normalizeDirection(originalDir);
+        const target = parseCoords(exits[originalDir]);
+
+        if (!dir || !target) {
+            delete exits[originalDir];
+            changed = true;
+            return;
+        }
+
+        const expectedCoords = getAdjacentCoords(origin.key, dir);
+        if (target.key !== expectedCoords) {
+            delete exits[originalDir];
+            changed = true;
+            return;
+        }
+
+        if (originalDir !== dir) {
+            delete exits[originalDir];
+            exits[dir] = target.key;
+            changed = true;
+            return;
+        }
+
+        if (exits[dir] !== target.key) {
+            exits[dir] = target.key;
+            changed = true;
+        }
+    });
+
+    return changed;
+}
+
+function repairRoomMapExits() {
+    if (!G.roomMap || typeof G.roomMap !== "object") {
+        G.roomMap = {};
+        return true;
+    }
+
+    let changed = false;
+    const coordsList = Object.keys(G.roomMap);
+
+    coordsList.forEach(coords => {
+        const room = G.roomMap[coords];
+        const parsed = parseCoords(coords);
+
+        if (!room || !parsed) return;
+
+        if (room.coords !== parsed.key) {
+            room.coords = parsed.key;
+            changed = true;
+        }
+
+        if (repairRoomExits(room)) changed = true;
+    });
+
+    coordsList.forEach(coords => {
+        const room = G.roomMap[coords];
+        if (!room) return;
+
+        Object.keys(room.exits || {}).forEach(dir => {
+            const targetCoords = room.exits[dir];
+            const targetRoom = G.roomMap[targetCoords];
+            const backDir = oppositeDirection(dir);
+
+            if (!targetRoom || !backDir) return;
+            if (setRoomExit(targetRoom, backDir, coords)) changed = true;
+        });
+    });
+
+    return changed;
+}
+
 // ── STORY DIRECTOR ───────────────────────────────────────────────
 
 function createStoryDirectorState() {
@@ -253,6 +433,7 @@ function beginAdventure() {
 
     showSpinner("Preparing your adventure...");
     G.activeRoom = getOrCreateRoom("0,0", zone, room);
+    repairRoomMapExits();
     updateStoryOnAdventureStart(zone, room);
     hideSpinner();
 
@@ -409,6 +590,7 @@ function resumeSavedGame() {
     G.player = save.player;
     G.roomMap = save.roomMap || {};
     G.story = save.story || createStoryDirectorState();
+    repairRoomMapExits();
     G.activeRoom = G.roomMap[G.player.coords] || null;
     G.activeNPC = null;
     G.prefetchCache = {};
@@ -471,6 +653,8 @@ if (document.readyState === "loading") {
 
 function saveGameState() {
     try {
+        repairRoomMapExits();
+
         const saveData = {
             version: 1,
 
@@ -505,29 +689,39 @@ function saveGameState() {
 // ── ROOM GENERATION ──────────────────────────────────────────────
 
 function getOrCreateRoom(coords, zoneName, roomType) {
-    if (G.roomMap[coords]) return G.roomMap[coords];
+    const parsed = parseCoords(coords);
+    if (!parsed) return null;
 
-    const room = buildRoomInstance(roomType, zoneName);
+    if (G.roomMap[parsed.key]) {
+        repairRoomExits(G.roomMap[parsed.key]);
+        return G.roomMap[parsed.key];
+    }
+
+    const buildRoomType = getRoomTemplate(roomType)
+        ? roomType
+        : chooseRoomTypeForZone(zoneName, "Street");
+    const room = buildRoomInstance(buildRoomType, zoneName);
     if (!room) return null;
 
-    room.coords  = coords;
-    room.exits   = generateExits(coords, zoneName);
+    room.coords  = parsed.key;
+    room.exits   = generateExits(parsed.key, zoneName);
     room.creatures = spawnNPCsForRoom(room, zoneName);
 
-    setRoom(coords, room);
+    repairRoomExits(room);
+    setRoom(parsed.key, room);
     return room;
 }
 
 function generateExits(coords, zoneName) {
-    const [x, y] = coords.split(",").map(Number);
-    const directions = ["N","S","E","W","NE","NW","SE","SW"];
+    const origin = parseCoords(coords);
     const exits = {};
+    if (!origin) return exits;
+
     const count = randInt(1, 3);
-    const shuffled = directions.sort(() => Math.random() - 0.5);
+    const shuffled = ROOM_DIRECTIONS.slice().sort(() => Math.random() - 0.5);
     for (let i = 0; i < count; i++) {
         const dir = shuffled[i];
-        const off = dirToOffset(dir);
-        exits[dir] = `${x + off.x},${y + off.y}`;
+        exits[dir] = getAdjacentCoords(origin.key, dir);
     }
     return exits;
 }
@@ -600,26 +794,49 @@ function createNPC(species, room, zoneTemplate) {
 // ── MOVEMENT ─────────────────────────────────────────────────────
 
 function movePlayer(direction) {
+    const dir = normalizeDirection(direction);
     const room = G.activeRoom;
-    if (!room || !room.exits[direction]) return;
+    if (!room || !dir) return;
 
-    const newCoords    = room.exits[direction];
+    if (!room.coords && G.player && G.player.coords) room.coords = G.player.coords;
+    repairRoomExits(room);
+
+    const target = parseCoords(room.exits[dir]);
+    const expectedCoords = getAdjacentCoords(room.coords, dir);
+    if (!target || target.key !== expectedCoords) {
+        if (room.exits) delete room.exits[dir];
+        renderRoom();
+        saveGameState();
+        console.warn("Removed invalid exit", dir, "from", room.coords);
+        return;
+    }
+
+    const newCoords    = target.key;
     const zone         = G.activeRoom.zone || "Town";
-    const zoneTemplate = getZoneTemplate(zone);
-    const roomType     = zoneTemplate ? rand(zoneTemplate.roomTypes) : "Street";
+    const roomType     = chooseRoomTypeForZone(zone, "Street");
+
+    const newRoom = getOrCreateRoom(newCoords, zone, roomType);
+    if (!newRoom) {
+        delete room.exits[dir];
+        renderRoom();
+        saveGameState();
+        console.warn("Room creation failed for", newCoords);
+        return;
+    }
+
+    setRoomExit(newRoom, oppositeDirection(dir), room.coords);
+    repairRoomMapExits();
 
     G.player.coords = newCoords;
-    const newRoom = getOrCreateRoom(newCoords, zone, roomType);
-    if (!newRoom) { console.warn("Room creation failed for", newCoords); return; } // ← guard
     G.activeRoom = newRoom;
     G.activeNPC  = null;
-    updateStoryOnRoomEntered(newRoom, direction);
+    updateStoryOnRoomEntered(newRoom, dir);
 
     clearChatLog();
     renderRoom();
     schedulePrefetch();
 
-    setNarration(buildRoomNarration(G.activeRoom, "move", direction));
+    setNarration(buildRoomNarration(G.activeRoom, "move", dir));
 
     saveGameState();
 }
@@ -639,8 +856,7 @@ function schedulePrefetch() {
             key,
             build: () => {
                 const z  = room.zone || "Town";
-                const zt = getZoneTemplate(z);
-                const rt = zt ? rand(zt.roomTypes) : "Street";
+                const rt = chooseRoomTypeForZone(z, "Street");
                 const pr = buildRoomInstance(rt, z);
                 return buildPrompt(pr, null,
                     "Write 1 sentence of atmospheric description for this location. Be vivid and brief."
@@ -980,6 +1196,9 @@ function removeTypingIndicator() {
 function renderRoom() {
     const room = G.activeRoom;
     if (!room) return;
+
+    if (!room.coords && G.player && G.player.coords) room.coords = G.player.coords;
+    repairRoomExits(room);
 
     const wrapEl = document.getElementById("roomImageWrapEl");
     if (wrapEl) {

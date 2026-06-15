@@ -5,7 +5,7 @@ const ZONE_TEMPLATES = [
         name: "Town",
         hostileArea: false,
         ambiance: "The sounds of daily life fill the air. People go about their business.",
-        roomTypes: ["Tavern", "Inn", "Street", "Alleyway", "Square", "Market", "Blacksmith", "Guild", "Barracks"],
+        roomTypes: ["Tavern", "Inn", "Street", "Alleyway", "Square", "Avenue", "Gate"],
         allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling"],
         lightLevel: "bright",
         defaultDanger: "safe"
