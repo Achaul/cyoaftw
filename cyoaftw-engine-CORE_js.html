@@ -397,6 +397,7 @@ function resetNpcPanel() {
     if (placeholderEl) placeholderEl.style.display = "block";
     if (detailEl) detailEl.classList.remove("active");
     clearChatOptions();
+    setExitGridVisible(true);
 }
 
 function resumeSavedGame() {
@@ -740,6 +741,12 @@ function getChatOptions(npc) {
         });
     }
 
+    options.push({
+        label: "Say goodbye",
+        text: "I say goodbye and step away.",
+        action: "disengage"
+    });
+
     return options;
 }
 
@@ -769,17 +776,34 @@ function renderChatOptions(npc) {
         const btn = document.createElement("button");
         btn.className = "chat-option-btn";
         btn.textContent = option.label;
-        btn.onclick = () => chooseChatOption(option.text);
+        btn.onclick = () => chooseChatOption(option);
         el.appendChild(btn);
     });
 }
 
-function chooseChatOption(text) {
-    if (!text || !G.activeNPC) return;
+function chooseChatOption(option) {
+    const choice = typeof option === "string" ? { text: option } : option;
+    if (!choice || !choice.text || !G.activeNPC) return;
 
-    addChatMessage("player", G.player.name, text);
+    if (choice.action === "disengage") {
+        disengageFromNPC(choice.text);
+        return;
+    }
+
+    addChatMessage("player", G.player.name, choice.text);
     setChatOptionsDisabled(true);
-    npcRespond(G.activeNPC, text);
+    npcRespond(G.activeNPC, choice.text);
+}
+
+function disengageFromNPC(text) {
+    const npc = G.activeNPC;
+    if (!npc) return;
+
+    if (text) addChatMessage("player", G.player.name, text);
+    G.activeNPC = null;
+    resetNpcPanel();
+    setNarration(`You step away from ${npc.name}.`);
+    saveGameState();
 }
 
 function clearNarration() {
@@ -790,6 +814,11 @@ function clearNarration() {
 function setNarration(text) {
     const el = document.getElementById("narrationEl");
     if (el) el.textContent = text || "";
+}
+
+function setExitGridVisible(visible) {
+    const el = document.getElementById("exitGridEl");
+    if (el) el.style.display = visible ? "grid" : "none";
 }
 
 function addChatMessage(side, speaker, text) {
@@ -863,6 +892,7 @@ function renderRoom() {
     clearNarration();
     renderNPCs(room.creatures || []);
     renderExits(room.exits    || {});
+    setExitGridVisible(!G.activeNPC);
     renderStats();
 }
 
@@ -937,6 +967,7 @@ function selectNPC(npc) {
 
     document.getElementById("chatLogEl").innerHTML = "";
     setNarration(`${npc.name} ${npc.action || "is standing nearby"}.`);
+    setExitGridVisible(false);
     renderChatOptions(npc);
     saveGameState();
 }

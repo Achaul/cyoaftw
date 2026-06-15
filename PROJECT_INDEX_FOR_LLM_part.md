@@ -45,6 +45,8 @@ Main Perchance page shell:
   - `#npcListEl`
   - `#exitGridEl`
 - `#chatPanelEl` sits inside the room image wrapper after `#narrationEl`, so chat displays over the room background image.
+- `#exitGridEl` is visible during exploration and hidden while an NPC interaction is active.
+- NPC preset speech includes a `Say goodbye` disengage option that clears `G.activeNPC` and returns to exploration controls without calling AI.
 
 ### `cyoaftw-engine-CORE_js.html`
 
@@ -142,6 +144,8 @@ Do not resurrect `cyoaftw-engine-CORE.js` unless the user explicitly asks to rev
 - Added Story Director state and prompt integration.
 - Removed optional chaining/nullish syntax from Story Director-related changes.
 - Moved chat panel into the room image wrapper after narration so dialogue displays over the room background.
+- Hid the exit grid during NPC interaction scenes.
+- Added a preset `Say goodbye` option for disengaging from NPC interaction scenes.
 - Renamed engine payload from `.js` to `_js.html` and wrapped it in script tags.
 - Updated shell page to load the renamed engine payload.
 
