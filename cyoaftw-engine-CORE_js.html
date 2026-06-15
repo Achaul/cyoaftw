@@ -260,9 +260,7 @@ function beginAdventure() {
     renderStats();
     schedulePrefetch();
 
-    setNarration(
-        `You find yourself in ${G.activeRoom.displayName}. ${G.activeRoom.baseDescription}`
-    );
+    setNarration(buildRoomNarration(G.activeRoom, "start", null));
 
     saveGameState();
 }
@@ -437,8 +435,7 @@ function resumeSavedGame() {
 
     showGameScreen();
 
-    const chatLogEl = document.getElementById("chatLogEl");
-    if (chatLogEl) chatLogEl.innerHTML = "";
+    clearChatLog();
 
     renderRoom();
     renderStats();
@@ -451,9 +448,7 @@ function resumeSavedGame() {
 
     schedulePrefetch();
 
-    setNarration(
-        `Welcome back to ${G.activeRoom.displayName || G.activeRoom.name}. ${G.activeRoom.baseDescription || ""}`
-    );
+    setNarration(buildRoomNarration(G.activeRoom, "resume", null));
 
     saveGameState();
     return true;
@@ -620,12 +615,11 @@ function movePlayer(direction) {
     G.activeNPC  = null;
     updateStoryOnRoomEntered(newRoom, direction);
 
+    clearChatLog();
     renderRoom();
     schedulePrefetch();
 
-    setNarration(
-        `You move ${direction} into ${G.activeRoom.displayName}. ${G.activeRoom.baseDescription}`
-    );
+    setNarration(buildRoomNarration(G.activeRoom, "move", direction));
 
     saveGameState();
 }
@@ -816,9 +810,123 @@ function setNarration(text) {
     if (el) el.textContent = text || "";
 }
 
+function getDirectionLabel(direction) {
+    const labels = {
+        N: "north",
+        S: "south",
+        E: "east",
+        W: "west",
+        NE: "northeast",
+        NW: "northwest",
+        SE: "southeast",
+        SW: "southwest"
+    };
+    return labels[direction] || String(direction || "").toLowerCase();
+}
+
+function lowerFirst(text) {
+    const value = String(text || "").trim();
+    if (!value) return "";
+    return value.charAt(0).toLowerCase() + value.slice(1);
+}
+
+function canFlowIntoLocationPhrase(description) {
+    return /^(a|an)\s+/i.test(String(description || "").trim());
+}
+
+function ensureSentence(text) {
+    const value = String(text || "").trim();
+    if (!value) return "";
+    return /[.!?]$/.test(value) ? value : value + ".";
+}
+
+function getEntityName(entity) {
+    if (!entity) return "";
+    return String(entity.name || entity.displayName || entity.type || entity.id || "").trim();
+}
+
+function isVisibleEntity(entity) {
+    return !!(
+        entity &&
+        !entity.unconscious &&
+        !entity.isUnconsciousBody &&
+        !entity.hidden &&
+        !entity.isHidden &&
+        entity.visible !== false
+    );
+}
+
+function hasArticle(text) {
+    return /^(a|an|the|some|several|many)\s+/i.test(String(text || "").trim());
+}
+
+function withIndefiniteArticle(text) {
+    const value = String(text || "").trim();
+    if (!value || hasArticle(value)) return value;
+    if (/s$/i.test(value) && !/ss$/i.test(value)) return value;
+    return (/^[aeiou]/i.test(value) ? "an " : "a ") + value;
+}
+
+function buildObservationNarration(room) {
+    if (!room) return "";
+
+    const lines = [];
+    const npcs = Array.isArray(room.creatures)
+        ? room.creatures.filter(isVisibleEntity)
+        : [];
+    const items = Array.isArray(room.items)
+        ? room.items.filter(isVisibleEntity)
+        : [];
+
+    npcs.forEach(npc => {
+        const name = getEntityName(npc);
+        if (name) lines.push(`You see ${name} here.`);
+    });
+
+    items.forEach(item => {
+        const name = withIndefiniteArticle(getEntityName(item));
+        if (name) lines.push(`You see ${name} here.`);
+    });
+
+    return lines.join(" ");
+}
+
+function buildRoomEntryNarration(room, mode, direction) {
+    const name = room && (room.displayName || room.name || room.type) ? (room.displayName || room.name || room.type) : "this place";
+    const description = room && room.baseDescription ? String(room.baseDescription).trim() : "";
+
+    if (!description) {
+        if (mode === "move") return `You move ${getDirectionLabel(direction)} into ${name}.`;
+        if (mode === "resume") return `Welcome back to ${name}.`;
+        return `You find yourself in ${name}.`;
+    }
+
+    if (canFlowIntoLocationPhrase(description)) {
+        const phrase = lowerFirst(description);
+        if (mode === "move") return `You move ${getDirectionLabel(direction)} into ${phrase}`;
+        if (mode === "resume") return `You return to ${phrase}`;
+        return `You find yourself in ${phrase}`;
+    }
+
+    if (mode === "move") return `You move ${getDirectionLabel(direction)}. ${description}`;
+    if (mode === "resume") return `You return. ${description}`;
+    return `You arrive. ${description}`;
+}
+
+function buildRoomNarration(room, mode, direction) {
+    const entry = ensureSentence(buildRoomEntryNarration(room, mode, direction));
+    const observations = buildObservationNarration(room);
+    return observations ? `${entry}\n\n${observations}` : entry;
+}
+
 function setExitGridVisible(visible) {
     const el = document.getElementById("exitGridEl");
     if (el) el.style.display = visible ? "grid" : "none";
+}
+
+function clearChatLog() {
+    const el = document.getElementById("chatLogEl");
+    if (el) el.innerHTML = "";
 }
 
 function addChatMessage(side, speaker, text) {
@@ -887,7 +995,7 @@ function renderRoom() {
     if (nameEl) nameEl.textContent = room.displayName || room.name;
 
     const descEl = document.getElementById("roomDescEl");
-    if (descEl) descEl.textContent = room.baseDescription || "";
+    if (descEl) descEl.textContent = "";
 
     clearNarration();
     renderNPCs(room.creatures || []);
@@ -950,6 +1058,9 @@ function renderStats() {
 // ── NPC PANEL ────────────────────────────────────────────────────
 
 function selectNPC(npc) {
+    const previousNPC = G.activeNPC;
+    const isNewNPC = !previousNPC ||
+        (previousNPC.id && npc.id ? previousNPC.id !== npc.id : previousNPC !== npc);
     G.activeNPC = npc;
 
     document.getElementById("npcPlaceholderEl").style.display = "none";
@@ -965,7 +1076,7 @@ function selectNPC(npc) {
     document.getElementById("npcFavorEl").textContent =
         favor >= 60 ? "Friendly" : favor >= 20 ? "Neutral" : favor >= -20 ? "Wary" : "Hostile";
 
-    document.getElementById("chatLogEl").innerHTML = "";
+    if (isNewNPC) clearChatLog();
     setNarration(`${npc.name} ${npc.action || "is standing nearby"}.`);
     setExitGridVisible(false);
     renderChatOptions(npc);

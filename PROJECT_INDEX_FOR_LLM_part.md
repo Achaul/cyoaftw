@@ -47,6 +47,10 @@ Main Perchance page shell:
 - `#chatPanelEl` sits inside the room image wrapper after `#narrationEl`, so chat displays over the room background image.
 - `#exitGridEl` is visible during exploration and hidden while an NPC interaction is active.
 - NPC preset speech includes a `Say goodbye` disengage option that clears `G.activeNPC` and returns to exploration controls without calling AI.
+- `#chatLogEl` starts fresh when moving to a different room or selecting a different NPC.
+- The saved-game prompt title uses `.prompt-title`, not an `h2`, so Perchance does not derive the page title from `Continue Adventure?`.
+- Room base descriptions are blended into `#narrationEl`; `#roomDescEl` is left empty to avoid repeating the title/description pair.
+- Room-entry narration includes visible NPCs and visible `room.items` as observation sentences after the entry description.
 
 ### `cyoaftw-engine-CORE_js.html`
 
@@ -146,6 +150,10 @@ Do not resurrect `cyoaftw-engine-CORE.js` unless the user explicitly asks to rev
 - Moved chat panel into the room image wrapper after narration so dialogue displays over the room background.
 - Hid the exit grid during NPC interaction scenes.
 - Added a preset `Say goodbye` option for disengaging from NPC interaction scenes.
+- Cleared chat history on room movement and when switching to a different NPC.
+- Changed the saved-game prompt label from `h2` to `.prompt-title` to avoid changing the Perchance page title.
+- Blended room descriptions into room-entry narration and stopped rendering the same description separately in `#roomDescEl`.
+- Added visible NPC/item observation sentences to room-entry narration.
 - Renamed engine payload from `.js` to `_js.html` and wrapped it in script tags.
 - Updated shell page to load the renamed engine payload.
 

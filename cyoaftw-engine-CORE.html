@@ -1,8 +1,8 @@
 <!--https://perchance.org/cyoaftw-engine-core-->
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-world-data.js?20260615012824"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-npc-data.js?20260615012824"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-context-builder.js?20260615012824"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-engine-CORE_js.html?20260615012824"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-world-data.js?20260615014217"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-npc-data.js?20260615014217"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-context-builder.js?20260615014217"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-engine-CORE_js.html?20260615014217"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -28,6 +28,14 @@ body {
 #setupWrapper h2 {
     color: #fff;
     font-size: 20px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+}
+
+#savedGamePrompt .prompt-title {
+    color: #fff;
+    font-size: 20px;
+    font-weight: bold;
     border-bottom: 1px solid #333;
     padding-bottom: 10px;
 }
@@ -285,6 +293,10 @@ body {
     text-shadow: 0 1px 3px rgba(0,0,0,0.9);
 }
 
+#roomDescEl:empty {
+    display: none;
+}
+
 #narrationEl {
     position: relative;
     z-index: 1;
@@ -293,6 +305,7 @@ body {
     padding: 4px 24px 12px;
     color: #ddd;
     font-style: italic;
+    white-space: pre-line;
     text-shadow: 0 1px 3px rgba(0,0,0,0.9);
 }
 
@@ -628,7 +641,7 @@ body {
 <div id="setupWrapper">
 
     <div id="savedGamePrompt">
-        <h2>Continue Adventure?</h2>
+        <div class="prompt-title">Continue Adventure?</div>
         <div id="savedGameSummaryEl"></div>
         <div class="saved-game-actions">
             <button onclick="startNewAdventureFromPrompt()" class="secondary">New Adventure</button>
