@@ -260,7 +260,7 @@ function beginAdventure() {
     renderStats();
     schedulePrefetch();
 
-    addChatMessage("left", "narrator",
+    setNarration(
         `You find yourself in ${G.activeRoom.displayName}. ${G.activeRoom.baseDescription}`
     );
 
@@ -450,7 +450,7 @@ function resumeSavedGame() {
 
     schedulePrefetch();
 
-    addChatMessage("left", "narrator",
+    setNarration(
         `Welcome back to ${G.activeRoom.displayName || G.activeRoom.name}. ${G.activeRoom.baseDescription || ""}`
     );
 
@@ -622,7 +622,7 @@ function movePlayer(direction) {
     renderRoom();
     schedulePrefetch();
 
-    addChatMessage("left", "narrator",
+    setNarration(
         `You move ${direction} into ${G.activeRoom.displayName}. ${G.activeRoom.baseDescription}`
     );
 
@@ -782,6 +782,16 @@ function chooseChatOption(text) {
     npcRespond(G.activeNPC, text);
 }
 
+function clearNarration() {
+    const el = document.getElementById("narrationEl");
+    if (el) el.textContent = "";
+}
+
+function setNarration(text) {
+    const el = document.getElementById("narrationEl");
+    if (el) el.textContent = text || "";
+}
+
 function addChatMessage(side, speaker, text) {
     const log = document.getElementById("chatLogEl");
     if (!log) return;
@@ -850,6 +860,7 @@ function renderRoom() {
     const descEl = document.getElementById("roomDescEl");
     if (descEl) descEl.textContent = room.baseDescription || "";
 
+    clearNarration();
     renderNPCs(room.creatures || []);
     renderExits(room.exits    || {});
     renderStats();
@@ -925,7 +936,7 @@ function selectNPC(npc) {
         favor >= 60 ? "Friendly" : favor >= 20 ? "Neutral" : favor >= -20 ? "Wary" : "Hostile";
 
     document.getElementById("chatLogEl").innerHTML = "";
-    addChatMessage("left", "narrator", `${npc.name} ${npc.action || "is standing nearby"}.`);
+    setNarration(`${npc.name} ${npc.action || "is standing nearby"}.`);
     renderChatOptions(npc);
     saveGameState();
 }
