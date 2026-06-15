@@ -39,6 +39,20 @@ const ZONE_TEMPLATES = [
     }
 ];
 
+// ── SPECIES TEMPLATES ───────────────────────────────────────────
+
+const SPECIES_TEMPLATES = [
+    { species: "Human",    isHumanoid: true  },
+    { species: "Elf",      isHumanoid: true  },
+    { species: "Dwarf",    isHumanoid: true  },
+    { species: "Halfling", isHumanoid: true  },
+    { species: "Goblin",   isHumanoid: true  },
+    { species: "Orc",      isHumanoid: true  },
+    { species: "Skeleton", isHumanoid: false },
+    { species: "Rat",      isHumanoid: false },
+    { species: "Ghost",    isHumanoid: false }
+];
+
 // ── ROOM TEMPLATES ───────────────────────────────────────────────
 const ROOM_TEMPLATES = [
     {
@@ -565,6 +579,19 @@ function getRoomTemplate(roomType) {
     return ROOM_TEMPLATES.find(
         r => r.type.toLowerCase() === String(roomType || "").toLowerCase()
     ) || null;
+}
+
+// ── HELPER: GET SPECIES TEMPLATE ────────────────────────────────
+
+function getSpeciesTemplate(species) {
+    return SPECIES_TEMPLATES.find(
+        s => s.species.toLowerCase() === String(species || "").toLowerCase()
+    ) || null;
+}
+
+function isHumanoidSpecies(species) {
+    const template = getSpeciesTemplate(species);
+    return !!(template && template.isHumanoid);
 }
 
 // ── HELPER: GET IMAGE FOR ROOM ───────────────────────────────────

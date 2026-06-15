@@ -18,6 +18,7 @@ window.G = {
     roomMap: {},
     activeRoom: null,
     activeNPC: null,
+    activeNPCMode: null,
     story: createStoryDirectorState(),
     prefetchCache: {},
     prefetchQueue: [],
@@ -43,6 +44,121 @@ function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 function getRoom(coords) { return G.roomMap[coords] || null; }
 function setRoom(coords, room) { G.roomMap[coords] = room; }
+
+function getNPCSpeciesTemplate(npc) {
+    if (!npc || typeof getSpeciesTemplate !== "function") return null;
+    return getSpeciesTemplate(npc.species);
+}
+
+function hydrateNPCSpeciesFlags(npc) {
+    if (!npc) return npc;
+    const template = getNPCSpeciesTemplate(npc);
+
+    if (template && typeof npc.isHumanoid !== "boolean") {
+        npc.isHumanoid = !!template.isHumanoid;
+    }
+
+    return npc;
+}
+
+function canConverseWithNPC(npc) {
+    if (!npc || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden) return false;
+    hydrateNPCSpeciesFlags(npc);
+
+    if (typeof npc.isHumanoid === "boolean") {
+        return npc.isHumanoid;
+    }
+
+    return false;
+}
+
+const TRADE_GOODS = [
+    { id: "ration",      name: "Ration",      value: 2 },
+    { id: "torch",       name: "Torch",       value: 1 },
+    { id: "bandage",     name: "Bandage",     value: 3 },
+    { id: "rope",        name: "Rope",        value: 5 },
+    { id: "lockpick",    name: "Lockpick",    value: 8 },
+    { id: "healing-herb", name: "Healing herb", value: 6 }
+];
+
+function getCoinValue(entity) {
+    if (!entity) return 0;
+    if (typeof entity.coins === "number") return Math.max(0, entity.coins);
+
+    const equipped = entity.equipped || {};
+    const pouch = equipped.coinPouch;
+    if (pouch && typeof pouch.value === "number") return Math.max(0, pouch.value);
+
+    return 0;
+}
+
+function adjustCoins(entity, delta) {
+    if (!entity || typeof delta !== "number") return false;
+
+    const nextValue = Math.max(0, getCoinValue(entity) + delta);
+    if (typeof entity.coins === "number" || !entity.equipped || !entity.equipped.coinPouch) {
+        entity.coins = nextValue;
+        return true;
+    }
+
+    entity.equipped.coinPouch.value = nextValue;
+    return true;
+}
+
+function hasEnoughCoins(entity, amount) {
+    return getCoinValue(entity) >= Math.max(0, amount || 0);
+}
+
+function getTemperamentModifier(temperament) {
+    const key = String(temperament || "neutral").toLowerCase();
+    const modifiers = {
+        aggressive: -6,
+        hostile: -4,
+        skittish: -2,
+        wary: -1,
+        neutral: 0,
+        bold: 1,
+        curious: 2,
+        calm: 4,
+        friendly: 6
+    };
+
+    return typeof modifiers[key] === "number" ? modifiers[key] : 0;
+}
+
+function showTradeMessage(text, success) {
+    const msgBox = document.getElementById("tradeFeedback");
+    if (msgBox) {
+        msgBox.textContent = text || "";
+        msgBox.style.color = success ? "#9f9" : "#f88";
+    }
+
+    if (text) setNarration(text);
+}
+
+function isTradeAccepted(playerTotal, npcTotal, npc) {
+    if (playerTotal >= npcTotal) return true;
+
+    const d20 = randInt(1, 20);
+    const temperamentMod = getTemperamentModifier(npc ? npc.temperament : "neutral");
+    const margin = d20 + temperamentMod;
+    const adjustedAsk = Math.max(0, npcTotal - margin);
+    const accepted = playerTotal >= adjustedAsk;
+
+    if (npc) {
+        if (!npc.memory) npc.memory = {};
+        npc.memory.lastTradeCheck = {
+            playerTotal,
+            npcTotal,
+            d20,
+            temperamentMod,
+            adjustedAsk,
+            accepted
+        };
+    }
+
+    return accepted;
+}
 
 const ROOM_DIRECTIONS = ["N","S","E","W","NE","NW","SE","SW"];
 const OPPOSITE_DIRECTIONS = {
@@ -433,6 +549,8 @@ function beginAdventure() {
 
     showSpinner("Preparing your adventure...");
     G.activeRoom = getOrCreateRoom("0,0", zone, room);
+    G.activeNPC = null;
+    G.activeNPCMode = null;
     repairRoomMapExits();
     updateStoryOnAdventureStart(zone, room);
     hideSpinner();
@@ -575,6 +693,7 @@ function resetNpcPanel() {
 
     if (placeholderEl) placeholderEl.style.display = "block";
     if (detailEl) detailEl.classList.remove("active");
+    G.activeNPCMode = null;
     clearChatOptions();
     setExitGridVisible(true);
 }
@@ -593,6 +712,7 @@ function resumeSavedGame() {
     repairRoomMapExits();
     G.activeRoom = G.roomMap[G.player.coords] || null;
     G.activeNPC = null;
+    G.activeNPCMode = null;
     G.prefetchCache = {};
     G.prefetchQueue = [];
     G.isPrefetching = false;
@@ -609,6 +729,7 @@ function resumeSavedGame() {
     if (activeNPCId && Array.isArray(G.activeRoom.creatures)) {
         for (let i = 0; i < G.activeRoom.creatures.length; i++) {
             if (G.activeRoom.creatures[i].id === activeNPCId) {
+                hydrateNPCSpeciesFlags(G.activeRoom.creatures[i]);
                 G.activeNPC = G.activeRoom.creatures[i];
                 break;
             }
@@ -755,6 +876,9 @@ function spawnNPCsForRoom(room, zoneName) {
 }
 
 function createNPC(species, room, zoneTemplate) {
+    const speciesTemplate = typeof getSpeciesTemplate === "function"
+        ? getSpeciesTemplate(species)
+        : null;
     const profile     = getRandomPersonalityProfile({});
     const ageCategory = getAgeCategoryForRole("Wanderer", profile.archetype);
     const age         = getRandomAge(ageCategory);
@@ -765,6 +889,7 @@ function createNPC(species, room, zoneTemplate) {
         id:               `${species.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`,
         name:             `${gender === "male" ? "a male" : "a female"} ${species}`,
         species,
+        isHumanoid:       !!(speciesTemplate && speciesTemplate.isHumanoid),
         gender,
         role:             "Wanderer",
         temperament,
@@ -830,6 +955,7 @@ function movePlayer(direction) {
     G.player.coords = newCoords;
     G.activeRoom = newRoom;
     G.activeNPC  = null;
+    G.activeNPCMode = null;
     updateStoryOnRoomEntered(newRoom, dir);
 
     clearChatLog();
@@ -888,6 +1014,11 @@ async function runPrefetchQueue() {
 // ── NPC INTERACTION ──────────────────────────────────────────────
 
 async function npcRespond(npc, playerInput) {
+    if (!canConverseWithNPC(npc)) {
+        clearChatOptions();
+        return;
+    }
+
     const room = G.activeRoom;
 
     const instruction = `
@@ -922,12 +1053,17 @@ Speak only as ${npc.name} would speak.
 
     saveGameState();
 
-    if (G.activeNPC === npc) renderChatOptions(npc);
+    if (G.activeNPC === npc) {
+        G.activeNPCMode = "talk";
+        renderChatOptions(npc);
+    }
 }
 
 // ── CHAT UI ──────────────────────────────────────────────────────
 
 function getChatOptions(npc) {
+    if (!canConverseWithNPC(npc)) return [];
+
     const favor = npc && npc.memory && typeof npc.memory.favorability === "number"
         ? npc.memory.favorability : 0;
     const hostility = npc && typeof npc.hostility === "number" ? npc.hostility : 0;
@@ -965,6 +1101,341 @@ function clearChatOptions() {
     if (el) el.innerHTML = "";
 }
 
+function renderNPCActionMenu(npc) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return;
+
+    el.innerHTML = "";
+    if (!npc) return;
+
+    const actions = [];
+    if (canConverseWithNPC(npc)) {
+        actions.push({ label: "Talk", action: "talk" });
+    }
+    actions.push(
+        { label: "Trade", action: "trade" },
+        { label: "Attack", action: "attack", className: "danger" },
+        { label: "Step away", action: "disengage" }
+    );
+
+    actions.forEach(option => {
+        const btn = document.createElement("button");
+        btn.className = `chat-option-btn npc-action-btn${option.className ? " " + option.className : ""}`;
+        btn.textContent = option.label;
+        btn.onclick = () => chooseNPCAction(option.action);
+        el.appendChild(btn);
+    });
+}
+
+function chooseNPCAction(action) {
+    const npc = G.activeNPC;
+    if (!npc) return;
+
+    if (action === "talk") {
+        startNPCConversation(npc);
+        return;
+    }
+
+    if (action === "trade") {
+        tradeWithNPC(npc);
+        return;
+    }
+
+    if (action === "attack") {
+        attackNPC(npc);
+        return;
+    }
+
+    if (action === "disengage") {
+        disengageFromNPC();
+    }
+}
+
+function startNPCConversation(npc) {
+    if (!canConverseWithNPC(npc)) {
+        setNarration(`${npc.name} does not seem capable of conversation.`);
+        renderNPCActionMenu(npc);
+        saveGameState();
+        return;
+    }
+
+    G.activeNPCMode = "talk";
+    renderChatOptions(npc);
+    setNarration(`You prepare to speak with ${npc.name}.`);
+    saveGameState();
+}
+
+function tradeWithNPC(npc) {
+    if (!canConverseWithNPC(npc)) {
+        G.activeNPCMode = "menu";
+        setNarration(`${npc.name} does not seem capable of trade.`);
+        renderNPCActionMenu(npc);
+        saveGameState();
+        return;
+    }
+
+    G.activeNPCMode = "trade";
+    renderTradeOptions(npc);
+    setNarration(`You look over what ${npc.name} has to trade.`);
+    saveGameState();
+}
+
+function attackNPC(npc) {
+    if (!npc || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden) return;
+
+    G.activeNPCMode = "attack";
+    const player = G.player;
+    const npcName = npc.name || "the creature";
+    const npcArmor = typeof npc.armor === "number" ? npc.armor : 10;
+    const attackRoll = randInt(1, 20);
+    const attackTotal = attackRoll + (player.attackBonus || 0);
+    const hit = attackRoll === 20 || (attackRoll !== 1 && attackTotal >= npcArmor);
+    const lines = [];
+
+    if (hit) {
+        const damage = Math.max(1, randInt(1, 6) + Math.max(0, player.attackBonus || 0));
+        npc.hp = Math.max(0, (typeof npc.hp === "number" ? npc.hp : npc.hpMax || 10) - damage);
+        npc.hostility = Math.min(100, (typeof npc.hostility === "number" ? npc.hostility : 0) + 25);
+        if (npc.memory) npc.memory.aggressionCount = (npc.memory.aggressionCount || 0) + 1;
+        lines.push(`You hit ${npcName} for ${damage} damage.`);
+    } else {
+        npc.hostility = Math.min(100, (typeof npc.hostility === "number" ? npc.hostility : 0) + 10);
+        lines.push(`You swing at ${npcName}, but miss.`);
+    }
+
+    if (npc.hp <= 0) {
+        npc.unconscious = true;
+        npc.isHidden = true;
+        rememberStoryEvent("combat", `${G.player.name} defeated ${npcName}.`, 8);
+        addStoryBeat("local-danger", `${npcName} was defeated.`, 5);
+        G.activeNPC = null;
+        G.activeNPCMode = null;
+        resetNpcPanel();
+        renderRoom();
+        setNarration(lines.join(" "));
+        saveGameState();
+        return;
+    }
+
+    if (typeof generateNPCBehavior === "function") {
+        npc.behavior = generateNPCBehavior(npc);
+    }
+
+    const counterRoll = randInt(1, 20);
+    const counterBonus = Math.max(0, Math.floor((npc.hostility || 0) / 35));
+    const counterTotal = counterRoll + counterBonus;
+    const playerArmor = typeof player.armor === "number" ? player.armor : 10;
+    const counterHits = counterRoll === 20 || (counterRoll !== 1 && counterTotal >= playerArmor);
+
+    if (counterHits) {
+        const counterDamage = Math.max(1, randInt(1, 4) + counterBonus);
+        player.hp = Math.max(0, (typeof player.hp === "number" ? player.hp : player.hpMax || 1) - counterDamage);
+        lines.push(`${npcName} strikes back for ${counterDamage} damage.`);
+    } else {
+        lines.push(`${npcName} fails to land a counterattack.`);
+    }
+
+    if (player.hp <= 0) {
+        lines.push("You collapse.");
+        rememberStoryEvent("combat", `${G.player.name} was brought down by ${npcName}.`, 12);
+    } else {
+        rememberStoryEvent("combat", `${G.player.name} attacked ${npcName}.`, 4);
+    }
+
+    renderStats();
+    renderNPCActionMenu(npc);
+    setNarration(lines.join(" "));
+    saveGameState();
+}
+
+function getItemName(item) {
+    return String(item && (item.name || item.displayName || item.id) ? (item.name || item.displayName || item.id) : "item");
+}
+
+function getItemValue(item) {
+    const value = item && typeof item.value === "number" ? item.value : 1;
+    return Math.max(1, value);
+}
+
+function cloneTradeItem(item) {
+    return {
+        id: item.id,
+        name: item.name,
+        value: getItemValue(item)
+    };
+}
+
+function ensureNPCTradeStock(npc) {
+    if (!npc) return [];
+    if (!Array.isArray(npc.inventory)) npc.inventory = [];
+    if (typeof npc.coins !== "number" && !(npc.equipped && npc.equipped.coinPouch)) {
+        npc.coins = randInt(4, 16);
+    }
+
+    if (!npc.tradeStockSeeded) {
+        const goods = TRADE_GOODS.slice().sort(() => Math.random() - 0.5);
+        const count = randInt(2, Math.min(4, goods.length));
+        for (let i = 0; i < count; i++) {
+            const item = cloneTradeItem(goods[i]);
+            item.id = `${item.id}-${Math.random().toString(36).slice(2, 7)}`;
+            npc.inventory.push(item);
+        }
+        npc.tradeStockSeeded = true;
+    }
+
+    return npc.inventory.filter(item => item && !item.hidden && !item.isHidden && getItemValue(item) > 0);
+}
+
+function renderTradeOptions(npc) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return;
+
+    el.innerHTML = "";
+    if (!canConverseWithNPC(npc)) {
+        renderNPCActionMenu(npc);
+        return;
+    }
+
+    const stock = ensureNPCTradeStock(npc);
+    const playerInventory = Array.isArray(G.player.inventory) ? G.player.inventory : [];
+
+    stock.forEach(item => {
+        const price = getItemValue(item);
+        const btn = document.createElement("button");
+        btn.className = "chat-option-btn trade-option-btn";
+        btn.textContent = `Buy ${getItemName(item)} (${price}g)`;
+        btn.disabled = !hasEnoughCoins(G.player, price);
+        btn.onclick = () => buyTradeItem(npc, item);
+        el.appendChild(btn);
+    });
+
+    playerInventory.forEach(item => {
+        const price = Math.max(1, Math.floor(getItemValue(item) / 2));
+        const btn = document.createElement("button");
+        btn.className = "chat-option-btn trade-option-btn";
+        btn.textContent = `Sell ${getItemName(item)} (${price}g)`;
+        btn.disabled = !hasEnoughCoins(npc, price);
+        btn.onclick = () => sellTradeItem(npc, item);
+        el.appendChild(btn);
+    });
+
+    if (!stock.length && !playerInventory.length) {
+        const btn = document.createElement("button");
+        btn.className = "chat-option-btn";
+        btn.textContent = "No goods available";
+        btn.disabled = true;
+        el.appendChild(btn);
+    }
+
+    const backBtn = document.createElement("button");
+    backBtn.className = "chat-option-btn npc-action-btn";
+    backBtn.textContent = "Back";
+    backBtn.onclick = () => {
+        G.activeNPCMode = "menu";
+        renderNPCActionMenu(npc);
+    };
+    el.appendChild(backBtn);
+}
+
+function recordTradeMemory(npc, playerGave, npcGave, playerCoins, npcCoins) {
+    if (!npc) return;
+    if (!npc.memory) npc.memory = {};
+    if (!Array.isArray(npc.memory.trades)) npc.memory.trades = [];
+
+    const playerItems = Array.isArray(playerGave) ? playerGave : [];
+    const npcItems = Array.isArray(npcGave) ? npcGave : [];
+    const playerTotal = playerItems.reduce((sum, item) => sum + getItemValue(item), 0) + (playerCoins || 0);
+    const npcTotal = npcItems.reduce((sum, item) => sum + getItemValue(item), 0) + (npcCoins || 0);
+
+    npc.memory.tradeCount = (npc.memory.tradeCount || 0) + 1;
+    npc.memory.trades.push({
+        time: Date.now(),
+        player: G.player && G.player.name ? G.player.name : "Adventurer",
+        playerGave: playerItems.map(getItemName),
+        npcGave: npcItems.map(getItemName),
+        playerCoins: playerCoins || 0,
+        npcCoins: npcCoins || 0,
+        netBenefit: playerTotal - npcTotal
+    });
+
+    if (npc.memory.trades.length > 10) npc.memory.trades.shift();
+
+    if (playerTotal > npcTotal && npc.memory && typeof npc.memory.favorability === "number") {
+        npc.memory.favorability = Math.min(100, npc.memory.favorability + 3);
+    }
+}
+
+function buyTradeItem(npc, item) {
+    if (!npc || !item) return;
+
+    const price = getItemValue(item);
+    if (!hasEnoughCoins(G.player, price)) {
+        showTradeMessage(`You do not have enough coin for ${getItemName(item)}.`, false);
+        renderTradeOptions(npc);
+        return;
+    }
+
+    if (!isTradeAccepted(price, getItemValue(item), npc)) {
+        showTradeMessage(`${npc.name} refuses the offer.`, false);
+        renderTradeOptions(npc);
+        saveGameState();
+        return;
+    }
+
+    if (!Array.isArray(G.player.inventory)) G.player.inventory = [];
+    if (!Array.isArray(npc.inventory)) npc.inventory = [];
+
+    const index = npc.inventory.indexOf(item);
+    if (index < 0) return;
+
+    npc.inventory.splice(index, 1);
+    const purchasedItem = cloneTradeItem(item);
+    G.player.inventory.push(purchasedItem);
+    adjustCoins(G.player, -price);
+    adjustCoins(npc, price);
+    recordTradeMemory(npc, [], [purchasedItem], price, 0);
+
+    addChatMessage("left", "narrator", `You buy ${getItemName(item)} for ${price}g.`);
+    renderStats();
+    renderTradeOptions(npc);
+    saveGameState();
+}
+
+function sellTradeItem(npc, item) {
+    if (!npc || !item || !Array.isArray(G.player.inventory)) return;
+
+    const price = Math.max(1, Math.floor(getItemValue(item) / 2));
+    if (!hasEnoughCoins(npc, price)) {
+        showTradeMessage(`${npc.name} cannot afford ${getItemName(item)}.`, false);
+        renderTradeOptions(npc);
+        return;
+    }
+
+    if (!isTradeAccepted(getItemValue(item), price, npc)) {
+        showTradeMessage(`${npc.name} refuses the offer.`, false);
+        renderTradeOptions(npc);
+        saveGameState();
+        return;
+    }
+
+    if (!Array.isArray(npc.inventory)) npc.inventory = [];
+
+    const index = G.player.inventory.indexOf(item);
+    if (index < 0) return;
+
+    G.player.inventory.splice(index, 1);
+    const soldItem = cloneTradeItem(item);
+    npc.inventory.push(soldItem);
+    adjustCoins(G.player, price);
+    adjustCoins(npc, -price);
+    recordTradeMemory(npc, [soldItem], [], 0, price);
+
+    addChatMessage("left", "narrator", `You sell ${getItemName(item)} for ${price}g.`);
+    renderStats();
+    renderTradeOptions(npc);
+    saveGameState();
+}
+
 function setChatOptionsDisabled(disabled) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
@@ -980,7 +1451,7 @@ function renderChatOptions(npc) {
     if (!el) return;
 
     el.innerHTML = "";
-    if (!npc) return;
+    if (!canConverseWithNPC(npc)) return;
 
     getChatOptions(npc).forEach(option => {
         const btn = document.createElement("button");
@@ -993,7 +1464,7 @@ function renderChatOptions(npc) {
 
 function chooseChatOption(option) {
     const choice = typeof option === "string" ? { text: option } : option;
-    if (!choice || !choice.text || !G.activeNPC) return;
+    if (!choice || !choice.text || !canConverseWithNPC(G.activeNPC)) return;
 
     if (choice.action === "disengage") {
         disengageFromNPC(choice.text);
@@ -1001,6 +1472,7 @@ function chooseChatOption(option) {
     }
 
     addChatMessage("player", G.player.name, choice.text);
+    G.activeNPCMode = "talk";
     setChatOptionsDisabled(true);
     npcRespond(G.activeNPC, choice.text);
 }
@@ -1011,6 +1483,7 @@ function disengageFromNPC(text) {
 
     if (text) addChatMessage("player", G.player.name, text);
     G.activeNPC = null;
+    G.activeNPCMode = null;
     resetNpcPanel();
     setNarration(`You step away from ${npc.name}.`);
     saveGameState();
@@ -1227,11 +1700,18 @@ function renderNPCs(npcs) {
     const el = document.getElementById("npcListEl");
     if (!el) return;
     el.innerHTML = "";
-    npcs.forEach(npc => {
+    const visibleNPCs = Array.isArray(npcs)
+        ? npcs.filter(isVisibleEntity)
+        : [];
+
+    visibleNPCs.forEach(npc => {
+        hydrateNPCSpeciesFlags(npc);
+
         const btn     = document.createElement("button");
         btn.className = "npc-btn";
         btn.textContent = npc.name;
-        btn.onclick   = () => selectNPC(npc);
+        btn.onclick = () => selectNPC(npc);
+
         el.appendChild(btn);
     });
 }
@@ -1260,7 +1740,7 @@ function renderStats() {
     document.getElementById("statArmorEl").textContent  = p.armor;
     document.getElementById("statAtkEl").textContent    = `+${p.attackBonus}`;
     document.getElementById("statWeaponEl").textContent = p.weapon;
-    document.getElementById("statCoinsEl").textContent  = `${p.coins}g`;
+    document.getElementById("statCoinsEl").textContent  = `${getCoinValue(p)}g`;
 
     const pct = Math.max(0, Math.min(100, (p.hp / p.hpMax) * 100));
     document.getElementById("hpBarFillEl").style.width      = pct + "%";
@@ -1277,10 +1757,14 @@ function renderStats() {
 // ── NPC PANEL ────────────────────────────────────────────────────
 
 function selectNPC(npc) {
+    if (!npc) return;
+    hydrateNPCSpeciesFlags(npc);
+
     const previousNPC = G.activeNPC;
     const isNewNPC = !previousNPC ||
         (previousNPC.id && npc.id ? previousNPC.id !== npc.id : previousNPC !== npc);
     G.activeNPC = npc;
+    G.activeNPCMode = "menu";
 
     document.getElementById("npcPlaceholderEl").style.display = "none";
     document.getElementById("npcDetailEl").classList.add("active");
@@ -1298,7 +1782,7 @@ function selectNPC(npc) {
     if (isNewNPC) clearChatLog();
     setNarration(`${npc.name} ${npc.action || "is standing nearby"}.`);
     setExitGridVisible(false);
-    renderChatOptions(npc);
+    renderNPCActionMenu(npc);
     saveGameState();
 }
 
