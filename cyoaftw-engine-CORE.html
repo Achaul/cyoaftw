@@ -1,8 +1,8 @@
 <!--https://perchance.org/cyoaftw-engine-core-->
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-world-data.js?2026061401"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-npc-data.js?2026061401"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-context-builder.js?2026061401"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-engine-CORE.js?2026061401"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-world-data.js?20260615001225"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-npc-data.js?20260615001225"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-context-builder.js?20260615001225"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-engine-CORE_js.html?20260615001225"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -60,6 +60,46 @@ body {
 }
 
 #setupWrapper button:hover { background: #4a3a8a; }
+
+#setupWrapper button.secondary {
+    background: #222;
+    border: 1px solid #444;
+    color: #ddd;
+}
+
+#setupWrapper button.secondary:hover {
+    background: #2b2b2b;
+}
+
+#savedGamePrompt {
+    display: none;
+    flex-direction: column;
+    gap: 14px;
+}
+
+#savedGamePrompt.active {
+    display: flex;
+}
+
+#savedGameSummaryEl {
+    background: #181818;
+    border: 1px solid #303030;
+    border-radius: 8px;
+    color: #bbb;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 12px;
+}
+
+.saved-game-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+#setupWrapper.save-prompt-active .setup-page.active {
+    display: none;
+}
 
 .setup-page { display: none; flex-direction: column; gap: 14px; }
 .setup-page.active { display: flex; }
@@ -416,39 +456,40 @@ body {
     40%           { transform: scale(1);   opacity: 1; }
 }
 
-/* Chat input */
-#chatInputWrapEl {
+/* Chat options */
+#chatOptionsEl {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 8px;
     padding: 10px 12px;
     background: #161616;
     border-top: 1px solid #222;
 }
 
-#chatInputEl {
-    flex: 1;
+.chat-option-btn {
+    flex: 1 1 170px;
+    min-height: 38px;
     padding: 8px 12px;
     background: #1a1a1a;
-    border: 1px solid #333;
-    color: #ccc;
-    border-radius: 20px;
-    font-size: 13px;
-    outline: none;
-}
-
-#chatInputEl:focus { border-color: #555; }
-
-#chatSendBtn {
-    padding: 8px 16px;
-    background: #3a2a6a;
-    color: #fff;
-    border: none;
-    border-radius: 20px;
+    border: 1px solid #3a3a3a;
+    color: #ddd;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 12px;
+    line-height: 1.25;
+    text-align: left;
 }
 
-#chatSendBtn:hover { background: #4a3a8a; }
+.chat-option-btn:hover {
+    background: #222;
+    color: #fff;
+    border-color: #555;
+}
+
+.chat-option-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
 
 /* Right panel — NPC info */
 #rightPanel {
@@ -577,6 +618,15 @@ body {
 
 <!-- ── SETUP WRAPPER ── -->
 <div id="setupWrapper">
+
+    <div id="savedGamePrompt">
+        <h2>Continue Adventure?</h2>
+        <div id="savedGameSummaryEl"></div>
+        <div class="saved-game-actions">
+            <button onclick="startNewAdventureFromPrompt()" class="secondary">New Adventure</button>
+            <button onclick="resumeSavedGame()">Resume</button>
+        </div>
+    </div>
 
     <!-- Page 1: World -->
     <div class="setup-page active" id="setupPage1">
@@ -751,11 +801,7 @@ body {
         </div>
         <div id="chatPanelEl">
             <div id="chatLogEl"></div>
-            <div id="chatInputWrapEl">
-                <input id="chatInputEl" type="text" placeholder="Say something..."
-                    onkeydown="if(event.key==='Enter') sendChat()" />
-                <button id="chatSendBtn" onclick="sendChat()">Send</button>
-            </div>
+            <div id="chatOptionsEl"></div>
         </div>
         <div id="npcListEl"></div>
         <div id="exitGridEl">

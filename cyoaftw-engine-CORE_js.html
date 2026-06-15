@@ -1,3 +1,4 @@
+<script>
 // ── GAME STATE ───────────────────────────────────────────────────
 
 window.G = {
@@ -60,13 +61,14 @@ function clampStoryTension(value) {
     return Math.max(0, Math.min(100, value));
 }
 
-function rememberStoryEvent(type, text, weight = 0) {
+function rememberStoryEvent(type, text, weight) {
     if (!G.story) G.story = createStoryDirectorState();
+    if (typeof weight !== "number") weight = 0;
 
     G.story.recentEvents.unshift({
         type,
         text,
-        room: G.activeRoom?.displayName || G.activeRoom?.name || null,
+        room: G.activeRoom ? (G.activeRoom.displayName || G.activeRoom.name || null) : null,
         turn: Date.now()
     });
 
@@ -90,7 +92,7 @@ function addStoryQuestion(text) {
 
 function ensureStoryThread(seed) {
     if (!G.story) G.story = createStoryDirectorState();
-    if (!seed?.id) return null;
+    if (!seed || !seed.id) return null;
 
     let thread = G.story.activeThreads.find(t => t.id === seed.id);
     if (!thread) {
@@ -107,7 +109,9 @@ function ensureStoryThread(seed) {
     return thread;
 }
 
-function addStoryBeat(threadId, text, intensityDelta = 0) {
+function addStoryBeat(threadId, text, intensityDelta) {
+    if (typeof intensityDelta !== "number") intensityDelta = 0;
+
     const thread = ensureStoryThread({
         id: threadId,
         title: threadId.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
@@ -116,7 +120,7 @@ function addStoryBeat(threadId, text, intensityDelta = 0) {
 
     thread.beats.push({
         text,
-        room: G.activeRoom?.displayName || G.activeRoom?.name || null,
+        room: G.activeRoom ? (G.activeRoom.displayName || G.activeRoom.name || null) : null,
         turn: Date.now()
     });
     thread.beats = thread.beats.slice(-6);
@@ -259,31 +263,214 @@ function beginAdventure() {
     addChatMessage("left", "narrator",
         `You find yourself in ${G.activeRoom.displayName}. ${G.activeRoom.baseDescription}`
     );
+
+    saveGameState();
 }
 
 // 
 
 // ── SAVE / LOAD HELPERS ──────────────────────────────────────────
 
-function hasSavedGame() {
+const SAVE_KEY = "cyoaftwSave";
+
+function isValidSavedGame(save) {
+    return !!(
+        save &&
+        save.version === 1 &&
+        save.player &&
+        save.roomMap &&
+        save.player.coords &&
+        save.roomMap[save.player.coords]
+    );
+}
+
+function readSavedGame() {
     try {
-        const raw = localStorage.getItem("cyoaftwSave");
-        if (!raw) return false;
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return null;
 
         const save = JSON.parse(raw);
+        if (!isValidSavedGame(save)) return null;
+        return save;
 
-        return !!(
-            save &&
-            save.version === 1 &&
-            save.player &&
-            save.roomMap &&
-            save.player.coords &&
-            save.roomMap[save.player.coords]
-        );
     } catch (err) {
-        console.warn("Saved game check failed:", err);
+        console.warn("Saved game read failed:", err);
+        return null;
+    }
+}
+
+function hasSavedGame() {
+    return !!readSavedGame();
+}
+
+function formatSavedAt(savedAt) {
+    if (!savedAt) return "unknown time";
+
+    const date = new Date(savedAt);
+    if (isNaN(date.getTime())) return "unknown time";
+
+    return date.toLocaleString();
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function getSavedGameSummary(save) {
+    const player = save.player || {};
+    const room = save.roomMap[player.coords] || {};
+    const location = room.displayName || room.name || room.type || player.coords || "unknown location";
+    const zone = room.zone ? `${room.zone} - ` : "";
+    const savedAt = save.meta ? save.meta.savedAt : null;
+
+    return `${escapeHtml(player.name || "Adventurer")} the ${escapeHtml(player.class || "Adventurer")}<br>` +
+        `${escapeHtml(zone)}${escapeHtml(location)}<br>` +
+        `Saved ${escapeHtml(formatSavedAt(savedAt))}`;
+}
+
+function showSavedGamePrompt() {
+    const promptEl = document.getElementById("savedGamePrompt");
+    const setupEl = document.getElementById("setupWrapper");
+    const summaryEl = document.getElementById("savedGameSummaryEl");
+    if (!promptEl || !setupEl || !summaryEl) return;
+
+    const save = readSavedGame();
+    if (!save) {
+        hideSavedGamePrompt();
+        return;
+    }
+
+    summaryEl.innerHTML = getSavedGameSummary(save);
+    promptEl.classList.add("active");
+    setupEl.classList.add("save-prompt-active");
+}
+
+function hideSavedGamePrompt() {
+    const promptEl = document.getElementById("savedGamePrompt");
+    const setupEl = document.getElementById("setupWrapper");
+
+    if (promptEl) promptEl.classList.remove("active");
+    if (setupEl) setupEl.classList.remove("save-prompt-active");
+}
+
+function clearSavedGame() {
+    try {
+        localStorage.removeItem(SAVE_KEY);
+        return true;
+    } catch (err) {
+        console.warn("Saved game clear failed:", err);
         return false;
     }
+}
+
+function showSetupScreen() {
+    const setupEl = document.getElementById("setupWrapper");
+    const gameEl = document.getElementById("gameWrapper");
+
+    if (setupEl) setupEl.style.display = "flex";
+    if (gameEl) gameEl.classList.remove("active");
+}
+
+function showGameScreen() {
+    const setupEl = document.getElementById("setupWrapper");
+    const gameEl = document.getElementById("gameWrapper");
+
+    if (setupEl) setupEl.style.display = "none";
+    if (gameEl) gameEl.classList.add("active");
+}
+
+function startNewAdventureFromPrompt() {
+    clearSavedGame();
+    hideSavedGamePrompt();
+    setupGoTo(1);
+}
+
+function resetNpcPanel() {
+    const placeholderEl = document.getElementById("npcPlaceholderEl");
+    const detailEl = document.getElementById("npcDetailEl");
+
+    if (placeholderEl) placeholderEl.style.display = "block";
+    if (detailEl) detailEl.classList.remove("active");
+    clearChatOptions();
+}
+
+function resumeSavedGame() {
+    const save = readSavedGame();
+    if (!save) {
+        hideSavedGamePrompt();
+        showSetupScreen();
+        return false;
+    }
+
+    G.player = save.player;
+    G.roomMap = save.roomMap || {};
+    G.story = save.story || createStoryDirectorState();
+    G.activeRoom = G.roomMap[G.player.coords] || null;
+    G.activeNPC = null;
+    G.prefetchCache = {};
+    G.prefetchQueue = [];
+    G.isPrefetching = false;
+
+    if (!G.activeRoom) {
+        console.warn("Saved game is missing the active room.");
+        clearSavedGame();
+        hideSavedGamePrompt();
+        showSetupScreen();
+        return false;
+    }
+
+    const activeNPCId = save.meta ? save.meta.activeNPCId : null;
+    if (activeNPCId && Array.isArray(G.activeRoom.creatures)) {
+        for (let i = 0; i < G.activeRoom.creatures.length; i++) {
+            if (G.activeRoom.creatures[i].id === activeNPCId) {
+                G.activeNPC = G.activeRoom.creatures[i];
+                break;
+            }
+        }
+    }
+
+    showGameScreen();
+
+    const chatLogEl = document.getElementById("chatLogEl");
+    if (chatLogEl) chatLogEl.innerHTML = "";
+
+    renderRoom();
+    renderStats();
+
+    if (G.activeNPC) {
+        selectNPC(G.activeNPC);
+    } else {
+        resetNpcPanel();
+    }
+
+    schedulePrefetch();
+
+    addChatMessage("left", "narrator",
+        `Welcome back to ${G.activeRoom.displayName || G.activeRoom.name}. ${G.activeRoom.baseDescription || ""}`
+    );
+
+    saveGameState();
+    return true;
+}
+
+function initSavedGamePrompt() {
+    showSetupScreen();
+    if (hasSavedGame()) {
+        showSavedGamePrompt();
+    } else {
+        hideSavedGamePrompt();
+    }
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initSavedGamePrompt);
+} else {
+    initSavedGamePrompt();
 }
 
 function saveGameState() {
@@ -298,12 +485,13 @@ function saveGameState() {
             story: G.story,
 
             meta: {
-                savedAt: Date.now()
+                savedAt: Date.now(),
+                activeNPCId: G.activeNPC ? G.activeNPC.id : null
             }
         };
 
         localStorage.setItem(
-            "cyoaftwSave",
+            SAVE_KEY,
             JSON.stringify(saveData)
         );
 
@@ -437,6 +625,8 @@ function movePlayer(direction) {
     addChatMessage("left", "narrator",
         `You move ${direction} into ${G.activeRoom.displayName}. ${G.activeRoom.baseDescription}`
     );
+
+    saveGameState();
 }
 
 // ── PREFETCH ─────────────────────────────────────────────────────
@@ -501,20 +691,96 @@ Speak only as ${npc.name} would speak.
 
     addTypingIndicator();
 
-    const result = await ai({ instruction: prompt, endButtons: "none" });
+    let responseText = "";
+    try {
+        const result = await ai({ instruction: prompt, endButtons: "none" });
+        responseText = typeof result === "string" ? result : result.text || "";
+    } catch (err) {
+        console.error("NPC response failed:", err);
+        responseText = `${npc.name} hesitates, unable to answer just now.`;
+    }
 
     removeTypingIndicator();
 
-    const responseText = typeof result === "string" ? result : result.text || "";
     addChatMessage("left", npc.name, responseText);
     updateStoryOnNpcInteraction(npc, playerInput, responseText);
 
     npc.memory.metPlayer = true;
     npc.memory.lastMood  = "neutral";
     npc.memory.playerActions.push(playerInput.slice(0, 60));
+
+    saveGameState();
+
+    if (G.activeNPC === npc) renderChatOptions(npc);
 }
 
 // ── CHAT UI ──────────────────────────────────────────────────────
+
+function getChatOptions(npc) {
+    const favor = npc && npc.memory && typeof npc.memory.favorability === "number"
+        ? npc.memory.favorability : 0;
+    const hostility = npc && typeof npc.hostility === "number" ? npc.hostility : 0;
+
+    const options = [
+        { label: "Greet them", text: "I greet them and wait to see how they respond." },
+        { label: "Ask about this place", text: "What can you tell me about this place?" },
+        { label: "Ask what they have seen", text: "Have you seen anything unusual nearby?" },
+        { label: "Offer help", text: "You look like you might need help. What is going on?" }
+    ];
+
+    if (hostility >= 60 || favor < -20) {
+        options.push({
+            label: "Keep things calm",
+            text: "I keep my distance and ask what they want."
+        });
+    } else {
+        options.push({
+            label: "Ask for a rumor",
+            text: "Have you heard any rumors or secrets worth knowing?"
+        });
+    }
+
+    return options;
+}
+
+function clearChatOptions() {
+    const el = document.getElementById("chatOptionsEl");
+    if (el) el.innerHTML = "";
+}
+
+function setChatOptionsDisabled(disabled) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return;
+
+    const buttons = el.querySelectorAll ? el.querySelectorAll("button") : el.children;
+    for (let i = 0; i < buttons.length; i++) {
+        buttons[i].disabled = disabled;
+    }
+}
+
+function renderChatOptions(npc) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return;
+
+    el.innerHTML = "";
+    if (!npc) return;
+
+    getChatOptions(npc).forEach(option => {
+        const btn = document.createElement("button");
+        btn.className = "chat-option-btn";
+        btn.textContent = option.label;
+        btn.onclick = () => chooseChatOption(option.text);
+        el.appendChild(btn);
+    });
+}
+
+function chooseChatOption(text) {
+    if (!text || !G.activeNPC) return;
+
+    addChatMessage("player", G.player.name, text);
+    setChatOptionsDisabled(true);
+    npcRespond(G.activeNPC, text);
+}
 
 function addChatMessage(side, speaker, text) {
     const log = document.getElementById("chatLogEl");
@@ -560,15 +826,6 @@ function addTypingIndicator() {
 function removeTypingIndicator() {
     const el = document.getElementById("typingMsg");
     if (el) el.remove();
-}
-
-function sendChat() {
-    const input = document.getElementById("chatInputEl");
-    const text  = input.value.trim();
-    if (!text || !G.activeNPC) return;
-    input.value = "";
-    addChatMessage("player", G.player.name, text);
-    npcRespond(G.activeNPC, text);
 }
 
 // ── RENDER ───────────────────────────────────────────────────────
@@ -658,16 +915,19 @@ function selectNPC(npc) {
     document.getElementById("npcDetailEl").classList.add("active");
     document.getElementById("npcDetailNameEl").textContent     = npc.name;
     document.getElementById("npcDetailBehaviorEl").textContent = npc.behavior || "";
-    document.getElementById("npcMoodEl").textContent           = npc.memory?.lastMood || "neutral";
+    document.getElementById("npcMoodEl").textContent           =
+        npc.memory && npc.memory.lastMood ? npc.memory.lastMood : "neutral";
     document.getElementById("npcRoleEl").textContent           = npc.role || "unknown";
 
-    const favor = npc.memory?.favorability ?? 0;
+    const favor = npc.memory && typeof npc.memory.favorability === "number"
+        ? npc.memory.favorability : 0;
     document.getElementById("npcFavorEl").textContent =
         favor >= 60 ? "Friendly" : favor >= 20 ? "Neutral" : favor >= -20 ? "Wary" : "Hostile";
 
     document.getElementById("chatLogEl").innerHTML = "";
     addChatMessage("left", "narrator", `${npc.name} ${npc.action || "is standing nearby"}.`);
-    document.getElementById("chatInputEl").placeholder = `Say something to ${npc.name}...`;
+    renderChatOptions(npc);
+    saveGameState();
 }
 
 // ── EQUIPMENT ────────────────────────────────────────────────────
@@ -699,3 +959,4 @@ function showSpinner(msg) {
 function hideSpinner() {
     document.getElementById("loadingSpinner").classList.remove("active");
 }
+</script>

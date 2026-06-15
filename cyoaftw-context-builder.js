@@ -115,7 +115,7 @@ function buildLocationNarrativeContext(room) {
     }
 
     const anchoredInteractions = creatures
-        .filter(n => n.memory?.anchorObjectId)
+        .filter(n => n.memory && n.memory.anchorObjectId)
         .map(n => ({ role: n.role, anchor: n.memory.anchorObjectId }));
 
     return {
@@ -263,8 +263,8 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
         quirksLine = `- Quirk: ${quirks[Math.floor(Math.random() * quirks.length)]} (occasional, do not repeat every line)`;
     }
 
-    const mood = npc.memory?.lastMood || npc.mood || "neutral";
-    const favorability = typeof npc.memory?.favorability === "number"
+    const mood = npc.memory && npc.memory.lastMood ? npc.memory.lastMood : npc.mood || "neutral";
+    const favorability = npc.memory && typeof npc.memory.favorability === "number"
         ? npc.memory.favorability : 0;
     const hostility = typeof npc.hostility === "number"
         ? npc.hostility : 0;
@@ -311,7 +311,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
 function buildPrompt(room, npc, instruction) {
     const locCtx = buildLocationNarrativeContext(room);
     const sceneBlock = serializeSceneBlock(locCtx);
-    const storyBlock = serializeStoryDirectorBlock(window.G?.story);
+    const storyBlock = serializeStoryDirectorBlock(window.G ? window.G.story : null);
     const npcBlock = npc ? buildNPCPersonaBlock(npc) : "";
 
     return [
