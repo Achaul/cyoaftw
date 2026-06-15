@@ -41,11 +41,10 @@ Main Perchance page shell:
 - Loads external data/context/engine files from jsDelivr/GitHub.
 - Contains CSS and DOM layout.
 - Current center-panel order:
-  - `#roomImageWrapEl`
-  - `#chatPanelEl`
+  - `#roomImageWrapEl`, containing `#roomNameEl`, `#roomDescEl`, `#narrationEl`, then `#chatPanelEl`
   - `#npcListEl`
   - `#exitGridEl`
-- `#chatPanelEl` was moved above `#exitGridEl` and now sits immediately below the room/narration block.
+- `#chatPanelEl` sits inside the room image wrapper after `#narrationEl`, so chat displays over the room background image.
 
 ### `cyoaftw-engine-CORE_js.html`
 
@@ -142,7 +141,7 @@ Do not resurrect `cyoaftw-engine-CORE.js` unless the user explicitly asks to rev
 
 - Added Story Director state and prompt integration.
 - Removed optional chaining/nullish syntax from Story Director-related changes.
-- Moved chat panel above exit grid.
+- Moved chat panel into the room image wrapper after narration so dialogue displays over the room background.
 - Renamed engine payload from `.js` to `_js.html` and wrapped it in script tags.
 - Updated shell page to load the renamed engine payload.
 
