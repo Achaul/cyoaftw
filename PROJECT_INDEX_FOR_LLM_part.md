@@ -42,10 +42,10 @@ Main Perchance page shell:
 - Contains CSS and DOM layout.
 - Current center-panel order:
   - `#roomImageWrapEl`, containing `#roomNameEl`, `#roomDescEl`, `#narrationEl`, then `#chatPanelEl`
-  - `#npcListEl`
   - `#exitGridEl`
 - `#chatPanelEl` sits inside the room image wrapper after `#narrationEl`, so chat displays over the room background image.
 - `#exitGridEl` is visible during exploration and hidden while an NPC interaction is active.
+- Visible NPCs are rendered inline in `#narrationEl` observation sentences; clicking an NPC name opens the NPC interaction panel.
 - NPC preset speech includes a `Say goodbye` disengage option that clears `G.activeNPC` and returns to exploration controls without calling AI.
 - `#chatLogEl` starts fresh when moving to a different room or selecting a different NPC.
 - The saved-game prompt title uses `.prompt-title`, not an `h2`, so Perchance does not derive the page title from `Continue Adventure?`.

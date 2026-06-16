@@ -580,7 +580,7 @@ function beginAdventure() {
     renderStats();
     schedulePrefetch();
 
-    setNarration(buildRoomNarration(G.activeRoom, "start", null));
+    renderRoomNarration(G.activeRoom, "start", null);
 
     saveGameState();
 }
@@ -772,7 +772,7 @@ function resumeSavedGame() {
 
     schedulePrefetch();
 
-    setNarration(buildRoomNarration(G.activeRoom, "resume", null));
+    renderRoomNarration(G.activeRoom, "resume", null);
 
     saveGameState();
     return true;
@@ -981,7 +981,7 @@ function movePlayer(direction) {
     renderRoom();
     schedulePrefetch();
 
-    setNarration(buildRoomNarration(G.activeRoom, "move", dir));
+    renderRoomNarration(G.activeRoom, "move", dir);
 
     saveGameState();
 }
@@ -2181,6 +2181,69 @@ function buildRoomNarration(room, mode, direction) {
     return observations ? `${entry}\n\n${observations}` : entry;
 }
 
+function appendNarrationText(parent, text) {
+    parent.appendChild(document.createTextNode(text));
+}
+
+function appendNarrationBreak(parent) {
+    parent.appendChild(document.createElement("br"));
+}
+
+function appendObservationSeparator(parent, hasObservations) {
+    if (hasObservations) {
+        appendNarrationText(parent, " ");
+    } else {
+        appendNarrationBreak(parent);
+        appendNarrationBreak(parent);
+    }
+}
+
+function renderRoomNarration(room, mode, direction) {
+    const el = document.getElementById("narrationEl");
+    if (!el) return;
+
+    el.textContent = "";
+    appendNarrationText(el, ensureSentence(buildRoomEntryNarration(room, mode, direction)));
+
+    if (!room) return;
+
+    let hasObservations = false;
+    const npcs = Array.isArray(room.creatures)
+        ? room.creatures.filter(isVisibleEntity)
+        : [];
+    const items = Array.isArray(room.items)
+        ? room.items.filter(isVisibleEntity)
+        : [];
+
+    npcs.forEach(npc => {
+        const name = getEntityName(npc);
+        if (!name) return;
+
+        hydrateNPCSpeciesFlags(npc);
+        appendObservationSeparator(el, hasObservations);
+        appendNarrationText(el, "You see ");
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "narration-entity-btn";
+        btn.textContent = name;
+        btn.onclick = () => selectNPC(npc);
+        el.appendChild(btn);
+
+        appendNarrationText(el, " here.");
+        hasObservations = true;
+    });
+
+    items.forEach(item => {
+        const name = withIndefiniteArticle(getEntityName(item));
+        if (!name) return;
+
+        appendObservationSeparator(el, hasObservations);
+        appendNarrationText(el, `You see ${name} here.`);
+        hasObservations = true;
+    });
+}
+
 function setExitGridVisible(visible) {
     const el = document.getElementById("exitGridEl");
     if (el) el.style.display = visible ? "grid" : "none";
@@ -2263,30 +2326,9 @@ function renderRoom() {
     if (descEl) descEl.textContent = "";
 
     clearNarration();
-    renderNPCs(room.creatures || []);
     renderExits(room.exits    || {});
     setExitGridVisible(!G.activeNPC);
     renderStats();
-}
-
-function renderNPCs(npcs) {
-    const el = document.getElementById("npcListEl");
-    if (!el) return;
-    el.innerHTML = "";
-    const visibleNPCs = Array.isArray(npcs)
-        ? npcs.filter(isVisibleEntity)
-        : [];
-
-    visibleNPCs.forEach(npc => {
-        hydrateNPCSpeciesFlags(npc);
-
-        const btn     = document.createElement("button");
-        btn.className = "npc-btn";
-        btn.textContent = npc.name;
-        btn.onclick = () => selectNPC(npc);
-
-        el.appendChild(btn);
-    });
 }
 
 function renderExits(exits) {

@@ -309,42 +309,26 @@ body {
     text-shadow: 0 1px 3px rgba(0,0,0,0.9);
 }
 
-#npcListEl {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 10px 16px;
-    justify-content: center;
-    background: #111;
-}
-
-.npc-btn {
-    padding: 5px 14px;
-    background: #1e1e1e;
-    border: 1px solid #444;
-    color: #bbb;
-    border-radius: 20px;
+.narration-entity-btn {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px dotted rgba(255,255,255,0.7);
+    color: inherit;
     cursor: pointer;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    display: inline;
+    font: inherit;
+    font-style: inherit;
+    line-height: inherit;
+    padding: 0;
+    text-shadow: inherit;
+    vertical-align: baseline;
 }
 
-.npc-btn:hover { background: #2a2a2a; color: #fff; }
-
-.npc-btn:disabled,
-.npc-btn-disabled {
-    color: #666;
-    border-color: #2a2a2a;
-    cursor: default;
-    opacity: 0.65;
-}
-
-.npc-btn:disabled:hover,
-.npc-btn-disabled:hover {
-    background: #1e1e1e;
-    color: #666;
+.narration-entity-btn:hover,
+.narration-entity-btn:focus-visible {
+    color: #fff;
+    border-bottom-color: #fff;
+    outline: none;
 }
 
 /* Exit grid */
@@ -872,7 +856,6 @@ body {
                 <div id="chatOptionsEl"></div>
             </div>
         </div>
-        <div id="npcListEl"></div>
         <div id="exitGridEl">
             <button class="exit-btn" id="exit-NW"></button>
             <button class="exit-btn" id="exit-N"></button>
