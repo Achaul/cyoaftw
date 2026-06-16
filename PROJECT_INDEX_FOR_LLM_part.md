@@ -117,7 +117,7 @@ World, zone, room, structural/object templates and room-building helpers. Used b
 
 ### `cyoaftw-npc-data.js`
 
-NPC personality, age, behavior, and generation helpers. Used by engine when spawning NPCs.
+NPC personality, age, behavior, creature-enrichment, anatomy/appearance, lore, and generation helpers. Used by engine when spawning NPCs.
 
 ### `js_cache_bust.ps1`
 
@@ -156,6 +156,7 @@ Do not resurrect `cyoaftw-engine-CORE.js` unless the user explicitly asks to rev
 - Added visible NPC/item observation sentences to room-entry narration.
 - Renamed engine payload from `.js` to `_js.html` and wrapped it in script tags.
 - Updated shell page to load the renamed engine payload.
+- Reintroduced NPC/creature enrichment: species templates now carry lore, anatomy profiles, cultural values, topics, and taboos; spawned NPCs receive anatomy, appearance highlights, motives, speech cues, and prompt-visible reaction biases.
 
 ## Recommended Next Steps
 

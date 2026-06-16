@@ -902,13 +902,13 @@ function createNPC(species, room, zoneTemplate) {
     const isHumanoid = getSpeciesHumanoidFlag(species) === true;
     const profile     = getRandomPersonalityProfile({});
     const ageCategory = getAgeCategoryForRole("Wanderer", profile.archetype);
-    const age         = getRandomAge(ageCategory);
-    const gender      = Math.random() < 0.5 ? "male" : "female";
+    const age         = isHumanoid ? getRandomAge(ageCategory) : null;
+    const gender      = isHumanoid ? (Math.random() < 0.5 ? "male" : "female") : "none";
     const temperament = profile.temperament;
 
     const npc = {
         id:               `${species.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`,
-        name:             `${gender === "male" ? "a male" : "a female"} ${species}`,
+        name:             isHumanoid ? `${gender === "male" ? "a male" : "a female"} ${species}` : `a ${species}`,
         species,
         isHumanoid,
         gender,
@@ -931,6 +931,10 @@ function createNPC(species, room, zoneTemplate) {
             aggressionCount: 0
         }
     };
+
+    if (typeof generateNPCEnrichment === "function") {
+        generateNPCEnrichment(npc, room, zoneTemplate);
+    }
 
     npc.action   = generatePostureOrAction(temperament);
     npc.behavior = generateNPCBehavior(npc);
@@ -2209,7 +2213,11 @@ function buildObservationNarration(room) {
 
     npcs.forEach(npc => {
         const name = getEntityName(npc);
-        if (name) lines.push(`You see ${name} here.`);
+        if (name) {
+            const detail = typeof getNPCObservationDetail === "function"
+                ? getNPCObservationDetail(npc) : "";
+            lines.push(`You see ${name} here${detail ? ", " + detail : ""}.`);
+        }
     });
 
     items.forEach(item => {
@@ -2297,7 +2305,9 @@ function renderRoomNarration(room, mode, direction) {
         btn.onclick = () => selectNPC(npc);
         el.appendChild(btn);
 
-        appendNarrationText(el, " here.");
+        const detail = typeof getNPCObservationDetail === "function"
+            ? getNPCObservationDetail(npc) : "";
+        appendNarrationText(el, ` here${detail ? ", " + detail : ""}.`);
         hasObservations = true;
     });
 
@@ -2656,7 +2666,10 @@ function selectNPC(npc) {
     document.getElementById("npcPlaceholderEl").style.display = "none";
     document.getElementById("npcDetailEl").classList.add("active");
     document.getElementById("npcDetailNameEl").textContent     = npc.name;
-    document.getElementById("npcDetailBehaviorEl").textContent = npc.behavior || "";
+    const inspection = typeof getNPCInspectionDetail === "function"
+        ? getNPCInspectionDetail(npc) : "";
+    document.getElementById("npcDetailBehaviorEl").textContent =
+        [npc.behavior || "", inspection].filter(Boolean).join(" ");
     document.getElementById("npcMoodEl").textContent           =
         npc.memory && npc.memory.lastMood ? npc.memory.lastMood : "neutral";
     document.getElementById("npcRoleEl").textContent           = npc.role || "unknown";
@@ -2667,7 +2680,7 @@ function selectNPC(npc) {
         favor >= 60 ? "Friendly" : favor >= 20 ? "Neutral" : favor >= -20 ? "Wary" : "Hostile";
 
     if (isNewNPC) clearChatLog();
-    setNarration(`${npc.name} ${npc.action || "is standing nearby"}.`);
+    setNarration(`${npc.name} ${npc.action || "is standing nearby"}.${inspection ? "\n\n" + inspection : ""}`);
     setExitGridVisible(false);
     renderNPCActionMenu(npc);
     saveGameState();

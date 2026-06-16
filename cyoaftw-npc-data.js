@@ -43,6 +43,261 @@ const SPEECH_STYLES = [
     "clipped", "rambling", "sarcastic", "poetic"
 ];
 
+const NPC_DISTINGUISHING_MARKS = [
+    "a small scar near one eye",
+    "weathered hands",
+    "a chipped tooth",
+    "old travel stains",
+    "a guarded stare",
+    "a restless posture",
+    "a careful way of watching exits",
+    "a faint herbal smell",
+    "a worn charm tied to their gear",
+    "patched clothing",
+    "a voice that drops when strangers come close"
+];
+
+const NPC_HUMANOID_MOTIVES = [
+    "earn enough coin to feel secure",
+    "avoid becoming involved in someone else's trouble",
+    "find out what strangers know",
+    "protect a personal secret",
+    "win a little respect",
+    "get through the day without losing face",
+    "locate a missing contact",
+    "turn a rumor into advantage"
+];
+
+const NPC_CREATURE_MOTIVES = [
+    "guard its territory",
+    "search for food or warmth",
+    "avoid a stronger threat nearby",
+    "obey an old instinct",
+    "watch for a chance to flee",
+    "protect a hidden nest or resting place"
+];
+
+function _npcRand(arr) {
+    if (!Array.isArray(arr) || !arr.length) return "";
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function _npcRandInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function _npcUniquePicks(arr, count) {
+    const pool = Array.isArray(arr) ? arr.slice() : [];
+    const picks = [];
+    while (pool.length && picks.length < count) {
+        const index = Math.floor(Math.random() * pool.length);
+        picks.push(pool.splice(index, 1)[0]);
+    }
+    return picks;
+}
+
+function _npcJoinList(parts) {
+    const clean = (Array.isArray(parts) ? parts : []).filter(Boolean);
+    if (!clean.length) return "";
+    if (clean.length === 1) return clean[0];
+    if (clean.length === 2) return clean[0] + " and " + clean[1];
+    return clean.slice(0, -1).join(", ") + ", and " + clean[clean.length - 1];
+}
+
+function _npcGetSpeciesTemplate(species) {
+    if (typeof getSpeciesTemplate === "function") {
+        return getSpeciesTemplate(species);
+    }
+    return null;
+}
+
+function getSpeechTicsForStyle(style, voice) {
+    const key = String(style || "common").toLowerCase();
+    const map = {
+        gruff: ["keeps sentences short", "uses blunt practical words"],
+        eloquent: ["chooses words with care", "speaks in polished phrases"],
+        whispered: ["keeps their voice low", "leans close before important words"],
+        boisterous: ["speaks loudly", "laughs or scoffs between points"],
+        nervous: ["restarts sentences", "checks the listener's reaction often"],
+        formal: ["uses titles", "keeps a respectful distance in speech"],
+        archaic: ["uses old-fashioned phrasing", "speaks as if quoting old custom"],
+        clipped: ["answers in fragments", "cuts away unnecessary words"],
+        rambling: ["circles the point", "adds side details before the answer"],
+        sarcastic: ["answers with dry edges", "lets irony slip into their tone"],
+        poetic: ["uses metaphor", "notices sensory details aloud"]
+    };
+    const tics = map[key] ? map[key].slice() : ["speaks plainly"];
+    if (voice) tics.unshift("has a " + voice + " voice");
+    return tics.slice(0, 3);
+}
+
+function generateNPCMotivation(npc, template, room) {
+    const isHumanoid = npc && npc.isHumanoid === true;
+    const culture = template && template.culture ? template.culture : {};
+    const values = Array.isArray(culture.values) ? culture.values : [];
+    const base = isHumanoid ? NPC_HUMANOID_MOTIVES : NPC_CREATURE_MOTIVES;
+    const roomType = room && room.type ? String(room.type).toLowerCase() : "";
+    let motive = _npcRand(base);
+
+    if (values.length && Math.random() < 0.45) {
+        motive = "act according to " + _npcRand(values);
+    }
+    if (roomType.indexOf("tavern") >= 0 || roomType.indexOf("inn") >= 0) {
+        motive = isHumanoid ? _npcRand(["hear useful gossip", "make a quiet bargain", "rest without being bothered"]) : motive;
+    }
+    if (roomType.indexOf("gate") >= 0) {
+        motive = isHumanoid ? _npcRand(["judge who is entering town", "avoid trouble at the gate", "watch for suspicious travelers"]) : motive;
+    }
+    if (roomType.indexOf("dungeon") >= 0 || roomType.indexOf("ruin") >= 0 || roomType.indexOf("vault") >= 0) {
+        motive = isHumanoid ? _npcRand(["survive the dangerous place", "claim something valuable before others do", "keep outsiders away from a secret"]) : _npcRand(NPC_CREATURE_MOTIVES);
+    }
+
+    return motive;
+}
+
+function generateNPCEnrichment(npc, room, zoneTemplate) {
+    if (!npc) return null;
+
+    const template = _npcGetSpeciesTemplate(npc.species) || {};
+    const profile = template.anatomyProfile || {};
+    const culture = template.culture || {};
+    const isHumanoid = npc.isHumanoid === true;
+
+    const surfaceType = profile.surfaceType || (isHumanoid ? "skin" : "hide");
+    const surfaceColor = _npcRand(profile.skinTones) || "unremarkable";
+    const build = _npcRand(profile.builds) || (isHumanoid ? "average" : "lean");
+    const eyeColor = _npcRand(profile.eyeColors) || "";
+    const hairColors = Array.isArray(profile.hairColors) ? profile.hairColors : [];
+    const hairColor = isHumanoid ? _npcRand(hairColors) : "";
+    const hairStyle = hairColor && hairColor !== "none" && hairColor !== "shaved"
+        ? _npcRand(profile.hairStyles) : "";
+    const features = _npcUniquePicks(profile.features, isHumanoid ? 2 : 3);
+    const marks = _npcUniquePicks(NPC_DISTINGUISHING_MARKS, isHumanoid ? _npcRandInt(1, 2) : 1);
+    const movement = _npcRand(profile.movements);
+    const voice = _npcRand(profile.voices);
+    const values = _npcUniquePicks(culture.values, 2);
+    const preferredTopics = _npcUniquePicks(culture.topics, 3);
+    const tabooTopics = _npcUniquePicks(culture.taboos, 2);
+    const speechTics = getSpeechTicsForStyle(npc.speechStyle, voice);
+
+    const anatomy = {
+        size: template.size || "medium",
+        build,
+        body: {
+            surfaceType,
+            color: surfaceColor
+        },
+        eyes: eyeColor ? { color: eyeColor } : null,
+        features,
+        marks,
+        movement,
+        voice
+    };
+
+    if (hairColor && hairColor !== "none" && hairColor !== "shaved") {
+        anatomy.hair = {
+            color: hairColor,
+            style: hairStyle || "unstyled"
+        };
+    }
+
+    const enrichment = {
+        speciesLore: template.lore || "",
+        values,
+        preferredTopics,
+        tabooTopics,
+        speechTics,
+        currentMotive: generateNPCMotivation(npc, template, room),
+        mannerisms: [
+            movement,
+            voice ? "speaks in a " + voice + " voice" : "",
+            features.length ? "draws attention to " + _npcRand(features) : ""
+        ].filter(Boolean),
+        reactionNotes: [
+            values.length ? "responds well to " + _npcJoinList(values) : "",
+            tabooTopics.length ? "bristles at " + _npcJoinList(tabooTopics) : ""
+        ].filter(Boolean)
+    };
+
+    npc.anatomy = anatomy;
+    npc.enrichment = enrichment;
+    npc.size = anatomy.size;
+    npc.bodyType = build;
+    npc.skinTone = surfaceType === "skin" ? surfaceColor : "";
+    npc.furColor = surfaceType === "fur" ? surfaceColor : "";
+    npc.scaleColor = surfaceType === "scales" ? surfaceColor : "";
+    npc.surfaceType = surfaceType;
+    npc.surfaceColor = surfaceColor;
+    npc.eyeColor = eyeColor;
+    npc.hairColor = hairColor && hairColor !== "none" && hairColor !== "shaved" ? hairColor : "";
+    npc.hairStyle = hairStyle;
+    npc.specialTraits = features.concat(marks).filter(Boolean);
+    npc.physicalTraits = buildNPCPhysicalSummary(npc);
+    npc.appearanceHighlights = buildNPCAppearanceHighlights(npc);
+    npc.loreNotes = enrichment.speciesLore;
+    npc.preferredTopics = preferredTopics;
+    npc.tabooTopics = tabooTopics;
+    npc.currentMotive = enrichment.currentMotive;
+
+    return enrichment;
+}
+
+function buildNPCAppearanceHighlights(npc) {
+    if (!npc) return [];
+    const anatomy = npc.anatomy || {};
+    const body = anatomy.body || {};
+    const highlights = [];
+
+    if (anatomy.build) highlights.push(anatomy.build + " build");
+    if (body.color && body.surfaceType) highlights.push(body.color + " " + body.surfaceType);
+    if (npc.eyeColor) highlights.push(npc.eyeColor + " eyes");
+    if (npc.hairColor) {
+        highlights.push((npc.hairStyle ? npc.hairStyle + " " : "") + npc.hairColor + " hair");
+    }
+    if (Array.isArray(anatomy.features)) {
+        for (let i = 0; i < anatomy.features.length; i++) highlights.push(anatomy.features[i]);
+    }
+    if (Array.isArray(anatomy.marks) && anatomy.marks.length && highlights.length < 6) {
+        highlights.push(anatomy.marks[0]);
+    }
+
+    return highlights.slice(0, 6);
+}
+
+function buildNPCPhysicalSummary(npc) {
+    if (!npc) return "";
+    const highlights = buildNPCAppearanceHighlights(npc);
+    const identity = [npc.gender && npc.gender !== "none" ? npc.gender : "", npc.species || ""]
+        .filter(Boolean).join(" ");
+
+    if (!identity && !highlights.length) return "";
+    if (!highlights.length) return identity + ".";
+    if (!identity) return _npcJoinList(highlights) + ".";
+    return identity + " with " + _npcJoinList(highlights) + ".";
+}
+
+function getNPCObservationDetail(npc) {
+    if (!npc) return "";
+    const highlights = Array.isArray(npc.appearanceHighlights) && npc.appearanceHighlights.length
+        ? npc.appearanceHighlights.slice(0, 4)
+        : buildNPCAppearanceHighlights(npc).slice(0, 4);
+    if (!highlights.length) return "";
+    return "with " + _npcJoinList(highlights);
+}
+
+function getNPCInspectionDetail(npc) {
+    if (!npc) return "";
+    const lines = [];
+    if (npc.physicalTraits) lines.push(npc.physicalTraits);
+    if (npc.enrichment && Array.isArray(npc.enrichment.mannerisms) && npc.enrichment.mannerisms.length) {
+        lines.push(_npcRand(npc.enrichment.mannerisms));
+    }
+    if (npc.enrichment && npc.enrichment.currentMotive) {
+        lines.push("They seem driven to " + npc.enrichment.currentMotive + ".");
+    }
+    return lines.join(" ");
+}
+
 // ── GET RANDOM PERSONALITY PROFILE ──────────────────────────────
 
 function getRandomPersonalityProfile(options = {}) {
@@ -205,6 +460,11 @@ function generateNPCBehavior(npc) {
     const flairOptions = personalityFlairs[chosenTrait] || [];
     if (flairOptions.length && Math.random() < 0.8) {
         behavior += `. ${_rand(flairOptions)}`;
+    }
+
+    if (npc.enrichment && Array.isArray(npc.enrichment.mannerisms) &&
+        npc.enrichment.mannerisms.length && Math.random() < 0.45) {
+        behavior += `. ${_rand(npc.enrichment.mannerisms)}`;
     }
 
     return behavior;

@@ -285,6 +285,32 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
     }
 
     const speechStyle = npc.speechStyle || profile.speechStyle || "";
+    const enrichment = npc.enrichment || {};
+    const appearanceHighlights = Array.isArray(npc.appearanceHighlights) && npc.appearanceHighlights.length
+        ? npc.appearanceHighlights : [];
+    const physicalTraits = npc.physicalTraits || "";
+    const anatomy = npc.anatomy || {};
+    const anatomyBody = anatomy.body || {};
+    const anatomyBits = [];
+    if (anatomy.size) anatomyBits.push(`size ${anatomy.size}`);
+    if (anatomy.build) anatomyBits.push(`${anatomy.build} build`);
+    if (anatomyBody.color && anatomyBody.surfaceType) {
+        anatomyBits.push(`${anatomyBody.color} ${anatomyBody.surfaceType}`);
+    }
+    if (anatomy.movement) anatomyBits.push(anatomy.movement);
+    if (anatomy.voice) anatomyBits.push(`${anatomy.voice} voice`);
+
+    const lore = npc.loreNotes || enrichment.speciesLore || "";
+    const motive = npc.currentMotive || enrichment.currentMotive || "";
+    const values = Array.isArray(enrichment.values) ? enrichment.values : [];
+    const speechTics = Array.isArray(enrichment.speechTics) ? enrichment.speechTics : [];
+    const preferredTopics = Array.isArray(npc.preferredTopics) && npc.preferredTopics.length
+        ? npc.preferredTopics
+        : (Array.isArray(enrichment.preferredTopics) ? enrichment.preferredTopics : []);
+    const tabooTopics = Array.isArray(npc.tabooTopics) && npc.tabooTopics.length
+        ? npc.tabooTopics
+        : (Array.isArray(enrichment.tabooTopics) ? enrichment.tabooTopics : []);
+    const reactionNotes = Array.isArray(enrichment.reactionNotes) ? enrichment.reactionNotes : [];
 
     const lines = [
         `${title}:`,
@@ -297,6 +323,16 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
         traits.length ? `- Traits: ${traits.join(", ")}` : "",
         quirksLine,
         speechStyle ? `- Speech style: ${speechStyle}` : "",
+        speechTics.length ? `- Speech cues: ${speechTics.join("; ")}` : "",
+        physicalTraits ? `- Appearance: ${physicalTraits}` : "",
+        appearanceHighlights.length ? `- Notable details: ${appearanceHighlights.join(", ")}` : "",
+        anatomyBits.length ? `- Anatomy/movement: ${anatomyBits.join(", ")}` : "",
+        lore ? `- Species lore: ${String(lore).slice(0, 240)}` : "",
+        values.length ? `- Values: ${values.join(", ")}` : "",
+        preferredTopics.length ? `- Comfortable topics: ${preferredTopics.join(", ")}` : "",
+        tabooTopics.length ? `- Sensitive topics: ${tabooTopics.join(", ")}` : "",
+        reactionNotes.length ? `- Reaction biases: ${reactionNotes.join("; ")}` : "",
+        motive ? `- Current motive: ${motive}` : "",
         `- Mood: ${mood}`,
         `- Favorability toward player: ${favorability}/100 (${favorLabel(favorability)})`,
         `- Hostility toward player: ${hostility}/100 (${hostLabel(hostility)})`,

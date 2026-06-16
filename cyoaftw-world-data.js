@@ -42,15 +42,198 @@ const ZONE_TEMPLATES = [
 // ── SPECIES TEMPLATES ───────────────────────────────────────────
 
 const SPECIES_TEMPLATES = [
-    { species: "Human",    isHumanoid: true  },
-    { species: "Elf",      isHumanoid: true  },
-    { species: "Dwarf",    isHumanoid: true  },
-    { species: "Halfling", isHumanoid: true  },
-    { species: "Goblin",   isHumanoid: true  },
-    { species: "Orc",      isHumanoid: true  },
-    { species: "Skeleton", isHumanoid: false },
-    { species: "Rat",      isHumanoid: false },
-    { species: "Ghost",    isHumanoid: false }
+    {
+        species: "Human",
+        isHumanoid: true,
+        size: "medium",
+        lore: "Humans are adaptable people whose customs change quickly from town to frontier. They tend to judge strangers by conduct before bloodline.",
+        anatomyProfile: {
+            surfaceType: "skin",
+            skinTones: ["pale", "fair", "tan", "olive", "brown", "dark brown"],
+            hairColors: ["black", "brown", "auburn", "blond", "gray"],
+            hairStyles: ["cropped", "loose", "tied back", "braided", "messy"],
+            eyeColors: ["brown", "hazel", "green", "blue", "gray"],
+            builds: ["lean", "sturdy", "soft-featured", "weathered", "athletic"],
+            features: ["calloused hands", "travel-worn boots", "expressive brows", "a tired but alert face"],
+            movements: ["moves with practical economy", "keeps an easy human stride", "shifts weight like someone used to long roads"],
+            voices: ["plain-spoken", "warm", "dry", "streetwise", "measured"]
+        },
+        culture: {
+            values: ["practical bargains", "local reputation", "family or guild ties"],
+            topics: ["recent trouble", "work", "weather", "rumors"],
+            taboos: ["being treated as disposable"]
+        }
+    },
+    {
+        species: "Elf",
+        isHumanoid: true,
+        size: "medium",
+        lore: "Elves carry long memory in their manners. Even a casual remark may be weighed against old promises, beauty, and restraint.",
+        anatomyProfile: {
+            surfaceType: "skin",
+            skinTones: ["pale", "warm ivory", "olive", "copper", "moonlit brown"],
+            hairColors: ["silver", "black", "gold", "chestnut", "white"],
+            hairStyles: ["long", "braided", "tied with cord", "flowing", "neatly pinned"],
+            eyeColors: ["green", "violet", "silver", "amber", "blue"],
+            builds: ["willowy", "graceful", "lithe", "narrow-shouldered", "elegant"],
+            features: ["tapered ears", "fine cheekbones", "an ageless gaze", "delicate hands"],
+            movements: ["moves with quiet precision", "steps as if listening to the floor", "turns with deliberate grace"],
+            voices: ["soft", "musical", "formal", "distant", "carefully chosen"]
+        },
+        culture: {
+            values: ["oaths", "old places", "craftsmanship", "patience"],
+            topics: ["history", "music", "omens", "old grudges"],
+            taboos: ["mockery of tradition", "careless promises"]
+        }
+    },
+    {
+        species: "Dwarf",
+        isHumanoid: true,
+        size: "small",
+        lore: "Dwarves are shaped by clan, craft, and memory. They notice workmanship quickly and remember debts even faster.",
+        anatomyProfile: {
+            surfaceType: "skin",
+            skinTones: ["ruddy", "tan", "deep brown", "umber", "stone-pale"],
+            hairColors: ["black", "brown", "red", "iron-gray", "white"],
+            hairStyles: ["braided", "thick", "bound with rings", "cropped", "wild"],
+            eyeColors: ["brown", "amber", "gray", "green", "black"],
+            builds: ["compact", "broad", "stout", "powerful", "thickset"],
+            features: ["square hands", "a strong jaw", "work-scarred knuckles", "ornamental beard-braids"],
+            movements: ["plants each step firmly", "moves like a walking wall", "keeps a low steady stance"],
+            voices: ["gravelly", "blunt", "resonant", "clipped", "hearty"]
+        },
+        culture: {
+            values: ["craft", "clan honor", "contracts", "endurance"],
+            topics: ["stonework", "tools", "lineage", "trade"],
+            taboos: ["broken bargains", "insults to craft"]
+        }
+    },
+    {
+        species: "Halfling",
+        isHumanoid: true,
+        size: "small",
+        lore: "Halflings survive by community, caution, and cheerful misdirection. They often know more local news than they admit.",
+        anatomyProfile: {
+            surfaceType: "skin",
+            skinTones: ["fair", "sun-browned", "warm tan", "olive", "brown"],
+            hairColors: ["brown", "black", "sandy", "auburn", "gray"],
+            hairStyles: ["curly", "loose", "short", "tousled", "neatly brushed"],
+            eyeColors: ["brown", "hazel", "green", "blue"],
+            builds: ["compact", "round-faced", "nimble", "soft", "sturdy"],
+            features: ["quick fingers", "bright eyes", "barefoot confidence", "a ready half-smile"],
+            movements: ["moves with small quick steps", "keeps near cover without seeming to", "rocks lightly on their heels"],
+            voices: ["bright", "conspiratorial", "gentle", "quick", "homey"]
+        },
+        culture: {
+            values: ["hospitality", "personal favors", "safe roads", "good food"],
+            topics: ["meals", "families", "gossip", "hidden shortcuts"],
+            taboos: ["threats to home", "wasted food"]
+        }
+    },
+    {
+        species: "Goblin",
+        isHumanoid: true,
+        size: "small",
+        lore: "Goblin bands prize cunning, salvage, and status earned by surviving bad odds. They often test strangers before trusting them.",
+        anatomyProfile: {
+            surfaceType: "skin",
+            skinTones: ["moss green", "yellow-green", "ash gray", "mud brown", "sallow ochre"],
+            hairColors: ["black", "mud-brown", "rust", "patchy gray", "none"],
+            hairStyles: ["patchy", "spiky", "stringy", "cropped", "tufted"],
+            eyeColors: ["amber", "red-brown", "black", "yellow", "pale green"],
+            builds: ["wiry", "knobby", "scrappy", "thin-limbed", "sinewy"],
+            features: ["large ears", "sharp little teeth", "long fingers", "a scarred nose", "ragged nails"],
+            movements: ["crouches when watched", "moves in quick nervous bursts", "tilts their head before answering"],
+            voices: ["nasal", "raspy", "quick", "sly", "chittering"]
+        },
+        culture: {
+            values: ["useful scraps", "rank", "clever tricks", "survival"],
+            topics: ["loot", "routes", "threats", "who is in charge"],
+            taboos: ["being cornered", "being laughed at by stronger folk"]
+        }
+    },
+    {
+        species: "Orc",
+        isHumanoid: true,
+        size: "large",
+        lore: "Orcs respect strength, directness, and loyalty proven under pressure. Insults are remembered, but so is courage.",
+        anatomyProfile: {
+            surfaceType: "skin",
+            skinTones: ["deep green", "gray-green", "ash gray", "dark umber", "olive"],
+            hairColors: ["black", "dark brown", "iron-gray", "rust", "shaved"],
+            hairStyles: ["shaved at the sides", "braided", "topknotted", "loose", "cropped"],
+            eyeColors: ["amber", "brown", "red-brown", "gray", "black"],
+            builds: ["powerful", "broad-shouldered", "scarred", "heavy", "muscular"],
+            features: ["short tusks", "thick neck", "scarred forearms", "heavy brow", "corded hands"],
+            movements: ["moves with blunt confidence", "keeps a fighter's stance", "rolls their shoulders before speaking"],
+            voices: ["deep", "rough", "commanding", "low", "blunt"]
+        },
+        culture: {
+            values: ["strength", "honor", "kinship", "spoils fairly won"],
+            topics: ["battles", "leadership", "weapons", "worthy enemies"],
+            taboos: ["cowardice", "veiled insults"]
+        }
+    },
+    {
+        species: "Skeleton",
+        isHumanoid: false,
+        size: "medium",
+        lore: "Animated skeletons retain fragments of purpose rather than full lives. They respond to command, trespass, and ritual disturbance.",
+        anatomyProfile: {
+            surfaceType: "bone",
+            skinTones: ["ivory", "yellowed", "ash-white", "smoke-stained", "old brown"],
+            eyeColors: ["blue witchlight", "green witchlight", "empty shadow", "red pinpricks"],
+            builds: ["bare-boned", "rattling", "ancient", "jagged", "ritually marked"],
+            features: ["cracked ribs", "missing teeth", "rusted bindings", "old blade marks", "dust in every joint"],
+            movements: ["rattles with each step", "turns with puppet-like precision", "moves without breath or hesitation"],
+            voices: ["dry", "hollow", "wordless", "scraping", "echoing"]
+        },
+        culture: {
+            values: ["orders", "thresholds", "burial rites"],
+            topics: ["the command that binds it", "the grave it left", "the trespass it senses"],
+            taboos: ["holy symbols", "grave desecration"]
+        }
+    },
+    {
+        species: "Rat",
+        isHumanoid: false,
+        size: "tiny",
+        lore: "Rats follow food, warmth, and danger-scent. A lone rat is usually a sign that a larger hidden ecology is nearby.",
+        anatomyProfile: {
+            surfaceType: "fur",
+            skinTones: ["brown", "black", "gray", "mottled", "pale"],
+            eyeColors: ["black", "red", "dark brown"],
+            builds: ["small", "lean", "ragged", "sleek", "bony"],
+            features: ["long whiskers", "a naked tail", "tiny clawed feet", "twitching ears", "sharp incisors"],
+            movements: ["sniffs rapidly", "darts from shadow to shadow", "freezes at the smallest sound"],
+            voices: ["squeaking", "silent", "chittering"]
+        },
+        culture: {
+            values: ["food", "escape routes", "warm nests"],
+            topics: ["scent trails", "crumbs", "nearby danger"],
+            taboos: ["fire", "sudden movement"]
+        }
+    },
+    {
+        species: "Ghost",
+        isHumanoid: false,
+        size: "medium",
+        lore: "Ghosts are memory given shape. They notice names, unfinished business, and places where the living have repeated old mistakes.",
+        anatomyProfile: {
+            surfaceType: "translucent form",
+            skinTones: ["pale blue", "silver-white", "faint green", "smoky gray", "candlelit gold"],
+            eyeColors: ["white", "blue", "hollow black", "silver", "faint green"],
+            builds: ["faint", "flickering", "mist-thin", "half-remembered", "tattered"],
+            features: ["blurred edges", "old-fashioned clothing", "light passing through them", "a face shaped by grief", "drifting hair"],
+            movements: ["drifts without touching the floor", "fades at the edges when still", "turns as if hearing distant music"],
+            voices: ["echoing", "faint", "mournful", "distant", "whispered"]
+        },
+        culture: {
+            values: ["names", "unfinished promises", "places of death"],
+            topics: ["lost memories", "betrayal", "buried truths", "the moment of death"],
+            taboos: ["mocking the dead", "breaking memorials"]
+        }
+    }
 ];
 
 // ── ROOM TEMPLATES ───────────────────────────────────────────────
