@@ -45,17 +45,35 @@ function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) 
 function getRoom(coords) { return G.roomMap[coords] || null; }
 function setRoom(coords, room) { G.roomMap[coords] = room; }
 
-function getNPCSpeciesTemplate(npc) {
-    if (!npc || typeof getSpeciesTemplate !== "function") return null;
-    return getSpeciesTemplate(npc.species);
+const FALLBACK_HUMANOID_SPECIES = ["human", "elf", "dwarf", "halfling", "goblin", "orc"];
+const FALLBACK_NON_HUMANOID_SPECIES = ["skeleton", "rat", "ghost"];
+
+function normalizeSpeciesName(species) {
+    return String(species || "").toLowerCase();
+}
+
+function getSpeciesHumanoidFlag(species) {
+    const template = typeof getSpeciesTemplate === "function"
+        ? getSpeciesTemplate(species)
+        : null;
+
+    if (template && typeof template.isHumanoid === "boolean") {
+        return template.isHumanoid;
+    }
+
+    const speciesName = normalizeSpeciesName(species);
+    if (FALLBACK_HUMANOID_SPECIES.includes(speciesName)) return true;
+    if (FALLBACK_NON_HUMANOID_SPECIES.includes(speciesName)) return false;
+
+    return null;
 }
 
 function hydrateNPCSpeciesFlags(npc) {
     if (!npc) return npc;
-    const template = getNPCSpeciesTemplate(npc);
+    const humanoidFlag = getSpeciesHumanoidFlag(npc.species);
 
-    if (template && typeof npc.isHumanoid !== "boolean") {
-        npc.isHumanoid = !!template.isHumanoid;
+    if (typeof humanoidFlag === "boolean") {
+        npc.isHumanoid = humanoidFlag;
     }
 
     return npc;
@@ -64,6 +82,9 @@ function hydrateNPCSpeciesFlags(npc) {
 function canConverseWithNPC(npc) {
     if (!npc || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden) return false;
     hydrateNPCSpeciesFlags(npc);
+
+    const humanoidFlag = getSpeciesHumanoidFlag(npc.species);
+    if (typeof humanoidFlag === "boolean") return humanoidFlag;
 
     if (typeof npc.isHumanoid === "boolean") {
         return npc.isHumanoid;
@@ -876,9 +897,7 @@ function spawnNPCsForRoom(room, zoneName) {
 }
 
 function createNPC(species, room, zoneTemplate) {
-    const speciesTemplate = typeof getSpeciesTemplate === "function"
-        ? getSpeciesTemplate(species)
-        : null;
+    const isHumanoid = getSpeciesHumanoidFlag(species) === true;
     const profile     = getRandomPersonalityProfile({});
     const ageCategory = getAgeCategoryForRole("Wanderer", profile.archetype);
     const age         = getRandomAge(ageCategory);
@@ -889,7 +908,7 @@ function createNPC(species, room, zoneTemplate) {
         id:               `${species.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`,
         name:             `${gender === "male" ? "a male" : "a female"} ${species}`,
         species,
-        isHumanoid:       !!(speciesTemplate && speciesTemplate.isHumanoid),
+        isHumanoid,
         gender,
         role:             "Wanderer",
         temperament,
@@ -1101,6 +1120,342 @@ function clearChatOptions() {
     if (el) el.innerHTML = "";
 }
 
+// -- COMBAT ---------------------------------------------------------------
+
+const COMBAT_ATTACK_STYLES = {
+    quick: {
+        label: "Quick",
+        hitBonus: 3,
+        damageBonus: -1,
+        incomingBonus: -1,
+        text: "You press with a fast, controlled strike."
+    },
+    balanced: {
+        label: "Balanced",
+        hitBonus: 1,
+        damageBonus: 0,
+        incomingBonus: 0,
+        text: "You commit to a measured attack."
+    },
+    heavy: {
+        label: "Heavy",
+        hitBonus: -2,
+        damageBonus: 3,
+        incomingBonus: 2,
+        text: "You put your weight behind a heavy blow."
+    },
+    precise: {
+        label: "Precise",
+        hitBonus: -1,
+        damageBonus: 0,
+        incomingBonus: 0,
+        text: "You wait for a cleaner opening."
+    }
+};
+
+const COMBAT_TARGETS = {
+    torso: { label: "Torso", hitMod: 0, damageMod: 1, limbKey: "torso" },
+    head:  { label: "Head",  hitMod: 4, damageMod: 1, limbKey: "head" },
+    arms:  { label: "Arms",  hitMod: 2, damageMod: 0, limbKey: "arms" },
+    legs:  { label: "Legs",  hitMod: 2, damageMod: 0, limbKey: "legs" }
+};
+
+function ensureCombatState(entity) {
+    if (!entity) return null;
+    entity.combatState = entity.combatState || {};
+    entity.combatState.limbs = entity.combatState.limbs || {};
+
+    const maxHp = Math.max(1, entity.hpMax || entity.maxHp || entity.hp || 10);
+    const plan = {
+        head: 0.2,
+        torso: 0.4,
+        arms: 0.2,
+        legs: 0.2
+    };
+
+    Object.entries(plan).forEach(([key, pct]) => {
+        if (!entity.combatState.limbs[key]) {
+            const max = Math.max(1, Math.round(maxHp * pct));
+            entity.combatState.limbs[key] = {
+                hp: max,
+                max,
+                bleed: 0,
+                disabled: false
+            };
+        }
+    });
+
+    return entity.combatState;
+}
+
+function getSetupStat(stat, fallback = 3) {
+    const value = G.player && G.player.stats && typeof G.player.stats[stat] === "number"
+        ? G.player.stats[stat]
+        : fallback;
+    return value;
+}
+
+function getWeaponDamageDie(player) {
+    const weaponName = String(player.weapon || player.equipped?.weapon?.name || "").toLowerCase();
+    if (weaponName.includes("dagger")) return 4;
+    if (weaponName.includes("staff")) return 5;
+    if (weaponName.includes("mace")) return 6;
+    if (weaponName.includes("sword")) return 6;
+    return 4;
+}
+
+function getCombatTargetOptions(npc) {
+    hydrateNPCSpeciesFlags(npc);
+    if (npc && npc.isHumanoid === false) {
+        return ["torso", "head"];
+    }
+    return ["torso", "head", "arms", "legs"];
+}
+
+function createCombatButton(label, onClick, options = {}) {
+    const btn = document.createElement("button");
+    btn.className = `chat-option-btn combat-option-btn${options.className ? " " + options.className : ""}`;
+    btn.textContent = label;
+    btn.disabled = options.disabled === true;
+    btn.onclick = onClick;
+    return btn;
+}
+
+function appendCombatGroup(el, title, buttons) {
+    const group = document.createElement("div");
+    group.className = "combat-action-group";
+
+    const heading = document.createElement("div");
+    heading.className = "combat-action-heading";
+    heading.textContent = title;
+    group.appendChild(heading);
+
+    buttons.forEach(btn => group.appendChild(btn));
+    el.appendChild(group);
+}
+
+function renderCombatActionMenu(npc) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el || !npc) return;
+
+    G.activeNPCMode = "combat";
+    el.innerHTML = "";
+
+    appendCombatGroup(el, "Attack", [
+        createCombatButton("Quick strike", () => renderCombatTargetMenu(npc, "quick")),
+        createCombatButton("Balanced strike", () => renderCombatTargetMenu(npc, "balanced")),
+        createCombatButton("Heavy strike", () => renderCombatTargetMenu(npc, "heavy")),
+        createCombatButton("Precise strike", () => renderCombatTargetMenu(npc, "precise"))
+    ]);
+
+    appendCombatGroup(el, "Defense", [
+        createCombatButton("Defend", () => performCombatDefense(npc, "defend")),
+        createCombatButton("Guard", () => performCombatDefense(npc, "guard")),
+        createCombatButton("Counter", () => performCombatDefense(npc, "counter")),
+        createCombatButton("Escape", () => attemptCombatEscape(npc))
+    ]);
+
+    appendCombatGroup(el, "Other", [
+        createCombatButton("Step back", () => renderNPCActionMenu(npc))
+    ]);
+}
+
+function renderCombatTargetMenu(npc, styleKey) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el || !npc) return;
+
+    const style = COMBAT_ATTACK_STYLES[styleKey] || COMBAT_ATTACK_STYLES.balanced;
+    el.innerHTML = "";
+
+    const buttons = getCombatTargetOptions(npc).map(targetKey => {
+        const target = COMBAT_TARGETS[targetKey];
+        return createCombatButton(
+            `${style.label}: ${target.label}`,
+            () => attackNPC(npc, { style: styleKey, target: targetKey })
+        );
+    });
+
+    buttons.push(createCombatButton("Back", () => renderCombatActionMenu(npc)));
+    appendCombatGroup(el, "Target", buttons);
+}
+
+function describeCombatWounds(entity) {
+    const state = ensureCombatState(entity);
+    if (!state) return "";
+
+    const parts = [];
+    Object.entries(state.limbs).forEach(([key, limb]) => {
+        const ratio = limb.max > 0 ? limb.hp / limb.max : 1;
+        if (limb.disabled || ratio <= 0) parts.push(`${key} disabled`);
+        else if (ratio <= 0.35) parts.push(`${key} badly hurt`);
+        else if (ratio <= 0.65) parts.push(`${key} hurt`);
+    });
+
+    return parts.length ? parts.join(", ") : "";
+}
+
+function syncCombatWoundMemory(entity) {
+    if (!entity) return;
+    const state = ensureCombatState(entity);
+    entity.memory = entity.memory || {};
+    entity.memory.limbDamage = entity.memory.limbDamage || {};
+
+    Object.entries(state.limbs).forEach(([key, limb]) => {
+        const ratio = limb.max > 0 ? limb.hp / limb.max : 1;
+        let severity = 0;
+        if (limb.disabled || ratio <= 0) severity = 3;
+        else if (ratio <= 0.35) severity = 2;
+        else if (ratio <= 0.65) severity = 1;
+
+        if (severity > 0) entity.memory.limbDamage[key] = severity;
+        else delete entity.memory.limbDamage[key];
+    });
+}
+
+function applyCombatBleeding(entity, lines, name) {
+    const state = ensureCombatState(entity);
+    if (!state || !entity || entity.hp <= 0) return;
+
+    const totalBleed = Object.values(state.limbs).reduce((sum, limb) => sum + (limb.bleed || 0), 0);
+    if (totalBleed <= 0) return;
+
+    entity.hp = Math.max(0, entity.hp - totalBleed);
+    lines.push(`${name} loses ${totalBleed} HP from bleeding.`);
+
+    Object.values(state.limbs).forEach(limb => {
+        limb.bleed = Math.max(0, limb.bleed - 1);
+    });
+}
+
+function applyCombatDamage(entity, amount, targetKey, options = {}) {
+    const state = ensureCombatState(entity);
+    const limbKey = COMBAT_TARGETS[targetKey]?.limbKey || "torso";
+    const limb = state.limbs[limbKey] || state.limbs.torso;
+    const damage = Math.max(1, amount);
+
+    entity.hp = Math.max(0, (typeof entity.hp === "number" ? entity.hp : entity.hpMax || 1) - damage);
+
+    if (limb) {
+        const limbDamage = Math.max(1, Math.floor(damage * (targetKey === "torso" ? 0.5 : 0.85)));
+        limb.hp = Math.max(0, limb.hp - limbDamage);
+        if (limb.hp <= 0) limb.disabled = true;
+
+        if (options.bleed || targetKey === "torso" && options.crit) {
+            limb.bleed = Math.max(limb.bleed || 0, options.crit ? 2 : 1);
+        }
+    }
+
+    syncCombatWoundMemory(entity);
+}
+
+function getWoundAttackPenalty(entity) {
+    const state = ensureCombatState(entity);
+    const arms = state?.limbs?.arms;
+    const head = state?.limbs?.head;
+    let penalty = 0;
+    if (arms) {
+        const ratio = arms.max > 0 ? arms.hp / arms.max : 1;
+        if (arms.disabled || ratio <= 0) penalty += 4;
+        else if (ratio <= 0.35) penalty += 2;
+        else if (ratio <= 0.65) penalty += 1;
+    }
+    if (head) {
+        const ratio = head.max > 0 ? head.hp / head.max : 1;
+        if (head.disabled || ratio <= 0) penalty += 3;
+        else if (ratio <= 0.35) penalty += 2;
+    }
+    return penalty;
+}
+
+function getWoundDefensePenalty(entity) {
+    const state = ensureCombatState(entity);
+    const legs = state?.limbs?.legs;
+    if (!legs) return 0;
+
+    const ratio = legs.max > 0 ? legs.hp / legs.max : 1;
+    if (legs.disabled || ratio <= 0) return 4;
+    if (ratio <= 0.35) return 2;
+    if (ratio <= 0.65) return 1;
+    return 0;
+}
+
+function getPlayerStanceArmorBonus() {
+    const stance = G.player?.combatState?.stance;
+    if (stance === "defend") return 3;
+    if (stance === "guard") return 2;
+    if (stance === "counter") return 1;
+    return 0;
+}
+
+function getPlayerStanceDamageMultiplier() {
+    const stance = G.player?.combatState?.stance;
+    if (stance === "defend") return 0.55;
+    if (stance === "guard") return 0.75;
+    return 1;
+}
+
+function clearPlayerCombatStance() {
+    if (G.player?.combatState) G.player.combatState.stance = null;
+}
+
+function performCombatDefense(npc, stance) {
+    if (!npc || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden) return;
+
+    ensureCombatState(G.player).stance = stance;
+    const npcName = npc.name || "the creature";
+    const stanceText = {
+        defend: "You settle into a defensive stance.",
+        guard: "You raise your guard and prepare to absorb the next attack.",
+        counter: "You invite an opening, ready to counter if they miss."
+    }[stance] || "You brace yourself.";
+
+    const lines = [stanceText];
+    resolveNPCCounter(npc, lines, { playerPassed: true });
+
+    if (npc.hp <= 0 || npc.unconscious || npc.isHidden || G.activeNPC !== npc) {
+        return;
+    }
+
+    renderStats();
+    renderCombatActionMenu(npc);
+    setNarration(lines.join(" "));
+    rememberStoryEvent("combat", `${G.player.name} defended against ${npcName}.`, 3);
+    saveGameState();
+}
+
+function attemptCombatEscape(npc) {
+    if (!npc) return;
+
+    const player = G.player;
+    const npcName = npc.name || "the creature";
+    const legPenalty = getWoundDefensePenalty(npc);
+    const playerRoll = randInt(1, 20) + getSetupStat("flexibility", 3);
+    const npcRoll = randInt(1, 20) + Math.max(0, Math.floor((npc.hostility || 0) / 35)) - legPenalty;
+    const lines = [];
+
+    if (playerRoll >= npcRoll) {
+        lines.push(`You break away from ${npcName}.`);
+        G.activeNPCMode = "menu";
+        renderNPCActionMenu(npc);
+        setNarration(lines.join(" "));
+        rememberStoryEvent("combat", `${G.player.name} escaped combat with ${npcName}.`, 5);
+        saveGameState();
+        return;
+    }
+
+    lines.push(`${npcName} cuts off your escape.`);
+    resolveNPCCounter(npc, lines, { playerPassed: true, escapeFailed: true });
+
+    if (npc.hp <= 0 || npc.unconscious || npc.isHidden || G.activeNPC !== npc) {
+        return;
+    }
+
+    renderStats();
+    renderCombatActionMenu(npc);
+    setNarration(lines.join(" "));
+    saveGameState();
+}
+
 function renderNPCActionMenu(npc) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
@@ -1142,7 +1497,7 @@ function chooseNPCAction(action) {
     }
 
     if (action === "attack") {
-        attackNPC(npc);
+        renderCombatActionMenu(npc);
         return;
     }
 
@@ -1180,40 +1535,80 @@ function tradeWithNPC(npc) {
     saveGameState();
 }
 
-function attackNPC(npc) {
+function attackNPC(npc, options = {}) {
     if (!npc || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden) return;
 
-    G.activeNPCMode = "attack";
+    G.activeNPCMode = "combat";
     const player = G.player;
     const npcName = npc.name || "the creature";
-    const npcArmor = typeof npc.armor === "number" ? npc.armor : 10;
+    const styleKey = options.style || "balanced";
+    const targetKey = options.target || "torso";
+    const style = COMBAT_ATTACK_STYLES[styleKey] || COMBAT_ATTACK_STYLES.balanced;
+    const target = COMBAT_TARGETS[targetKey] || COMBAT_TARGETS.torso;
+    const npcArmor = (typeof npc.armor === "number" ? npc.armor : 10) +
+        target.hitMod +
+        -Math.max(0, getWoundDefensePenalty(npc));
     const attackRoll = randInt(1, 20);
-    const attackTotal = attackRoll + (player.attackBonus || 0);
+    const statBonus = Math.max(0, Math.floor((getSetupStat("physicalProwess", 3) - 3) / 2));
+    const attackTotal = attackRoll +
+        (player.attackBonus || 0) +
+        statBonus +
+        style.hitBonus -
+        getWoundAttackPenalty(player);
     const hit = attackRoll === 20 || (attackRoll !== 1 && attackTotal >= npcArmor);
+    const crit = attackRoll === 20 || (hit && attackTotal - npcArmor >= 8);
     const lines = [];
 
-    if (hit) {
-        const damage = Math.max(1, randInt(1, 6) + Math.max(0, player.attackBonus || 0));
-        npc.hp = Math.max(0, (typeof npc.hp === "number" ? npc.hp : npc.hpMax || 10) - damage);
-        npc.hostility = Math.min(100, (typeof npc.hostility === "number" ? npc.hostility : 0) + 25);
-        if (npc.memory) npc.memory.aggressionCount = (npc.memory.aggressionCount || 0) + 1;
-        lines.push(`You hit ${npcName} for ${damage} damage.`);
-    } else {
-        npc.hostility = Math.min(100, (typeof npc.hostility === "number" ? npc.hostility : 0) + 10);
-        lines.push(`You swing at ${npcName}, but miss.`);
+    ensureCombatState(player);
+    ensureCombatState(npc);
+    applyCombatBleeding(player, lines, player.name || "You");
+    applyCombatBleeding(npc, lines, npcName);
+
+    if (player.hp <= 0) {
+        lines.push("You collapse.");
+        renderStats();
+        setNarration(lines.join(" "));
+        saveGameState();
+        return;
     }
 
     if (npc.hp <= 0) {
-        npc.unconscious = true;
-        npc.isHidden = true;
-        rememberStoryEvent("combat", `${G.player.name} defeated ${npcName}.`, 8);
-        addStoryBeat("local-danger", `${npcName} was defeated.`, 5);
-        G.activeNPC = null;
-        G.activeNPCMode = null;
-        resetNpcPanel();
-        renderRoom();
-        setNarration(lines.join(" "));
-        saveGameState();
+        finishNPCDefeat(npc, npcName, lines);
+        return;
+    }
+
+    lines.push(`${style.text} You aim for ${npcName}'s ${target.label.toLowerCase()}.`);
+
+    if (hit) {
+        const weaponDie = getWeaponDamageDie(player);
+        const damageRoll = randInt(1, weaponDie);
+        const preciseBonus = styleKey === "precise" && targetKey !== "torso" ? 2 : 0;
+        const damage = Math.max(1,
+            damageRoll +
+            Math.max(0, player.attackBonus || 0) +
+            statBonus +
+            style.damageBonus +
+            target.damageMod +
+            preciseBonus +
+            (crit ? Math.ceil(weaponDie / 2) : 0)
+        );
+        applyCombatDamage(npc, damage, targetKey, {
+            crit,
+            bleed: crit || styleKey === "heavy" || targetKey === "torso"
+        });
+        npc.hostility = Math.min(100, (typeof npc.hostility === "number" ? npc.hostility : 0) + 25);
+        if (npc.memory) npc.memory.aggressionCount = (npc.memory.aggressionCount || 0) + 1;
+        lines.push(`You hit for ${damage} damage${crit ? " with a telling blow" : ""}.`);
+
+        const woundText = describeCombatWounds(npc);
+        if (woundText) lines.push(`${npcName} is showing wounds: ${woundText}.`);
+    } else {
+        npc.hostility = Math.min(100, (typeof npc.hostility === "number" ? npc.hostility : 0) + 10);
+        lines.push(`You miss.`);
+    }
+
+    if (npc.hp <= 0) {
+        finishNPCDefeat(npc, npcName, lines);
         return;
     }
 
@@ -1221,18 +1616,21 @@ function attackNPC(npc) {
         npc.behavior = generateNPCBehavior(npc);
     }
 
-    const counterRoll = randInt(1, 20);
-    const counterBonus = Math.max(0, Math.floor((npc.hostility || 0) / 35));
-    const counterTotal = counterRoll + counterBonus;
-    const playerArmor = typeof player.armor === "number" ? player.armor : 10;
-    const counterHits = counterRoll === 20 || (counterRoll !== 1 && counterTotal >= playerArmor);
+    if (maybeRenderNPCSurrender(npc, lines)) {
+        renderStats();
+        setNarration(lines.join(" "));
+        saveGameState();
+        return;
+    }
 
-    if (counterHits) {
-        const counterDamage = Math.max(1, randInt(1, 4) + counterBonus);
-        player.hp = Math.max(0, (typeof player.hp === "number" ? player.hp : player.hpMax || 1) - counterDamage);
-        lines.push(`${npcName} strikes back for ${counterDamage} damage.`);
-    } else {
-        lines.push(`${npcName} fails to land a counterattack.`);
+    resolveNPCCounter(npc, lines, {
+        playerMissed: !hit,
+        playerStyle: styleKey,
+        openingBonus: !hit && style.incomingBonus > 0 ? style.incomingBonus : 0
+    });
+
+    if (npc.hp <= 0 || npc.unconscious || npc.isHidden || G.activeNPC !== npc) {
+        return;
     }
 
     if (player.hp <= 0) {
@@ -1243,7 +1641,182 @@ function attackNPC(npc) {
     }
 
     renderStats();
+    renderCombatActionMenu(npc);
+    setNarration(lines.join(" "));
+    clearPlayerCombatStance();
+    saveGameState();
+}
+
+function resolveNPCCounter(npc, lines, context = {}) {
+    if (!npc || npc.hp <= 0) return;
+
+    const player = G.player;
+    const npcName = npc.name || "the creature";
+    const npcPlan = chooseNPCCombatPlan(npc, context);
+
+    if (npcPlan.type === "recover") {
+        lines.push(`${npcName} hangs back and tries to recover their guard.`);
+        npc.combatState = npc.combatState || {};
+        npc.combatState.stance = "guard";
+        clearPlayerCombatStance();
+        return;
+    }
+
+    const counterRoll = randInt(1, 20);
+    const counterBonus = Math.max(0, Math.floor((npc.hostility || 0) / 35)) +
+        npcPlan.hitBonus -
+        getWoundAttackPenalty(npc) +
+        (context.openingBonus || 0);
+    const counterTotal = counterRoll + counterBonus;
+    const playerArmor = (typeof player.armor === "number" ? player.armor : 10) +
+        getPlayerStanceArmorBonus() -
+        getWoundDefensePenalty(player);
+    const counterHits = counterRoll === 20 || (counterRoll !== 1 && counterTotal >= playerArmor);
+
+    lines.push(npcPlan.line);
+
+    if (counterHits) {
+        let counterDamage = Math.max(1, randInt(1, npcPlan.damageDie) + npcPlan.damageBonus);
+        counterDamage = Math.max(1, Math.floor(counterDamage * getPlayerStanceDamageMultiplier()));
+        applyCombatDamage(player, counterDamage, npcPlan.target, {
+            crit: counterRoll === 20,
+            bleed: counterRoll === 20
+        });
+        lines.push(`${npcName} hits you for ${counterDamage} damage.`);
+    } else {
+        lines.push(`${npcName} misses.`);
+        if (player.combatState?.stance === "counter") {
+            const riposteDamage = Math.max(1, randInt(1, 3) + Math.floor((player.attackBonus || 0) / 2));
+            applyCombatDamage(npc, riposteDamage, "torso", { bleed: false });
+            lines.push(`You counter for ${riposteDamage} damage.`);
+            if (npc.hp <= 0) {
+                finishNPCDefeat(npc, npcName, lines);
+                return;
+            }
+        }
+    }
+
+    clearPlayerCombatStance();
+}
+
+function chooseNPCCombatPlan(npc, context = {}) {
+    const hpMax = Math.max(1, npc.hpMax || npc.hp || 10);
+    const hpRatio = Math.max(0, npc.hp || 0) / hpMax;
+    const temperament = String(npc.temperament || npc.personalityProfile?.temperament || "").toLowerCase();
+    const aggressive = ["hostile", "aggressive", "bold"].includes(temperament) || (npc.hostility || 0) >= 70;
+    const cautious = ["skittish", "wary", "calm"].includes(temperament);
+
+    if (hpRatio < 0.35 && cautious && Math.random() < 0.35) {
+        return { type: "recover" };
+    }
+
+    const canHeavy = aggressive && hpRatio > 0.45 && Math.random() < 0.45;
+    const wounded = hpRatio < 0.5;
+    const target = wounded && Math.random() < 0.35 ? "legs" : "torso";
+
+    if (canHeavy) {
+        return {
+            type: "attack",
+            target,
+            hitBonus: -1,
+            damageBonus: 3,
+            damageDie: 6,
+            line: `${npc.name || "The creature"} makes a heavy attack.`
+        };
+    }
+
+    if (wounded || context.escapeFailed) {
+        return {
+            type: "attack",
+            target,
+            hitBonus: 2,
+            damageBonus: 0,
+            damageDie: 4,
+            line: `${npc.name || "The creature"} snaps back with a quick attack.`
+        };
+    }
+
+    return {
+        type: "attack",
+        target,
+        hitBonus: 0,
+        damageBonus: 1,
+        damageDie: 4,
+        line: `${npc.name || "The creature"} attacks.`
+    };
+}
+
+function maybeRenderNPCSurrender(npc, lines) {
+    if (!npc || npc.surrendered || npc.refusesSurrender) return false;
+    hydrateNPCSpeciesFlags(npc);
+    if (npc.isHumanoid === false) return false;
+
+    const hpMax = Math.max(1, npc.hpMax || npc.hp || 10);
+    const hpRatio = (npc.hp || 0) / hpMax;
+    const temperament = String(npc.temperament || npc.personalityProfile?.temperament || "").toLowerCase();
+    if (["aggressive", "hostile"].includes(temperament) && hpRatio > 0.12) return false;
+    if (hpRatio > 0.25) return false;
+
+    const chance = hpRatio <= 0.1 ? 0.85 : 0.45;
+    if (Math.random() > chance) return false;
+
+    npc.surrendered = true;
+    npc.hostility = Math.max(0, (npc.hostility || 0) - 25);
+    if (npc.memory) npc.memory.lastMood = "afraid";
+    lines.push(`${npc.name || "The creature"} falters and tries to surrender.`);
+    renderNPCSurrenderOptions(npc);
+    return true;
+}
+
+function renderNPCSurrenderOptions(npc) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return;
+    el.innerHTML = "";
+
+    appendCombatGroup(el, "Surrender", [
+        createCombatButton("Accept surrender", () => acceptNPCSurrender(npc)),
+        createCombatButton("Keep fighting", () => refuseNPCSurrender(npc), { className: "danger" }),
+        createCombatButton("Step away", () => disengageFromNPC())
+    ]);
+}
+
+function acceptNPCSurrender(npc) {
+    if (!npc) return;
+    npc.surrendered = true;
+    npc.hostility = Math.max(0, (npc.hostility || 0) - 35);
+    if (npc.memory) {
+        npc.memory.favorability = Math.max(-20, (npc.memory.favorability || 0) + 10);
+        npc.memory.lastMood = "subdued";
+    }
+
+    G.activeNPCMode = "menu";
+    if (typeof generateNPCBehavior === "function") npc.behavior = generateNPCBehavior(npc);
     renderNPCActionMenu(npc);
+    setNarration(`${npc.name || "The creature"} lowers their guard and yields.`);
+    rememberStoryEvent("combat", `${G.player.name} accepted ${npc.name || "an opponent"}'s surrender.`, 6);
+    saveGameState();
+}
+
+function refuseNPCSurrender(npc) {
+    if (!npc) return;
+    npc.surrendered = false;
+    npc.refusesSurrender = true;
+    npc.hostility = 100;
+    if (npc.memory) npc.memory.lastMood = "desperate";
+    renderCombatActionMenu(npc);
+    setNarration(`${npc.name || "The creature"} realizes mercy is not coming.`);
+    saveGameState();
+}
+
+function finishNPCDefeat(npc, npcName, lines) {
+    npc.unconscious = true;
+    npc.isHidden = true;
+    rememberStoryEvent("combat", `${G.player.name} defeated ${npcName}.`, 8);
+    addStoryBeat("local-danger", `${npcName} was defeated.`, 5);
+    G.activeNPC = null;
+    G.activeNPCMode = null;
+    resetNpcPanel();
+    renderRoom();
     setNarration(lines.join(" "));
     saveGameState();
 }

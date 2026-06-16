@@ -1,8 +1,8 @@
 <!--https://perchance.org/cyoaftw-engine-core-->
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-world-data.js?20260615215536"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-npc-data.js?20260615215536"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-context-builder.js?20260615215536"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-engine-CORE_js.html?20260615215536"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-world-data.js?20260616024607"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-npc-data.js?20260616024607"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-context-builder.js?20260616024607"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-engine-CORE_js.html?20260616024607"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -532,6 +532,30 @@ body {
 }
 
 .npc-action-btn.danger {
+    border-color: #5a3030;
+    color: #f0b6b6;
+}
+
+.combat-action-group {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.combat-action-heading {
+    flex: 1 1 100%;
+    color: #aaa;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.combat-option-btn {
+    flex: 1 1 135px;
+    text-align: center;
+}
+
+.combat-option-btn.danger {
     border-color: #5a3030;
     color: #f0b6b6;
 }
