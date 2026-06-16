@@ -18,6 +18,7 @@ window.G = {
     roomMap: {},
     activeRoom: null,
     activeNPC: null,
+    activeObject: null,
     activeNPCMode: null,
     story: createStoryDirectorState(),
     prefetchCache: {},
@@ -714,6 +715,7 @@ function resetNpcPanel() {
 
     if (placeholderEl) placeholderEl.style.display = "block";
     if (detailEl) detailEl.classList.remove("active");
+    G.activeObject = null;
     G.activeNPCMode = null;
     clearChatOptions();
     setExitGridVisible(true);
@@ -1573,7 +1575,7 @@ function attackNPC(npc, options = {}) {
     }
 
     if (npc.hp <= 0) {
-        finishNPCDefeat(npc, npcName, lines);
+        finishNPCDefeat(npc, npcName, lines, { cause: "bleeding", lethal: true });
         return;
     }
 
@@ -1608,7 +1610,12 @@ function attackNPC(npc, options = {}) {
     }
 
     if (npc.hp <= 0) {
-        finishNPCDefeat(npc, npcName, lines);
+        finishNPCDefeat(npc, npcName, lines, {
+            cause: "attack",
+            style: styleKey,
+            target: targetKey,
+            crit
+        });
         return;
     }
 
@@ -1690,7 +1697,12 @@ function resolveNPCCounter(npc, lines, context = {}) {
             applyCombatDamage(npc, riposteDamage, "torso", { bleed: false });
             lines.push(`You counter for ${riposteDamage} damage.`);
             if (npc.hp <= 0) {
-                finishNPCDefeat(npc, npcName, lines);
+                finishNPCDefeat(npc, npcName, lines, {
+                    cause: "counter",
+                    style: "counter",
+                    target: "torso",
+                    crit: false
+                });
                 return;
             }
         }
@@ -1808,17 +1820,68 @@ function refuseNPCSurrender(npc) {
     saveGameState();
 }
 
-function finishNPCDefeat(npc, npcName, lines) {
-    npc.unconscious = true;
-    npc.isHidden = true;
+function determineCombatDefeatOutcome(context = {}) {
+    if (context.lethal === true || context.cause === "bleeding") return "corpse";
+    if (context.crit && context.target === "head") return "corpse";
+    if (context.style === "heavy" && ["head", "torso"].includes(context.target)) return "corpse";
+    if (context.target === "head" && Math.random() < 0.35) return "corpse";
+    return "unconscious";
+}
+
+function moveDefeatedNPCToRoomObject(npc, outcome, context = {}) {
+    const room = G.activeRoom || getRoom(G.player && G.player.coords);
+    if (!room || !npc) return npc;
+
+    room.items = Array.isArray(room.items) ? room.items : [];
+    room.creatures = Array.isArray(room.creatures) ? room.creatures : [];
+
+    const creatureIndex = room.creatures.findIndex(creature =>
+        creature === npc || (creature && npc.id && creature.id === npc.id)
+    );
+    if (creatureIndex >= 0) room.creatures.splice(creatureIndex, 1);
+
+    const originalName = npc.originalName || npc.name || npc.species || "opponent";
+    npc.originalName = originalName;
+    npc.bodyState = outcome;
+    npc.objectType = "body";
+    npc.tags = Array.isArray(npc.tags) ? npc.tags : [];
+    if (!npc.tags.includes("body")) npc.tags.push("body");
+    if (!npc.tags.includes(outcome)) npc.tags.push(outcome);
+    npc.visible = true;
+    npc.hidden = false;
+    npc.isHidden = false;
+    npc.isUnconsciousBody = outcome === "unconscious";
+    npc.unconscious = outcome === "unconscious";
+    npc.dead = outcome === "corpse";
+    npc.hp = outcome === "corpse" ? 0 : Math.max(1, npc.hp || 0);
+    npc.defeatContext = context;
+    npc.description = outcome === "corpse"
+        ? `The body of ${originalName} lies still.`
+        : `${originalName} lies unconscious and vulnerable.`;
+    npc.name = outcome === "corpse"
+        ? `corpse of ${originalName}`
+        : `unconscious ${originalName}`;
+
+    if (!room.items.some(item => item === npc || (item && npc.id && item.id === npc.id))) {
+        room.items.push(npc);
+    }
+
+    return npc;
+}
+
+function finishNPCDefeat(npc, npcName, lines, context = {}) {
+    const outcome = determineCombatDefeatOutcome(context);
+    const body = moveDefeatedNPCToRoomObject(npc, outcome, context);
+    lines.push(outcome === "corpse"
+        ? `${npcName} falls dead.`
+        : `${npcName} collapses unconscious.`);
     rememberStoryEvent("combat", `${G.player.name} defeated ${npcName}.`, 8);
-    addStoryBeat("local-danger", `${npcName} was defeated.`, 5);
+    addStoryBeat("local-danger", `${npcName} was defeated and left as ${outcome === "corpse" ? "a corpse" : "an unconscious body"}.`, 5);
     G.activeNPC = null;
+    G.activeObject = body;
     G.activeNPCMode = null;
-    resetNpcPanel();
     renderRoom();
-    setNarration(lines.join(" "));
-    saveGameState();
+    selectRoomObject(body, lines.join(" "));
 }
 
 function getItemName(item) {
@@ -2108,6 +2171,10 @@ function getEntityName(entity) {
 }
 
 function isVisibleEntity(entity) {
+    if (entity && entity.objectType === "body") {
+        return !entity.hidden && !entity.isHidden && entity.visible !== false;
+    }
+
     return !!(
         entity &&
         !entity.unconscious &&
@@ -2239,7 +2306,20 @@ function renderRoomNarration(room, mode, direction) {
         if (!name) return;
 
         appendObservationSeparator(el, hasObservations);
-        appendNarrationText(el, `You see ${name} here.`);
+        appendNarrationText(el, "You see ");
+
+        if (isRoomObjectInteractive(item)) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "narration-entity-btn";
+            btn.textContent = name;
+            btn.onclick = () => selectRoomObject(item);
+            el.appendChild(btn);
+        } else {
+            appendNarrationText(el, name);
+        }
+
+        appendNarrationText(el, " here.");
         hasObservations = true;
     });
 }
@@ -2369,6 +2449,197 @@ function renderStats() {
     }
 }
 
+// ── ROOM OBJECT PANEL ────────────────────────────────────────────
+
+function isRoomObjectInteractive(item) {
+    return !!(item && item.objectType === "body");
+}
+
+function selectRoomObject(item, narrationText = null) {
+    if (!item) return;
+
+    G.activeNPC = null;
+    G.activeObject = item;
+    G.activeNPCMode = "object";
+
+    const placeholderEl = document.getElementById("npcPlaceholderEl");
+    const detailEl = document.getElementById("npcDetailEl");
+    if (placeholderEl) placeholderEl.style.display = "none";
+    if (detailEl) detailEl.classList.add("active");
+
+    document.getElementById("npcDetailNameEl").textContent = getEntityName(item);
+    document.getElementById("npcDetailBehaviorEl").textContent = item.description || "";
+    document.getElementById("npcMoodEl").textContent =
+        item.bodyState === "corpse" ? "dead" : item.bodyState || "object";
+    document.getElementById("npcRoleEl").textContent = item.objectType === "body" ? "Body" : "Object";
+    document.getElementById("npcFavorEl").textContent = item.bodyLooted ? "Searched" : "Unsearched";
+
+    clearChatLog();
+    setExitGridVisible(false);
+    renderRoomObjectActionMenu(item);
+    if (narrationText) setNarration(narrationText);
+    saveGameState();
+}
+
+function renderRoomObjectActionMenu(item) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return;
+
+    el.innerHTML = "";
+    if (!item) return;
+
+    const buttons = [
+        createCombatButton("Examine", () => examineRoomObject(item)),
+        createCombatButton("Search", () => searchBodyObject(item), { disabled: item.bodyLooted === true })
+    ];
+
+    if (item.bodyState === "unconscious") {
+        buttons.push(createCombatButton("Try to wake", () => wakeUnconsciousBody(item)));
+        buttons.push(createCombatButton("Finish off", () => finishOffBody(item), { className: "danger" }));
+    }
+
+    buttons.push(createCombatButton("Leave", () => leaveRoomObject()));
+    appendCombatGroup(el, "Body", buttons);
+}
+
+function examineRoomObject(item) {
+    if (!item) return;
+
+    const wounds = describeCombatWounds(item);
+    const base = item.description || `You look over ${getEntityName(item)}.`;
+    const woundText = wounds ? ` Visible wounds: ${wounds}.` : "";
+    setNarration(base + woundText);
+    renderRoomObjectActionMenu(item);
+}
+
+function collectBodyLoot(item) {
+    const found = [];
+    if (!item) return found;
+    if (!Array.isArray(G.player.inventory)) G.player.inventory = [];
+
+    const inventory = Array.isArray(item.inventory) ? item.inventory : [];
+    while (inventory.length) {
+        const loot = inventory.shift();
+        if (loot && !loot.hidden && !loot.isHidden) {
+            G.player.inventory.push({ ...loot });
+            found.push(getItemName(loot));
+        }
+    }
+    item.inventory = inventory;
+
+    const equipped = item.equipped || {};
+    Object.keys(equipped).forEach(slot => {
+        if (slot === "coinPouch") return;
+        const equippedItem = equipped[slot];
+        if (!equippedItem) return;
+        if (Array.isArray(equippedItem)) {
+            equippedItem.forEach(entry => {
+                if (entry) {
+                    G.player.inventory.push({ ...entry });
+                    found.push(getItemName(entry));
+                }
+            });
+        } else {
+            G.player.inventory.push({ ...equippedItem });
+            found.push(getItemName(equippedItem));
+        }
+        delete equipped[slot];
+    });
+
+    const coins = getCoinValue(item);
+    if (coins > 0) {
+        adjustCoins(G.player, coins);
+        adjustCoins(item, -coins);
+        found.push(`${coins}g`);
+    }
+
+    return found;
+}
+
+function searchBodyObject(item) {
+    if (!item || item.bodyLooted) return;
+
+    const found = collectBodyLoot(item);
+    item.bodyLooted = true;
+
+    document.getElementById("npcFavorEl").textContent = "Searched";
+    renderStats();
+    renderRoomObjectActionMenu(item);
+
+    const name = getEntityName(item);
+    const text = found.length
+        ? `You search ${name} and recover ${found.join(", ")}.`
+        : `You search ${name}, but find nothing useful.`;
+    setNarration(text);
+    rememberStoryEvent("combat", `${G.player.name} searched ${name}.`, 3);
+    saveGameState();
+}
+
+function wakeUnconsciousBody(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+
+    const room = G.activeRoom || getRoom(G.player && G.player.coords);
+    if (!room) return;
+
+    room.items = Array.isArray(room.items) ? room.items : [];
+    room.creatures = Array.isArray(room.creatures) ? room.creatures : [];
+
+    const itemIndex = room.items.findIndex(entry => entry === item || (entry && item.id && entry.id === item.id));
+    if (itemIndex >= 0) room.items.splice(itemIndex, 1);
+
+    item.name = item.originalName || item.name || item.species || "wounded opponent";
+    item.bodyState = null;
+    item.objectType = null;
+    item.isUnconsciousBody = false;
+    item.unconscious = false;
+    item.dead = false;
+    item.hidden = false;
+    item.isHidden = false;
+    item.hp = Math.max(1, Math.ceil((item.hpMax || 10) * 0.25));
+    item.hostility = Math.max(0, (item.hostility || 0) - 20);
+    item.action = "is struggling back to their feet";
+    item.description = "";
+
+    if (item.memory) {
+        item.memory.lastMood = "shaken";
+        item.memory.favorability = Math.max(-80, (item.memory.favorability || 0) - 10);
+    }
+    if (typeof generateNPCBehavior === "function") item.behavior = generateNPCBehavior(item);
+
+    room.creatures.push(item);
+    G.activeObject = null;
+    selectNPC(item);
+    setNarration(`${item.name} wakes, battered and wary.`);
+    rememberStoryEvent("combat", `${G.player.name} woke ${item.name} after combat.`, 4);
+    saveGameState();
+}
+
+function finishOffBody(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+
+    const originalName = item.originalName || item.name || item.species || "opponent";
+    item.bodyState = "corpse";
+    item.dead = true;
+    item.unconscious = false;
+    item.isUnconsciousBody = false;
+    item.hp = 0;
+    item.name = `corpse of ${originalName}`;
+    item.description = `The body of ${originalName} lies still.`;
+    if (Array.isArray(item.tags) && !item.tags.includes("corpse")) item.tags.push("corpse");
+
+    selectRoomObject(item, `You finish off ${originalName}.`);
+    rememberStoryEvent("combat", `${G.player.name} killed ${originalName} while they were unconscious.`, 9);
+    saveGameState();
+}
+
+function leaveRoomObject() {
+    const item = G.activeObject;
+    G.activeObject = null;
+    resetNpcPanel();
+    if (item) setNarration(`You step away from ${getEntityName(item)}.`);
+    saveGameState();
+}
+
 // ── NPC PANEL ────────────────────────────────────────────────────
 
 function selectNPC(npc) {
@@ -2379,6 +2650,7 @@ function selectNPC(npc) {
     const isNewNPC = !previousNPC ||
         (previousNPC.id && npc.id ? previousNPC.id !== npc.id : previousNPC !== npc);
     G.activeNPC = npc;
+    G.activeObject = null;
     G.activeNPCMode = "menu";
 
     document.getElementById("npcPlaceholderEl").style.display = "none";
