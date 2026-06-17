@@ -103,6 +103,425 @@ const TRADE_GOODS = [
     { id: "healing-herb", name: "Healing herb", value: 6 }
 ];
 
+const NPC_MISC_LOOT = [
+    { id: "folded-note", name: "Folded note", value: 2, type: ["misc", "lore"], description: "A folded note covered in hurried directions and half-finished thoughts." },
+    { id: "bone-dice", name: "Bone dice", value: 4, type: ["misc", "trinket"], description: "A set of worn bone dice kept in a tiny leather wrap." },
+    { id: "brass-key", name: "Brass key", value: 3, type: ["misc", "utility"], description: "A small brass key with no clear mark showing what it opens." },
+    { id: "lucky-charm", name: "Lucky charm", value: 5, type: ["misc", "trinket"], description: "A simple charm carried more for hope than beauty." },
+    { id: "wax-sealed-letter", name: "Wax-sealed letter", value: 6, type: ["misc", "lore"], description: "A private letter sealed in dark wax and tucked away for safekeeping." },
+    { id: "tarnished-ring", name: "Tarnished ring", value: 7, type: ["misc", "trinket"], description: "A cheap ring polished smooth by anxious fingers." }
+];
+
+const NPC_ZONE_LOOT = {
+    Town: [
+        { id: "receipt-slip", name: "Receipt slip", value: 2, type: ["misc", "paper"], description: "A narrow slip listing a few mundane purchases and prices." },
+        { id: "house-token", name: "House token", value: 3, type: ["misc", "token"], description: "A stamped token used by a local inn or bathhouse." },
+        { id: "market-ribbon", name: "Market ribbon", value: 2, type: ["misc", "trinket"], description: "A colored ribbon tied around a small bundle of personal effects." }
+    ],
+    Dungeon: [
+        { id: "rusted-key", name: "Rusted key", value: 4, type: ["misc", "utility"], description: "An old iron key flecked with rust from the dungeon air." },
+        { id: "scrap-map", name: "Scrap map", value: 5, type: ["misc", "lore"], description: "A torn scrap showing a few corridors and a warning mark in charcoal." },
+        { id: "grim-trophy", name: "Grim trophy", value: 6, type: ["misc", "trinket"], description: "A token taken from some earlier fight and kept with ugly pride." }
+    ],
+    Ruins: [
+        { id: "cracked-icon", name: "Cracked icon", value: 5, type: ["misc", "relic"], description: "A cracked devotional icon from some older ruined shrine." },
+        { id: "dusty-scroll", name: "Dusty scroll", value: 6, type: ["misc", "lore"], description: "A brittle scroll fragment carrying faded script and ceremonial marks." },
+        { id: "mason-chip", name: "Carved stone chip", value: 3, type: ["misc", "relic"], description: "A carved chip of dressed stone broken from an older monument." }
+    ],
+    "Underground City": [
+        { id: "miners-chit", name: "Miner's chit", value: 4, type: ["misc", "token"], description: "A stamped chit used for counting loads or labor below the earth." },
+        { id: "ore-sample", name: "Ore sample", value: 5, type: ["misc", "trade"], description: "A wrapped shard of ore saved to prove the worth of a vein." },
+        { id: "fungus-satchel", name: "Fungus satchel", value: 3, type: ["misc", "supply"], description: "A small satchel holding dried cave fungi and medicinal dust." }
+    ]
+};
+
+function generateLootUID() {
+    return crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function assignLootUID(item) {
+    if (!item || typeof item !== "object") return item;
+    if (!item._uid) item._uid = generateLootUID();
+    if (!item.id) item.id = `loot-${item._uid.slice(-8)}`;
+    return item;
+}
+
+function cloneLootTemplate(template, overrides = {}) {
+    const item = {
+        ...template,
+        ...overrides,
+        type: Array.isArray(template && template.type) ? template.type.slice() : []
+    };
+
+    const seed = String(template && template.id ? template.id : item.name || "loot")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    item.id = `${seed || "loot"}-${Math.random().toString(36).slice(2, 7)}`;
+
+    return assignLootUID(item);
+}
+
+function pickLootQuality(kind, options = {}) {
+    const basePools = {
+        weapon: [
+            { name: "worn", score: -1, valueMod: -0.1, weight: 2 },
+            { name: "", score: 0, valueMod: 0, weight: 5 },
+            { name: "fine", score: 1, valueMod: 0.15, weight: 2 },
+            { name: "battle-kept", score: 2, valueMod: 0.3, weight: 1 }
+        ],
+        armor: [
+            { name: "patched", score: -1, valueMod: -0.1, weight: 2 },
+            { name: "", score: 0, valueMod: 0, weight: 5 },
+            { name: "sturdy", score: 1, valueMod: 0.12, weight: 2 },
+            { name: "well-forged", score: 2, valueMod: 0.25, weight: 1 }
+        ],
+        clothes: [
+            { name: "plain", score: 0, valueMod: 0, weight: 5 },
+            { name: "well-kept", score: 1, valueMod: 0.1, weight: 3 },
+            { name: "tailored", score: 2, valueMod: 0.2, weight: 1 }
+        ],
+        belt: [
+            { name: "", score: 0, valueMod: 0, weight: 4 },
+            { name: "stout", score: 1, valueMod: 0.1, weight: 2 }
+        ]
+    };
+
+    let pool = (basePools[kind] || [{ name: "", score: 0, valueMod: 0, weight: 1 }]).slice();
+    if (typeof options.minScore === "number") {
+        const filtered = pool.filter(entry => entry.score >= options.minScore);
+        if (filtered.length) pool = filtered;
+    }
+
+    const totalWeight = pool.reduce((sum, entry) => sum + (entry.weight || 1), 0);
+    let roll = Math.random() * totalWeight;
+    for (const entry of pool) {
+        roll -= entry.weight || 1;
+        if (roll <= 0) return entry;
+    }
+    return pool[pool.length - 1];
+}
+
+function buildGeneratedItemDescription(item, baseName, mainType, slot, color, qualityName) {
+    const qualityText = qualityName ? `${qualityName} ` : "";
+    const colorText = color ? `${color} ` : "";
+
+    if (mainType === "weapon") {
+        return `A ${qualityText}${baseName} kept ready for a fight.${item.damage ? ` It looks capable of dealing ${item.damage} damage.` : ""}`;
+    }
+    if (mainType === "armor") {
+        return `A ${colorText}${qualityText}${baseName} made for the ${slot}.${typeof item.armor === "number" ? ` It offers about ${item.armor} armor.` : ""}`;
+    }
+    if (mainType === "clothes") {
+        return `A ${colorText}${qualityText}${baseName} worn on the ${slot}.`;
+    }
+    if (mainType === "belt") {
+        return `A ${qualityText}${baseName} with room for pouches and small tools.`;
+    }
+    return `A ${qualityText}${baseName}.`;
+}
+
+function generateLootItem(mainType, slot, options = {}) {
+    const weaponPool = [
+        { name: "dagger", damage: 4, value: 6 },
+        { name: "short sword", damage: 6, value: 10 },
+        { name: "spear", damage: 6, value: 9 },
+        { name: "mace", damage: 6, value: 9 },
+        { name: "axe", damage: 8, value: 11 },
+        { name: "warhammer", damage: 8, value: 13 }
+    ];
+
+    const armorPool = {
+        head: [
+            { name: "cap", armor: 1, value: 4 },
+            { name: "hood", armor: 1, value: 4 },
+            { name: "helmet", armor: 2, value: 7 }
+        ],
+        upper: [
+            { name: "tunic", armor: 1, value: 5 },
+            { name: "vest", armor: 2, value: 7 },
+            { name: "leather armor", armor: 4, value: 12 },
+            { name: "chain shirt", armor: 5, value: 16 }
+        ],
+        lower: [
+            { name: "trousers", armor: 1, value: 4 },
+            { name: "leggings", armor: 2, value: 6 },
+            { name: "greaves", armor: 3, value: 10 }
+        ],
+        feet: [
+            { name: "sandals", armor: 0, value: 2 },
+            { name: "shoes", armor: 1, value: 3 },
+            { name: "boots", armor: 1, value: 5 }
+        ]
+    };
+
+    const clothesPool = {
+        upper: ["shirt", "tunic", "vest", "blouse", "coat"],
+        lower: ["trousers", "skirt", "leggings", "pants"],
+        feet: ["sandals", "slippers", "shoes", "boots"]
+    };
+
+    const beltPool = ["cloth belt", "rope belt", "leather belt", "studded belt"];
+    const colors = ["brown", "gray", "black", "tan", "green", "blue", "red", "cream"];
+    const quality = pickLootQuality(mainType, options.qualityOptions || {});
+    const color = (mainType === "armor" || mainType === "clothes") ? rand(colors) : "";
+
+    let base = null;
+    let baseName = "";
+
+    if (mainType === "weapon") {
+        base = rand(weaponPool);
+        baseName = base.name;
+    } else if (mainType === "armor") {
+        base = rand((armorPool[slot] || armorPool.upper));
+        baseName = base.name;
+    } else if (mainType === "clothes") {
+        baseName = rand((clothesPool[slot] || clothesPool.upper));
+    } else if (mainType === "belt") {
+        baseName = rand(beltPool);
+    } else {
+        return null;
+    }
+
+    const displayName = `${quality.name ? quality.name + " " : ""}${color ? color + " " : ""}${baseName}`.trim();
+    const item = {
+        id: `${mainType}-${slot || "item"}-${Math.random().toString(36).slice(2, 7)}`,
+        name: displayName,
+        type: [mainType, slot || mainType],
+        slot,
+        quality: quality.score,
+        qualityName: quality.name,
+        color,
+        value: Math.max(1, Math.round(((base && base.value) || 4) * (1 + quality.valueMod))),
+        modifier: Math.max(0, quality.score)
+    };
+
+    if (mainType === "weapon") {
+        item.damage = Math.max(2, Math.round(base.damage * (1 + quality.valueMod)));
+    }
+    if (mainType === "armor") {
+        item.armor = Math.max(0, Math.round(base.armor * (1 + quality.valueMod)));
+        item.modifier = item.armor;
+    }
+    if (mainType === "belt") {
+        item.pouchSlots = quality.score >= 1 ? 5 : 3;
+    }
+
+    item.description = buildGeneratedItemDescription(item, baseName, mainType, slot, color, quality.name);
+    return assignLootUID(item);
+}
+
+function isMerchantRole(role) {
+    return ["Vendor", "Shopkeeper", "Innkeeper", "Bartender"].includes(role);
+}
+
+function determineNPCRole(species, room, zoneTemplate, profile, isHumanoid) {
+    const roomType = String(room && room.type ? room.type : "").toLowerCase();
+    const speciesName = normalizeSpeciesName(species);
+    const hostileArea = !!(zoneTemplate && zoneTemplate.hostileArea);
+
+    if (!isHumanoid) {
+        if (speciesName === "skeleton") return "Ancient Sentinel";
+        if (speciesName === "ghost") return "Restless Spirit";
+        if (speciesName === "rat") return "Scavenger";
+        return hostileArea ? "Predator" : "Wanderer";
+    }
+
+    if (roomType === "gate" || roomType === "underground gate") return "Town Guard";
+    if (roomType === "tavern" || roomType === "taproom") return rand(["Bartender", "Wanderer", "Adventurer"]);
+    if (roomType === "inn" || roomType === "inn common" || roomType === "guest room") return rand(["Innkeeper", "Wanderer", "Adventurer"]);
+    if (roomType === "square" || roomType === "avenue") return rand(["Vendor", "Townsfolk", "Wanderer"]);
+    if (roomType === "street" || roomType === "alleyway") return hostileArea ? "Scavenger" : rand(["Townsfolk", "Wanderer"]);
+    if (roomType === "kitchen") return "Servant";
+    if (roomType === "shrine" || roomType === "altar") return "Priest";
+    if (roomType === "armory") return hostileArea ? "Scavenger" : "Town Guard";
+
+    if (hostileArea) {
+        return ["aggressive", "hostile"].includes(profile && profile.temperament) ? "Raider" : "Adventurer";
+    }
+
+    return rand(["Wanderer", "Townsfolk"]);
+}
+
+function getNPCEquipmentSlots(npc, zoneTemplate) {
+    const roleMap = {
+        "Town Guard": ["head", "upper", "lower", "feet", "weapon", "belt"],
+        "Adventurer": ["head", "upper", "lower", "feet", "weapon", "belt"],
+        "Raider": ["upper", "lower", "feet", "weapon", "belt"],
+        "Scavenger": ["upper", "lower", "feet", "weapon", "belt"],
+        "Vendor": ["upper", "lower", "feet", "belt"],
+        "Shopkeeper": ["upper", "lower", "feet", "belt"],
+        "Innkeeper": ["upper", "lower", "feet", "belt"],
+        "Bartender": ["upper", "lower", "feet", "belt"],
+        "Priest": ["upper", "lower", "feet", "belt"],
+        "Servant": ["upper", "lower"],
+        "Townsfolk": ["upper", "lower", "feet", "belt"],
+        "Wanderer": ["upper", "lower", "feet", "belt"]
+    };
+
+    if (npc && npc.isHumanoid === false) {
+        if (normalizeSpeciesName(npc.species) === "skeleton") return ["weapon"];
+        return [];
+    }
+
+    const base = roleMap[npc && npc.role ? npc.role : "Wanderer"] || roleMap.Wanderer;
+    if ((zoneTemplate && zoneTemplate.hostileArea) && !base.includes("weapon")) {
+        return base.concat(["weapon"]);
+    }
+    return base.slice();
+}
+
+function generateNPCEquipmentItem(slot, npc, zoneTemplate) {
+    const role = npc && npc.role ? npc.role : "Wanderer";
+    const combatRole = ["Town Guard", "Adventurer", "Raider", "Scavenger"].includes(role) || !!(zoneTemplate && zoneTemplate.hostileArea);
+
+    if (slot === "weapon") {
+        const shouldCarryWeapon = combatRole || Math.random() < 0.25;
+        return shouldCarryWeapon ? generateLootItem("weapon", slot, {
+            qualityOptions: combatRole ? { minScore: 0 } : {}
+        }) : null;
+    }
+
+    if (slot === "belt") return generateLootItem("belt", slot);
+
+    if (["head", "upper", "lower", "feet"].includes(slot)) {
+        const armorChance = combatRole
+            ? (slot === "head" ? 0.55 : 0.72)
+            : (slot === "upper" ? 0.2 : slot === "feet" ? 0.15 : 0.08);
+
+        if (Math.random() < armorChance) {
+            const armorItem = generateLootItem("armor", slot, {
+                qualityOptions: combatRole ? { minScore: 0 } : {}
+            });
+            if (armorItem) return armorItem;
+        }
+
+        if (slot === "head") return null;
+        return generateLootItem("clothes", slot);
+    }
+
+    return null;
+}
+
+function createNPCTradeGood(template) {
+    return cloneLootTemplate(template, {
+        description: `A practical ${String(template.name || "trade good").toLowerCase()} carried for daily use or barter.`,
+        type: ["trade-good", "supply"]
+    });
+}
+
+function getSpeciesBonusLoot(species) {
+    const speciesName = normalizeSpeciesName(species);
+    if (speciesName === "skeleton") {
+        return [
+            { id: "grave-token", name: "Grave token", value: 5, type: ["misc", "relic"], description: "A funerary token left with the dead long before the bones rose again." },
+            { id: "bone-charm", name: "Bone charm", value: 4, type: ["misc", "trinket"], description: "A crude charm lashed together from polished bone fragments." }
+        ];
+    }
+    if (speciesName === "ghost") {
+        return [
+            { id: "mourning-locket", name: "Mourning locket", value: 8, type: ["misc", "relic"], description: "A cold locket that seems tied to an unfinished grief." },
+            { id: "faded-keepsake", name: "Faded keepsake", value: 5, type: ["misc", "lore"], description: "A personal keepsake that feels out of place among the living." }
+        ];
+    }
+    if (speciesName === "rat") {
+        return [
+            { id: "gnawed-ration", name: "Gnawed ration", value: 1, type: ["misc", "supply"], description: "A food scrap dragged off and worried half to pieces." }
+        ];
+    }
+    return [];
+}
+
+function generateNPCBackstory(npc, room, zoneTemplate) {
+    if (!npc) return "";
+
+    const roomName = room && (room.displayName || room.name || room.type) ? (room.displayName || room.name || room.type) : "this place";
+    const zoneName = zoneTemplate && zoneTemplate.name ? zoneTemplate.name : (room && room.zone ? room.zone : "the region");
+    const roleText = npc.role ? npc.role.toLowerCase() : "wanderer";
+    const moodText = npc.temperament ? npc.temperament.toLowerCase() : "neutral";
+    const motive = npc.currentMotive || (npc.enrichment && npc.enrichment.currentMotive) || "keep going another day";
+    const lore = npc.loreNotes || (npc.enrichment && npc.enrichment.speciesLore) || "";
+
+    const seedLine = `${npc.name || "This figure"} is a ${roleText} of the ${zoneName}, last seen around ${roomName.toLowerCase()}.`;
+    const motiveLine = `They have a ${moodText} streak and seem intent on ${motive}.`;
+    const loreLine = lore ? ` ${lore}` : "";
+    return `${seedLine} ${motiveLine}${loreLine}`.trim();
+}
+
+function calculateNPCArmorFromEquipment(npc) {
+    const equipped = npc && npc.equipped ? npc.equipped : {};
+    const armorBonus = Object.values(equipped).reduce((sum, item) => {
+        if (!item || Array.isArray(item) || typeof item.armor !== "number") return sum;
+        return sum + item.armor;
+    }, 0);
+    return 10 + Math.min(4, Math.floor(armorBonus / 2));
+}
+
+function seedNPCStartingLoot(npc, room, zoneTemplate) {
+    if (!npc) return npc;
+
+    const slots = getNPCEquipmentSlots(npc, zoneTemplate);
+    npc.equipped = {};
+
+    slots.forEach(slot => {
+        const item = generateNPCEquipmentItem(slot, npc, zoneTemplate);
+        if (item) npc.equipped[slot] = item;
+    });
+
+    if (npc.isHumanoid && !npc.equipped.lower) {
+        npc.equipped.lower = generateLootItem("clothes", "lower");
+    }
+
+    const coinRanges = {
+        "Town Guard": [6, 18],
+        "Adventurer": [8, 22],
+        "Raider": [4, 16],
+        "Scavenger": [2, 10],
+        "Vendor": [12, 32],
+        "Shopkeeper": [12, 32],
+        "Innkeeper": [10, 24],
+        "Bartender": [8, 18],
+        "Priest": [4, 14],
+        "Servant": [1, 6],
+        "Townsfolk": [2, 10],
+        "Wanderer": [3, 12]
+    };
+    const [minCoins, maxCoins] = coinRanges[npc.role] || (npc.isHumanoid ? [2, 10] : [0, 6]);
+    npc.equipped.coinPouch = assignLootUID({
+        id: `coin-pouch-${Math.random().toString(36).slice(2, 7)}`,
+        name: "Coin Pouch",
+        type: ["coin", "pouch"],
+        value: randInt(minCoins, maxCoins),
+        description: "A small pouch holding loose coins."
+    });
+
+    const inventory = [];
+    const merchant = isMerchantRole(npc.role);
+    const carriedGoods = merchant ? randInt(2, 4) : (npc.isHumanoid && Math.random() < 0.55 ? randInt(0, 2) : 0);
+    for (let i = 0; i < carriedGoods; i++) {
+        inventory.push(createNPCTradeGood(rand(TRADE_GOODS)));
+    }
+
+    const zoneLoot = NPC_ZONE_LOOT[(zoneTemplate && zoneTemplate.name) || ""];
+    if (Array.isArray(zoneLoot) && zoneLoot.length && Math.random() < (zoneTemplate && zoneTemplate.hostileArea ? 0.75 : 0.45)) {
+        inventory.push(cloneLootTemplate(rand(zoneLoot)));
+    }
+
+    if (Math.random() < 0.45) {
+        inventory.push(cloneLootTemplate(rand(NPC_MISC_LOOT)));
+    }
+
+    const speciesLoot = getSpeciesBonusLoot(npc.species);
+    if (speciesLoot.length && Math.random() < 0.7) {
+        inventory.push(cloneLootTemplate(rand(speciesLoot)));
+    }
+
+    npc.inventory = inventory.slice(0, 5);
+    npc.tradeStockSeeded = merchant && npc.inventory.length > 0;
+    npc.armor = calculateNPCArmorFromEquipment(npc);
+    return npc;
+}
+
 function getCoinValue(entity) {
     if (!entity) return 0;
     if (typeof entity.coins === "number") return Math.max(0, entity.coins);
@@ -985,7 +1404,8 @@ function spawnNPCsForRoom(room, zoneName) {
 function createNPC(species, room, zoneTemplate) {
     const isHumanoid = getSpeciesHumanoidFlag(species) === true;
     const profile     = getRandomPersonalityProfile({});
-    const ageCategory = getAgeCategoryForRole("Wanderer", profile.archetype);
+    const role        = determineNPCRole(species, room, zoneTemplate, profile, isHumanoid);
+    const ageCategory = getAgeCategoryForRole(role, profile.archetype);
     const age         = isHumanoid ? getRandomAge(ageCategory) : null;
     const gender      = isHumanoid ? (Math.random() < 0.5 ? "male" : "female") : "none";
     const temperament = profile.temperament;
@@ -996,7 +1416,7 @@ function createNPC(species, room, zoneTemplate) {
         species,
         isHumanoid,
         gender,
-        role:             "Wanderer",
+        role,
         temperament,
         hostility:        temperament === "hostile" ? randInt(60, 90) : randInt(0, 40),
         age,
@@ -1016,10 +1436,13 @@ function createNPC(species, room, zoneTemplate) {
         }
     };
 
+    seedNPCStartingLoot(npc, room, zoneTemplate);
+
     if (typeof generateNPCEnrichment === "function") {
         generateNPCEnrichment(npc, room, zoneTemplate);
     }
 
+    npc.backstory = generateNPCBackstory(npc, room, zoneTemplate);
     npc.action   = generatePostureOrAction(temperament);
     npc.behavior = generateNPCBehavior(npc);
     return npc;
@@ -1285,13 +1708,180 @@ function getSetupStat(stat, fallback = 3) {
     return value;
 }
 
-function getWeaponDamageDie(player) {
-    const weaponName = String(player.weapon || player.equipped?.weapon?.name || "").toLowerCase();
+function getEquippedItem(entity, slot) {
+    if (!entity || !entity.equipped) return null;
+    return entity.equipped[slot] || null;
+}
+
+function getItemArmorValue(item) {
+    if (!item || Array.isArray(item)) return 0;
+    if (typeof item.armor === "number") return Math.max(0, item.armor);
+    if (typeof item.modifier === "number") return Math.max(0, item.modifier);
+    return 0;
+}
+
+function getEntityWeaponItem(entity) {
+    return getEquippedItem(entity, "weapon");
+}
+
+function getEntityWeaponName(entity) {
+    const equippedWeapon = getEntityWeaponItem(entity);
+    return String(
+        (equippedWeapon && (equippedWeapon.name || equippedWeapon.displayName)) ||
+        entity?.weapon ||
+        "unarmed"
+    );
+}
+
+function getWeaponTypeFromName(name = "", fallback = "generic") {
+    const key = String(name || "").toLowerCase();
+    if (key.includes("dagger")) return "dagger";
+    if (key.includes("sword") || key.includes("scimitar") || key.includes("saber") || key.includes("rapier")) return "sword";
+    if (key.includes("axe")) return "axe";
+    if (key.includes("mace") || key.includes("hammer") || key.includes("maul") || key.includes("morningstar")) return "mace";
+    if (key.includes("spear") || key.includes("trident")) return "spear";
+    if (key.includes("halberd") || key.includes("glaive") || key.includes("polearm")) return "polearm";
+    if (key.includes("staff")) return "staff";
+    if (key.includes("flail")) return "flail";
+    if (key.includes("whip")) return "whip";
+    return fallback;
+}
+
+function getEntityWeaponProfile(entity) {
+    const weaponItem = getEntityWeaponItem(entity);
+    const weaponName = getEntityWeaponName(entity).toLowerCase();
+    const weaponType = String(weaponItem?.weaponType || getWeaponTypeFromName(weaponName, "generic")).toLowerCase();
+
+    let damageDie = typeof weaponItem?.damage === "number" ? Math.max(2, weaponItem.damage) : 4;
+    if (!(typeof weaponItem?.damage === "number")) {
+        if (weaponName.includes("dagger")) damageDie = 4;
+        else if (weaponName.includes("staff")) damageDie = 5;
+        else if (weaponName.includes("mace")) damageDie = 6;
+        else if (weaponName.includes("sword")) damageDie = 6;
+        else if (weaponName.includes("axe")) damageDie = 8;
+        else if (weaponName.includes("hammer") || weaponName.includes("maul")) damageDie = 8;
+        else if (weaponName.includes("spear")) damageDie = 6;
+    }
+
+    let hitBonus = 0;
+    let damageBonus = 0;
+    if (weaponType === "dagger") hitBonus += 1;
+    if (weaponType === "sword" || weaponType === "spear" || weaponType === "polearm") hitBonus += 1;
+    if (weaponType === "axe" || weaponType === "mace" || weaponType === "flail") damageBonus += 1;
+
+    if (typeof weaponItem?.quality === "number") {
+        hitBonus += Math.max(-1, Math.min(1, weaponItem.quality));
+    }
+
+    return {
+        item: weaponItem,
+        name: getEntityWeaponName(entity),
+        type: weaponType,
+        damageDie,
+        hitBonus,
+        damageBonus
+    };
+}
+
+function getWeaponDamageDie(entity) {
+    const weaponName = getEntityWeaponName(entity).toLowerCase();
     if (weaponName.includes("dagger")) return 4;
     if (weaponName.includes("staff")) return 5;
     if (weaponName.includes("mace")) return 6;
     if (weaponName.includes("sword")) return 6;
-    return 4;
+    return getEntityWeaponProfile(entity).damageDie;
+}
+
+function getEquippedArmorTotal(entity) {
+    if (!entity || !entity.equipped) return 0;
+    return ["head", "upper", "hands", "lower", "feet"].reduce((sum, slot) => {
+        return sum + getItemArmorValue(entity.equipped[slot]);
+    }, 0);
+}
+
+function getTargetArmorClassBonus(entity, targetKey = "torso") {
+    const eq = entity?.equipped || {};
+    const headArmor = getItemArmorValue(eq.head);
+    const upperArmor = getItemArmorValue(eq.upper);
+    const handsArmor = getItemArmorValue(eq.hands);
+    const lowerArmor = getItemArmorValue(eq.lower);
+    const feetArmor = getItemArmorValue(eq.feet);
+
+    if (targetKey === "head") return Math.min(2, headArmor);
+    if (targetKey === "torso") return Math.min(3, Math.ceil(upperArmor / 2));
+    if (targetKey === "arms") return Math.min(2, Math.floor((upperArmor + handsArmor) / 3));
+    if (targetKey === "legs") return Math.min(2, Math.floor((lowerArmor + feetArmor) / 3));
+    return 0;
+}
+
+function getEquipmentDodgeBonus(entity) {
+    const eq = entity?.equipped || {};
+    return ["upper", "lower", "feet", "head"].reduce((sum, slot) => {
+        const item = eq[slot];
+        if (!item || Array.isArray(item)) return sum;
+        let next = sum;
+        if (typeof item.dodgeBonus === "number") next += item.dodgeBonus;
+        if (item.enchantment === "elusion") next += 2;
+        return next;
+    }, 0);
+}
+
+function getEntityArmorClass(entity, targetKey = "torso") {
+    if (!entity) return 10;
+
+    const totalArmor = getEquippedArmorTotal(entity);
+    let armorClass = typeof entity.armor === "number" ? entity.armor : 10;
+
+    if (totalArmor > 0) {
+        armorClass = 10 + Math.min(6, Math.floor(totalArmor / 2));
+    }
+
+    if (entity.size === "small") armorClass += 1;
+    if (entity.size === "large") armorClass -= 1;
+
+    armorClass += getTargetArmorClassBonus(entity, targetKey);
+    armorClass += getEquipmentDodgeBonus(entity);
+
+    return Math.max(5, armorClass);
+}
+
+function getTargetDamageReduction(entity, targetKey = "torso", damageTypes = "physical") {
+    const eq = entity?.equipped || {};
+    const types = Array.isArray(damageTypes) ? damageTypes : [damageTypes];
+    const slotsByTarget = {
+        head: ["head"],
+        torso: ["upper"],
+        arms: ["upper", "hands"],
+        legs: ["lower", "feet"]
+    };
+    const slots = slotsByTarget[targetKey] || ["upper"];
+
+    let reduction = 0;
+    slots.forEach(slot => {
+        const item = eq[slot];
+        if (!item || Array.isArray(item)) return;
+
+        if (types.includes("physical")) {
+            reduction += getItemArmorValue(item);
+        }
+
+        if (item.resistances) {
+            types.forEach(type => {
+                reduction += item.resistances[type] || 0;
+            });
+        }
+
+        if (item.enchantment === "fireproof" && types.includes("fire")) reduction += 3;
+        if (item.enchantment === "frostguard" && types.includes("ice")) reduction += 3;
+    });
+
+    const scaled = targetKey === "head"
+        ? Math.ceil(reduction / 2)
+        : targetKey === "torso"
+            ? Math.ceil(reduction / 3)
+            : Math.floor(reduction / 4);
+
+    return Math.max(0, Math.min(5, scaled));
 }
 
 function getCombatTargetOptions(npc) {
@@ -1635,7 +2225,8 @@ function attackNPC(npc, options = {}) {
     const targetKey = options.target || "torso";
     const style = COMBAT_ATTACK_STYLES[styleKey] || COMBAT_ATTACK_STYLES.balanced;
     const target = COMBAT_TARGETS[targetKey] || COMBAT_TARGETS.torso;
-    const npcArmor = (typeof npc.armor === "number" ? npc.armor : 10) +
+    const playerWeapon = getEntityWeaponProfile(player);
+    const npcArmor = getEntityArmorClass(npc, targetKey) +
         target.hitMod +
         -Math.max(0, getWoundDefensePenalty(npc));
     const attackRoll = randInt(1, 20);
@@ -1643,6 +2234,7 @@ function attackNPC(npc, options = {}) {
     const attackTotal = attackRoll +
         (player.attackBonus || 0) +
         statBonus +
+        playerWeapon.hitBonus +
         style.hitBonus -
         getWoundAttackPenalty(player);
     const hit = attackRoll === 20 || (attackRoll !== 1 && attackTotal >= npcArmor);
@@ -1670,25 +2262,28 @@ function attackNPC(npc, options = {}) {
     lines.push(`${style.text} You aim for ${npcName}'s ${target.label.toLowerCase()}.`);
 
     if (hit) {
-        const weaponDie = getWeaponDamageDie(player);
+        const weaponDie = playerWeapon.damageDie;
         const damageRoll = randInt(1, weaponDie);
         const preciseBonus = styleKey === "precise" && targetKey !== "torso" ? 2 : 0;
-        const damage = Math.max(1,
+        const rawDamage = Math.max(1,
             damageRoll +
             Math.max(0, player.attackBonus || 0) +
             statBonus +
+            playerWeapon.damageBonus +
             style.damageBonus +
             target.damageMod +
             preciseBonus +
             (crit ? Math.ceil(weaponDie / 2) : 0)
         );
+        const blocked = getTargetDamageReduction(npc, targetKey, "physical");
+        const damage = Math.max(1, rawDamage - blocked);
         applyCombatDamage(npc, damage, targetKey, {
             crit,
             bleed: crit || styleKey === "heavy" || targetKey === "torso"
         });
         npc.hostility = Math.min(100, (typeof npc.hostility === "number" ? npc.hostility : 0) + 25);
         if (npc.memory) npc.memory.aggressionCount = (npc.memory.aggressionCount || 0) + 1;
-        lines.push(`You hit for ${damage} damage${crit ? " with a telling blow" : ""}.`);
+        lines.push(`You hit for ${damage} damage${crit ? " with a telling blow" : ""}${blocked > 0 ? ` after ${blocked} was absorbed by gear` : ""}.`);
 
         const woundText = describeCombatWounds(npc);
         if (woundText) lines.push(`${npcName} is showing wounds: ${woundText}.`);
@@ -1748,6 +2343,7 @@ function resolveNPCCounter(npc, lines, context = {}) {
     const player = G.player;
     const npcName = npc.name || "the creature";
     const npcPlan = chooseNPCCombatPlan(npc, context);
+    const npcWeapon = getEntityWeaponProfile(npc);
 
     if (npcPlan.type === "recover") {
         lines.push(`${npcName} hangs back and tries to recover their guard.`);
@@ -1761,9 +2357,10 @@ function resolveNPCCounter(npc, lines, context = {}) {
     const counterBonus = Math.max(0, Math.floor((npc.hostility || 0) / 35)) +
         npcPlan.hitBonus -
         getWoundAttackPenalty(npc) +
+        npcWeapon.hitBonus +
         (context.openingBonus || 0);
     const counterTotal = counterRoll + counterBonus;
-    const playerArmor = (typeof player.armor === "number" ? player.armor : 10) +
+    const playerArmor = getEntityArmorClass(player, npcPlan.target) +
         getPlayerStanceArmorBonus() -
         getWoundDefensePenalty(player);
     const counterHits = counterRoll === 20 || (counterRoll !== 1 && counterTotal >= playerArmor);
@@ -1771,13 +2368,15 @@ function resolveNPCCounter(npc, lines, context = {}) {
     lines.push(npcPlan.line);
 
     if (counterHits) {
-        let counterDamage = Math.max(1, randInt(1, npcPlan.damageDie) + npcPlan.damageBonus);
+        const rawDamage = Math.max(1, randInt(1, npcPlan.damageDie) + npcPlan.damageBonus + npcWeapon.damageBonus);
+        const blocked = getTargetDamageReduction(player, npcPlan.target, "physical");
+        let counterDamage = Math.max(1, rawDamage - blocked);
         counterDamage = Math.max(1, Math.floor(counterDamage * getPlayerStanceDamageMultiplier()));
         applyCombatDamage(player, counterDamage, npcPlan.target, {
             crit: counterRoll === 20,
             bleed: counterRoll === 20
         });
-        lines.push(`${npcName} hits you for ${counterDamage} damage.`);
+        lines.push(`${npcName} hits you for ${counterDamage} damage${blocked > 0 ? ` after your gear absorbs ${blocked}` : ""}.`);
     } else {
         lines.push(`${npcName} misses.`);
         if (player.combatState?.stance === "counter") {
@@ -1805,6 +2404,8 @@ function chooseNPCCombatPlan(npc, context = {}) {
     const temperament = String(npc.temperament || npc.personalityProfile?.temperament || "").toLowerCase();
     const aggressive = ["hostile", "aggressive", "bold"].includes(temperament) || (npc.hostility || 0) >= 70;
     const cautious = ["skittish", "wary", "calm"].includes(temperament);
+    const weapon = getEntityWeaponProfile(npc);
+    const weaponText = weapon.name && weapon.name !== "unarmed" ? ` with ${weapon.name}` : "";
 
     if (hpRatio < 0.35 && cautious && Math.random() < 0.35) {
         return { type: "recover" };
@@ -1820,8 +2421,8 @@ function chooseNPCCombatPlan(npc, context = {}) {
             target,
             hitBonus: -1,
             damageBonus: 3,
-            damageDie: 6,
-            line: `${npc.name || "The creature"} makes a heavy attack.`
+            damageDie: weapon.damageDie,
+            line: `${npc.name || "The creature"} makes a heavy attack${weaponText}.`
         };
     }
 
@@ -1831,8 +2432,8 @@ function chooseNPCCombatPlan(npc, context = {}) {
             target,
             hitBonus: 2,
             damageBonus: 0,
-            damageDie: 4,
-            line: `${npc.name || "The creature"} snaps back with a quick attack.`
+            damageDie: weapon.damageDie,
+            line: `${npc.name || "The creature"} snaps back with a quick attack${weaponText}.`
         };
     }
 
@@ -1841,8 +2442,8 @@ function chooseNPCCombatPlan(npc, context = {}) {
         target,
         hitBonus: 0,
         damageBonus: 1,
-        damageDie: 4,
-        line: `${npc.name || "The creature"} attacks.`
+        damageDie: weapon.damageDie,
+        line: `${npc.name || "The creature"} attacks${weaponText}.`
     };
 }
 
@@ -2523,12 +3124,14 @@ function renderExits(exits) {
 
 function renderStats() {
     const p = G.player;
+    const displayedArmor = getEntityArmorClass(p);
+    const displayedWeapon = getEntityWeaponName(p);
     document.getElementById("playerNameEl").textContent = p.name;
     document.getElementById("statClassEl").textContent  = p.class;
     document.getElementById("statHpEl").textContent     = `${p.hp} / ${p.hpMax}`;
-    document.getElementById("statArmorEl").textContent  = p.armor;
+    document.getElementById("statArmorEl").textContent  = displayedArmor;
     document.getElementById("statAtkEl").textContent    = `+${p.attackBonus}`;
-    document.getElementById("statWeaponEl").textContent = p.weapon;
+    document.getElementById("statWeaponEl").textContent = displayedWeapon;
     document.getElementById("statCoinsEl").textContent  = `${getCoinValue(p)}g`;
 
     const pct = Math.max(0, Math.min(100, (p.hp / p.hpMax) * 100));
