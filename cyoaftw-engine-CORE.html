@@ -3,6 +3,8 @@
 <script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-npc-data.js?20260616031841"></script>
 <script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-context-builder.js?20260616031841"></script>
 <script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-engine-CORE_js.html?20260616031841"></script>
+<!--<script src="https://www.hostize.com/s/I02IdCoecu?20260615" onerror="console.warn('SFW content only.')"></script>-->
+
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -633,7 +635,10 @@ body {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.7);
+    background:
+        radial-gradient(circle at top, rgba(122,90,170,0.18), transparent 32%),
+        rgba(0,0,0,0.82);
+    backdrop-filter: blur(2px);
     z-index: 200;
     align-items: center;
     justify-content: center;
@@ -643,13 +648,15 @@ body {
 
 .spinner-box {
     background: #1e1e1e;
+    border: 1px solid #32254f;
     border-radius: 10px;
-    padding: 28px 36px;
-    text-align: center;
+    padding: 28px 30px 24px;
+    text-align: left;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    align-items: center;
+    gap: 10px;
+    width: min(440px, calc(100vw - 32px));
+    box-shadow: 0 24px 60px rgba(0,0,0,0.45);
 }
 
 .loader {
@@ -662,10 +669,46 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+#loadingTitle {
+    color: #f4efff;
+    font-size: 16px;
+    font-weight: bold;
+}
+
 #loadingLog {
-    color: #888;
-    font-size: 12px;
-    font-style: italic;
+    color: #c9c1da;
+    font-size: 13px;
+    min-height: 20px;
+}
+
+.loading-progress {
+    width: 100%;
+    height: 8px;
+    background: #141414;
+    border: 1px solid #2d2d2d;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+#loadingProgressBar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #7a5aaa, #a78ad0);
+    transition: width 0.22s ease;
+}
+
+#loadingStepHistory {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+.loading-step-entry {
+    color: #8e8a99;
+    font-size: 11px;
+    border-top: 1px solid #2b2438;
+    padding-top: 6px;
 }
 </style>
 
@@ -905,7 +948,12 @@ body {
 <div id="loadingSpinner">
     <div class="spinner-box">
         <div class="loader"></div>
+        <div id="loadingTitle">Preparing Adventure</div>
         <div id="loadingLog">Loading...</div>
+        <div class="loading-progress">
+            <div id="loadingProgressBar"></div>
+        </div>
+        <div id="loadingStepHistory"></div>
     </div>
 </div>
 

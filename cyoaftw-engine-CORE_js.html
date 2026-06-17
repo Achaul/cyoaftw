@@ -538,7 +538,7 @@ function selectPersonality(btn) {
     window.playerTraits[trait] = (window.playerTraits[trait] || 0) + 1;
 }
 
-function beginAdventure() {
+async function beginAdventure() {
     const name   = document.getElementById("charNameEl").value.trim() || "Adventurer";
     const cls    = document.getElementById("charClassEl").value;
     const gender = document.getElementById("charGenderEl").value;
@@ -566,15 +566,56 @@ function beginAdventure() {
         stats:     { ...window.setupStats }
     };
 
-    document.getElementById("setupWrapper").style.display = "none";
-    document.getElementById("gameWrapper").classList.add("active");
+    showSpinner("Preparing your adventure...", "Starting New Adventure");
+    await waitForNextPaint();
 
-    showSpinner("Preparing your adventure...");
-    G.activeRoom = getOrCreateRoom("0,0", zone, room);
-    G.activeNPC = null;
-    G.activeNPCMode = null;
-    repairRoomMapExits();
-    updateStoryOnAdventureStart(zone, room);
+    await performLoadingStep("Clearing the previous adventure state...", 12, () => {
+        G.roomMap = {};
+        G.activeRoom = null;
+        G.activeNPC = null;
+        G.activeObject = null;
+        G.activeNPCMode = null;
+        G.story = createStoryDirectorState();
+        G.prefetchCache = {};
+        G.prefetchQueue = [];
+        G.isPrefetching = false;
+    });
+
+    let startingRoom = null;
+
+    await performLoadingStep(`Creating the starting ${String(room || "room").toLowerCase()}...`, 36, () => {
+        startingRoom = createRoomSkeleton("0,0", zone, room);
+    });
+
+    if (!startingRoom) {
+        hideSpinner();
+        console.warn("Starting room creation failed.");
+        return false;
+    }
+
+    await performLoadingStep("Sketching exits and nearby map paths...", 58, () => {
+        assignGeneratedExits(startingRoom, zone);
+    });
+
+    await performLoadingStep("Creating NPCs and local encounters...", 80, () => {
+        assignGeneratedNPCs(startingRoom, zone);
+    });
+
+    await performLoadingStep("Finalizing the world state...", 96, () => {
+        G.activeRoom = finalizeGeneratedRoom(startingRoom);
+        repairRoomMapExits();
+        updateStoryOnAdventureStart(zone, room);
+    });
+
+    const startingNpcCount = Array.isArray(G.activeRoom && G.activeRoom.creatures)
+        ? G.activeRoom.creatures.length
+        : 0;
+    showGameScreen();
+    updateLoadingStatus(
+        `Ready. ${startingNpcCount} NPC${startingNpcCount === 1 ? "" : "s"} placed in the opening area.`,
+        100
+    );
+    await wait(180);
     hideSpinner();
 
     renderRoom();
@@ -584,6 +625,7 @@ function beginAdventure() {
     renderRoomNarration(G.activeRoom, "start", null);
 
     saveGameState();
+    return true;
 }
 
 // 
@@ -721,7 +763,7 @@ function resetNpcPanel() {
     setExitGridVisible(true);
 }
 
-function resumeSavedGame() {
+async function resumeSavedGame() {
     const save = readSavedGame();
     if (!save) {
         hideSavedGamePrompt();
@@ -729,18 +771,28 @@ function resumeSavedGame() {
         return false;
     }
 
-    G.player = save.player;
-    G.roomMap = save.roomMap || {};
-    G.story = save.story || createStoryDirectorState();
-    repairRoomMapExits();
-    G.activeRoom = G.roomMap[G.player.coords] || null;
-    G.activeNPC = null;
-    G.activeNPCMode = null;
-    G.prefetchCache = {};
-    G.prefetchQueue = [];
-    G.isPrefetching = false;
+    const roomCount = Object.keys(save.roomMap || {}).length;
+    const npcCount = countNPCsInRoomMap(save.roomMap);
+
+    showSpinner("Reopening your saved adventure...", "Resuming Adventure");
+    await waitForNextPaint();
+
+    await performLoadingStep(`Restoring ${roomCount} explored room${roomCount === 1 ? "" : "s"}...`, 32, () => {
+        G.player = save.player;
+        G.roomMap = save.roomMap || {};
+        G.story = save.story || createStoryDirectorState();
+        repairRoomMapExits();
+        G.activeRoom = G.roomMap[G.player.coords] || null;
+        G.activeNPC = null;
+        G.activeObject = null;
+        G.activeNPCMode = null;
+        G.prefetchCache = {};
+        G.prefetchQueue = [];
+        G.isPrefetching = false;
+    });
 
     if (!G.activeRoom) {
+        hideSpinner();
         console.warn("Saved game is missing the active room.");
         clearSavedGame();
         hideSavedGamePrompt();
@@ -748,35 +800,41 @@ function resumeSavedGame() {
         return false;
     }
 
-    const activeNPCId = save.meta ? save.meta.activeNPCId : null;
-    if (activeNPCId && Array.isArray(G.activeRoom.creatures)) {
-        for (let i = 0; i < G.activeRoom.creatures.length; i++) {
-            if (G.activeRoom.creatures[i].id === activeNPCId) {
-                hydrateNPCSpeciesFlags(G.activeRoom.creatures[i]);
-                G.activeNPC = G.activeRoom.creatures[i];
-                break;
+    await performLoadingStep(`Restoring NPC records and nearby encounters (${npcCount} total)...`, 62, () => {
+        const activeNPCId = save.meta ? save.meta.activeNPCId : null;
+        if (activeNPCId && Array.isArray(G.activeRoom.creatures)) {
+            for (let i = 0; i < G.activeRoom.creatures.length; i++) {
+                if (G.activeRoom.creatures[i].id === activeNPCId) {
+                    hydrateNPCSpeciesFlags(G.activeRoom.creatures[i]);
+                    G.activeNPC = G.activeRoom.creatures[i];
+                    break;
+                }
             }
         }
-    }
+    });
 
-    showGameScreen();
+    await performLoadingStep("Rebuilding panels, exits, and room details...", 86, () => {
+        showGameScreen();
+        clearChatLog();
+        renderRoom();
+        renderStats();
 
-    clearChatLog();
+        if (G.activeNPC) {
+            selectNPC(G.activeNPC);
+        } else {
+            resetNpcPanel();
+        }
+    });
 
-    renderRoom();
-    renderStats();
+    await performLoadingStep("Picking up the story where you left off...", 98, () => {
+        schedulePrefetch();
+        renderRoomNarration(G.activeRoom, "resume", null);
+        saveGameState();
+    });
 
-    if (G.activeNPC) {
-        selectNPC(G.activeNPC);
-    } else {
-        resetNpcPanel();
-    }
-
-    schedulePrefetch();
-
-    renderRoomNarration(G.activeRoom, "resume", null);
-
-    saveGameState();
+    updateLoadingStatus("Adventure restored.", 100);
+    await wait(180);
+    hideSpinner();
     return true;
 }
 
@@ -832,6 +890,39 @@ function saveGameState() {
 
 // ── ROOM GENERATION ──────────────────────────────────────────────
 
+function createRoomSkeleton(coords, zoneName, roomType) {
+    const parsed = parseCoords(coords);
+    if (!parsed) return null;
+
+    const buildRoomType = getRoomTemplate(roomType)
+        ? roomType
+        : chooseRoomTypeForZone(zoneName, "Street");
+    const room = buildRoomInstance(buildRoomType, zoneName);
+    if (!room) return null;
+
+    room.coords = parsed.key;
+    return room;
+}
+
+function assignGeneratedExits(room, zoneName) {
+    if (!room || !room.coords) return {};
+    room.exits = generateExits(room.coords, zoneName);
+    return room.exits;
+}
+
+function assignGeneratedNPCs(room, zoneName) {
+    if (!room) return [];
+    room.creatures = spawnNPCsForRoom(room, zoneName);
+    return room.creatures;
+}
+
+function finalizeGeneratedRoom(room) {
+    if (!room || !room.coords) return null;
+    repairRoomExits(room);
+    setRoom(room.coords, room);
+    return room;
+}
+
 function getOrCreateRoom(coords, zoneName, roomType) {
     const parsed = parseCoords(coords);
     if (!parsed) return null;
@@ -841,19 +932,12 @@ function getOrCreateRoom(coords, zoneName, roomType) {
         return G.roomMap[parsed.key];
     }
 
-    const buildRoomType = getRoomTemplate(roomType)
-        ? roomType
-        : chooseRoomTypeForZone(zoneName, "Street");
-    const room = buildRoomInstance(buildRoomType, zoneName);
+    const room = createRoomSkeleton(parsed.key, zoneName, roomType);
     if (!room) return null;
 
-    room.coords  = parsed.key;
-    room.exits   = generateExits(parsed.key, zoneName);
-    room.creatures = spawnNPCsForRoom(room, zoneName);
-
-    repairRoomExits(room);
-    setRoom(parsed.key, room);
-    return room;
+    assignGeneratedExits(room, zoneName);
+    assignGeneratedNPCs(room, zoneName);
+    return finalizeGeneratedRoom(room);
 }
 
 function generateExits(coords, zoneName) {
@@ -2707,12 +2791,73 @@ function renderEquipment() {
 
 // ── SPINNER ──────────────────────────────────────────────────────
 
-function showSpinner(msg) {
-    document.getElementById("loadingLog").textContent = msg || "Loading...";
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, Math.max(0, ms || 0)));
+}
+
+function waitForNextPaint() {
+    return new Promise(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+}
+
+function countNPCsInRoomMap(roomMap) {
+    return Object.values(roomMap || {}).reduce((total, room) => {
+        return total + (Array.isArray(room && room.creatures) ? room.creatures.length : 0);
+    }, 0);
+}
+
+function setLoadingProgress(progress) {
+    const barEl = document.getElementById("loadingProgressBar");
+    if (!barEl) return;
+
+    const clamped = Math.max(0, Math.min(100, Number(progress) || 0));
+    barEl.style.width = `${clamped}%`;
+}
+
+function appendLoadingHistory(message) {
+    const historyEl = document.getElementById("loadingStepHistory");
+    if (!historyEl || !message) return;
+
+    const entryEl = document.createElement("div");
+    entryEl.className = "loading-step-entry";
+    entryEl.textContent = message;
+    historyEl.appendChild(entryEl);
+
+    while (historyEl.children.length > 4) {
+        historyEl.removeChild(historyEl.firstChild);
+    }
+}
+
+function updateLoadingStatus(message, progress, addHistory = false) {
+    const logEl = document.getElementById("loadingLog");
+    if (logEl) logEl.textContent = message || "Loading...";
+    if (typeof progress === "number") setLoadingProgress(progress);
+    if (addHistory) appendLoadingHistory(message);
+}
+
+async function performLoadingStep(message, progress, action, minDurationMs = 240) {
+    updateLoadingStatus(message, progress, true);
+    await waitForNextPaint();
+
+    const result = typeof action === "function" ? await action() : null;
+    await wait(minDurationMs);
+    return result;
+}
+
+function showSpinner(msg, title) {
+    const titleEl = document.getElementById("loadingTitle");
+    const historyEl = document.getElementById("loadingStepHistory");
+
+    if (titleEl) titleEl.textContent = title || "Preparing Adventure";
+    if (historyEl) historyEl.innerHTML = "";
+    setLoadingProgress(0);
+    updateLoadingStatus(msg || "Loading...", 0, false);
     document.getElementById("loadingSpinner").classList.add("active");
 }
 
 function hideSpinner() {
+    setLoadingProgress(0);
     document.getElementById("loadingSpinner").classList.remove("active");
 }
 </script>
