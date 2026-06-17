@@ -157,6 +157,7 @@ Do not resurrect `cyoaftw-engine-CORE.js` unless the user explicitly asks to rev
 - Renamed engine payload from `.js` to `_js.html` and wrapped it in script tags.
 - Updated shell page to load the renamed engine payload.
 - Reintroduced NPC/creature enrichment: species templates now carry lore, anatomy profiles, cultural values, topics, and taboos; spawned NPCs receive anatomy, appearance highlights, motives, speech cues, and prompt-visible reaction biases.
+- Reintroduced location-aware humanoid jobs: rooms now assign roles such as Bartender, Innkeeper, Cook, Vendor, Guard, Priest/Cultist, Archivist/Scholar, Miner, Scout, Raider, and Tomb Robber with key signature roles guaranteed once per relevant room.
 
 ## Recommended Next Steps
 

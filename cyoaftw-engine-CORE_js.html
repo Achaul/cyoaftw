@@ -103,6 +103,36 @@ const TRADE_GOODS = [
     { id: "healing-herb", name: "Healing herb", value: 6 }
 ];
 
+const ROLE_TRADE_GOODS = {
+    "Blacksmith": [
+        { id: "whetstone", name: "Whetstone", value: 4 },
+        { id: "iron-nails", name: "Iron nails", value: 3 },
+        { id: "repair-rivet", name: "Repair rivet", value: 2 }
+    ],
+    "Healer": [
+        { id: "clean-bandage", name: "Clean bandage", value: 4 },
+        { id: "healing-herb", name: "Healing herb", value: 6 },
+        { id: "bitter-tonic", name: "Bitter tonic", value: 7 }
+    ],
+    "Cook": [
+        { id: "travel-bread", name: "Travel bread", value: 2 },
+        { id: "spice-pinch", name: "Pinch of spice", value: 3 },
+        { id: "dried-meat", name: "Dried meat", value: 4 }
+    ],
+    "Priest": [
+        { id: "blessed-candle", name: "Blessed candle", value: 5 },
+        { id: "prayer-token", name: "Prayer token", value: 4 }
+    ],
+    "Archivist": [
+        { id: "ink-vial", name: "Ink vial", value: 5 },
+        { id: "blank-parchment", name: "Blank parchment", value: 3 }
+    ],
+    "Miner": [
+        { id: "ore-sample", name: "Ore sample", value: 5 },
+        { id: "chalk-mark", name: "Mining chalk", value: 2 }
+    ]
+};
+
 const NPC_MISC_LOOT = [
     { id: "folded-note", name: "Folded note", value: 2, type: ["misc", "lore"], description: "A folded note covered in hurried directions and half-finished thoughts." },
     { id: "bone-dice", name: "Bone dice", value: 4, type: ["misc", "trinket"], description: "A set of worn bone dice kept in a tiny leather wrap." },
@@ -311,14 +341,218 @@ function generateLootItem(mainType, slot, options = {}) {
     return assignLootUID(item);
 }
 
+const UNIQUE_ROOM_NPC_ROLES = [
+    "Bartender", "Innkeeper", "Blacksmith", "Vendor", "Shopkeeper",
+    "Wandering Merchant", "Healer", "Priest", "Cook", "Archivist", "Town Guard",
+    "Stone Guard", "Cultist", "Miner"
+];
+
 function isMerchantRole(role) {
-    return ["Vendor", "Shopkeeper", "Innkeeper", "Bartender"].includes(role);
+    return [
+        "Vendor", "Shopkeeper", "Innkeeper", "Bartender",
+        "Wandering Merchant", "Blacksmith", "Healer", "Cook"
+    ].includes(role);
 }
 
-function determineNPCRole(species, room, zoneTemplate, profile, isHumanoid) {
+function getTakenRoomRoles(room, pendingNpcs) {
+    const taken = new Set();
+    const existing = [];
+    if (room && Array.isArray(room.creatures)) existing.push(...room.creatures);
+    if (Array.isArray(pendingNpcs)) existing.push(...pendingNpcs);
+
+    existing.forEach(npc => {
+        if (npc && npc.isHumanoid !== false && npc.role && UNIQUE_ROOM_NPC_ROLES.includes(npc.role)) {
+            taken.add(npc.role);
+        }
+    });
+
+    return taken;
+}
+
+function pickWeightedRole(entries, takenRoles) {
+    const candidates = (Array.isArray(entries) ? entries : []).filter(entry => {
+        if (!entry || !entry.role) return false;
+        if (entry.unique && takenRoles && takenRoles.has(entry.role)) return false;
+        return true;
+    });
+    if (!candidates.length) return null;
+
+    const total = candidates.reduce((sum, entry) => sum + (entry.weight || 1), 0);
+    let roll = Math.random() * total;
+    for (let i = 0; i < candidates.length; i++) {
+        const entry = candidates[i];
+        roll -= entry.weight || 1;
+        if (roll <= 0) return entry.role;
+    }
+    return candidates[candidates.length - 1].role;
+}
+
+function getRequiredLocationRole(roomType, hostileArea, zoneName) {
+    if (roomType === "tavern" || roomType === "taproom") return "Bartender";
+    if (roomType === "inn" || roomType === "inn common") return "Innkeeper";
+    if (roomType === "kitchen") return "Cook";
+    if (roomType === "square") return "Vendor";
+    if (roomType === "gate") return "Town Guard";
+    if (roomType === "underground gate") return "Stone Guard";
+    if (roomType === "shrine" || roomType === "altar") return hostileArea ? "Cultist" : "Priest";
+    if (roomType === "library" && !hostileArea) return "Archivist";
+    if (roomType === "cavern" && zoneName === "Underground City") return "Miner";
+    return null;
+}
+
+function getLocationRoleTable(roomType, roomRole, hostileArea, zoneName) {
+    if (roomType === "gate" || roomType === "underground gate") {
+        return [
+            { role: zoneName === "Underground City" ? "Stone Guard" : "Town Guard", weight: 8, unique: zoneName === "Underground City" },
+            { role: "Scout", weight: 2 },
+            { role: "Wandering Merchant", weight: 1, unique: true }
+        ];
+    }
+
+    if (roomType === "tavern" || roomType === "taproom") {
+        return [
+            { role: "Bartender", weight: 7, unique: true },
+            { role: "Patron", weight: 5 },
+            { role: "Adventurer", weight: 3 },
+            { role: "Wandering Merchant", weight: 2, unique: true },
+            { role: "Townsfolk", weight: 2 },
+            { role: "Servant", weight: 1 }
+        ];
+    }
+
+    if (roomType === "inn" || roomType === "inn common" || roomType === "guest room") {
+        return [
+            { role: "Innkeeper", weight: 6, unique: true },
+            { role: "Guest", weight: 5 },
+            { role: "Adventurer", weight: 3 },
+            { role: "Healer", weight: 2, unique: true },
+            { role: "Servant", weight: 2 },
+            { role: "Wandering Merchant", weight: 1, unique: true }
+        ];
+    }
+
+    if (roomType === "kitchen") {
+        return [
+            { role: "Cook", weight: 7, unique: true },
+            { role: "Servant", weight: 4 },
+            { role: "Townsfolk", weight: 1 }
+        ];
+    }
+
+    if (roomType === "cellar") {
+        return [
+            { role: "Servant", weight: 4 },
+            { role: "Scavenger", weight: 2 },
+            { role: "Townsfolk", weight: 1 }
+        ];
+    }
+
+    if (roomType === "square" || roomType === "avenue") {
+        return [
+            { role: "Vendor", weight: 5, unique: true },
+            { role: "Townsfolk", weight: 5 },
+            { role: "Wandering Merchant", weight: 2, unique: true },
+            { role: "Town Guard", weight: 2 },
+            { role: "Adventurer", weight: 1 }
+        ];
+    }
+
+    if (roomType === "street") {
+        return [
+            { role: "Townsfolk", weight: 5 },
+            { role: "Town Guard", weight: 2 },
+            { role: "Wandering Merchant", weight: 1, unique: true },
+            { role: "Adventurer", weight: 1 }
+        ];
+    }
+
+    if (roomType === "alleyway") {
+        return [
+            { role: "Scavenger", weight: 4 },
+            { role: "Townsfolk", weight: 2 },
+            { role: "Raider", weight: 1 },
+            { role: "Wanderer", weight: 1 }
+        ];
+    }
+
+    if (roomType === "shrine" || roomType === "altar") {
+        return [
+            { role: "Priest", weight: hostileArea ? 2 : 6, unique: true },
+            { role: "Pilgrim", weight: 3 },
+            { role: hostileArea ? "Cultist" : "Townsfolk", weight: 2 },
+            { role: "Adventurer", weight: 1 }
+        ];
+    }
+
+    if (roomType === "library") {
+        return [
+            { role: "Archivist", weight: hostileArea ? 2 : 6, unique: true },
+            { role: "Scholar", weight: 4 },
+            { role: "Tomb Robber", weight: hostileArea ? 3 : 1 },
+            { role: "Adventurer", weight: 2 }
+        ];
+    }
+
+    if (roomType === "armory") {
+        return [
+            { role: hostileArea ? "Scavenger" : "Blacksmith", weight: 5, unique: !hostileArea },
+            { role: hostileArea ? "Raider" : "Town Guard", weight: 4 },
+            { role: "Adventurer", weight: 2 }
+        ];
+    }
+
+    if (roomType === "chamber" || roomType === "vault" || roomType === "trap" || roomType === "tower" ||
+        roomType === "hallway" || roomType === "ruins passage") {
+        return [
+            { role: hostileArea ? "Raider" : "Adventurer", weight: 4 },
+            { role: "Scavenger", weight: 3 },
+            { role: "Tomb Robber", weight: 3 },
+            { role: "Scout", weight: 2 },
+            { role: hostileArea ? "Cultist" : "Wanderer", weight: 1 }
+        ];
+    }
+
+    if (roomType === "cavern" || roomType === "underground hallway") {
+        return [
+            { role: "Miner", weight: 4 },
+            { role: "Stone Guard", weight: 3, unique: true },
+            { role: "Scout", weight: 2 },
+            { role: "Wandering Merchant", weight: 1, unique: true },
+            { role: "Townsfolk", weight: 1 }
+        ];
+    }
+
+    if (roomRole === "landmark" && hostileArea) {
+        return [
+            { role: "Raider", weight: 4 },
+            { role: "Scavenger", weight: 3 },
+            { role: "Adventurer", weight: 2 },
+            { role: "Cultist", weight: 1 }
+        ];
+    }
+
+    if (roomRole === "interior") {
+        return [
+            { role: "Servant", weight: 3 },
+            { role: "Townsfolk", weight: 3 },
+            { role: "Guest", weight: 2 },
+            { role: "Wanderer", weight: 1 }
+        ];
+    }
+
+    return [
+        { role: "Townsfolk", weight: 4 },
+        { role: "Wanderer", weight: 2 },
+        { role: "Adventurer", weight: 1 }
+    ];
+}
+
+function determineNPCRole(species, room, zoneTemplate, profile, isHumanoid, takenRoles) {
     const roomType = String(room && room.type ? room.type : "").toLowerCase();
     const speciesName = normalizeSpeciesName(species);
     const hostileArea = !!(zoneTemplate && zoneTemplate.hostileArea);
+    const zoneName = zoneTemplate && zoneTemplate.name ? zoneTemplate.name : "";
+    const roomRole = room && room.role ? room.role : "";
 
     if (!isHumanoid) {
         if (speciesName === "skeleton") return "Ancient Sentinel";
@@ -327,20 +561,21 @@ function determineNPCRole(species, room, zoneTemplate, profile, isHumanoid) {
         return hostileArea ? "Predator" : "Wanderer";
     }
 
-    if (roomType === "gate" || roomType === "underground gate") return "Town Guard";
-    if (roomType === "tavern" || roomType === "taproom") return rand(["Bartender", "Wanderer", "Adventurer"]);
-    if (roomType === "inn" || roomType === "inn common" || roomType === "guest room") return rand(["Innkeeper", "Wanderer", "Adventurer"]);
-    if (roomType === "square" || roomType === "avenue") return rand(["Vendor", "Townsfolk", "Wanderer"]);
-    if (roomType === "street" || roomType === "alleyway") return hostileArea ? "Scavenger" : rand(["Townsfolk", "Wanderer"]);
-    if (roomType === "kitchen") return "Servant";
-    if (roomType === "shrine" || roomType === "altar") return "Priest";
-    if (roomType === "armory") return hostileArea ? "Scavenger" : "Town Guard";
-
-    if (hostileArea) {
-        return ["aggressive", "hostile"].includes(profile && profile.temperament) ? "Raider" : "Adventurer";
+    const requiredRole = getRequiredLocationRole(roomType, hostileArea, zoneName);
+    if (requiredRole && (!takenRoles || !takenRoles.has(requiredRole))) {
+        return requiredRole;
     }
 
-    return rand(["Wanderer", "Townsfolk"]);
+    const table = getLocationRoleTable(roomType, roomRole, hostileArea, zoneName);
+    let role = pickWeightedRole(table, takenRoles);
+
+    if (!role) {
+        role = hostileArea
+            ? (["aggressive", "hostile"].includes(profile && profile.temperament) ? "Raider" : "Adventurer")
+            : "Townsfolk";
+    }
+
+    return role;
 }
 
 function getNPCEquipmentSlots(npc, zoneTemplate) {
@@ -351,11 +586,26 @@ function getNPCEquipmentSlots(npc, zoneTemplate) {
         "Scavenger": ["upper", "lower", "feet", "weapon", "belt"],
         "Vendor": ["upper", "lower", "feet", "belt"],
         "Shopkeeper": ["upper", "lower", "feet", "belt"],
+        "Wandering Merchant": ["upper", "lower", "feet", "belt"],
+        "Blacksmith": ["upper", "lower", "feet", "weapon", "belt"],
+        "Healer": ["upper", "lower", "feet", "belt"],
         "Innkeeper": ["upper", "lower", "feet", "belt"],
         "Bartender": ["upper", "lower", "feet", "belt"],
+        "Cook": ["upper", "lower", "feet", "belt"],
         "Priest": ["upper", "lower", "feet", "belt"],
+        "Archivist": ["upper", "lower", "feet", "belt"],
+        "Scholar": ["upper", "lower", "feet", "belt"],
         "Servant": ["upper", "lower"],
+        "Guest": ["upper", "lower", "feet", "belt"],
+        "Patron": ["upper", "lower", "feet", "belt"],
         "Townsfolk": ["upper", "lower", "feet", "belt"],
+        "Villager": ["upper", "lower", "feet", "belt"],
+        "Pilgrim": ["upper", "lower", "feet", "belt"],
+        "Miner": ["head", "upper", "lower", "feet", "weapon", "belt"],
+        "Scout": ["upper", "lower", "feet", "weapon", "belt"],
+        "Stone Guard": ["head", "upper", "lower", "feet", "weapon", "belt"],
+        "Cultist": ["upper", "lower", "feet", "weapon", "belt"],
+        "Tomb Robber": ["upper", "lower", "feet", "weapon", "belt"],
         "Wanderer": ["upper", "lower", "feet", "belt"]
     };
 
@@ -373,7 +623,10 @@ function getNPCEquipmentSlots(npc, zoneTemplate) {
 
 function generateNPCEquipmentItem(slot, npc, zoneTemplate) {
     const role = npc && npc.role ? npc.role : "Wanderer";
-    const combatRole = ["Town Guard", "Adventurer", "Raider", "Scavenger"].includes(role) || !!(zoneTemplate && zoneTemplate.hostileArea);
+    const combatRole = [
+        "Town Guard", "Stone Guard", "Adventurer", "Raider", "Scavenger",
+        "Scout", "Miner", "Cultist", "Tomb Robber", "Blacksmith"
+    ].includes(role) || !!(zoneTemplate && zoneTemplate.hostileArea);
 
     if (slot === "weapon") {
         const shouldCarryWeapon = combatRole || Math.random() < 0.25;
@@ -479,11 +732,26 @@ function seedNPCStartingLoot(npc, room, zoneTemplate) {
         "Scavenger": [2, 10],
         "Vendor": [12, 32],
         "Shopkeeper": [12, 32],
+        "Wandering Merchant": [16, 40],
+        "Blacksmith": [10, 28],
+        "Healer": [8, 24],
         "Innkeeper": [10, 24],
         "Bartender": [8, 18],
+        "Cook": [4, 12],
         "Priest": [4, 14],
+        "Archivist": [5, 16],
+        "Scholar": [4, 14],
         "Servant": [1, 6],
+        "Guest": [3, 14],
+        "Patron": [3, 12],
         "Townsfolk": [2, 10],
+        "Villager": [2, 8],
+        "Pilgrim": [2, 10],
+        "Miner": [4, 14],
+        "Scout": [4, 16],
+        "Stone Guard": [6, 18],
+        "Cultist": [3, 12],
+        "Tomb Robber": [6, 22],
         "Wanderer": [3, 12]
     };
     const [minCoins, maxCoins] = coinRanges[npc.role] || (npc.isHumanoid ? [2, 10] : [0, 6]);
@@ -500,6 +768,14 @@ function seedNPCStartingLoot(npc, room, zoneTemplate) {
     const carriedGoods = merchant ? randInt(2, 4) : (npc.isHumanoid && Math.random() < 0.55 ? randInt(0, 2) : 0);
     for (let i = 0; i < carriedGoods; i++) {
         inventory.push(createNPCTradeGood(rand(TRADE_GOODS)));
+    }
+
+    const roleGoods = ROLE_TRADE_GOODS[npc.role];
+    if (Array.isArray(roleGoods) && roleGoods.length) {
+        const roleGoodCount = merchant ? randInt(1, 2) : (Math.random() < 0.45 ? 1 : 0);
+        for (let i = 0; i < roleGoodCount; i++) {
+            inventory.push(createNPCTradeGood(rand(roleGoods)));
+        }
     }
 
     const zoneLoot = NPC_ZONE_LOOT[(zoneTemplate && zoneTemplate.name) || ""];
@@ -1393,18 +1669,24 @@ function spawnNPCsForRoom(room, zoneName) {
     if (!zone) return npcs;
 
     const count = room.role === "landmark" ? randInt(1, 3) : randInt(0, 2);
+    const takenRoles = getTakenRoomRoles(room, npcs);
     for (let i = 0; i < count; i++) {
         const species = rand(zone.allowedSpecies);
-        const npc = createNPC(species, room, zone);
-        if (npc) npcs.push(npc);
+        const npc = createNPC(species, room, zone, { takenRoles });
+        if (npc) {
+            npcs.push(npc);
+            if (npc.isHumanoid !== false && npc.role && UNIQUE_ROOM_NPC_ROLES.includes(npc.role)) {
+                takenRoles.add(npc.role);
+            }
+        }
     }
     return npcs;
 }
 
-function createNPC(species, room, zoneTemplate) {
+function createNPC(species, room, zoneTemplate, options = {}) {
     const isHumanoid = getSpeciesHumanoidFlag(species) === true;
     const profile     = getRandomPersonalityProfile({});
-    const role        = determineNPCRole(species, room, zoneTemplate, profile, isHumanoid);
+    const role        = determineNPCRole(species, room, zoneTemplate, profile, isHumanoid, options.takenRoles);
     const ageCategory = getAgeCategoryForRole(role, profile.archetype);
     const age         = isHumanoid ? getRandomAge(ageCategory) : null;
     const gender      = isHumanoid ? (Math.random() < 0.5 ? "male" : "female") : "none";
@@ -2598,7 +2880,10 @@ function ensureNPCTradeStock(npc) {
     }
 
     if (!npc.tradeStockSeeded) {
-        const goods = TRADE_GOODS.slice().sort(() => Math.random() - 0.5);
+        const goods = TRADE_GOODS.slice();
+        const roleGoods = ROLE_TRADE_GOODS[npc.role];
+        if (Array.isArray(roleGoods)) goods.push(...roleGoods);
+        goods.sort(() => Math.random() - 0.5);
         const count = randInt(2, Math.min(4, goods.length));
         for (let i = 0; i < count; i++) {
             const item = cloneTradeItem(goods[i]);

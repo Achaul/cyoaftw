@@ -386,13 +386,16 @@ function getRandomAge(category = null) {
 // ── GET AGE CATEGORY BY ROLE ─────────────────────────────────────
 
 function getAgeCategoryForRole(role, archetype) {
-    if (["Innkeeper", "Healer", "Blacksmith"].includes(role) ||
+    if (["Innkeeper", "Healer", "Blacksmith", "Priest", "Archivist", "Shopkeeper"].includes(role) ||
         ["sage", "caretaker", "guardian"].includes(archetype)) {
         return ["adult", "middle-aged", "elderly"][Math.floor(Math.random() * 3)];
     }
-    if (["Adventurer", "Bartender"].includes(role) ||
+    if (["Adventurer", "Bartender", "Patron", "Guest", "Scout", "Tomb Robber"].includes(role) ||
         ["hero", "romantic", "scoundrel"].includes(archetype)) {
         return ["young", "adult"][Math.floor(Math.random() * 2)];
+    }
+    if (["Town Guard", "Stone Guard", "Raider", "Scavenger", "Miner", "Cultist"].includes(role)) {
+        return ["young", "adult", "middle-aged"][Math.floor(Math.random() * 3)];
     }
     return ["young", "adult", "middle-aged"][Math.floor(Math.random() * 3)];
 }
