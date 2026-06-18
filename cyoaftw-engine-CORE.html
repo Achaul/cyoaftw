@@ -626,7 +626,7 @@ body {
     border-radius: 6px;
     padding: 8px;
     font-size: 12px;
-    cursor: pointer;
+    cursor: default;
 }
 
 .eq-slot:hover { border-color: #555; }
@@ -644,19 +644,83 @@ body {
 
 #equipmentInventory {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
     min-height: 40px;
-    align-content: flex-start;
 }
 
-.equipment-chip {
+.equipment-row {
     background: #111;
     border: 1px solid #333;
-    border-radius: 999px;
+    border-radius: 6px;
     color: #bbb;
     font-size: 12px;
-    padding: 6px 10px;
+    padding: 8px;
+}
+
+.equipment-row-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.equipment-row-title {
+    color: #ddd;
+    font-weight: bold;
+}
+
+.equipment-row-subtitle {
+    color: #666;
+    font-size: 11px;
+}
+
+.equipment-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.equipment-action-btn {
+    background: #252525;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #ddd;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+.equipment-action-btn:hover {
+    border-color: #666;
+}
+
+.equipment-action-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.equipment-qty-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #888;
+    font-size: 11px;
+}
+
+.equipment-qty-input {
+    width: 58px;
+    background: #181818;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #ddd;
+    padding: 4px 6px;
+}
+
+.equipment-empty {
+    color: #666;
 }
 
 #equipmentInventory.empty {
@@ -970,14 +1034,14 @@ body {
 <div id="equipmentManager">
     <h3>Equipment</h3>
     <div id="equipmentSlots">
-        <div class="eq-slot"><b>🪖 Head</b><span id="eq-head">(empty)</span></div>
-        <div class="eq-slot"><b>🗡 Weapon</b><span id="eq-weapon">(empty)</span></div>
-        <div class="eq-slot"><b>🧥 Upper</b><span id="eq-upper">(empty)</span></div>
-        <div class="eq-slot"><b>👐 Hands</b><span id="eq-hands">(empty)</span></div>
-        <div class="eq-slot"><b>👖 Lower</b><span id="eq-lower">(empty)</span></div>
-        <div class="eq-slot"><b>🥾 Feet</b><span id="eq-feet">(empty)</span></div>
-        <div class="eq-slot"><b>🎒 Belt</b><span id="eq-belt">(empty)</span></div>
-        <div class="eq-slot"><b>💰 Coins</b><span id="eq-coinPouch">(empty)</span></div>
+        <div class="eq-slot" id="eq-slot-head"><b>🪖 Head</b><span id="eq-head">(empty)</span></div>
+        <div class="eq-slot" id="eq-slot-weapon"><b>🗡 Weapon</b><span id="eq-weapon">(empty)</span></div>
+        <div class="eq-slot" id="eq-slot-upper"><b>🧥 Upper</b><span id="eq-upper">(empty)</span></div>
+        <div class="eq-slot" id="eq-slot-hands"><b>👐 Hands</b><span id="eq-hands">(empty)</span></div>
+        <div class="eq-slot" id="eq-slot-lower"><b>👖 Lower</b><span id="eq-lower">(empty)</span></div>
+        <div class="eq-slot" id="eq-slot-feet"><b>🥾 Feet</b><span id="eq-feet">(empty)</span></div>
+        <div class="eq-slot" id="eq-slot-belt"><b>🎒 Belt</b><span id="eq-belt">(empty)</span></div>
+        <div class="eq-slot" id="eq-slot-coinPouch"><b>💰 Coins</b><span id="eq-coinPouch">(empty)</span></div>
     </div>
     <div class="equipment-section-title">Carried Items</div>
     <div id="equipmentInventory" class="empty">(nothing carried)</div>

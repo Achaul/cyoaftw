@@ -83,6 +83,7 @@ function hydrateNPCSpeciesFlags(npc) {
 function canConverseWithNPC(npc) {
     if (!npc || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden) return false;
     hydrateNPCSpeciesFlags(npc);
+    if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
 
     const humanoidFlag = getSpeciesHumanoidFlag(npc.species);
     if (typeof humanoidFlag === "boolean") return humanoidFlag;
@@ -877,6 +878,74 @@ function getTemperamentModifier(temperament) {
     return typeof modifiers[key] === "number" ? modifiers[key] : 0;
 }
 
+function applyNPCImpact(npc, impact = {}) {
+    if (!npc) return npc;
+    if (typeof applyNPCRelationshipImpact === "function") {
+        applyNPCRelationshipImpact(npc, impact);
+    } else {
+        npc.memory = npc.memory || {};
+        if (typeof npc.memory.favorability !== "number") npc.memory.favorability = 0;
+        if (typeof npc.hostility !== "number") npc.hostility = 0;
+        npc.memory.favorability = Math.max(-100, Math.min(100, npc.memory.favorability + (impact.favor || 0)));
+        npc.hostility = Math.max(0, Math.min(100, npc.hostility + (impact.hostility || 0)));
+        if (impact.moodOverride) npc.memory.lastMood = impact.moodOverride;
+    }
+
+    if (typeof generateNPCBehavior === "function") {
+        npc.behavior = generateNPCBehavior(npc);
+    }
+    return npc;
+}
+
+function advanceNPCAffectTime(steps = 1) {
+    if (typeof decayNPCStatesInWorld === "function") {
+        decayNPCStatesInWorld(G.roomMap, steps);
+    }
+}
+
+function isRomanceEligibleNPC(npc) {
+    return typeof isAdultHumanoidNPC === "function" ? isAdultHumanoidNPC(npc) : false;
+}
+
+function classifyConversationChoice(npc, choice) {
+    const label = String(choice && (choice.intent || choice.label || choice.text) || "").toLowerCase();
+    const favor = npc && npc.memory && typeof npc.memory.favorability === "number" ? npc.memory.favorability : 0;
+    const hostility = npc && typeof npc.hostility === "number" ? npc.hostility : 0;
+    const attraction = npc && npc.memory && typeof npc.memory.attraction === "number" ? npc.memory.attraction : 0;
+    const eligibleForRomance = isRomanceEligibleNPC(npc);
+
+    if (choice && choice.relationshipImpact) return choice.relationshipImpact;
+    if (label.includes("greet")) return { mood: 1, favor: 4, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" };
+    if (label.includes("help")) return { mood: 1, favor: 5, hostility: -1, intent: "help", markMet: true, actionTag: "help" };
+    if (label.includes("rumor") || label.includes("seen") || label.includes("place")) return { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "question" };
+    if (label.includes("calm")) return { mood: 1, favor: 2, hostility: -2, intent: "calm", markMet: true, actionTag: "calm" };
+    if (label.includes("compliment")) return { mood: 1, favor: 6, hostility: -1, intent: "flattery", markMet: true, actionTag: "compliment" };
+    if (label.includes("apologize")) {
+        return hostility >= 60
+            ? { mood: 1, favor: 3, hostility: -4, intent: "apology", markMet: true, actionTag: "apology" }
+            : { mood: 1, favor: 2, hostility: -2, intent: "apology", markMet: true, actionTag: "apology" };
+    }
+    if (label.includes("comfort")) {
+        return hostility >= 70
+            ? { mood: 0, favor: -1, hostility: 1, intent: "comfort", markMet: true, actionTag: "comfort-rebuffed" }
+            : { mood: 1, favor: 5, hostility: -2, intent: "comfort", markMet: true, actionTag: "comfort" };
+    }
+    if (label.includes("flirt")) {
+        if (!eligibleForRomance) return { mood: -1, favor: -2, hostility: 1, intent: "awkward", markMet: true, actionTag: "misread-flirt" };
+        if (hostility >= 70) return { mood: -1, favor: -4, hostility: 4, attraction: 1, arousal: 2, intent: "flirt", markMet: true, actionTag: "flirt-rejected" };
+        if (favor >= 25 || attraction >= 25) return { mood: 1, favor: 3, hostility: -1, attraction: 8, arousal: 6, disinhibition: 3, intent: "flirt", markMet: true, actionTag: "flirt-received" };
+        return { mood: 0, favor: 1, hostility: 0, attraction: 4, arousal: 3, disinhibition: 1, intent: "flirt", markMet: true, actionTag: "flirt-tentative" };
+    }
+    if (label.includes("tease")) {
+        if (!eligibleForRomance) return { mood: 0, favor: 0, hostility: 0, intent: "tease", markMet: true, actionTag: "tease" };
+        if (favor >= 15 || attraction >= 20) return { mood: 1, favor: 1, hostility: 0, attraction: 5, arousal: 4, disinhibition: 2, intent: "tease", markMet: true, actionTag: "tease-playful" };
+        return { mood: -1, favor: -2, hostility: 2, attraction: 1, arousal: 1, intent: "tease", markMet: true, actionTag: "tease-backfire" };
+    }
+    if (label.includes("sharp") || label.includes("warn") || label.includes("threat")) return { mood: -1, favor: -5, hostility: 5, aggression: 1, intent: "aggression", markMet: true, actionTag: "threat" };
+    if (label.includes("goodbye")) return { mood: 0, favor: 1, intent: "goodbye", markMet: true, actionTag: "goodbye" };
+    return { mood: 0, favor: 0, intent: "talk", markMet: true, actionTag: "talk" };
+}
+
 function showTradeMessage(text, success) {
     const msgBox = document.getElementById("tradeFeedback");
     if (msgBox) {
@@ -892,7 +961,13 @@ function isTradeAccepted(playerTotal, npcTotal, npc) {
 
     const d20 = randInt(1, 20);
     const temperamentMod = getTemperamentModifier(npc ? npc.temperament : "neutral");
-    const margin = d20 + temperamentMod;
+    const favorMod = npc && npc.memory && typeof npc.memory.favorability === "number"
+        ? Math.floor(npc.memory.favorability / 20)
+        : 0;
+    const hostilityMod = npc && typeof npc.hostility === "number"
+        ? -Math.floor(npc.hostility / 25)
+        : 0;
+    const margin = d20 + temperamentMod + favorMod + hostilityMod;
     const adjustedAsk = Math.max(0, npcTotal - margin);
     const accepted = playerTotal >= adjustedAsk;
 
@@ -1737,7 +1812,9 @@ function createNPC(species, room, zoneTemplate, options = {}) {
         gender,
         role,
         temperament,
-        hostility:        temperament === "hostile" ? randInt(60, 90) : randInt(0, 40),
+        hostility:        typeof getBaseHostilityForTemperament === "function"
+            ? getBaseHostilityForTemperament(temperament)
+            : (temperament === "hostile" ? randInt(60, 90) : randInt(0, 40)),
         age,
         ageCategory,
         personalityProfile: profile,
@@ -1748,12 +1825,15 @@ function createNPC(species, room, zoneTemplate, options = {}) {
         equipped:  {},
         memory: {
             metPlayer:       false,
-            favorability:    temperament === "hostile" ? -40 : 0,
+            favorability:    typeof getBaseFavorabilityForTemperament === "function"
+                ? getBaseFavorabilityForTemperament(temperament)
+                : (temperament === "hostile" ? -40 : 0),
             lastMood:        "neutral",
             playerActions:   [],
             aggressionCount: 0
         }
     };
+    if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
 
     seedNPCStartingLoot(npc, room, zoneTemplate);
 
@@ -1773,6 +1853,7 @@ function movePlayer(direction) {
     const dir = normalizeDirection(direction);
     const room = G.activeRoom;
     if (!room || !dir) return;
+    advanceNPCAffectTime(2);
 
     if (!room.coords && G.player && G.player.coords) room.coords = G.player.coords;
     repairRoomExits(room);
@@ -1878,6 +1959,7 @@ The player says: "${playerInput}"
 Respond in character. Stay brief — 2 to 4 sentences.
 Do not break character. Do not refer to yourself as an AI.
 Speak only as ${npc.name} would speak.
+If there is romantic tension, keep it suggestive or emotional rather than explicit.
     `.trim();
 
     const prompt = buildPrompt(room, npc, instruction);
@@ -1898,9 +1980,12 @@ Speak only as ${npc.name} would speak.
     addChatMessage("left", npc.name, responseText);
     updateStoryOnNpcInteraction(npc, playerInput, responseText);
 
+    if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
     npc.memory.metPlayer = true;
-    npc.memory.lastMood  = "neutral";
+    npc.memory.lastSpokenTo = Date.now();
     npc.memory.playerActions.push(playerInput.slice(0, 60));
+    npc.memory.playerActions = npc.memory.playerActions.slice(-12);
+    if (typeof generateNPCBehavior === "function") npc.behavior = generateNPCBehavior(npc);
 
     saveGameState();
 
@@ -1914,34 +1999,107 @@ Speak only as ${npc.name} would speak.
 
 function getChatOptions(npc) {
     if (!canConverseWithNPC(npc)) return [];
+    const canRomance = isRomanceEligibleNPC(npc);
 
     const favor = npc && npc.memory && typeof npc.memory.favorability === "number"
         ? npc.memory.favorability : 0;
     const hostility = npc && typeof npc.hostility === "number" ? npc.hostility : 0;
 
     const options = [
-        { label: "Greet them", text: "I greet them and wait to see how they respond." },
-        { label: "Ask about this place", text: "What can you tell me about this place?" },
-        { label: "Ask what they have seen", text: "Have you seen anything unusual nearby?" },
-        { label: "Offer help", text: "You look like you might need help. What is going on?" }
+        {
+            label: "Greet them",
+            text: "I greet them and wait to see how they respond.",
+            intent: "greeting",
+            relationshipImpact: { mood: 1, favor: 4, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" }
+        },
+        {
+            label: "Ask about this place",
+            text: "What can you tell me about this place?",
+            intent: "curious",
+            relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-place" }
+        },
+        {
+            label: "Ask what they have seen",
+            text: "Have you seen anything unusual nearby?",
+            intent: "curious",
+            relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-seen" }
+        },
+        {
+            label: "Offer help",
+            text: "You look like you might need help. What is going on?",
+            intent: "help",
+            relationshipImpact: { mood: 1, favor: 5, hostility: -1, intent: "help", markMet: true, actionTag: "offer-help" }
+        }
     ];
 
     if (hostility >= 60 || favor < -20) {
         options.push({
             label: "Keep things calm",
-            text: "I keep my distance and ask what they want."
+            text: "I keep my distance and ask what they want.",
+            intent: "calm",
+            relationshipImpact: { mood: 1, favor: 2, hostility: -2, intent: "calm", markMet: true, actionTag: "keep-calm" }
         });
     } else {
         options.push({
             label: "Ask for a rumor",
-            text: "Have you heard any rumors or secrets worth knowing?"
+            text: "Have you heard any rumors or secrets worth knowing?",
+            intent: "rumor",
+            relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-rumor" }
         });
     }
 
     options.push({
+        label: "Compliment them",
+        text: "I offer a sincere compliment and try to put them at ease.",
+        intent: "flattery",
+        relationshipImpact: { mood: 1, favor: 6, hostility: -1, attraction: 3, arousal: 1, intent: "flattery", markMet: true, actionTag: "compliment" }
+    });
+
+    options.push({
+        label: "Apologize",
+        text: "I offer a sincere apology and try to smooth things over.",
+        intent: "apology"
+    });
+
+    if (favor >= 5 || hostility <= 55) {
+        options.push({
+            label: "Comfort them",
+            text: "I speak gently and try to reassure them.",
+            intent: "comfort"
+        });
+    }
+
+    if (canRomance) {
+        options.push({
+            label: "Flirt lightly",
+            text: "I let a little warmth and charm into my voice and test the waters.",
+            intent: "flirt"
+        });
+
+        if (favor >= 10 || hostility <= 45 || (npc.memory && (npc.memory.attraction || 0) >= 15)) {
+            options.push({
+                label: "Tease playfully",
+                text: "I tease them lightly to see whether they play along.",
+                intent: "tease"
+            });
+        }
+    }
+
+    options.push({
+        label: hostility >= 55 ? "Warn them sharply" : "Question them sharply",
+        text: hostility >= 55
+            ? "I warn them not to make trouble for me."
+            : "I press them sharply and demand a straight answer.",
+        intent: "aggression",
+        relationshipImpact: { mood: -1, favor: -5, hostility: 5, aggression: 1, intent: "aggression", markMet: true, actionTag: "sharp-question" }
+    });
+
+    options.push({
         label: "Say goodbye",
         text: "I say goodbye and step away.",
-        action: "disengage"
+        action: "disengage",
+        intent: "goodbye",
+        relationshipImpact: { mood: 0, favor: 1, intent: "goodbye", markMet: true, actionTag: "goodbye" }
     });
 
     return options;
@@ -2078,9 +2236,7 @@ function ensurePlayerEquipmentState(player) {
         eq.weapon = createLegacyWeaponItem(legacyWeaponName);
     }
 
-    if (eq.weapon) {
-        player.weapon = getItemName(eq.weapon);
-    }
+    player.weapon = eq.weapon ? getItemName(eq.weapon) : "unarmed";
 
     const defaultClothing = {
         upper: {
@@ -2100,18 +2256,307 @@ function ensurePlayerEquipmentState(player) {
         }
     };
 
-    Object.entries(defaultClothing).forEach(([slot, item]) => {
-        if (!eq[slot]) {
-            eq[slot] = createPlayerStartingItem(item.name, slot, {
-                type: item.type,
-                value: 0,
-                modifier: 0,
-                description: item.description
-            });
-        }
-    });
+    if (!player._baselineClothingSeeded) {
+        Object.entries(defaultClothing).forEach(([slot, item]) => {
+            if (!eq[slot]) {
+                eq[slot] = createPlayerStartingItem(item.name, slot, {
+                    type: item.type,
+                    value: 0,
+                    modifier: 0,
+                    description: item.description
+                });
+            }
+        });
+        player._baselineClothingSeeded = true;
+    }
 
     return player;
+}
+
+const PLAYER_EQUIPMENT_SLOT_META = {
+    head: { icon: "🪖", label: "Head" },
+    weapon: { icon: "🗡", label: "Weapon" },
+    upper: { icon: "🧥", label: "Upper" },
+    hands: { icon: "👐", label: "Hands" },
+    lower: { icon: "👖", label: "Lower" },
+    feet: { icon: "🥾", label: "Feet" },
+    belt: { icon: "🎒", label: "Belt" },
+    coinPouch: { icon: "💰", label: "Coins" }
+};
+
+function getPlayerEquipmentSlots() {
+    return ["head", "weapon", "upper", "hands", "lower", "feet", "belt", "coinPouch"];
+}
+
+function getEquipmentSlotMeta(slot) {
+    return PLAYER_EQUIPMENT_SLOT_META[slot] || { icon: "•", label: slot };
+}
+
+function getItemQuantity(item) {
+    const quantity = Number(item && item.quantity);
+    return Number.isFinite(quantity) && quantity > 0 ? Math.max(1, Math.floor(quantity)) : 1;
+}
+
+function getItemUnitValue(item) {
+    const value = item && typeof item.value === "number" ? item.value : 1;
+    return Math.max(1, value);
+}
+
+function getWeaponDamageByName(name = "") {
+    const weaponName = String(name || "").toLowerCase();
+    if (weaponName.includes("dagger") || weaponName.includes("knife")) return 4;
+    if (weaponName.includes("staff")) return 5;
+    if (weaponName.includes("mace") || weaponName.includes("club")) return 6;
+    if (weaponName.includes("sword")) return 6;
+    if (weaponName.includes("spear")) return 6;
+    if (weaponName.includes("axe")) return 8;
+    if (weaponName.includes("hammer") || weaponName.includes("maul")) return 8;
+    return 4;
+}
+
+function getItemEquipSlot(item) {
+    if (!item || typeof item !== "object") return null;
+    if (typeof item.slot === "string" && PLAYER_EQUIPMENT_SLOT_META[item.slot] && item.slot !== "coinPouch") {
+        return item.slot;
+    }
+
+    const types = Array.isArray(item.type)
+        ? item.type.map(entry => String(entry).toLowerCase())
+        : [String(item.type || "").toLowerCase()];
+
+    if (types.includes("weapon")) return "weapon";
+    if (types.includes("belt")) return "belt";
+
+    const slotMatch = getPlayerEquipmentSlots().find(slot => slot !== "coinPouch" && types.includes(slot));
+    if (slotMatch) return slotMatch;
+
+    const name = getItemName(item).toLowerCase();
+    if (/(dagger|knife|sword|axe|mace|hammer|maul|staff|spear|trident|glaive|halberd|whip|flail)/.test(name)) return "weapon";
+    if (/(belt|girdle|sash)/.test(name)) return "belt";
+    if (/(helmet|hood|cap|hat|helm)/.test(name)) return "head";
+    if (/(glove|gauntlet|bracer|vambrace)/.test(name)) return "hands";
+    if (/(boot|shoe|sandal|slipper)/.test(name)) return "feet";
+    if (/(trouser|pants|leggings|greaves|skirt)/.test(name)) return "lower";
+    if (/(shirt|tunic|vest|coat|armor|shirt|robe|blouse|jerkin|mail)/.test(name)) return "upper";
+    return null;
+}
+
+function isItemEquippable(item) {
+    return !!getItemEquipSlot(item);
+}
+
+function prepareItemForEquip(item, slot) {
+    if (!item || typeof item !== "object" || !slot) return item;
+
+    item.slot = slot;
+    const types = Array.isArray(item.type) ? item.type.map(entry => String(entry).toLowerCase()) : [];
+
+    if (slot === "weapon") {
+        item.type = ["weapon", "weapon"];
+        if (!item.weaponType) item.weaponType = getWeaponTypeFromName(getItemName(item), "generic");
+        if (typeof item.damage !== "number") item.damage = getWeaponDamageByName(getItemName(item));
+        return item;
+    }
+
+    const nextTypes = types.slice();
+    if (!nextTypes.includes(slot)) nextTypes.push(slot);
+    if (!nextTypes.includes("clothes") && !nextTypes.includes("armor") && ["head", "upper", "hands", "lower", "feet"].includes(slot)) {
+        nextTypes.unshift("clothes");
+    }
+    if (slot === "belt" && !nextTypes.includes("belt")) nextTypes.unshift("belt");
+    item.type = nextTypes;
+    return item;
+}
+
+function cloneItemForStackAmount(item, quantity) {
+    if (!item || typeof item !== "object") return null;
+
+    const clone = {
+        ...item,
+        type: Array.isArray(item.type) ? item.type.slice() : item.type
+    };
+
+    delete clone._uid;
+    delete clone.id;
+
+    const nextQuantity = Math.max(1, Math.floor(quantity || 1));
+    if (nextQuantity > 1 || typeof item.quantity === "number") {
+        clone.quantity = nextQuantity;
+    } else {
+        delete clone.quantity;
+    }
+
+    return assignLootUID(clone);
+}
+
+function getInventoryStackKey(item) {
+    if (!item || typeof item !== "object") return "";
+    if (item.stackKey) return String(item.stackKey);
+
+    const types = Array.isArray(item.type) ? item.type.map(entry => String(entry).toLowerCase()).sort().join(",") : String(item.type || "").toLowerCase();
+    return [
+        getItemName(item).toLowerCase(),
+        item.slot || "",
+        types,
+        typeof item.damage === "number" ? item.damage : "",
+        typeof item.armor === "number" ? item.armor : "",
+        typeof item.modifier === "number" ? item.modifier : "",
+        getItemUnitValue(item)
+    ].join("|");
+}
+
+function buildPlayerInventoryEntries(player) {
+    const inventory = Array.isArray(player && player.inventory) ? player.inventory : [];
+    const grouped = new Map();
+
+    inventory.forEach(item => {
+        if (!item) return;
+        const key = getInventoryStackKey(item);
+        const entry = grouped.get(key) || {
+            key,
+            item,
+            totalQuantity: 0
+        };
+
+        entry.totalQuantity += getItemQuantity(item);
+        if (!grouped.has(key)) grouped.set(key, entry);
+    });
+
+    return Array.from(grouped.values()).sort((a, b) => {
+        return getItemName(a.item).localeCompare(getItemName(b.item));
+    });
+}
+
+function takeInventoryEntryAmount(player, stackKey, amount) {
+    if (!player || !Array.isArray(player.inventory)) return null;
+
+    const targetAmount = Math.max(1, Math.floor(amount || 1));
+    let remaining = targetAmount;
+    let sample = null;
+
+    for (let i = player.inventory.length - 1; i >= 0 && remaining > 0; i--) {
+        const item = player.inventory[i];
+        if (!item || getInventoryStackKey(item) !== stackKey) continue;
+        if (!sample) sample = item;
+
+        const itemQuantity = getItemQuantity(item);
+        if (itemQuantity > remaining) {
+            item.quantity = itemQuantity - remaining;
+            remaining = 0;
+            break;
+        }
+
+        player.inventory.splice(i, 1);
+        remaining -= itemQuantity;
+    }
+
+    const removed = targetAmount - remaining;
+    if (!sample || removed <= 0) return null;
+    return cloneItemForStackAmount(sample, removed);
+}
+
+function getInventoryEntryMaxEquipAmount(entry) {
+    return entry && isItemEquippable(entry.item) ? 1 : 0;
+}
+
+function formatInventoryItemLabel(item, quantityOverride = null) {
+    if (!item) return "item";
+
+    const quantity = quantityOverride == null ? getItemQuantity(item) : Math.max(1, Math.floor(quantityOverride || 1));
+    const baseName = getItemName(item);
+    if (quantity <= 1) return baseName;
+    return `${baseName} x${quantity}`;
+}
+
+function createDroppedCoinsItem(amount) {
+    const quantity = Math.max(1, Math.floor(amount || 1));
+    return assignLootUID({
+        name: quantity === 1 ? "Coin" : `${quantity} coins`,
+        type: ["coin", "currency"],
+        quantity,
+        value: 1,
+        description: quantity === 1 ? "A single loose coin." : `A small pile of ${quantity} loose coins.`
+    });
+}
+
+function dropItemIntoCurrentRoom(item) {
+    const room = G.activeRoom || getRoom(G.player && G.player.coords);
+    if (!room || !item) return false;
+
+    room.items = Array.isArray(room.items) ? room.items : [];
+    item.hidden = false;
+    item.isHidden = false;
+    item.visible = true;
+    room.items.push(item);
+    return true;
+}
+
+function moveEquippedItemToInventory(slot) {
+    ensurePlayerEquipmentState(G.player);
+    const eq = G.player.equipped || {};
+    const item = eq[slot];
+    if (!item || slot === "coinPouch") return null;
+
+    delete eq[slot];
+    G.player.inventory.push(item);
+    if (slot === "weapon") G.player.weapon = "unarmed";
+    return item;
+}
+
+function dropEquippedItemToRoom(slot) {
+    ensurePlayerEquipmentState(G.player);
+    const eq = G.player.equipped || {};
+    const item = eq[slot];
+    if (!item || slot === "coinPouch") return false;
+
+    delete eq[slot];
+    if (slot === "weapon") G.player.weapon = "unarmed";
+    if (dropItemIntoCurrentRoom(item)) return true;
+
+    eq[slot] = item;
+    if (slot === "weapon") G.player.weapon = getItemName(item);
+    return false;
+}
+
+function equipInventoryEntry(stackKey) {
+    ensurePlayerEquipmentState(G.player);
+
+    const entry = buildPlayerInventoryEntries(G.player).find(candidate => candidate.key === stackKey);
+    if (!entry) return false;
+
+    const slot = getItemEquipSlot(entry.item);
+    if (!slot) return false;
+
+    const item = takeInventoryEntryAmount(G.player, stackKey, 1);
+    if (!item) return false;
+
+    prepareItemForEquip(item, slot);
+
+    const existing = G.player.equipped[slot];
+    if (existing) G.player.inventory.push(existing);
+
+    G.player.equipped[slot] = item;
+    G.player.weapon = slot === "weapon" ? getItemName(item) : (G.player.equipped.weapon ? getItemName(G.player.equipped.weapon) : "unarmed");
+    return true;
+}
+
+function dropInventoryEntryToRoom(stackKey, amount) {
+    ensurePlayerEquipmentState(G.player);
+
+    const item = takeInventoryEntryAmount(G.player, stackKey, amount);
+    if (!item) return null;
+
+    const itemTypes = Array.isArray(item.type) ? item.type.map(entry => String(entry).toLowerCase()) : [];
+    if (getItemQuantity(item) > 1 && !itemTypes.includes("coin")) {
+        item.name = formatInventoryItemLabel(item, getItemQuantity(item));
+    }
+
+    if (!dropItemIntoCurrentRoom(item)) {
+        G.player.inventory.push(item);
+        return null;
+    }
+
+    return item;
 }
 
 function getEquippedItem(entity, slot) {
@@ -2548,13 +2993,20 @@ function renderNPCActionMenu(npc) {
 
     el.innerHTML = "";
     if (!npc) return;
+    if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
 
     const actions = [];
     if (canConverseWithNPC(npc)) {
         actions.push({ label: "Talk", action: "talk" });
     }
+    const hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
+    const favor = npc.memory && typeof npc.memory.favorability === "number" ? npc.memory.favorability : 0;
+
+    if (hostility < 80 && favor > -70) {
+        actions.push({ label: "Trade", action: "trade" });
+    }
+
     actions.push(
-        { label: "Trade", action: "trade" },
         { label: "Attack", action: "attack", className: "danger" },
         { label: "Step away", action: "disengage" }
     );
@@ -2611,6 +3063,23 @@ function tradeWithNPC(npc) {
         G.activeNPCMode = "menu";
         setNarration(`${npc.name} does not seem capable of trade.`);
         renderNPCActionMenu(npc);
+        saveGameState();
+        return;
+    }
+
+    if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
+    if ((npc.hostility || 0) >= 80 || (npc.memory && (npc.memory.favorability || 0) <= -70)) {
+        applyNPCImpact(npc, {
+            mood: -1,
+            favor: -2,
+            hostility: 2,
+            aggression: 1,
+            intent: "trade",
+            actionTag: "refused-trade"
+        });
+        G.activeNPCMode = "menu";
+        renderNPCActionMenu(npc);
+        setNarration(`${npc.name} refuses to trade while things stand like this.`);
         saveGameState();
         return;
     }
@@ -2687,14 +3156,34 @@ function attackNPC(npc, options = {}) {
             crit,
             bleed: crit || styleKey === "heavy" || targetKey === "torso"
         });
-        npc.hostility = Math.min(100, (typeof npc.hostility === "number" ? npc.hostility : 0) + 25);
-        if (npc.memory) npc.memory.aggressionCount = (npc.memory.aggressionCount || 0) + 1;
+        applyNPCImpact(npc, {
+            mood: crit || damage >= Math.max(3, Math.ceil((npc.hpMax || 10) * 0.2)) ? -2 : -1,
+            favor: crit ? -16 : -10,
+            hostility: 25,
+            aggression: 1,
+            attraction: -6,
+            arousal: 4,
+            intent: "attack",
+            moodOverride: crit ? "furious" : null,
+            markMet: true,
+            actionTag: "attacked-by-player"
+        });
         lines.push(`You hit for ${damage} damage${crit ? " with a telling blow" : ""}${blocked > 0 ? ` after ${blocked} was absorbed by gear` : ""}.`);
 
         const woundText = describeCombatWounds(npc);
         if (woundText) lines.push(`${npcName} is showing wounds: ${woundText}.`);
     } else {
-        npc.hostility = Math.min(100, (typeof npc.hostility === "number" ? npc.hostility : 0) + 10);
+        applyNPCImpact(npc, {
+            mood: -1,
+            favor: -4,
+            hostility: 10,
+            aggression: 1,
+            attraction: -2,
+            arousal: 2,
+            intent: "attack",
+            markMet: true,
+            actionTag: "attacked-by-player"
+        });
         lines.push(`You miss.`);
     }
 
@@ -2856,6 +3345,7 @@ function chooseNPCCombatPlan(npc, context = {}) {
 function maybeRenderNPCSurrender(npc, lines) {
     if (!npc || npc.surrendered || npc.refusesSurrender) return false;
     hydrateNPCSpeciesFlags(npc);
+    if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
     if (npc.isHumanoid === false) return false;
 
     const hpMax = Math.max(1, npc.hpMax || npc.hp || 10);
@@ -2868,8 +3358,14 @@ function maybeRenderNPCSurrender(npc, lines) {
     if (Math.random() > chance) return false;
 
     npc.surrendered = true;
-    npc.hostility = Math.max(0, (npc.hostility || 0) - 25);
-    if (npc.memory) npc.memory.lastMood = "afraid";
+    applyNPCImpact(npc, {
+        mood: -1,
+        favor: -2,
+        hostility: -25,
+        intent: "surrender",
+        moodOverride: "afraid",
+        actionTag: "surrender-attempt"
+    });
     lines.push(`${npc.name || "The creature"} falters and tries to surrender.`);
     renderNPCSurrenderOptions(npc);
     return true;
@@ -2890,11 +3386,16 @@ function renderNPCSurrenderOptions(npc) {
 function acceptNPCSurrender(npc) {
     if (!npc) return;
     npc.surrendered = true;
-    npc.hostility = Math.max(0, (npc.hostility || 0) - 35);
-    if (npc.memory) {
-        npc.memory.favorability = Math.max(-20, (npc.memory.favorability || 0) + 10);
-        npc.memory.lastMood = "subdued";
-    }
+    applyNPCImpact(npc, {
+        mood: 1,
+        favor: 10,
+        hostility: -35,
+        attraction: 4,
+        arousal: 2,
+        intent: "mercy",
+        moodOverride: "subdued",
+        actionTag: "mercy-shown"
+    });
 
     G.activeNPCMode = "menu";
     if (typeof generateNPCBehavior === "function") npc.behavior = generateNPCBehavior(npc);
@@ -2908,8 +3409,17 @@ function refuseNPCSurrender(npc) {
     if (!npc) return;
     npc.surrendered = false;
     npc.refusesSurrender = true;
-    npc.hostility = 100;
-    if (npc.memory) npc.memory.lastMood = "desperate";
+    applyNPCImpact(npc, {
+        mood: -2,
+        favor: -10,
+        hostility: 100 - (npc.hostility || 0),
+        aggression: 1,
+        attraction: -8,
+        arousal: 3,
+        intent: "cruelty",
+        moodOverride: "desperate",
+        actionTag: "mercy-refused"
+    });
     renderCombatActionMenu(npc);
     setNarration(`${npc.name || "The creature"} realizes mercy is not coming.`);
     saveGameState();
@@ -2984,8 +3494,7 @@ function getItemName(item) {
 }
 
 function getItemValue(item) {
-    const value = item && typeof item.value === "number" ? item.value : 1;
-    return Math.max(1, value);
+    return getItemUnitValue(item) * getItemQuantity(item);
 }
 
 function ensureNPCTradeStock(npc) {
@@ -3068,8 +3577,13 @@ function recordTradeMemory(npc, playerGave, npcGave, playerCoins, npcCoins) {
 
     if (npc.memory.trades.length > 10) npc.memory.trades.shift();
 
-    if (playerTotal > npcTotal && npc.memory && typeof npc.memory.favorability === "number") {
-        npc.memory.favorability = Math.min(100, npc.memory.favorability + 3);
+    const netBenefit = playerTotal - npcTotal;
+    if (netBenefit >= 6) {
+        applyNPCImpact(npc, { mood: 1, favor: 5, hostility: -2, intent: "gift", actionTag: "generous-trade" });
+    } else if (netBenefit > 0) {
+        applyNPCImpact(npc, { mood: 0, favor: 2, hostility: -1, intent: "trade", actionTag: "fair-trade" });
+    } else if (netBenefit <= -6) {
+        applyNPCImpact(npc, { mood: -1, favor: -3, hostility: 2, intent: "trade", actionTag: "hard-bargain" });
     }
 }
 
@@ -3171,16 +3685,21 @@ function renderChatOptions(npc) {
 function chooseChatOption(option) {
     const choice = typeof option === "string" ? { text: option } : option;
     if (!choice || !choice.text || !canConverseWithNPC(G.activeNPC)) return;
+    const npc = G.activeNPC;
 
     if (choice.action === "disengage") {
+        advanceNPCAffectTime(1);
+        if (npc) applyNPCImpact(npc, classifyConversationChoice(npc, choice));
         disengageFromNPC(choice.text);
         return;
     }
 
     addChatMessage("player", G.player.name, choice.text);
+    advanceNPCAffectTime(1);
+    if (npc) applyNPCImpact(npc, classifyConversationChoice(npc, choice));
     G.activeNPCMode = "talk";
     setChatOptionsDisabled(true);
-    npcRespond(G.activeNPC, choice.text);
+    npcRespond(npc, choice.text);
 }
 
 function disengageFromNPC(text) {
@@ -3692,6 +4211,14 @@ function wakeUnconsciousBody(item) {
 
     room.creatures.push(item);
     G.activeObject = null;
+    applyNPCImpact(item, {
+        mood: -1,
+        favor: -6,
+        hostility: -20,
+        intent: "mercy",
+        moodOverride: "shaken",
+        actionTag: "woken-after-defeat"
+    });
     selectNPC(item);
     setNarration(`${item.name} wakes, battered and wary.`);
     rememberStoryEvent("combat", `${G.player.name} woke ${item.name} after combat.`, 4);
@@ -3748,10 +4275,16 @@ function selectNPC(npc) {
         npc.memory && npc.memory.lastMood ? npc.memory.lastMood : "neutral";
     document.getElementById("npcRoleEl").textContent           = npc.role || "unknown";
 
-    const favor = npc.memory && typeof npc.memory.favorability === "number"
-        ? npc.memory.favorability : 0;
     document.getElementById("npcFavorEl").textContent =
-        favor >= 60 ? "Friendly" : favor >= 20 ? "Neutral" : favor >= -20 ? "Wary" : "Hostile";
+        typeof getRelationshipLabel === "function"
+            ? (() => {
+                const relationship = getRelationshipLabel(npc);
+                const attraction = typeof getAttractionLabel === "function" ? getAttractionLabel(npc) : "none";
+                return attraction && attraction !== "none" ? `${relationship} / ${attraction}` : relationship;
+            })()
+            : (npc.memory && typeof npc.memory.favorability === "number"
+                ? (npc.memory.favorability >= 60 ? "Friendly" : npc.memory.favorability >= 20 ? "Neutral" : npc.memory.favorability >= -20 ? "Wary" : "Hostile")
+                : "neutral");
 
     if (isNewNPC) clearChatLog();
     setNarration(`${npc.name} ${npc.action || "is standing nearby"}.${inspection ? "\n\n" + inspection : ""}`);
@@ -3762,6 +4295,186 @@ function selectNPC(npc) {
 
 // ── EQUIPMENT ────────────────────────────────────────────────────
 
+function createEquipmentActionButton(label, onClick, options = {}) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "equipment-action-btn";
+    btn.textContent = label;
+    btn.disabled = options.disabled === true;
+    btn.onclick = onClick;
+    return btn;
+}
+
+function createEquipmentQuantityInput(max, value = 1) {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.className = "equipment-qty-input";
+    input.min = "1";
+    input.max = String(Math.max(1, Math.floor(max || 1)));
+    input.value = String(Math.max(1, Math.min(Math.floor(value || 1), Math.floor(max || 1))));
+    return input;
+}
+
+function readEquipmentQuantityInput(input, max) {
+    const fallbackMax = Math.max(1, Math.floor(max || 1));
+    const raw = Number(input && input.value);
+    if (!Number.isFinite(raw)) return 1;
+    return Math.max(1, Math.min(fallbackMax, Math.floor(raw)));
+}
+
+function updateInventoryContextPanels() {
+    if (G.activeNPCMode === "trade" && G.activeNPC) {
+        renderTradeOptions(G.activeNPC);
+    } else if (G.activeNPCMode === "object" && G.activeObject) {
+        renderRoomObjectActionMenu(G.activeObject);
+    }
+}
+
+function refreshInventoryUi(statusText = "") {
+    renderStats();
+    updateInventoryContextPanels();
+
+    if (statusText) {
+        if (!G.activeNPC && !G.activeObject && G.activeRoom) {
+            const observations = buildObservationNarration(G.activeRoom);
+            setNarration(observations ? `${statusText}\n\n${observations}` : statusText);
+        } else {
+            setNarration(statusText);
+        }
+    }
+
+    saveGameState();
+}
+
+function renderEquipmentSlot(slot) {
+    const slotEl = document.getElementById(`eq-slot-${slot}`);
+    if (!slotEl) return;
+
+    slotEl.innerHTML = "";
+
+    const meta = getEquipmentSlotMeta(slot);
+    const labelEl = document.createElement("b");
+    labelEl.textContent = `${meta.icon} ${meta.label}`;
+    slotEl.appendChild(labelEl);
+
+    const valueEl = document.createElement("div");
+    valueEl.className = "equipment-row-title";
+
+    if (slot === "coinPouch") {
+        const coins = getCoinValue(G.player);
+        valueEl.textContent = `${coins} coin${coins === 1 ? "" : "s"}`;
+        valueEl.classList.toggle("equipment-empty", coins <= 0);
+        slotEl.appendChild(valueEl);
+
+        if (coins > 0) {
+            const actionsEl = document.createElement("div");
+            actionsEl.className = "equipment-row-actions";
+
+            const qtyWrap = document.createElement("label");
+            qtyWrap.className = "equipment-qty-wrap";
+            qtyWrap.textContent = "Drop";
+            const qtyInput = createEquipmentQuantityInput(coins, 1);
+            qtyWrap.appendChild(qtyInput);
+            actionsEl.appendChild(qtyWrap);
+
+            actionsEl.appendChild(createEquipmentActionButton("Drop", () => {
+                const amount = readEquipmentQuantityInput(qtyInput, coins);
+                adjustCoins(G.player, -amount);
+                if (!dropItemIntoCurrentRoom(createDroppedCoinsItem(amount))) {
+                    adjustCoins(G.player, amount);
+                    return;
+                }
+                refreshInventoryUi(`You drop ${amount} coin${amount === 1 ? "" : "s"} to the ground.`);
+            }));
+
+            slotEl.appendChild(actionsEl);
+        }
+
+        return;
+    }
+
+    const item = G.player.equipped[slot];
+    valueEl.textContent = item ? getItemName(item) : "(empty)";
+    if (!item) valueEl.classList.add("equipment-empty");
+    slotEl.appendChild(valueEl);
+
+    if (!item) return;
+
+    const actionsEl = document.createElement("div");
+    actionsEl.className = "equipment-row-actions";
+
+    actionsEl.appendChild(createEquipmentActionButton("Remove", () => {
+        const removed = moveEquippedItemToInventory(slot);
+        if (!removed) return;
+        refreshInventoryUi(`You remove ${getItemName(removed)} and stow it in your pack.`);
+    }));
+
+    actionsEl.appendChild(createEquipmentActionButton("Drop", () => {
+        const itemName = getItemName(item);
+        const didDrop = dropEquippedItemToRoom(slot);
+        if (!didDrop) return;
+        refreshInventoryUi(`You drop ${itemName}.`);
+    }));
+
+    slotEl.appendChild(actionsEl);
+}
+
+function renderEquipmentInventoryEntry(entry, inventoryEl) {
+    const rowEl = document.createElement("div");
+    rowEl.className = "equipment-row";
+
+    const headerEl = document.createElement("div");
+    headerEl.className = "equipment-row-header";
+
+    const titleWrapEl = document.createElement("div");
+    const titleEl = document.createElement("div");
+    titleEl.className = "equipment-row-title";
+    titleEl.textContent = formatInventoryItemLabel(entry.item, entry.totalQuantity);
+    titleWrapEl.appendChild(titleEl);
+
+    const slot = getItemEquipSlot(entry.item);
+    const subtitleEl = document.createElement("div");
+    subtitleEl.className = "equipment-row-subtitle";
+    subtitleEl.textContent = slot ? `Can equip to ${getEquipmentSlotMeta(slot).label}` : "Carry only";
+    titleWrapEl.appendChild(subtitleEl);
+
+    headerEl.appendChild(titleWrapEl);
+    rowEl.appendChild(headerEl);
+
+    const actionsEl = document.createElement("div");
+    actionsEl.className = "equipment-row-actions";
+
+    if (slot) {
+        actionsEl.appendChild(createEquipmentActionButton("Equip", () => {
+            const itemName = getItemName(entry.item);
+            const destination = getEquipmentSlotMeta(slot).label.toLowerCase();
+            if (!equipInventoryEntry(entry.key)) return;
+            refreshInventoryUi(`You equip ${itemName} to your ${destination}.`);
+        }, { disabled: getInventoryEntryMaxEquipAmount(entry) <= 0 }));
+    }
+
+    const dropQuantity = entry.totalQuantity;
+    let qtyInput = null;
+    if (dropQuantity > 1) {
+        const qtyWrap = document.createElement("label");
+        qtyWrap.className = "equipment-qty-wrap";
+        qtyWrap.textContent = "Drop";
+        qtyInput = createEquipmentQuantityInput(dropQuantity, 1);
+        qtyWrap.appendChild(qtyInput);
+        actionsEl.appendChild(qtyWrap);
+    }
+
+    actionsEl.appendChild(createEquipmentActionButton("Drop", () => {
+        const amount = qtyInput ? readEquipmentQuantityInput(qtyInput, dropQuantity) : 1;
+        const dropped = dropInventoryEntryToRoom(entry.key, amount);
+        if (!dropped) return;
+        refreshInventoryUi(`You drop ${formatInventoryItemLabel(entry.item, amount)}.`);
+    }));
+
+    rowEl.appendChild(actionsEl);
+    inventoryEl.appendChild(rowEl);
+}
+
 function toggleEquipment() {
     document.getElementById("equipmentManager").classList.toggle("active");
     renderEquipment();
@@ -3769,38 +4482,22 @@ function toggleEquipment() {
 
 function renderEquipment() {
     ensurePlayerEquipmentState(G.player);
-    const eq    = G.player.equipped;
-    const slots = ["head","weapon","upper","hands","lower","feet","belt","coinPouch"];
-    slots.forEach(slot => {
-        const el   = document.getElementById(`eq-${slot}`);
-        if (!el) return;
-        if (slot === "coinPouch") {
-            el.textContent = `${getCoinValue(G.player)}g`;
-            el.style.color = "#ccc";
-            return;
-        }
-
-        const item = eq[slot];
-        el.textContent  = item ? getItemName(item) : "(empty)";
-        el.style.color  = item ? "#ccc" : "#555";
-    });
+    getPlayerEquipmentSlots().forEach(renderEquipmentSlot);
 
     const inventoryEl = document.getElementById("equipmentInventory");
     if (!inventoryEl) return;
 
-    const carriedItems = (Array.isArray(G.player.inventory) ? G.player.inventory : [])
-        .filter(item => !!item);
+    const entries = buildPlayerInventoryEntries(G.player);
 
-    if (!carriedItems.length) {
+    if (!entries.length) {
         inventoryEl.classList.add("empty");
         inventoryEl.textContent = "(nothing carried)";
         return;
     }
 
     inventoryEl.classList.remove("empty");
-    inventoryEl.innerHTML = carriedItems
-        .map(item => `<span class="equipment-chip">${escapeHtml(getItemName(item))}</span>`)
-        .join("");
+    inventoryEl.innerHTML = "";
+    entries.forEach(entry => renderEquipmentInventoryEntry(entry, inventoryEl));
 }
 
 // ── SPINNER ──────────────────────────────────────────────────────

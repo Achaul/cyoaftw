@@ -268,6 +268,24 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
         ? npc.memory.favorability : 0;
     const hostility = typeof npc.hostility === "number"
         ? npc.hostility : 0;
+    const relationship = typeof getRelationshipLabel === "function"
+        ? getRelationshipLabel(npc)
+        : "neutral";
+    const recentPlayerActions = npc.memory && Array.isArray(npc.memory.playerActions)
+        ? npc.memory.playerActions.slice(-4)
+        : [];
+    const attraction = npc.memory && typeof npc.memory.attraction === "number"
+        ? npc.memory.attraction : 0;
+    const arousal = npc.memory && typeof npc.memory.arousal === "number"
+        ? npc.memory.arousal : 0;
+    const disinhibition = npc.memory && typeof npc.memory.disinhibition === "number"
+        ? npc.memory.disinhibition : 0;
+    const attractionLabel = typeof getAttractionLabel === "function"
+        ? getAttractionLabel(npc)
+        : "none";
+    const arousalLabel = typeof getArousalLabel === "function"
+        ? getArousalLabel(npc)
+        : "calm";
 
     function favorLabel(v) {
         if (v >= 80) return "trusted";
@@ -334,8 +352,19 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
         reactionNotes.length ? `- Reaction biases: ${reactionNotes.join("; ")}` : "",
         motive ? `- Current motive: ${motive}` : "",
         `- Mood: ${mood}`,
+        `- Relationship to player: ${relationship}`,
+        recentPlayerActions.length ? `- Recent player actions toward you: ${recentPlayerActions.join(", ")}` : "",
         `- Favorability toward player: ${favorability}/100 (${favorLabel(favorability)})`,
         `- Hostility toward player: ${hostility}/100 (${hostLabel(hostility)})`,
+        typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc)
+            ? `- Attraction toward player: ${attraction}/100 (${attractionLabel})`
+            : "",
+        typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc)
+            ? `- Current romantic tension/arousal: ${arousal}/100 (${arousalLabel})`
+            : "",
+        typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc)
+            ? `- Disinhibition: ${disinhibition}/100`
+            : "",
         npc.backstory ? `- Backstory: ${String(npc.backstory).slice(0, 200)}` : "",
         npc.action ? `- Currently: ${npc.action}` : ""
     ].filter(Boolean);

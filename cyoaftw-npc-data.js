@@ -298,6 +298,294 @@ function getNPCInspectionDetail(npc) {
     return lines.join(" ");
 }
 
+function getBaseHostilityForTemperament(temperament) {
+    const key = String(temperament || "neutral").toLowerCase();
+    const ranges = {
+        aggressive: [72, 92],
+        hostile: [62, 86],
+        wary: [42, 66],
+        skittish: [28, 52],
+        neutral: [24, 46],
+        curious: [18, 38],
+        bold: [22, 48],
+        calm: [14, 34],
+        friendly: [6, 24]
+    };
+    const [min, max] = ranges[key] || ranges.neutral;
+    return _npcRandInt(min, max);
+}
+
+function getBaseFavorabilityForTemperament(temperament) {
+    const key = String(temperament || "neutral").toLowerCase();
+    if (key === "aggressive" || key === "hostile") return -60;
+    if (key === "wary") return -20;
+    if (key === "skittish") return -10;
+    if (key === "friendly") return 18;
+    if (key === "curious") return 8;
+    if (key === "calm") return 10;
+    return 0;
+}
+
+function ensureNPCRelationshipState(npc) {
+    if (!npc) return npc;
+
+    npc.memory = npc.memory || {};
+    if (!Array.isArray(npc.memory.playerActions)) npc.memory.playerActions = [];
+    if (typeof npc.memory.metPlayer !== "boolean") npc.memory.metPlayer = false;
+    if (typeof npc.memory.aggressionCount !== "number") npc.memory.aggressionCount = 0;
+    if (typeof npc.memory.lastSpokenTo !== "number") npc.memory.lastSpokenTo = 0;
+
+    if (typeof npc.hostility !== "number") {
+        npc.hostility = getBaseHostilityForTemperament(npc.temperament);
+    }
+
+    if (typeof npc.memory.favorability !== "number") {
+        npc.memory.favorability = getBaseFavorabilityForTemperament(npc.temperament);
+    }
+
+    if (!npc.memory.lastMood) npc.memory.lastMood = "neutral";
+    if (typeof npc.memory.attraction !== "number") npc.memory.attraction = 0;
+    if (typeof npc.memory.arousal !== "number") npc.memory.arousal = 0;
+    if (typeof npc.memory.disinhibition !== "number") npc.memory.disinhibition = 0;
+
+    npc.hostility = Math.max(0, Math.min(100, Math.round(npc.hostility)));
+    npc.memory.favorability = Math.max(-100, Math.min(100, Math.round(npc.memory.favorability)));
+    npc.memory.attraction = Math.max(0, Math.min(100, Math.round(npc.memory.attraction)));
+    npc.memory.arousal = Math.max(0, Math.min(100, Math.round(npc.memory.arousal)));
+    npc.memory.disinhibition = Math.max(0, Math.min(100, Math.round(npc.memory.disinhibition)));
+
+    if (!isAdultHumanoidNPC(npc)) {
+        npc.memory.attraction = 0;
+        npc.memory.arousal = 0;
+        npc.memory.disinhibition = 0;
+    }
+
+    return npc;
+}
+
+function isAdultHumanoidNPC(npc) {
+    return !!(
+        npc &&
+        npc.isHumanoid === true &&
+        typeof npc.age === "number" &&
+        npc.age >= 18
+    );
+}
+
+function getMoodScale() {
+    return ["furious", "angry", "wary", "neutral", "friendly", "warm", "affectionate"];
+}
+
+function canImproveMood(npc, intent) {
+    ensureNPCRelationshipState(npc);
+
+    const key = String(intent || "").toLowerCase();
+    if (npc.surrendered) return key === "mercy" ? 1.2 : 1;
+    if (npc.hostility >= 70 && !["surrender", "plead", "bribe", "gift", "mercy"].includes(key)) return false;
+    if (npc.hostility >= 50) return 0.5;
+    if (["friendly", "calm"].includes(String(npc.temperament || "").toLowerCase())) return 1.25;
+    if (["hostile", "aggressive"].includes(String(npc.temperament || "").toLowerCase())) return 0.75;
+    return 1;
+}
+
+function getCurrentNPCDisposition(npc) {
+    ensureNPCRelationshipState(npc);
+
+    const mood = String(npc.memory.lastMood || "neutral").toLowerCase();
+    if (mood && mood !== "neutral") return mood;
+
+    const hostility = npc.hostility ?? 50;
+    const favorability = npc.memory.favorability ?? 0;
+
+    if (hostility >= 85) return "hostile";
+    if (hostility >= 65) {
+        if (favorability <= -40) return "hostile";
+        if (favorability < 0) return "unfriendly";
+        return "wary";
+    }
+    if (hostility >= 40) {
+        if (favorability <= -60) return "hostile";
+        if (favorability <= -30) return "unfriendly";
+        if (favorability < 0) return "wary";
+        if (favorability > 60) return "friendly";
+        return "neutral";
+    }
+    if (favorability <= -75) return "hateful";
+    if (favorability <= -40) return "unfriendly";
+    if (favorability <= -10) return "cool";
+    if (favorability >= 90) return "devoted";
+    if (favorability >= 60) return "warm";
+    if (favorability >= 30) return "friendly";
+    return "neutral";
+}
+
+function getRelationshipLabel(npc) {
+    if (!npc) return "unknown";
+    ensureNPCRelationshipState(npc);
+
+    const disposition = getCurrentNPCDisposition(npc);
+    const favor = npc.memory.favorability ?? 0;
+
+    if (favor >= 95) return "devoted";
+    if (favor <= -90) return "hateful";
+
+    switch (disposition) {
+        case "furious":
+        case "hostile":
+            return "hostile";
+        case "hateful":
+            return "hateful";
+        case "unfriendly":
+        case "angry":
+            return "unfriendly";
+        case "wary":
+        case "suspicious":
+        case "cool":
+            return "guarded";
+        case "friendly":
+            return "friendly";
+        case "warm":
+        case "affectionate":
+            return "very friendly";
+        case "devoted":
+            return "devoted";
+        default:
+            return "neutral";
+    }
+}
+
+function getAttractionLabel(npc) {
+    if (!npc || !isAdultHumanoidNPC(npc)) return "none";
+    ensureNPCRelationshipState(npc);
+
+    const attraction = npc.memory.attraction ?? 0;
+    if (attraction >= 85) return "captivated";
+    if (attraction >= 60) return "strongly interested";
+    if (attraction >= 35) return "interested";
+    if (attraction >= 15) return "curious";
+    return "none";
+}
+
+function getArousalLabel(npc) {
+    if (!npc || !isAdultHumanoidNPC(npc)) return "calm";
+    ensureNPCRelationshipState(npc);
+
+    const arousal = npc.memory.arousal ?? 0;
+    if (arousal >= 80) return "flustered";
+    if (arousal >= 55) return "heated";
+    if (arousal >= 30) return "stirred";
+    if (arousal >= 10) return "alert";
+    return "calm";
+}
+
+function adjustNPCMood(npc, delta = 0, favorDelta = 0, intent = null) {
+    ensureNPCRelationshipState(npc);
+
+    const scale = delta > 0 || favorDelta > 0 ? canImproveMood(npc, intent) : 1;
+    if (scale === false) return npc;
+
+    const moodScale = getMoodScale();
+    const currentMood = npc.memory.lastMood || "neutral";
+    let moodIndex = moodScale.indexOf(currentMood);
+    if (moodIndex < 0) moodIndex = moodScale.indexOf("neutral");
+
+    const scaledDelta = Math.round((delta || 0) * (scale || 1));
+    const scaledFavor = Math.round((favorDelta || 0) * (scale || 1));
+
+    if (scaledDelta !== 0) {
+        moodIndex = Math.max(0, Math.min(moodScale.length - 1, moodIndex + scaledDelta));
+        npc.memory.lastMood = moodScale[moodIndex];
+    }
+
+    npc.memory.favorability = Math.max(-100, Math.min(100, (npc.memory.favorability || 0) + scaledFavor));
+
+    if (String(npc.temperament || "").toLowerCase() === "hostile") {
+        npc.memory.favorability = Math.min(npc.memory.favorability, 50);
+    } else if (String(npc.temperament || "").toLowerCase() === "friendly") {
+        npc.memory.favorability = Math.max(npc.memory.favorability, -50);
+    }
+
+    return npc;
+}
+
+function applyNPCRelationshipImpact(npc, impact = {}) {
+    ensureNPCRelationshipState(npc);
+    if (!npc) return npc;
+
+    const {
+        mood = 0,
+        favor = 0,
+        hostility = 0,
+        aggression = 0,
+        attraction = 0,
+        arousal = 0,
+        disinhibition = 0,
+        intent = null,
+        moodOverride = null,
+        markMet = false,
+        actionTag = ""
+    } = impact || {};
+
+    adjustNPCMood(npc, mood, favor, intent);
+
+    if (typeof hostility === "number" && hostility !== 0) {
+        npc.hostility = Math.max(0, Math.min(100, (npc.hostility || 0) + hostility));
+    }
+    if (typeof aggression === "number" && aggression !== 0) {
+        npc.memory.aggressionCount = Math.max(0, (npc.memory.aggressionCount || 0) + aggression);
+    }
+    if (isAdultHumanoidNPC(npc)) {
+        if (typeof attraction === "number" && attraction !== 0) {
+            npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + attraction));
+        }
+        if (typeof arousal === "number" && arousal !== 0) {
+            npc.memory.arousal = Math.max(0, Math.min(100, (npc.memory.arousal || 0) + arousal));
+        }
+        if (typeof disinhibition === "number" && disinhibition !== 0) {
+            npc.memory.disinhibition = Math.max(0, Math.min(100, (npc.memory.disinhibition || 0) + disinhibition));
+        }
+    }
+    if (moodOverride) npc.memory.lastMood = moodOverride;
+    if (markMet) npc.memory.metPlayer = true;
+    if (actionTag) {
+        npc.memory.playerActions.push(actionTag);
+        npc.memory.playerActions = npc.memory.playerActions.slice(-12);
+    }
+
+    return npc;
+}
+
+function shouldNPCAttack(npc) {
+    if (!npc) return false;
+    ensureNPCRelationshipState(npc);
+    if (npc.surrendered || npc.unconscious || npc.hidden || npc.isHidden) return false;
+
+    const lastMood = String(npc.memory.lastMood || "").toLowerCase();
+    if (["afraid", "subdued", "friendly", "warm", "affectionate"].includes(lastMood)) return false;
+    if ((npc.hostility || 0) >= 75) return true;
+    if ((npc.memory.favorability || 0) <= -75) return true;
+    return ["furious", "angry", "hateful"].includes(lastMood);
+}
+
+function decayNPCAffect(npc, steps = 1) {
+    if (!npc) return npc;
+    ensureNPCRelationshipState(npc);
+    if (!isAdultHumanoidNPC(npc)) return npc;
+
+    const amount = Math.max(1, Math.floor(steps || 1));
+    npc.memory.arousal = Math.max(0, (npc.memory.arousal || 0) - amount * 4);
+    npc.memory.disinhibition = Math.max(0, (npc.memory.disinhibition || 0) - amount * 3);
+    return npc;
+}
+
+function decayNPCStatesInWorld(roomMap, steps = 1) {
+    const map = roomMap && typeof roomMap === "object" ? roomMap : {};
+    Object.values(map).forEach(room => {
+        if (!room || !Array.isArray(room.creatures)) return;
+        room.creatures.forEach(npc => decayNPCAffect(npc, steps));
+    });
+}
+
 // ── GET RANDOM PERSONALITY PROFILE ──────────────────────────────
 
 function getRandomPersonalityProfile(options = {}) {
@@ -405,9 +693,14 @@ function getAgeCategoryForRole(role, archetype) {
 function generateNPCBehavior(npc) {
     function _rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+    ensureNPCRelationshipState(npc);
+
     const hostility   = npc.hostility ?? 50;
     const mood        = npc.memory?.lastMood || "neutral";
     const favor       = npc.memory?.favorability ?? 0;
+    const attraction  = npc.memory?.attraction ?? 0;
+    const arousal     = npc.memory?.arousal ?? 0;
+    const disposition = getCurrentNPCDisposition(npc);
     const traits      = npc.personalityProfile?.traits || npc.personalityTraits || ["neutral"];
 
     const behaviorMatrix = {
@@ -442,13 +735,12 @@ function generateNPCBehavior(npc) {
 
     // Determine base tone
     let baseTone = "neutral";
-    if      (hostility >= 80) baseTone = "aggressive";
-    else if (hostility >= 60) baseTone = "hostile";
-    else if (favor >= 75)     baseTone = "friendly";
-    else if (favor >= 40)     baseTone = "calm";
-    else if (favor >= 10)     baseTone = "neutral";
-    else if (favor >= -20)    baseTone = "wary";
-    else                      baseTone = "hostile";
+    if (["furious", "hateful"].includes(disposition) || hostility >= 80) baseTone = "aggressive";
+    else if (["hostile", "angry", "unfriendly"].includes(disposition) || hostility >= 60) baseTone = "hostile";
+    else if (["affectionate", "warm", "devoted"].includes(disposition) || favor >= 75) baseTone = "friendly";
+    else if (["friendly"].includes(disposition) || favor >= 40) baseTone = "calm";
+    else if (["wary", "guarded", "cool"].includes(disposition) || favor >= -20) baseTone = "wary";
+    else baseTone = "neutral";
 
     const behaviorOptions = behaviorMatrix[baseTone] || behaviorMatrix["neutral"];
 
@@ -468,6 +760,16 @@ function generateNPCBehavior(npc) {
     if (npc.enrichment && Array.isArray(npc.enrichment.mannerisms) &&
         npc.enrichment.mannerisms.length && Math.random() < 0.45) {
         behavior += `. ${_rand(npc.enrichment.mannerisms)}`;
+    }
+
+    if (isAdultHumanoidNPC(npc)) {
+        if (attraction >= 60 && hostility < 50 && favor >= 10 && Math.random() < 0.35) {
+            behavior += ". Their attention lingers on you a little longer than it should.";
+        } else if (attraction >= 40 && hostility >= 55 && Math.random() < 0.3) {
+            behavior += ". Something in their expression turns tense and conflicted.";
+        } else if (arousal >= 55 && Math.random() < 0.35) {
+            behavior += ". They look momentarily flustered before steadying themselves.";
+        }
     }
 
     return behavior;
