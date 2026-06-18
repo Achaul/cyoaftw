@@ -1,9 +1,9 @@
 <!--https://perchance.org/cyoaftw-engine-core-->
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-world-data.js?20260617024926"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-npc-data.js?20260617024926"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-context-builder.js?20260617024926"></script>
-<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-engine-CORE_js.html?20260617024926"></script>
-<!--<script src="https://www.hostize.com/s/I02IdCoecu?20260617024926" onerror="console.warn('SFW content only.')"></script>-->
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-world-data.js?20260617221806"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-npc-data.js?20260617221806"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-context-builder.js?20260617221806"></script>
+<script src="https://cdn.jsdelivr.net/gh/Achaul/cyoaftw@main/cyoaftw-engine-CORE_js.html?20260617221806"></script>
+<!--<script src="https://www.hostize.com/s/I02IdCoecu?20260617221806" onerror="console.warn('SFW content only.')"></script>-->
 
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -600,6 +600,9 @@ body {
     padding: 20px;
     z-index: 100;
     min-width: 320px;
+    width: min(92vw, 520px);
+    max-height: 85vh;
+    overflow-y: auto;
 }
 
 #equipmentManager.active { display: block; }
@@ -629,6 +632,41 @@ body {
 .eq-slot:hover { border-color: #555; }
 .eq-slot b { color: #aaa; display: block; margin-bottom: 2px; }
 .eq-slot span { color: #666; }
+
+.equipment-section-title {
+    color: #ddd;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+    margin: 14px 0 8px;
+    text-transform: uppercase;
+}
+
+#equipmentInventory {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 40px;
+    align-content: flex-start;
+}
+
+.equipment-chip {
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 999px;
+    color: #bbb;
+    font-size: 12px;
+    padding: 6px 10px;
+}
+
+#equipmentInventory.empty {
+    display: block;
+    color: #666;
+    background: #111;
+    border: 1px dashed #333;
+    border-radius: 6px;
+    padding: 10px;
+}
 
 /* Loading spinner */
 #loadingSpinner {
@@ -941,6 +979,8 @@ body {
         <div class="eq-slot"><b>🎒 Belt</b><span id="eq-belt">(empty)</span></div>
         <div class="eq-slot"><b>💰 Coins</b><span id="eq-coinPouch">(empty)</span></div>
     </div>
+    <div class="equipment-section-title">Carried Items</div>
+    <div id="equipmentInventory" class="empty">(nothing carried)</div>
     <button onclick="toggleEquipment()" style="margin-top:12px; width:100%;">Close</button>
 </div>
 

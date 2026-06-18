@@ -158,6 +158,8 @@ Do not resurrect `cyoaftw-engine-CORE.js` unless the user explicitly asks to rev
 - Updated shell page to load the renamed engine payload.
 - Reintroduced NPC/creature enrichment: species templates now carry lore, anatomy profiles, cultural values, topics, and taboos; spawned NPCs receive anatomy, appearance highlights, motives, speech cues, and prompt-visible reaction biases.
 - Reintroduced location-aware humanoid jobs: rooms now assign roles such as Bartender, Innkeeper, Cook, Vendor, Guard, Priest/Cultist, Archivist/Scholar, Miner, Scout, Raider, and Tomb Robber with key signature roles guaranteed once per relevant room.
+- Trade stock is now the NPC's actual carried `inventory`: opening trade no longer generates hidden goods, and buy/sell transfers the same item objects between player and NPC inventories.
+- Merchant-style roles now seed role-appropriate carried stock: Bartenders carry tavern food/drink, Innkeepers carry lodging/meal items, Vendors/Shopkeepers carry market supplies, and Wandering Merchants/Traders carry travel goods or trade samples.
 
 ## Recommended Next Steps
 

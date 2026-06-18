@@ -104,6 +104,41 @@ const TRADE_GOODS = [
 ];
 
 const ROLE_TRADE_GOODS = {
+    "Bartender": [
+        { id: "mug-of-ale", name: "Mug of ale", value: 2 },
+        { id: "cheap-wine", name: "Cheap wine", value: 3 },
+        { id: "tavern-meal", name: "Tavern meal", value: 4 },
+        { id: "house-spirits", name: "House spirits", value: 5 }
+    ],
+    "Innkeeper": [
+        { id: "room-token", name: "Room token", value: 6 },
+        { id: "travel-bread", name: "Travel bread", value: 2 },
+        { id: "clean-linen", name: "Clean linen", value: 4 },
+        { id: "warm-supper", name: "Warm supper", value: 5 }
+    ],
+    "Vendor": [
+        { id: "market-ration", name: "Market ration", value: 2 },
+        { id: "twine-bundle", name: "Bundle of twine", value: 2 },
+        { id: "oil-flask", name: "Oil flask", value: 4 },
+        { id: "small-knife", name: "Small knife", value: 6 }
+    ],
+    "Shopkeeper": [
+        { id: "sewing-kit", name: "Sewing kit", value: 5 },
+        { id: "lamp-oil", name: "Lamp oil", value: 4 },
+        { id: "wax-tablet", name: "Wax tablet", value: 6 },
+        { id: "wrapped-supplies", name: "Wrapped supplies", value: 8 }
+    ],
+    "Wandering Merchant": [
+        { id: "road-map", name: "Road map", value: 9 },
+        { id: "foreign-spice", name: "Foreign spice", value: 7 },
+        { id: "bright-scarf", name: "Bright scarf", value: 6 },
+        { id: "traveler-charm", name: "Traveler's charm", value: 8 }
+    ],
+    "Trader": [
+        { id: "trade-ledger", name: "Trade ledger", value: 8 },
+        { id: "sample-crate", name: "Sample crate", value: 10 },
+        { id: "sealed-goods", name: "Sealed goods", value: 12 }
+    ],
     "Blacksmith": [
         { id: "whetstone", name: "Whetstone", value: 4 },
         { id: "iron-nails", name: "Iron nails", value: 3 },
@@ -350,7 +385,7 @@ const UNIQUE_ROOM_NPC_ROLES = [
 function isMerchantRole(role) {
     return [
         "Vendor", "Shopkeeper", "Innkeeper", "Bartender",
-        "Wandering Merchant", "Blacksmith", "Healer", "Cook"
+        "Wandering Merchant", "Trader", "Blacksmith", "Healer", "Cook"
     ].includes(role);
 }
 
@@ -793,7 +828,6 @@ function seedNPCStartingLoot(npc, room, zoneTemplate) {
     }
 
     npc.inventory = inventory.slice(0, 5);
-    npc.tradeStockSeeded = merchant && npc.inventory.length > 0;
     npc.armor = calculateNPCArmorFromEquipment(npc);
     return npc;
 }
@@ -1260,6 +1294,7 @@ async function beginAdventure() {
         traits:    window.playerTraits,
         stats:     { ...window.setupStats }
     };
+    ensurePlayerEquipmentState(G.player);
 
     showSpinner("Preparing your adventure...", "Starting New Adventure");
     await waitForNextPaint();
@@ -1474,6 +1509,7 @@ async function resumeSavedGame() {
 
     await performLoadingStep(`Restoring ${roomCount} explored room${roomCount === 1 ? "" : "s"}...`, 32, () => {
         G.player = save.player;
+        ensurePlayerEquipmentState(G.player);
         G.roomMap = save.roomMap || {};
         G.story = save.story || createStoryDirectorState();
         repairRoomMapExits();
@@ -1551,6 +1587,7 @@ if (document.readyState === "loading") {
 function saveGameState() {
     try {
         repairRoomMapExits();
+        ensurePlayerEquipmentState(G.player);
 
         const saveData = {
             version: 1,
@@ -1988,6 +2025,93 @@ function getSetupStat(stat, fallback = 3) {
         ? G.player.stats[stat]
         : fallback;
     return value;
+}
+
+function createPlayerStartingItem(name, slot, extras = {}) {
+    const normalizedName = String(name || "").trim() || "item";
+    return assignLootUID({
+        id: `player-${slot}-${normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "item"}`,
+        name: normalizedName,
+        slot,
+        type: extras.type || ["gear", slot],
+        value: typeof extras.value === "number" ? extras.value : 0,
+        modifier: typeof extras.modifier === "number" ? extras.modifier : 0,
+        description: extras.description || "",
+        ...extras
+    });
+}
+
+function createLegacyWeaponItem(name) {
+    const weaponName = String(name || "").trim() || "Unarmed";
+    const baseDamageByWeapon = {
+        dagger: 4,
+        "short sword": 6,
+        sword: 6,
+        staff: 5,
+        mace: 6,
+        spear: 6,
+        axe: 8,
+        warhammer: 8
+    };
+    const lookupKey = weaponName.toLowerCase();
+
+    return createPlayerStartingItem(weaponName, "weapon", {
+        type: ["weapon", "weapon"],
+        weaponType: getWeaponTypeFromName(weaponName, "generic"),
+        damage: baseDamageByWeapon[lookupKey] || 4,
+        value: 0,
+        modifier: 0,
+        description: `Your currently readied ${weaponName.toLowerCase()}.`
+    });
+}
+
+function ensurePlayerEquipmentState(player) {
+    if (!player || typeof player !== "object") return player;
+
+    if (!Array.isArray(player.inventory)) player.inventory = [];
+    if (!player.equipped || typeof player.equipped !== "object") player.equipped = {};
+
+    const eq = player.equipped;
+    const legacyWeaponName = typeof player.weapon === "string" ? player.weapon.trim() : "";
+
+    if (!eq.weapon && legacyWeaponName) {
+        eq.weapon = createLegacyWeaponItem(legacyWeaponName);
+    }
+
+    if (eq.weapon) {
+        player.weapon = getItemName(eq.weapon);
+    }
+
+    const defaultClothing = {
+        upper: {
+            name: "Traveler's tunic",
+            type: ["clothes", "upper"],
+            description: "A simple tunic that counts as your ordinary day clothes."
+        },
+        lower: {
+            name: "Traveler's trousers",
+            type: ["clothes", "lower"],
+            description: "Simple trousers worn as your ordinary traveling clothes."
+        },
+        feet: {
+            name: "Travel shoes",
+            type: ["clothes", "feet"],
+            description: "Practical shoes worn for everyday travel."
+        }
+    };
+
+    Object.entries(defaultClothing).forEach(([slot, item]) => {
+        if (!eq[slot]) {
+            eq[slot] = createPlayerStartingItem(item.name, slot, {
+                type: item.type,
+                value: 0,
+                modifier: 0,
+                description: item.description
+            });
+        }
+    });
+
+    return player;
 }
 
 function getEquippedItem(entity, slot) {
@@ -2864,35 +2988,9 @@ function getItemValue(item) {
     return Math.max(1, value);
 }
 
-function cloneTradeItem(item) {
-    return {
-        id: item.id,
-        name: item.name,
-        value: getItemValue(item)
-    };
-}
-
 function ensureNPCTradeStock(npc) {
     if (!npc) return [];
     if (!Array.isArray(npc.inventory)) npc.inventory = [];
-    if (typeof npc.coins !== "number" && !(npc.equipped && npc.equipped.coinPouch)) {
-        npc.coins = randInt(4, 16);
-    }
-
-    if (!npc.tradeStockSeeded) {
-        const goods = TRADE_GOODS.slice();
-        const roleGoods = ROLE_TRADE_GOODS[npc.role];
-        if (Array.isArray(roleGoods)) goods.push(...roleGoods);
-        goods.sort(() => Math.random() - 0.5);
-        const count = randInt(2, Math.min(4, goods.length));
-        for (let i = 0; i < count; i++) {
-            const item = cloneTradeItem(goods[i]);
-            item.id = `${item.id}-${Math.random().toString(36).slice(2, 7)}`;
-            npc.inventory.push(item);
-        }
-        npc.tradeStockSeeded = true;
-    }
-
     return npc.inventory.filter(item => item && !item.hidden && !item.isHidden && getItemValue(item) > 0);
 }
 
@@ -2998,8 +3096,7 @@ function buyTradeItem(npc, item) {
     const index = npc.inventory.indexOf(item);
     if (index < 0) return;
 
-    npc.inventory.splice(index, 1);
-    const purchasedItem = cloneTradeItem(item);
+    const purchasedItem = npc.inventory.splice(index, 1)[0];
     G.player.inventory.push(purchasedItem);
     adjustCoins(G.player, -price);
     adjustCoins(npc, price);
@@ -3033,8 +3130,7 @@ function sellTradeItem(npc, item) {
     const index = G.player.inventory.indexOf(item);
     if (index < 0) return;
 
-    G.player.inventory.splice(index, 1);
-    const soldItem = cloneTradeItem(item);
+    const soldItem = G.player.inventory.splice(index, 1)[0];
     npc.inventory.push(soldItem);
     adjustCoins(G.player, price);
     adjustCoins(npc, -price);
@@ -3409,6 +3505,7 @@ function renderExits(exits) {
 
 function renderStats() {
     const p = G.player;
+    ensurePlayerEquipmentState(p);
     const displayedArmor = getEntityArmorClass(p);
     const displayedWeapon = getEntityWeaponName(p);
     document.getElementById("playerNameEl").textContent = p.name;
@@ -3428,6 +3525,11 @@ function renderStats() {
     if (room) {
         document.getElementById("locationLabelEl").textContent =
             `${room.zone || ""} — ${room.displayName || room.name}`;
+    }
+
+    const equipmentManager = document.getElementById("equipmentManager");
+    if (equipmentManager && equipmentManager.classList.contains("active")) {
+        renderEquipment();
     }
 }
 
@@ -3666,15 +3768,39 @@ function toggleEquipment() {
 }
 
 function renderEquipment() {
+    ensurePlayerEquipmentState(G.player);
     const eq    = G.player.equipped;
     const slots = ["head","weapon","upper","hands","lower","feet","belt","coinPouch"];
     slots.forEach(slot => {
         const el   = document.getElementById(`eq-${slot}`);
         if (!el) return;
+        if (slot === "coinPouch") {
+            el.textContent = `${getCoinValue(G.player)}g`;
+            el.style.color = "#ccc";
+            return;
+        }
+
         const item = eq[slot];
-        el.textContent  = item ? item.name : "(empty)";
+        el.textContent  = item ? getItemName(item) : "(empty)";
         el.style.color  = item ? "#ccc" : "#555";
     });
+
+    const inventoryEl = document.getElementById("equipmentInventory");
+    if (!inventoryEl) return;
+
+    const carriedItems = (Array.isArray(G.player.inventory) ? G.player.inventory : [])
+        .filter(item => !!item);
+
+    if (!carriedItems.length) {
+        inventoryEl.classList.add("empty");
+        inventoryEl.textContent = "(nothing carried)";
+        return;
+    }
+
+    inventoryEl.classList.remove("empty");
+    inventoryEl.innerHTML = carriedItems
+        .map(item => `<span class="equipment-chip">${escapeHtml(getItemName(item))}</span>`)
+        .join("");
 }
 
 // ── SPINNER ──────────────────────────────────────────────────────
