@@ -447,6 +447,8 @@ body {
 
 .chat-message.left .chat-bubble {
     border-bottom-left-radius: 2px;
+    text-align: left;
+    align-self: flex-start;
 }
 
 /* Speech vs narration */
@@ -455,6 +457,50 @@ body {
 .player-speech { color: #fff; font-style: normal; }
 .player-voice { color: rgba(255,255,255,0.75); font-style: italic; }
 .chat-fragment + .chat-fragment { margin-left: 0.35em; }
+
+.chat-action-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 220px;
+    padding: 10px 12px;
+    background: rgba(15, 15, 15, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+}
+
+.chat-action-heading {
+    color: #b8b8b8;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.chat-action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.chat-action-inline-btn {
+    flex: 1 1 120px;
+    min-height: 34px;
+    padding: 7px 10px;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    color: #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.2;
+    text-align: left;
+}
+
+.chat-action-inline-btn:hover {
+    background: #222;
+    color: #fff;
+    border-color: #555;
+}
 
 /* Typing indicator */
 .typing-indicator {

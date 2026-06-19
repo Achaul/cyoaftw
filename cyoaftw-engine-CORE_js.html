@@ -1977,6 +1977,7 @@ async function npcRespond(npc, interaction) {
         return;
     }
 
+    clearInlineActionCards();
     const room = G.activeRoom;
     const playerInput = typeof interaction === "string" ? interaction : (interaction && interaction.text ? interaction.text : "");
     const intent = interaction && interaction.intent ? interaction.intent : "talk";
@@ -2032,6 +2033,9 @@ async function npcRespond(npc, interaction) {
     if (typeof generateNPCBehavior === "function") npc.behavior = generateNPCBehavior(npc);
     if (G.activeNPC === npc && typeof refreshNPCDetailPanel === "function") {
         refreshNPCDetailPanel(npc);
+    }
+    if (G.activeNPC === npc) {
+        renderInlineNPCActionCard(npc);
     }
 
     saveGameState();
@@ -3039,6 +3043,7 @@ function renderNPCActionMenu(npc) {
     if (!el) return;
 
     el.innerHTML = "";
+    clearInlineActionCards();
     if (!npc) return;
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
 
@@ -3106,6 +3111,7 @@ function startNPCConversation(npc) {
 }
 
 function tradeWithNPC(npc) {
+    clearInlineActionCards();
     if (!canConverseWithNPC(npc)) {
         G.activeNPCMode = "menu";
         setNarration(`${npc.name} does not seem capable of trade.`);
@@ -3753,11 +3759,11 @@ function disengageFromNPC(text) {
     const npc = G.activeNPC;
     if (!npc) return;
 
-    if (text) addChatMessage("player", G.player.name, text);
+    clearChatLog();
     G.activeNPC = null;
     G.activeNPCMode = null;
     resetNpcPanel();
-    setNarration(`You step away from ${npc.name}.`);
+    renderNarrationWithRoomObservations(G.activeRoom, `You step away from ${npc.name}.`);
     saveGameState();
 }
 
@@ -3905,14 +3911,8 @@ function appendObservationSeparator(parent, hasObservations) {
     }
 }
 
-function renderRoomNarration(room, mode, direction) {
-    const el = document.getElementById("narrationEl");
-    if (!el) return;
-
-    el.textContent = "";
-    appendNarrationText(el, ensureSentence(buildRoomEntryNarration(room, mode, direction)));
-
-    if (!room) return;
+function renderRoomObservations(parent, room) {
+    if (!parent || !room) return;
 
     let hasObservations = false;
     const npcs = Array.isArray(room.creatures)
@@ -3927,19 +3927,19 @@ function renderRoomNarration(room, mode, direction) {
         if (!name) return;
 
         hydrateNPCSpeciesFlags(npc);
-        appendObservationSeparator(el, hasObservations);
-        appendNarrationText(el, "You see ");
+        appendObservationSeparator(parent, hasObservations);
+        appendNarrationText(parent, "You see ");
 
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "narration-entity-btn";
         btn.textContent = name;
         btn.onclick = () => selectNPC(npc);
-        el.appendChild(btn);
+        parent.appendChild(btn);
 
         const detail = typeof getNPCObservationDetail === "function"
             ? getNPCObservationDetail(npc) : "";
-        appendNarrationText(el, ` here${detail ? ", " + detail : ""}.`);
+        appendNarrationText(parent, ` here${detail ? ", " + detail : ""}.`);
         hasObservations = true;
     });
 
@@ -3947,8 +3947,8 @@ function renderRoomNarration(room, mode, direction) {
         const name = withIndefiniteArticle(getEntityName(item));
         if (!name) return;
 
-        appendObservationSeparator(el, hasObservations);
-        appendNarrationText(el, "You see ");
+        appendObservationSeparator(parent, hasObservations);
+        appendNarrationText(parent, "You see ");
 
         if (isRoomObjectInteractive(item)) {
             const btn = document.createElement("button");
@@ -3956,14 +3956,27 @@ function renderRoomNarration(room, mode, direction) {
             btn.className = "narration-entity-btn";
             btn.textContent = name;
             btn.onclick = () => selectRoomObject(item);
-            el.appendChild(btn);
+            parent.appendChild(btn);
         } else {
-            appendNarrationText(el, name);
+            appendNarrationText(parent, name);
         }
 
-        appendNarrationText(el, " here.");
+        appendNarrationText(parent, " here.");
         hasObservations = true;
     });
+}
+
+function renderNarrationWithRoomObservations(room, leadText) {
+    const el = document.getElementById("narrationEl");
+    if (!el) return;
+
+    el.textContent = "";
+    appendNarrationText(el, ensureSentence(leadText));
+    renderRoomObservations(el, room);
+}
+
+function renderRoomNarration(room, mode, direction) {
+    renderNarrationWithRoomObservations(room, buildRoomEntryNarration(room, mode, direction));
 }
 
 function setExitGridVisible(visible) {
@@ -4062,6 +4075,131 @@ function renderChatBubbleText(bubble, side, text) {
         span.textContent = part.text;
         bubble.appendChild(span);
     });
+}
+
+function clearInlineActionCards() {
+    const log = document.getElementById("chatLogEl");
+    if (!log || !log.querySelectorAll) return;
+    const cards = log.querySelectorAll(".chat-message.inline-action-card");
+    for (let i = 0; i < cards.length; i++) {
+        cards[i].remove();
+    }
+}
+
+function isMerchantLikeNPC(npc) {
+    const role = String(npc && npc.role || "").toLowerCase();
+    return [
+        "bartender",
+        "innkeeper",
+        "shopkeeper",
+        "merchant",
+        "trader",
+        "blacksmith",
+        "healer",
+        "archivist"
+    ].some(tag => role.includes(tag));
+}
+
+function shouldShowPostReplyTradeAction(npc) {
+    if (!npc || !canConverseWithNPC(npc)) return false;
+    if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
+
+    const hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
+    const favor = npc.memory && typeof npc.memory.favorability === "number" ? npc.memory.favorability : 0;
+    if (hostility >= 80 || favor <= -70) return false;
+
+    const establishedTrader = npc.memory && (npc.memory.tradeCount || 0) > 0;
+    return isMerchantLikeNPC(npc) || establishedTrader;
+}
+
+function getPostReplyNPCActionOptions(npc) {
+    if (!npc || !canConverseWithNPC(npc)) return [];
+
+    const options = [];
+
+    if (shouldShowPostReplyTradeAction(npc)) {
+        options.push({
+            key: "trade",
+            label: "Trade",
+            run: () => chooseNPCAction("trade")
+        });
+    }
+
+    const chatOptions = typeof getChatOptions === "function" ? getChatOptions(npc) : [];
+    const preferredFollowUps = [
+        "Offer help",
+        "Keep things calm",
+        "Ask about this place",
+        "Ask for a rumor",
+        "Ask what they have seen",
+        "Compliment them"
+    ];
+
+    preferredFollowUps.forEach(label => {
+        const option = chatOptions.find(entry => entry && entry.label === label);
+        if (!option) return;
+        if (options.some(entry => entry.key === `chat:${label}`)) return;
+        options.push({
+            key: `chat:${label}`,
+            label,
+            run: () => chooseChatOption(option)
+        });
+    });
+
+    options.push({
+        key: "disengage",
+        label: "Step away",
+        run: () => chooseNPCAction("disengage")
+    });
+
+    return options.slice(0, 4);
+}
+
+function renderInlineNPCActionCard(npc) {
+    const log = document.getElementById("chatLogEl");
+    if (!log || !npc) return;
+
+    clearInlineActionCards();
+    const options = getPostReplyNPCActionOptions(npc);
+    if (!options.length) return;
+
+    const row = document.createElement("div");
+    row.className = "chat-message left inline-action-card";
+
+    const avatar = document.createElement("div");
+    avatar.className = "chat-avatar";
+    avatar.textContent = "Actions";
+
+    const bubble = document.createElement("div");
+    bubble.className = "chat-bubble chat-action-card";
+
+    const heading = document.createElement("div");
+    heading.className = "chat-action-heading";
+    heading.textContent = "Available now";
+    bubble.appendChild(heading);
+
+    const buttons = document.createElement("div");
+    buttons.className = "chat-action-buttons";
+
+    options.forEach(option => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chat-action-inline-btn";
+        btn.textContent = option.label;
+        btn.onclick = () => {
+            if (G.activeNPC !== npc) return;
+            option.run();
+        };
+        buttons.appendChild(btn);
+    });
+
+    bubble.appendChild(buttons);
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    log.appendChild(row);
+
+    requestAnimationFrame(() => bubble.classList.add("show"));
+    log.scrollTop = log.scrollHeight;
 }
 
 function addChatMessage(side, speaker, text) {
