@@ -1977,7 +1977,6 @@ async function npcRespond(npc, interaction) {
         return;
     }
 
-    clearInlineActionCards();
     const room = G.activeRoom;
     const playerInput = typeof interaction === "string" ? interaction : (interaction && interaction.text ? interaction.text : "");
     const intent = interaction && interaction.intent ? interaction.intent : "talk";
@@ -2033,9 +2032,6 @@ async function npcRespond(npc, interaction) {
     if (typeof generateNPCBehavior === "function") npc.behavior = generateNPCBehavior(npc);
     if (G.activeNPC === npc && typeof refreshNPCDetailPanel === "function") {
         refreshNPCDetailPanel(npc);
-    }
-    if (G.activeNPC === npc) {
-        renderInlineNPCActionCard(npc);
     }
 
     saveGameState();
@@ -2134,6 +2130,13 @@ function getChatOptions(npc) {
                 intent: "tease"
             });
         }
+    }
+
+    if (shouldShowPostReplyTradeAction(npc)) {
+        options.push({
+            label: "Trade",
+            action: "trade"
+        });
     }
 
     options.push({
@@ -3043,7 +3046,6 @@ function renderNPCActionMenu(npc) {
     if (!el) return;
 
     el.innerHTML = "";
-    clearInlineActionCards();
     if (!npc) return;
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
 
@@ -3111,7 +3113,6 @@ function startNPCConversation(npc) {
 }
 
 function tradeWithNPC(npc) {
-    clearInlineActionCards();
     if (!canConverseWithNPC(npc)) {
         G.activeNPCMode = "menu";
         setNarration(`${npc.name} does not seem capable of trade.`);
@@ -3737,8 +3738,13 @@ function renderChatOptions(npc) {
 
 function chooseChatOption(option) {
     const choice = typeof option === "string" ? { text: option } : option;
-    if (!choice || !choice.text || !canConverseWithNPC(G.activeNPC)) return;
+    if (!choice || (!choice.text && !choice.action) || !canConverseWithNPC(G.activeNPC)) return;
     const npc = G.activeNPC;
+
+    if (choice.action === "trade") {
+        tradeWithNPC(npc);
+        return;
+    }
 
     if (choice.action === "disengage") {
         advanceNPCAffectTime(1);
@@ -4077,15 +4083,6 @@ function renderChatBubbleText(bubble, side, text) {
     });
 }
 
-function clearInlineActionCards() {
-    const log = document.getElementById("chatLogEl");
-    if (!log || !log.querySelectorAll) return;
-    const cards = log.querySelectorAll(".chat-message.inline-action-card");
-    for (let i = 0; i < cards.length; i++) {
-        cards[i].remove();
-    }
-}
-
 function isMerchantLikeNPC(npc) {
     const role = String(npc && npc.role || "").toLowerCase();
     return [
@@ -4108,98 +4105,10 @@ function shouldShowPostReplyTradeAction(npc) {
     const favor = npc.memory && typeof npc.memory.favorability === "number" ? npc.memory.favorability : 0;
     if (hostility >= 80 || favor <= -70) return false;
 
+    const hasNpcReply = !!(npc.memory && Array.isArray(npc.memory.recentLines) &&
+        npc.memory.recentLines.some(line => line && line.speaker === "npc"));
     const establishedTrader = npc.memory && (npc.memory.tradeCount || 0) > 0;
-    return isMerchantLikeNPC(npc) || establishedTrader;
-}
-
-function getPostReplyNPCActionOptions(npc) {
-    if (!npc || !canConverseWithNPC(npc)) return [];
-
-    const options = [];
-
-    if (shouldShowPostReplyTradeAction(npc)) {
-        options.push({
-            key: "trade",
-            label: "Trade",
-            run: () => chooseNPCAction("trade")
-        });
-    }
-
-    const chatOptions = typeof getChatOptions === "function" ? getChatOptions(npc) : [];
-    const preferredFollowUps = [
-        "Offer help",
-        "Keep things calm",
-        "Ask about this place",
-        "Ask for a rumor",
-        "Ask what they have seen",
-        "Compliment them"
-    ];
-
-    preferredFollowUps.forEach(label => {
-        const option = chatOptions.find(entry => entry && entry.label === label);
-        if (!option) return;
-        if (options.some(entry => entry.key === `chat:${label}`)) return;
-        options.push({
-            key: `chat:${label}`,
-            label,
-            run: () => chooseChatOption(option)
-        });
-    });
-
-    options.push({
-        key: "disengage",
-        label: "Step away",
-        run: () => chooseNPCAction("disengage")
-    });
-
-    return options.slice(0, 4);
-}
-
-function renderInlineNPCActionCard(npc) {
-    const log = document.getElementById("chatLogEl");
-    if (!log || !npc) return;
-
-    clearInlineActionCards();
-    const options = getPostReplyNPCActionOptions(npc);
-    if (!options.length) return;
-
-    const row = document.createElement("div");
-    row.className = "chat-message left inline-action-card";
-
-    const avatar = document.createElement("div");
-    avatar.className = "chat-avatar";
-    avatar.textContent = "Actions";
-
-    const bubble = document.createElement("div");
-    bubble.className = "chat-bubble chat-action-card";
-
-    const heading = document.createElement("div");
-    heading.className = "chat-action-heading";
-    heading.textContent = "Available now";
-    bubble.appendChild(heading);
-
-    const buttons = document.createElement("div");
-    buttons.className = "chat-action-buttons";
-
-    options.forEach(option => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "chat-action-inline-btn";
-        btn.textContent = option.label;
-        btn.onclick = () => {
-            if (G.activeNPC !== npc) return;
-            option.run();
-        };
-        buttons.appendChild(btn);
-    });
-
-    bubble.appendChild(buttons);
-    row.appendChild(avatar);
-    row.appendChild(bubble);
-    log.appendChild(row);
-
-    requestAnimationFrame(() => bubble.classList.add("show"));
-    log.scrollTop = log.scrollHeight;
+    return hasNpcReply && (isMerchantLikeNPC(npc) || establishedTrader);
 }
 
 function addChatMessage(side, speaker, text) {
