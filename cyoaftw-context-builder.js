@@ -241,6 +241,28 @@ function serializeStoryDirectorBlock(story) {
 }
 
 // ── BUILD NPC PERSONA BLOCK ──────────────────────────────────────
+function buildNPCRecentExchangeBlock(npc, maxTurns = 4) {
+    if (!npc || !npc.memory || !Array.isArray(npc.memory.recentLines) || !npc.memory.recentLines.length) {
+        return "";
+    }
+
+    const now = Date.now();
+    const lines = npc.memory.recentLines
+        .slice(-maxTurns)
+        .filter(line => line && line.text && line.timestamp && (now - line.timestamp) < 10 * 60 * 1000)
+        .map(line => {
+            const speaker = line.speaker === "player" ? "Player" : (npc.name || "NPC");
+            return `- ${speaker}: ${String(line.text).replace(/\s+/g, " ").trim()}`;
+        });
+
+    if (!lines.length) return "";
+
+    return [
+        "RECENT EXCHANGE:",
+        ...lines
+    ].join("\n");
+}
+
 function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
     if (!npc) return "";
 
@@ -271,9 +293,14 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
     const relationship = typeof getRelationshipLabel === "function"
         ? getRelationshipLabel(npc)
         : "neutral";
-    const recentPlayerActions = npc.memory && Array.isArray(npc.memory.playerActions)
-        ? npc.memory.playerActions.slice(-4)
-        : [];
+    const recentPlayerActions = typeof getNPCActionTags === "function"
+        ? getNPCActionTags(npc, 4)
+        : (npc.memory && Array.isArray(npc.memory.playerActions)
+            ? npc.memory.playerActions.slice(-4)
+            : []);
+    const relationshipGuidance = typeof getNPCRelationshipSpeechGuidance === "function"
+        ? getNPCRelationshipSpeechGuidance(npc)
+        : null;
     const attraction = npc.memory && typeof npc.memory.attraction === "number"
         ? npc.memory.attraction : 0;
     const arousal = npc.memory && typeof npc.memory.arousal === "number"
@@ -302,7 +329,10 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
         return "neutral";
     }
 
-    const speechStyle = npc.speechStyle || profile.speechStyle || "";
+    const speechProfile = typeof getNPCSpeechProfile === "function"
+        ? getNPCSpeechProfile(npc, window.G ? window.G.activeRoom : null)
+        : null;
+    const speechStyle = speechProfile ? speechProfile.style : (npc.speechStyle || profile.speechStyle || "");
     const enrichment = npc.enrichment || {};
     const appearanceHighlights = Array.isArray(npc.appearanceHighlights) && npc.appearanceHighlights.length
         ? npc.appearanceHighlights : [];
@@ -321,7 +351,10 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
     const lore = npc.loreNotes || enrichment.speciesLore || "";
     const motive = npc.currentMotive || enrichment.currentMotive || "";
     const values = Array.isArray(enrichment.values) ? enrichment.values : [];
-    const speechTics = Array.isArray(enrichment.speechTics) ? enrichment.speechTics : [];
+    const speechTics = speechProfile && Array.isArray(speechProfile.cues) && speechProfile.cues.length
+        ? speechProfile.cues
+        : (Array.isArray(enrichment.speechTics) ? enrichment.speechTics : []);
+    const speechAvoid = speechProfile && Array.isArray(speechProfile.avoid) ? speechProfile.avoid : [];
     const preferredTopics = Array.isArray(npc.preferredTopics) && npc.preferredTopics.length
         ? npc.preferredTopics
         : (Array.isArray(enrichment.preferredTopics) ? enrichment.preferredTopics : []);
@@ -341,7 +374,10 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
         traits.length ? `- Traits: ${traits.join(", ")}` : "",
         quirksLine,
         speechStyle ? `- Speech style: ${speechStyle}` : "",
+        speechProfile ? `- Speech guide: ${speechProfile.sentenceLength} sentences, ${speechProfile.vocabulary}, ${speechProfile.cadence}` : "",
+        speechProfile ? `- Speech sample: "${speechProfile.sample}"` : "",
         speechTics.length ? `- Speech cues: ${speechTics.join("; ")}` : "",
+        speechAvoid.length ? `- Avoid in speech: ${speechAvoid.join("; ")}` : "",
         physicalTraits ? `- Appearance: ${physicalTraits}` : "",
         appearanceHighlights.length ? `- Notable details: ${appearanceHighlights.join(", ")}` : "",
         anatomyBits.length ? `- Anatomy/movement: ${anatomyBits.join(", ")}` : "",
@@ -353,7 +389,9 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
         motive ? `- Current motive: ${motive}` : "",
         `- Mood: ${mood}`,
         `- Relationship to player: ${relationship}`,
-        recentPlayerActions.length ? `- Recent player actions toward you: ${recentPlayerActions.join(", ")}` : "",
+        relationshipGuidance ? `- Default attitude toward player: ${relationshipGuidance.baseline} (${relationshipGuidance.direction})` : "",
+        relationshipGuidance ? `- Subtle reaction cue: ${relationshipGuidance.cue}` : "",
+        recentPlayerActions.length ? `- Recent player actions toward you: ${recentPlayerActions.map(action => typeof formatNPCActionTag === "function" ? formatNPCActionTag(action) : action).join(", ")}` : "",
         `- Favorability toward player: ${favorability}/100 (${favorLabel(favorability)})`,
         `- Hostility toward player: ${hostility}/100 (${hostLabel(hostility)})`,
         typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc)
@@ -365,6 +403,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
         typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc)
             ? `- Disinhibition: ${disinhibition}/100`
             : "",
+        "- Conversation rules: answer the player directly, stay conversational, and do not volunteer atmospheric description unless it matters.",
         npc.backstory ? `- Backstory: ${String(npc.backstory).slice(0, 200)}` : "",
         npc.action ? `- Currently: ${npc.action}` : ""
     ].filter(Boolean);
@@ -378,11 +417,13 @@ function buildPrompt(room, npc, instruction) {
     const sceneBlock = serializeSceneBlock(locCtx);
     const storyBlock = serializeStoryDirectorBlock(window.G ? window.G.story : null);
     const npcBlock = npc ? buildNPCPersonaBlock(npc) : "";
+    const recentExchangeBlock = npc ? buildNPCRecentExchangeBlock(npc) : "";
 
     return [
         sceneBlock,
         storyBlock,
         npcBlock,
+        recentExchangeBlock,
         `INSTRUCTION: ${instruction}`
     ].filter(Boolean).join("\n\n");
 }

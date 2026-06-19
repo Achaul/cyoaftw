@@ -894,6 +894,9 @@ function applyNPCImpact(npc, impact = {}) {
     if (typeof generateNPCBehavior === "function") {
         npc.behavior = generateNPCBehavior(npc);
     }
+    if (G.activeNPC === npc && typeof refreshNPCDetailPanel === "function") {
+        refreshNPCDetailPanel(npc);
+    }
     return npc;
 }
 
@@ -1819,7 +1822,7 @@ function createNPC(species, room, zoneTemplate, options = {}) {
         ageCategory,
         personalityProfile: profile,
         personalityTraits:  profile.traits,
-        speechStyle:        profile.speechStyle,
+        speechStyle:        "common",
         hp: 10, hpMax: 10,
         inventory: [],
         equipped:  {},
@@ -1830,10 +1833,13 @@ function createNPC(species, room, zoneTemplate, options = {}) {
                 : (temperament === "hostile" ? -40 : 0),
             lastMood:        "neutral",
             playerActions:   [],
+            playerActionTags: [],
+            recentLines:     [],
             aggressionCount: 0
         }
     };
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
+    if (typeof syncNPCSpeechProfile === "function") syncNPCSpeechProfile(npc, room, zoneTemplate);
 
     seedNPCStartingLoot(npc, room, zoneTemplate);
 
@@ -1945,22 +1951,60 @@ async function runPrefetchQueue() {
 
 // ── NPC INTERACTION ──────────────────────────────────────────────
 
-async function npcRespond(npc, playerInput) {
+function rememberNPCConversationLine(npc, speaker, text, intent = "talk") {
+    if (!npc || !text) return;
+    if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
+    npc.memory.recentLines.push({
+        speaker,
+        intent,
+        text: String(text).replace(/\s+/g, " ").trim(),
+        timestamp: Date.now()
+    });
+    npc.memory.recentLines = npc.memory.recentLines.slice(-6);
+}
+
+function normalizeNPCReplyText(text) {
+    return String(text || "")
+        .replace(/[“”]/g, "\"")
+        .replace(/[‘’]/g, "'")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+async function npcRespond(npc, interaction) {
     if (!canConverseWithNPC(npc)) {
         clearChatOptions();
         return;
     }
 
     const room = G.activeRoom;
+    const playerInput = typeof interaction === "string" ? interaction : (interaction && interaction.text ? interaction.text : "");
+    const intent = interaction && interaction.intent ? interaction.intent : "talk";
+    const speechProfile = typeof syncNPCSpeechProfile === "function"
+        ? syncNPCSpeechProfile(npc, room, null)
+        : (typeof getNPCSpeechProfile === "function" ? getNPCSpeechProfile(npc, room, null) : null);
+    const relationshipGuidance = typeof getNPCRelationshipSpeechGuidance === "function"
+        ? getNPCRelationshipSpeechGuidance(npc)
+        : null;
 
-    const instruction = `
-You are ${npc.name}, a ${npc.species} in this location.
-The player says: "${playerInput}"
-Respond in character. Stay brief — 2 to 4 sentences.
-Do not break character. Do not refer to yourself as an AI.
-Speak only as ${npc.name} would speak.
-If there is romantic tension, keep it suggestive or emotional rather than explicit.
-    `.trim();
+    const instruction = [
+        `You are ${npc.name}, a ${npc.species}${npc.role ? ` working here as ${npc.role}` : ""}.`,
+        `The player says: "${playerInput}"`,
+        `Conversation intent: ${intent}.`,
+        "Respond in character and stay brief: 1 to 3 short sentences.",
+        "Answer the player's question or approach directly before adding any attitude, suspicion, or warmth.",
+        "Use normal spoken language. Keep it grounded and easy to read.",
+        "Do not break character. Do not refer to yourself as an AI.",
+        "Do not write purple prose, fantasy-trope narration, or stagey lines about eyes, fingers, tavern stones, cages, air, or whispers unless the player directly asks about them.",
+        "Do not default to vague hints. If the NPC is evasive, let them be plain and evasive rather than cryptic and theatrical.",
+        "If you include a visible action, keep it to one short clause at most.",
+        relationshipGuidance ? `Relationship baseline: ${relationshipGuidance.baseline}. ${relationshipGuidance.instruction}` : "",
+        relationshipGuidance ? `Subtle cue for this reply: ${relationshipGuidance.cue}. Keep it understated.` : "",
+        speechProfile ? `Speech target: ${speechProfile.style}. Example tone: "${speechProfile.sample}"` : "",
+        speechProfile ? `Speech habits: ${speechProfile.sentenceLength} sentences, ${speechProfile.vocabulary}, ${speechProfile.cadence}.` : "",
+        speechProfile && speechProfile.avoid.length ? `Avoid these habits: ${speechProfile.avoid.join(", ")}.` : "",
+        "If there is romantic tension, keep it mild, readable, and non-explicit."
+    ].filter(Boolean).join("\n");
 
     const prompt = buildPrompt(room, npc, instruction);
 
@@ -1969,7 +2013,7 @@ If there is romantic tension, keep it suggestive or emotional rather than explic
     let responseText = "";
     try {
         const result = await ai({ instruction: prompt, endButtons: "none" });
-        responseText = typeof result === "string" ? result : result.text || "";
+        responseText = normalizeNPCReplyText(typeof result === "string" ? result : result.text || "");
     } catch (err) {
         console.error("NPC response failed:", err);
         responseText = `${npc.name} hesitates, unable to answer just now.`;
@@ -1983,9 +2027,12 @@ If there is romantic tension, keep it suggestive or emotional rather than explic
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
     npc.memory.metPlayer = true;
     npc.memory.lastSpokenTo = Date.now();
-    npc.memory.playerActions.push(playerInput.slice(0, 60));
-    npc.memory.playerActions = npc.memory.playerActions.slice(-12);
+    rememberNPCConversationLine(npc, "player", playerInput, intent);
+    rememberNPCConversationLine(npc, "npc", responseText, intent);
     if (typeof generateNPCBehavior === "function") npc.behavior = generateNPCBehavior(npc);
+    if (G.activeNPC === npc && typeof refreshNPCDetailPanel === "function") {
+        refreshNPCDetailPanel(npc);
+    }
 
     saveGameState();
 
@@ -3699,7 +3746,7 @@ function chooseChatOption(option) {
     if (npc) applyNPCImpact(npc, classifyConversationChoice(npc, choice));
     G.activeNPCMode = "talk";
     setChatOptionsDisabled(true);
-    npcRespond(npc, choice.text);
+    npcRespond(npc, choice);
 }
 
 function disengageFromNPC(text) {
@@ -3929,6 +3976,94 @@ function clearChatLog() {
     if (el) el.innerHTML = "";
 }
 
+function buildChatTextParts(text) {
+    const source = String(text || "")
+        .replace(/[“”]/g, "\"")
+        .replace(/[‘’]/g, "'")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!source) return [];
+
+    const quoteCount = (source.match(/"/g) || []).length;
+    if (quoteCount < 2 || quoteCount % 2 !== 0) {
+        return [{ type: "plain", text: source }];
+    }
+
+    const parts = [];
+    let buffer = "";
+    let inQuote = false;
+
+    for (let i = 0; i < source.length; i++) {
+        const char = source[i];
+        if (char === "\"") {
+            const cleaned = buffer.trim();
+            if (cleaned) {
+                parts.push({
+                    type: inQuote ? "spoken" : "narration",
+                    text: inQuote ? `"${cleaned}"` : cleaned
+                });
+            }
+            buffer = "";
+            inQuote = !inQuote;
+            continue;
+        }
+        buffer += char;
+    }
+
+    const cleaned = buffer.trim();
+    if (cleaned) {
+        parts.push({
+            type: inQuote ? "spoken" : "narration",
+            text: inQuote ? `"${cleaned}"` : cleaned
+        });
+    }
+
+    if (!parts.some(part => part.type === "spoken")) {
+        return [{ type: "plain", text: source }];
+    }
+
+    const merged = [];
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (!part || !part.text) continue;
+        const previous = merged[merged.length - 1];
+        if (previous && previous.type === part.type) {
+            previous.text += " " + part.text;
+        } else {
+            merged.push({ type: part.type, text: part.text });
+        }
+    }
+
+    return merged;
+}
+
+function renderChatBubbleText(bubble, side, text) {
+    if (!bubble) return;
+
+    const parts = buildChatTextParts(text);
+    if (!parts.length) {
+        bubble.textContent = text || "";
+        return;
+    }
+
+    const speechClass = side === "player" ? "player-speech" : "npc-speech";
+    const voiceClass = side === "player" ? "player-voice" : "npc-voice";
+
+    bubble.textContent = "";
+    parts.forEach(part => {
+        const span = document.createElement("span");
+        const className = part.type === "spoken"
+            ? speechClass
+            : part.type === "narration"
+                ? voiceClass
+                : "";
+        span.className = `chat-fragment ${className}`.trim();
+        span.textContent = part.text;
+        bubble.appendChild(span);
+    });
+}
+
 function addChatMessage(side, speaker, text) {
     const log = document.getElementById("chatLogEl");
     if (!log) return;
@@ -3942,7 +4077,7 @@ function addChatMessage(side, speaker, text) {
 
     const bubble      = document.createElement("div");
     bubble.className  = "chat-bubble";
-    bubble.textContent = text;
+    renderChatBubbleText(bubble, side, text);
 
     msg.appendChild(avatar);
     msg.appendChild(bubble);
@@ -4253,6 +4388,42 @@ function leaveRoomObject() {
 
 // ── NPC PANEL ────────────────────────────────────────────────────
 
+function getNPCDispositionSummary(npc) {
+    if (!npc) return "neutral";
+
+    const relationship = typeof getRelationshipLabel === "function"
+        ? getRelationshipLabel(npc)
+        : "neutral";
+    const attraction = typeof getAttractionLabel === "function" ? getAttractionLabel(npc) : "none";
+    const favor = npc.memory && typeof npc.memory.favorability === "number"
+        ? npc.memory.favorability
+        : 0;
+    const hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
+
+    const parts = [`${relationship} (F${favor >= 0 ? "+" : ""}${favor}, H${hostility})`];
+    if (attraction && attraction !== "none") parts.push(attraction);
+    return parts.join(" / ");
+}
+
+function refreshNPCDetailPanel(npc) {
+    if (!npc) return;
+
+    const detailEl = document.getElementById("npcDetailEl");
+    if (!detailEl || !detailEl.classList.contains("active")) return;
+
+    const inspection = typeof getNPCInspectionDetail === "function"
+        ? getNPCInspectionDetail(npc)
+        : "";
+
+    document.getElementById("npcDetailNameEl").textContent = npc.name;
+    document.getElementById("npcDetailBehaviorEl").textContent =
+        [npc.behavior || "", inspection].filter(Boolean).join(" ");
+    document.getElementById("npcMoodEl").textContent =
+        npc.memory && npc.memory.lastMood ? npc.memory.lastMood : "neutral";
+    document.getElementById("npcRoleEl").textContent = npc.role || "unknown";
+    document.getElementById("npcFavorEl").textContent = getNPCDispositionSummary(npc);
+}
+
 function selectNPC(npc) {
     if (!npc) return;
     hydrateNPCSpeciesFlags(npc);
@@ -4266,27 +4437,11 @@ function selectNPC(npc) {
 
     document.getElementById("npcPlaceholderEl").style.display = "none";
     document.getElementById("npcDetailEl").classList.add("active");
-    document.getElementById("npcDetailNameEl").textContent     = npc.name;
-    const inspection = typeof getNPCInspectionDetail === "function"
-        ? getNPCInspectionDetail(npc) : "";
-    document.getElementById("npcDetailBehaviorEl").textContent =
-        [npc.behavior || "", inspection].filter(Boolean).join(" ");
-    document.getElementById("npcMoodEl").textContent           =
-        npc.memory && npc.memory.lastMood ? npc.memory.lastMood : "neutral";
-    document.getElementById("npcRoleEl").textContent           = npc.role || "unknown";
-
-    document.getElementById("npcFavorEl").textContent =
-        typeof getRelationshipLabel === "function"
-            ? (() => {
-                const relationship = getRelationshipLabel(npc);
-                const attraction = typeof getAttractionLabel === "function" ? getAttractionLabel(npc) : "none";
-                return attraction && attraction !== "none" ? `${relationship} / ${attraction}` : relationship;
-            })()
-            : (npc.memory && typeof npc.memory.favorability === "number"
-                ? (npc.memory.favorability >= 60 ? "Friendly" : npc.memory.favorability >= 20 ? "Neutral" : npc.memory.favorability >= -20 ? "Wary" : "Hostile")
-                : "neutral");
+    refreshNPCDetailPanel(npc);
 
     if (isNewNPC) clearChatLog();
+    const inspection = typeof getNPCInspectionDetail === "function"
+        ? getNPCInspectionDetail(npc) : "";
     setNarration(`${npc.name} ${npc.action || "is standing nearby"}.${inspection ? "\n\n" + inspection : ""}`);
     setExitGridVisible(false);
     renderNPCActionMenu(npc);

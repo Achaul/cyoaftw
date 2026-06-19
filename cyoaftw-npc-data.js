@@ -37,11 +37,139 @@ const temperaments = [
     "curious", "skittish", "bold", "aggressive"
 ];
 
-const SPEECH_STYLES = [
-    "common", "gruff", "eloquent", "whispered",
-    "boisterous", "nervous", "formal", "archaic",
-    "clipped", "rambling", "sarcastic", "poetic"
-];
+const NPC_SPEECH_PROFILES = {
+    common: {
+        sample: "Yeah, I noticed. Two travelers came through before dusk and kept moving.",
+        sentenceLength: "short to medium",
+        vocabulary: "plain everyday words",
+        cadence: "answers the question first, then adds one useful detail",
+        cues: ["speaks plainly", "keeps the point clear", "does not dress up simple facts"],
+        avoid: ["poetic imagery", "dramatic pauses", "mysterious tavern-sage lines"]
+    },
+    direct: {
+        sample: "If you need an answer, ask straight. I don't waste time.",
+        sentenceLength: "short",
+        vocabulary: "blunt practical words",
+        cadence: "gets to the point immediately",
+        cues: ["uses firm statements", "sounds decisive", "cuts off rambling"],
+        avoid: ["flowery phrasing", "soft hedging", "long explanations"]
+    },
+    gruff: {
+        sample: "Saw them, yes. Kept their heads down and paid in full.",
+        sentenceLength: "short to medium",
+        vocabulary: "rough practical words",
+        cadence: "dry and matter-of-fact",
+        cues: ["keeps sentences tight", "sounds worn or work-hardened", "shows warmth sparingly"],
+        avoid: ["courtly language", "pretty metaphors", "theatrical threats"]
+    },
+    formal: {
+        sample: "I did notice them. They arrived late and spoke to no one for long.",
+        sentenceLength: "medium",
+        vocabulary: "precise but readable words",
+        cadence: "measured and controlled",
+        cues: ["chooses words carefully", "sounds composed", "may use titles when appropriate"],
+        avoid: ["purple prose", "archaic filler", "grand speeches"]
+    },
+    guarded: {
+        sample: "Maybe. Depends on why you're asking.",
+        sentenceLength: "short",
+        vocabulary: "plain careful words",
+        cadence: "gives partial answers before trust is earned",
+        cues: ["holds something back", "tests the listener first", "keeps tone restrained"],
+        avoid: ["rambling", "open confession", "needless scene description"]
+    },
+    folksy: {
+        sample: "Could be something to it. This road carries more trouble than wagons lately.",
+        sentenceLength: "short to medium",
+        vocabulary: "casual conversational words",
+        cadence: "friendly and lightly colored by local habit",
+        cues: ["sounds approachable", "may use a plain saying now and then", "keeps the mood human and readable"],
+        avoid: ["cutesy chatter", "thick dialect spelling", "storybook whimsy"]
+    },
+    clipped: {
+        sample: "Yes. Near the gate. After dark.",
+        sentenceLength: "very short",
+        vocabulary: "lean functional words",
+        cadence: "fragmented but clear",
+        cues: ["answers in compact beats", "drops filler", "keeps emotion tucked in"],
+        avoid: ["long setup", "speechifying", "decorative wording"]
+    },
+    nervous: {
+        sample: "I saw something, I think. Hard to be sure, but it felt wrong.",
+        sentenceLength: "short to medium",
+        vocabulary: "simple uncertain words",
+        cadence: "hesitates and self-corrects",
+        cues: ["second-guesses details", "sounds alert to danger", "watches for reactions"],
+        avoid: ["confident lectures", "poetic dread", "slick sarcasm"]
+    },
+    boisterous: {
+        sample: "Aye, I saw them, and they looked like trouble from ten paces off.",
+        sentenceLength: "medium",
+        vocabulary: "plain emphatic words",
+        cadence: "energetic and open",
+        cues: ["sounds larger than life without losing clarity", "speaks with confidence", "lets attitude show"],
+        avoid: ["long monologues", "fancy ornament", "endless shouting"]
+    },
+    wry: {
+        sample: "I noticed. Trouble rarely bothers to wear a sign, but that came close.",
+        sentenceLength: "short to medium",
+        vocabulary: "plain words with a dry edge",
+        cadence: "understated and pointed",
+        cues: ["uses dry humor sparingly", "sounds unimpressed", "lands the point cleanly"],
+        avoid: ["constant snark", "florid irony", "riddle-talk"]
+    },
+    broken: {
+        sample: "Seen them. Bad smell. Bad dark. Stay away.",
+        sentenceLength: "very short",
+        vocabulary: "simple concrete words",
+        cadence: "broken or primitive but understandable",
+        cues: ["keeps grammar simple", "uses direct warning language", "focuses on immediate facts"],
+        avoid: ["eloquent phrasing", "complex syntax", "abstract reflection"]
+    },
+    whisper: {
+        sample: "Keep your voice down. Yes, I saw them, and I don't want them hearing this.",
+        sentenceLength: "short to medium",
+        vocabulary: "plain quiet words",
+        cadence: "low and controlled",
+        cues: ["sounds hushed", "stays concise", "treats silence as useful"],
+        avoid: ["stagey suspense", "breathy seduction", "atmospheric rambling"]
+    }
+};
+
+const SPEECH_STYLE_ALIASES = {
+    archaic: "formal",
+    boisterous: "boisterous",
+    broken: "broken",
+    chattery: "clipped",
+    clipped: "clipped",
+    common: "common",
+    commanding: "direct",
+    direct: "direct",
+    eloquent: "formal",
+    formal: "formal",
+    gagged: "broken",
+    growl: "broken",
+    gruff: "gruff",
+    guttural: "broken",
+    hiss: "broken",
+    majestic: "formal",
+    mechanical: "clipped",
+    mimicry: "broken",
+    murmur: "guarded",
+    nervous: "nervous",
+    none: "broken",
+    poetic: "formal",
+    rambling: "folksy",
+    sarcastic: "wry",
+    serene: "guarded",
+    shout: "direct",
+    snarl: "broken",
+    squeak: "broken",
+    whisper: "whisper",
+    whispered: "whisper"
+};
+
+const SPEECH_STYLES = Object.keys(NPC_SPEECH_PROFILES);
 
 const NPC_DISTINGUISHING_MARKS = [
     "a small scar near one eye",
@@ -77,6 +205,44 @@ const NPC_CREATURE_MOTIVES = [
     "protect a hidden nest or resting place"
 ];
 
+const NPC_ACTION_RELATION_WEIGHTS = {
+    greeting: 1,
+    help: 2,
+    "offer-help": 3,
+    "ask-place": 0,
+    "ask-seen": 0,
+    "ask-rumor": 0,
+    question: 0,
+    calm: 2,
+    "keep-calm": 2,
+    compliment: 2,
+    apology: 2,
+    comfort: 2,
+    "comfort-rebuffed": -1,
+    flirt: 0,
+    "flirt-tentative": 1,
+    "flirt-received": 2,
+    "flirt-rejected": -2,
+    tease: 0,
+    "tease-playful": 1,
+    "tease-backfire": -2,
+    "misread-flirt": -2,
+    threat: -3,
+    "sharp-question": -3,
+    goodbye: 0,
+    talk: 0,
+    gift: 3,
+    "generous-trade": 3,
+    "fair-trade": 1,
+    "hard-bargain": -1,
+    "refused-trade": -2,
+    "attacked-by-player": -6,
+    "surrender-attempt": 0,
+    "mercy-shown": 4,
+    "mercy-refused": -5,
+    "woken-after-defeat": 2
+};
+
 function _npcRand(arr) {
     if (!Array.isArray(arr) || !arr.length) return "";
     return arr[Math.floor(Math.random() * arr.length)];
@@ -111,22 +277,242 @@ function _npcGetSpeciesTemplate(species) {
     return null;
 }
 
-function getSpeechTicsForStyle(style, voice) {
-    const key = String(style || "common").toLowerCase();
-    const map = {
-        gruff: ["keeps sentences short", "uses blunt practical words"],
-        eloquent: ["chooses words with care", "speaks in polished phrases"],
-        whispered: ["keeps their voice low", "leans close before important words"],
-        boisterous: ["speaks loudly", "laughs or scoffs between points"],
-        nervous: ["restarts sentences", "checks the listener's reaction often"],
-        formal: ["uses titles", "keeps a respectful distance in speech"],
-        archaic: ["uses old-fashioned phrasing", "speaks as if quoting old custom"],
-        clipped: ["answers in fragments", "cuts away unnecessary words"],
-        rambling: ["circles the point", "adds side details before the answer"],
-        sarcastic: ["answers with dry edges", "lets irony slip into their tone"],
-        poetic: ["uses metaphor", "notices sensory details aloud"]
+function formatNPCActionTag(tag) {
+    const key = String(tag || "").trim();
+    if (!key) return "";
+
+    const labels = {
+        greeting: "greeted you politely",
+        help: "offered help",
+        "offer-help": "offered help",
+        "ask-place": "asked about the area",
+        "ask-seen": "asked what you had seen",
+        "ask-rumor": "asked for rumors",
+        question: "asked questions",
+        calm: "tried to keep things calm",
+        "keep-calm": "tried to keep things calm",
+        compliment: "offered a sincere compliment",
+        apology: "apologized",
+        comfort: "tried to reassure you",
+        "comfort-rebuffed": "pushed comfort at the wrong time",
+        "misread-flirt": "misread the mood",
+        "flirt-tentative": "tested the waters gently",
+        "flirt-received": "flirted warmly",
+        "flirt-rejected": "pushed flirtation too far",
+        tease: "teased lightly",
+        "tease-playful": "teased playfully",
+        "tease-backfire": "teased at the wrong moment",
+        threat: "threatened you",
+        "sharp-question": "pressed you harshly",
+        goodbye: "left politely",
+        gift: "gave you something",
+        "generous-trade": "traded generously",
+        "fair-trade": "traded fairly",
+        "hard-bargain": "drove a hard bargain",
+        "refused-trade": "pushed a bad trade",
+        "attacked-by-player": "attacked you",
+        "surrender-attempt": "tried to force surrender",
+        "mercy-shown": "showed mercy",
+        "mercy-refused": "refused mercy",
+        "woken-after-defeat": "woke you carefully after the fight"
     };
-    const tics = map[key] ? map[key].slice() : ["speaks plainly"];
+
+    if (labels[key]) return labels[key];
+    return key.replace(/[-_]/g, " ");
+}
+
+function getNPCActionTags(npc, limit = 12) {
+    if (!npc || !npc.memory) return [];
+    const primary = Array.isArray(npc.memory.playerActionTags) ? npc.memory.playerActionTags : [];
+    const fallback = Array.isArray(npc.memory.playerActions) ? npc.memory.playerActions : [];
+    const raw = primary.length ? primary : fallback;
+    return raw
+        .map(tag => String(tag || "").trim())
+        .filter(tag => Object.prototype.hasOwnProperty.call(NPC_ACTION_RELATION_WEIGHTS, tag))
+        .slice(-limit);
+}
+
+function getNPCRelationshipMomentum(npc) {
+    const tags = getNPCActionTags(npc, 8);
+    if (!tags.length) return 0;
+
+    let total = 0;
+    for (let i = 0; i < tags.length; i++) {
+        const recencyWeight = 0.6 + ((i + 1) / tags.length) * 0.8;
+        total += (NPC_ACTION_RELATION_WEIGHTS[tags[i]] || 0) * recencyWeight;
+    }
+    return Math.round(total);
+}
+
+function getNPCRelationshipSpeechGuidance(npc) {
+    if (!npc) {
+        return {
+            baseline: "neutral",
+            direction: "steady",
+            cue: "keep the tone even and readable",
+            instruction: "Default to a neutral, conversational tone."
+        };
+    }
+
+    ensureNPCRelationshipState(npc);
+
+    const favor = npc.memory.favorability ?? 0;
+    const hostility = npc.hostility ?? 0;
+    const momentum = getNPCRelationshipMomentum(npc);
+    const score = favor - Math.round(hostility * 0.7) + momentum * 3;
+
+    let baseline = "neutral";
+    let instruction = "Default to a neutral, conversational tone.";
+    let cue = "keep the tone even and readable";
+
+    if (score >= 70) {
+        baseline = "openly warm";
+        instruction = "Default to a warm tone. Answer more openly and volunteer one small helpful detail when it fits.";
+        cue = "the answer comes easier and carries a little extra warmth";
+    } else if (score >= 35) {
+        baseline = "warming";
+        instruction = "Default to a friendly tone. Be less guarded than before and let a little warmth show.";
+        cue = "some of the stiffness is gone";
+    } else if (score >= 10) {
+        baseline = "cautiously receptive";
+        instruction = "Default to a mildly receptive tone. Answer directly and allow a small sign of trust.";
+        cue = "they offer one extra useful detail without making a show of it";
+    } else if (score <= -70) {
+        baseline = "hostile";
+        instruction = "Default to a hostile or openly resistant tone. Keep answers terse, skeptical, or refusing.";
+        cue = "their patience is thin";
+    } else if (score <= -35) {
+        baseline = "defensive";
+        instruction = "Default to a defensive tone. Stay guarded, skeptical, and sparing with details.";
+        cue = "they answer like they expect trouble";
+    } else if (score <= -10) {
+        baseline = "reserved";
+        instruction = "Default to a reserved tone. Be polite if needed, but keep distance and avoid sounding open.";
+        cue = "the reply stays tight and measured";
+    }
+
+    let direction = "steady";
+    if (momentum >= 6) direction = "improving";
+    else if (momentum >= 2) direction = "softening";
+    else if (momentum <= -6) direction = "deteriorating";
+    else if (momentum <= -2) direction = "cooling";
+
+    if (direction === "improving") {
+        cue = baseline === "hostile" || baseline === "defensive"
+            ? "despite the guard, they give slightly more than they would have before"
+            : "they sound a little more at ease than before";
+    } else if (direction === "softening") {
+        cue = baseline === "reserved"
+            ? "a little of the caution lifts"
+            : "they let a bit more warmth show";
+    } else if (direction === "deteriorating") {
+        cue = baseline === "warming" || baseline === "openly warm"
+            ? "there is a new edge under the politeness"
+            : "they sound more brittle and less patient";
+    } else if (direction === "cooling") {
+        cue = baseline === "neutral"
+            ? "the reply is a touch cooler than before"
+            : "they keep a little more distance in the answer";
+    }
+
+    return { baseline, direction, cue, instruction };
+}
+
+function normalizeSpeechStyle(style) {
+    const key = String(style || "common").toLowerCase().trim();
+    if (SPEECH_STYLE_ALIASES[key]) return SPEECH_STYLE_ALIASES[key];
+    if (NPC_SPEECH_PROFILES[key]) return key;
+    return "common";
+}
+
+function getSpeechProfile(style) {
+    return NPC_SPEECH_PROFILES[normalizeSpeechStyle(style)] || NPC_SPEECH_PROFILES.common;
+}
+
+function determineNPCSpeechStyle(npc, room, zoneTemplate) {
+    if (!npc) return "common";
+
+    const template = _npcGetSpeciesTemplate(npc.species) || {};
+    const role = String(npc.role || "").toLowerCase();
+    const temperament = String(npc.temperament || "").toLowerCase();
+    const ageCategory = String(npc.ageCategory || "").toLowerCase();
+    const roomType = String((room && room.type) || "").toLowerCase();
+    const zoneName = String((zoneTemplate && zoneTemplate.name) || (room && room.zone) || "").toLowerCase();
+    const traits = Array.isArray(npc.personalityTraits) && npc.personalityTraits.length
+        ? npc.personalityTraits
+        : (Array.isArray(npc.personalityProfile && npc.personalityProfile.traits) ? npc.personalityProfile.traits : []);
+
+    let style = normalizeSpeechStyle(template.speechStyle || npc.speechStyle || npc.speech || "common");
+
+    if (role.includes("guard")) style = "direct";
+    else if (role.includes("blacksmith") || role.includes("miner")) style = "gruff";
+    else if (role.includes("innkeeper") || role.includes("bartender") || role.includes("shopkeeper")) style = "folksy";
+    else if (role.includes("healer") || role.includes("priest") || role.includes("archivist")) style = "formal";
+    else if (role.includes("scout") || role.includes("thief") || role.includes("raider")) style = "guarded";
+
+    if (roomType.includes("gate") && style === "common") style = "guarded";
+    if ((roomType.includes("tavern") || roomType.includes("inn")) && ["common", "guarded"].includes(style)) style = "folksy";
+    if ((zoneName.includes("dungeon") || zoneName.includes("ruin")) && ["common", "folksy"].includes(style)) style = "guarded";
+
+    if (temperament === "aggressive" || temperament === "hostile" || temperament === "bold") {
+        if (style === "formal") style = "direct";
+        else if (style === "common") style = "gruff";
+    } else if (temperament === "wary" || temperament === "skittish" || temperament === "paranoid") {
+        if (!["broken", "whisper", "guarded", "nervous"].includes(style)) style = "guarded";
+    } else if (temperament === "friendly" || temperament === "curious") {
+        if (style === "common") style = "folksy";
+        if (style === "direct") style = "common";
+    }
+
+    if (traits.includes("sarcastic")) style = "wry";
+    else if (traits.includes("shy") || traits.includes("paranoid")) style = "nervous";
+    else if (traits.includes("grump") || traits.includes("bitter")) style = "gruff";
+    else if (traits.includes("studious")) style = "formal";
+    else if (traits.includes("cheerful") || traits.includes("helpful")) {
+        if (["common", "guarded"].includes(style)) style = "folksy";
+    }
+
+    if (ageCategory === "elderly" && ["common", "direct"].includes(style)) style = "formal";
+    if (ageCategory === "young" && style === "formal" && !role.includes("priest") && !role.includes("archivist")) style = "common";
+
+    return normalizeSpeechStyle(style);
+}
+
+function getNPCSpeechProfile(npc, room, zoneTemplate) {
+    const style = determineNPCSpeechStyle(npc, room, zoneTemplate);
+    const profile = getSpeechProfile(style);
+    return {
+        style,
+        sample: profile.sample,
+        sentenceLength: profile.sentenceLength,
+        vocabulary: profile.vocabulary,
+        cadence: profile.cadence,
+        cues: Array.isArray(profile.cues) ? profile.cues.slice() : [],
+        avoid: Array.isArray(profile.avoid) ? profile.avoid.slice() : []
+    };
+}
+
+function syncNPCSpeechProfile(npc, room, zoneTemplate) {
+    if (!npc) return null;
+    const speechProfile = getNPCSpeechProfile(npc, room, zoneTemplate);
+    npc.speechStyle = speechProfile.style;
+    npc.speechProfile = {
+        style: speechProfile.style,
+        sample: speechProfile.sample,
+        sentenceLength: speechProfile.sentenceLength,
+        vocabulary: speechProfile.vocabulary,
+        cadence: speechProfile.cadence,
+        cues: speechProfile.cues.slice(0, 3),
+        avoid: speechProfile.avoid.slice(0, 3)
+    };
+    return speechProfile;
+}
+
+function getSpeechTicsForStyle(style, voice) {
+    const profile = getSpeechProfile(style);
+    const tics = Array.isArray(profile.cues) && profile.cues.length
+        ? profile.cues.slice(0, 3)
+        : ["speaks plainly"];
     if (voice) tics.unshift("has a " + voice + " voice");
     return tics.slice(0, 3);
 }
@@ -162,6 +548,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     const profile = template.anatomyProfile || {};
     const culture = template.culture || {};
     const isHumanoid = npc.isHumanoid === true;
+    const speechProfile = syncNPCSpeechProfile(npc, room, zoneTemplate) || getNPCSpeechProfile(npc, room, zoneTemplate);
 
     const surfaceType = profile.surfaceType || (isHumanoid ? "skin" : "hide");
     const surfaceColor = _npcRand(profile.skinTones) || "unremarkable";
@@ -178,7 +565,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     const values = _npcUniquePicks(culture.values, 2);
     const preferredTopics = _npcUniquePicks(culture.topics, 3);
     const tabooTopics = _npcUniquePicks(culture.taboos, 2);
-    const speechTics = getSpeechTicsForStyle(npc.speechStyle, voice);
+    const speechTics = getSpeechTicsForStyle(speechProfile.style, voice);
 
     const anatomy = {
         size: template.size || "medium",
@@ -207,6 +594,15 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
         preferredTopics,
         tabooTopics,
         speechTics,
+        speechProfile: {
+            style: speechProfile.style,
+            sample: speechProfile.sample,
+            sentenceLength: speechProfile.sentenceLength,
+            vocabulary: speechProfile.vocabulary,
+            cadence: speechProfile.cadence,
+            cues: speechProfile.cues.slice(0, 3),
+            avoid: speechProfile.avoid.slice(0, 3)
+        },
         currentMotive: generateNPCMotivation(npc, template, room),
         mannerisms: [
             movement,
@@ -238,6 +634,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     npc.preferredTopics = preferredTopics;
     npc.tabooTopics = tabooTopics;
     npc.currentMotive = enrichment.currentMotive;
+    npc.speechProfile = enrichment.speechProfile;
 
     return enrichment;
 }
@@ -331,6 +728,8 @@ function ensureNPCRelationshipState(npc) {
 
     npc.memory = npc.memory || {};
     if (!Array.isArray(npc.memory.playerActions)) npc.memory.playerActions = [];
+    if (!Array.isArray(npc.memory.playerActionTags)) npc.memory.playerActionTags = [];
+    if (!Array.isArray(npc.memory.recentLines)) npc.memory.recentLines = [];
     if (typeof npc.memory.metPlayer !== "boolean") npc.memory.metPlayer = false;
     if (typeof npc.memory.aggressionCount !== "number") npc.memory.aggressionCount = 0;
     if (typeof npc.memory.lastSpokenTo !== "number") npc.memory.lastSpokenTo = 0;
@@ -381,7 +780,10 @@ function canImproveMood(npc, intent) {
 
     const key = String(intent || "").toLowerCase();
     if (npc.surrendered) return key === "mercy" ? 1.2 : 1;
-    if (npc.hostility >= 70 && !["surrender", "plead", "bribe", "gift", "mercy"].includes(key)) return false;
+    if (npc.hostility >= 70) {
+        if (["surrender", "plead", "bribe", "gift", "mercy", "apology", "calm", "comfort", "help", "greeting"].includes(key)) return 0.25;
+        return false;
+    }
     if (npc.hostility >= 50) return 0.5;
     if (["friendly", "calm"].includes(String(npc.temperament || "").toLowerCase())) return 1.25;
     if (["hostile", "aggressive"].includes(String(npc.temperament || "").toLowerCase())) return 0.75;
@@ -548,6 +950,8 @@ function applyNPCRelationshipImpact(npc, impact = {}) {
     if (moodOverride) npc.memory.lastMood = moodOverride;
     if (markMet) npc.memory.metPlayer = true;
     if (actionTag) {
+        npc.memory.playerActionTags.push(actionTag);
+        npc.memory.playerActionTags = npc.memory.playerActionTags.slice(-20);
         npc.memory.playerActions.push(actionTag);
         npc.memory.playerActions = npc.memory.playerActions.slice(-12);
     }
@@ -648,15 +1052,12 @@ function getRandomPersonalityProfile(options = {}) {
         neuroticism:       Math.max(1, Math.min(10, base.neuroticism       + _randInt(-2, 2)))
     };
 
-    const speechStyle = _rand(SPEECH_STYLES);
-
     return {
         temperament,
         archetype,
         traits,
         quirks,
-        bigFive,
-        speechStyle
+        bigFive
     };
 }
 
