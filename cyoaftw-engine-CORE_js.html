@@ -1178,7 +1178,10 @@ function createStoryDirectorState() {
         activeThreads: [],
         discoveredFacts: [],
         recentEvents: [],
-        unresolvedQuestions: []
+        unresolvedQuestions: [],
+        turnCounter: 0,
+        eventCounter: 0,
+        flags: {}
     };
 }
 
@@ -1186,19 +1189,81 @@ function clampStoryTension(value) {
     return Math.max(0, Math.min(100, value));
 }
 
-function rememberStoryEvent(type, text, weight) {
-    if (!G.story) G.story = createStoryDirectorState();
+function ensureStoryStateShape(story) {
+    const next = story && typeof story === "object" ? story : createStoryDirectorState();
+
+    if (typeof next.act !== "number") next.act = 1;
+    if (typeof next.tension !== "number") next.tension = 15;
+    if (!Array.isArray(next.activeThreads)) next.activeThreads = [];
+    if (!Array.isArray(next.discoveredFacts)) next.discoveredFacts = [];
+    if (!Array.isArray(next.recentEvents)) next.recentEvents = [];
+    if (!Array.isArray(next.unresolvedQuestions)) next.unresolvedQuestions = [];
+    if (typeof next.turnCounter !== "number") next.turnCounter = 0;
+    if (typeof next.eventCounter !== "number") next.eventCounter = 0;
+    if (!next.flags || typeof next.flags !== "object" || Array.isArray(next.flags)) next.flags = {};
+
+    return next;
+}
+
+function getCurrentStoryTurn() {
+    G.story = ensureStoryStateShape(G.story);
+    return G.story.turnCounter || 0;
+}
+
+function advanceStoryTurn(steps = 1) {
+    G.story = ensureStoryStateShape(G.story);
+    const amount = Math.max(0, Math.floor(steps || 0));
+    G.story.turnCounter += amount;
+    return G.story.turnCounter;
+}
+
+function setStoryFlag(flag, value = true) {
+    if (!flag) return null;
+    G.story = ensureStoryStateShape(G.story);
+    G.story.flags[String(flag)] = value;
+    return value;
+}
+
+function clearStoryFlag(flag) {
+    if (!flag) return false;
+    G.story = ensureStoryStateShape(G.story);
+    delete G.story.flags[String(flag)];
+    return true;
+}
+
+function hasStoryFlag(flag) {
+    if (!flag) return false;
+    G.story = ensureStoryStateShape(G.story);
+    return !!G.story.flags[String(flag)];
+}
+
+function rememberStoryEvent(type, text, weight, options = {}) {
+    G.story = ensureStoryStateShape(G.story);
     if (typeof weight !== "number") weight = 0;
+
+    const eventTags = Array.isArray(options && options.tags)
+        ? options.tags.map(tag => String(tag || "").trim()).filter(Boolean)
+        : [];
+    G.story.eventCounter += 1;
 
     G.story.recentEvents.unshift({
         type,
         text,
         room: G.activeRoom ? (G.activeRoom.displayName || G.activeRoom.name || null) : null,
-        turn: Date.now()
+        turn: getCurrentStoryTurn(),
+        time: Date.now(),
+        eventCounter: G.story.eventCounter,
+        tags: eventTags
     });
 
     G.story.recentEvents = G.story.recentEvents.slice(0, 8);
     G.story.tension = clampStoryTension((G.story.tension || 0) + weight);
+
+    if (Array.isArray(options && options.flags)) {
+        options.flags.forEach(flag => setStoryFlag(flag, true));
+    } else if (options && options.flags && typeof options.flags === "object") {
+        Object.entries(options.flags).forEach(([flag, value]) => setStoryFlag(flag, value));
+    }
 }
 
 function addStoryFact(text) {
@@ -1589,7 +1654,7 @@ async function resumeSavedGame() {
         G.player = save.player;
         ensurePlayerEquipmentState(G.player);
         G.roomMap = save.roomMap || {};
-        G.story = save.story || createStoryDirectorState();
+        G.story = ensureStoryStateShape(save.story || createStoryDirectorState());
         repairRoomMapExits();
         G.activeRoom = G.roomMap[G.player.coords] || null;
         G.activeNPC = null;
@@ -1894,6 +1959,7 @@ function movePlayer(direction) {
     G.activeRoom = newRoom;
     G.activeNPC  = null;
     G.activeNPCMode = null;
+    advanceStoryTurn(1);
     updateStoryOnRoomEntered(newRoom, dir);
 
     clearChatLog();
@@ -3642,6 +3708,10 @@ function chooseChatOption(option) {
 
     if (choice.action === "disengage") {
         advanceNPCAffectTime(1);
+        advanceStoryTurn(1);
+        if (npc && typeof recordNPCConversationChoice === "function") {
+            recordNPCConversationChoice(npc, choice);
+        }
         if (npc) applyNPCImpact(npc, classifyConversationChoice(npc, choice));
         disengageFromNPC(choice.text);
         return;
@@ -3649,6 +3719,10 @@ function chooseChatOption(option) {
 
     addChatMessage("player", G.player.name, choice.text);
     advanceNPCAffectTime(1);
+    advanceStoryTurn(1);
+    if (npc && typeof recordNPCConversationChoice === "function") {
+        recordNPCConversationChoice(npc, choice);
+    }
     if (npc) applyNPCImpact(npc, classifyConversationChoice(npc, choice));
     G.activeNPCMode = "talk";
     setChatOptionsDisabled(true);
@@ -4380,7 +4454,10 @@ function selectNPC(npc) {
     document.getElementById("npcDetailEl").classList.add("active");
     refreshNPCDetailPanel(npc);
 
-    if (isNewNPC) clearChatLog();
+    if (isNewNPC) {
+        if (typeof resetNPCConversationSession === "function") resetNPCConversationSession(npc);
+        clearChatLog();
+    }
     const inspection = typeof getNPCInspectionDetail === "function"
         ? getNPCInspectionDetail(npc) : "";
     setNarration(`${npc.name} ${npc.action || "is standing nearby"}.${inspection ? "\n\n" + inspection : ""}`);

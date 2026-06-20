@@ -460,46 +460,191 @@ function _npcResolveConversationValue(value, npc, ctx) {
     return typeof value === "function" ? value(npc, ctx) : value;
 }
 
+function ensureNPCConversationState(npc) {
+    if (!npc) return null;
+    npc.memory = npc.memory || {};
+
+    const state = npc.memory.conversationState && typeof npc.memory.conversationState === "object"
+        ? npc.memory.conversationState
+        : {};
+
+    if (!Array.isArray(state.usedOptionIds)) state.usedOptionIds = [];
+    if (!Array.isArray(state.sessionUsedOptionIds)) state.sessionUsedOptionIds = [];
+    if (!state.lastVariantByOption || typeof state.lastVariantByOption !== "object") state.lastVariantByOption = {};
+    if (!state.optionUsage || typeof state.optionUsage !== "object" || Array.isArray(state.optionUsage)) state.optionUsage = {};
+    if (typeof state.interactionCount !== "number") state.interactionCount = 0;
+    if (typeof state.sessionInteractionCount !== "number") state.sessionInteractionCount = 0;
+    if (typeof state.sessionNumber !== "number") state.sessionNumber = 0;
+    if (typeof state.lastOptionId !== "string") state.lastOptionId = "";
+
+    npc.memory.conversationState = state;
+    return state;
+}
+
+function resetNPCConversationSession(npc) {
+    const state = ensureNPCConversationState(npc);
+    if (!state) return null;
+
+    state.sessionUsedOptionIds = [];
+    state.sessionInteractionCount = 0;
+    state.sessionNumber += 1;
+    state.lastOptionId = "";
+    return state;
+}
+
+function recordNPCConversationChoice(npc, choice) {
+    if (!npc || !choice) return null;
+    const state = ensureNPCConversationState(npc);
+    if (!state) return null;
+
+    const optionId = String(choice.id || "").trim();
+    if (optionId) {
+        state.usedOptionIds.push(optionId);
+        state.usedOptionIds = state.usedOptionIds.slice(-60);
+        state.sessionUsedOptionIds.push(optionId);
+        state.sessionUsedOptionIds = state.sessionUsedOptionIds.slice(-30);
+        state.lastOptionId = optionId;
+
+        const usage = state.optionUsage[optionId] && typeof state.optionUsage[optionId] === "object"
+            ? state.optionUsage[optionId]
+            : {};
+        usage.count = typeof usage.count === "number" ? usage.count + 1 : 1;
+        usage.sessionCount = usage.sessionNumber === state.sessionNumber && typeof usage.sessionCount === "number"
+            ? usage.sessionCount + 1
+            : 1;
+        usage.sessionNumber = state.sessionNumber || 0;
+        usage.lastUsedTurn = typeof getCurrentStoryTurn === "function"
+            ? getCurrentStoryTurn()
+            : state.interactionCount;
+        usage.lastUsedEventCounter = typeof G === "object" && G && G.story && typeof G.story.eventCounter === "number"
+            ? G.story.eventCounter
+            : 0;
+        state.optionUsage[optionId] = usage;
+    }
+
+    state.interactionCount += 1;
+    state.sessionInteractionCount += 1;
+    return state;
+}
+
+function _npcHasNamedFlags(source, required) {
+    const names = _npcNormalizeList(required);
+    if (!names.length) return true;
+    const map = source && typeof source === "object" ? source : {};
+    return names.every(name => !!map[name]);
+}
+
+function _npcHasAnyNamedFlags(source, required) {
+    const names = _npcNormalizeList(required);
+    if (!names.length) return false;
+    const map = source && typeof source === "object" ? source : {};
+    return names.some(name => !!map[name]);
+}
+
+function _npcNormalizeEventNames(value) {
+    return _npcNormalizeList(value);
+}
+
+function _npcNormalizeStoryEvents(events) {
+    return Array.isArray(events) ? events.filter(Boolean) : [];
+}
+
+function _npcRecentEventMatches(events, options = {}, afterCounter = 0) {
+    const normalizedEvents = _npcNormalizeStoryEvents(events);
+    if (!normalizedEvents.length) return false;
+
+    const types = _npcNormalizeEventNames(options.types);
+    const tags = _npcNormalizeEventNames(options.tags);
+
+    return normalizedEvents.some(event => {
+        const eventCounter = typeof event.eventCounter === "number" ? event.eventCounter : 0;
+        if (eventCounter <= afterCounter) return false;
+
+        const eventType = String(event.type || "").toLowerCase();
+        const eventTags = _npcNormalizeList(event.tags);
+        const typeMatch = !types.length || types.includes(eventType);
+        const tagMatch = !tags.length || tags.some(tag => eventTags.includes(tag));
+        return typeMatch && tagMatch;
+    });
+}
+
+function _npcPickConversationVariant(npc, optionId, variants, fallback, ctx) {
+    const resolvedFallback = _npcResolveConversationValue(fallback, npc, ctx);
+    const pool = (Array.isArray(variants) ? variants : [])
+        .map(entry => _npcResolveConversationValue(entry, npc, ctx))
+        .filter(Boolean);
+
+    if (!pool.length) return resolvedFallback;
+
+    const state = ensureNPCConversationState(npc);
+    const last = state && state.lastVariantByOption
+        ? String(state.lastVariantByOption[optionId] || "")
+        : "";
+    const candidates = pool.length > 1 && last
+        ? pool.filter(entry => entry !== last)
+        : pool.slice();
+    const pickFrom = candidates.length ? candidates : pool;
+    const pick = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+
+    if (state && state.lastVariantByOption) {
+        state.lastVariantByOption[optionId] = pick;
+    }
+
+    return pick;
+}
+
 const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "greet-intro",
         priority: 10,
+        repeat: "never",
         label: "Greet them",
-        text: "You greet them and wait to see how they respond.",
+        textVariants: [
+            "You offer a simple greeting and leave room for them to answer however they like.",
+            "You start the conversation with a polite greeting and wait to see what tone they choose.",
+            "You open with a measured greeting and give them space to respond."
+        ],
         intent: "greeting",
         relationshipImpact: { mood: 1, favor: 4, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" },
         conditions: { metPlayer: false }
     },
     {
-        id: "greet-familiar",
-        priority: 11,
-        label: "Check in with them",
-        text: npc => `You greet ${npc.name} like someone you have already met and wait for their reaction.`,
-        intent: "greeting",
-        relationshipImpact: { mood: 1, favor: 3, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" },
-        conditions: { metPlayer: true }
-    },
-    {
         id: "ask-place",
         priority: 20,
+        repeat: "session",
         label: "Ask about this place",
-        text: "What can you tell me about this place?",
+        textVariants: [
+            "You ask about the area and let them frame it in their own terms.",
+            "You invite them to tell you what matters about this place.",
+            "You ask them to explain the place as they see it."
+        ],
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-place" }
     },
     {
         id: "ask-seen",
         priority: 30,
+        repeat: "session",
+        resetTimer: { turns: 4 },
         label: "Ask what they have seen",
-        text: "Have you seen anything unusual nearby?",
+        textVariants: [
+            "You ask what they have noticed nearby and listen for anything unusual.",
+            "You steer the conversation toward recent events and what they have seen.",
+            "You ask whether anything around here has seemed out of place."
+        ],
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-seen" }
     },
     {
         id: "ask-background",
         priority: 40,
+        repeat: "session",
         label: "Ask what brought them here",
-        text: "What brought you here in the first place?",
+        textVariants: [
+            "You ask what brought them here and leave the rest for them to fill in.",
+            "You invite them to share how they ended up in this place.",
+            "You ask about the path that led them here."
+        ],
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-background" },
         conditions: {
@@ -511,16 +656,26 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "offer-help",
         priority: 50,
+        repeat: "session",
         label: "Offer help",
-        text: "You look like you might need help. What is going on?",
+        textVariants: [
+            "You offer help and let them decide how much to reveal.",
+            "You make it clear you are willing to help if they need it.",
+            "You give them an opening to ask for help without pressing."
+        ],
         intent: "help",
         relationshipImpact: { mood: 1, favor: 5, hostility: -1, intent: "help", markMet: true, actionTag: "offer-help" }
     },
     {
         id: "keep-calm",
         priority: 60,
+        repeat: "session",
         label: "Keep things calm",
-        text: "You keep your distance and ask what they want.",
+        textVariants: [
+            "You keep your tone even and try to keep the conversation from turning ugly.",
+            "You slow things down and make it clear you are not looking for a fight.",
+            "You give them room while trying to settle the tension."
+        ],
         intent: "calm",
         relationshipImpact: { mood: 1, favor: 2, hostility: -2, intent: "calm", markMet: true, actionTag: "keep-calm" },
         conditions: {
@@ -533,8 +688,14 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "ask-rumor",
         priority: 70,
+        repeat: "session",
+        resetTimer: { turns: 6 },
         label: "Ask for a rumor",
-        text: "Have you heard any rumors or secrets worth knowing?",
+        textVariants: [
+            "You ask whether they have heard anything worth knowing.",
+            "You nudge the conversation toward rumors and loose talk.",
+            "You invite them to share whispers, gossip, or anything people are not saying openly."
+        ],
         intent: "rumor",
         relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-rumor" },
         conditions: {
@@ -545,10 +706,19 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "ask-work",
         priority: 80,
+        repeat: "session",
         label: npc => npc && npc.role ? `Ask about their work as ${npc.role}` : "Ask about their work",
-        text: npc => npc && npc.role
-            ? `What is it like working here as ${npc.role}?`
-            : "What kind of work keeps you busy around here?",
+        textVariants: [
+            npc => npc && npc.role
+                ? `You ask what life is like in their role as ${npc.role}.`
+                : "You ask what kind of work fills their days.",
+            npc => npc && npc.role
+                ? `You invite them to talk about their work as ${npc.role}.`
+                : "You ask what keeps them busy around here.",
+            npc => npc && npc.role
+                ? `You ask how they came to this sort of work as ${npc.role}.`
+                : "You ask what sort of work they have made for themselves."
+        ],
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-work" },
         conditions: {
@@ -560,8 +730,13 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "ask-watch",
         priority: 90,
+        repeat: "session",
         label: "Ask who they are watching for",
-        text: "Who are you keeping an eye out for?",
+        textVariants: [
+            "You ask who or what they are keeping an eye on.",
+            "You draw attention to their vigilance and ask what has them watching so closely.",
+            "You ask what they are expecting to see before long."
+        ],
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-watch" },
         conditions: {
@@ -573,8 +748,13 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "ask-need",
         priority: 100,
+        repeat: "session",
         label: "Ask what they need most",
-        text: "What do you need most right now?",
+        textVariants: [
+            "You ask what they need most right now and let them decide how honest to be.",
+            "You follow up by asking what would actually help them.",
+            "You ask where help would matter most."
+        ],
         intent: "help",
         relationshipImpact: { mood: 1, favor: 3, hostility: -1, intent: "help", markMet: true, actionTag: "ask-need" },
         conditions: {
@@ -586,10 +766,19 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "ask-people",
         priority: 110,
+        repeat: "session",
         label: npc => npc && npc.species ? `Ask about ${npc.species} customs` : "Ask about their people",
-        text: npc => npc && npc.species
-            ? `What should I know about ${npc.species} customs before I make a fool of myself?`
-            : "What should I know about your people before I make a fool of myself?",
+        textVariants: [
+            npc => npc && npc.species
+                ? `You ask what someone unfamiliar with ${npc.species} customs ought to know.`
+                : "You ask what an outsider should understand about their people.",
+            npc => npc && npc.species
+                ? `You invite them to explain the customs of ${npc.species} in their own words.`
+                : "You ask how they would explain their people to a stranger.",
+            npc => npc && npc.species
+                ? `You ask about the habits and customs of ${npc.species} without pretending you already understand them.`
+                : "You ask about the customs they grew up with."
+        ],
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-people" },
         conditions: {
@@ -603,23 +792,38 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "compliment",
         priority: 120,
+        repeat: "session",
         label: "Compliment them",
-        text: "You try to offer a sincere compliment.",
+        textVariants: [
+            "You offer a sincere compliment and watch how they take it.",
+            "You try to put them at ease with a genuine compliment.",
+            "You offer a few kind words and leave the rest unforced."
+        ],
         intent: "flattery",
         relationshipImpact: { mood: 1, favor: 6, hostility: -1, attraction: 3, arousal: 1, intent: "flattery", markMet: true, actionTag: "compliment" }
     },
     {
         id: "apologize",
         priority: 130,
+        repeat: "session",
         label: "Apologize",
-        text: "You apologize and try to smooth things over.",
+        textVariants: [
+            "You apologize and try to smooth things over without making a bigger scene of it.",
+            "You own your part in the tension and try to ease it.",
+            "You offer a simple apology and let them decide what to do with it."
+        ],
         intent: "apology"
     },
     {
         id: "comfort",
         priority: 140,
+        repeat: "session",
         label: "Comfort them",
-        text: "You speak gently and try to reassure them.",
+        textVariants: [
+            "You try to reassure them in a calm, steady way.",
+            "You offer a little comfort without crowding them.",
+            "You speak gently and try to give them something steady to hold onto."
+        ],
         intent: "comfort",
         conditions: {
             any: [
@@ -631,8 +835,13 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "flirt",
         priority: 150,
+        repeat: "session",
         label: "Flirt lightly",
-        text: "You use a little charm in your voice and test the waters.",
+        textVariants: [
+            "You let a little charm into the moment and see whether they lean into it.",
+            "You test the waters with a light touch of flirtation.",
+            "You nudge the conversation in a warmer direction and watch their reaction."
+        ],
         intent: "flirt",
         conditions: {
             romanceEligible: true,
@@ -642,8 +851,13 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "tease",
         priority: 160,
+        repeat: "session",
         label: "Tease playfully",
-        text: "You tease them lightly.",
+        textVariants: [
+            "You tease them lightly and see whether they play along.",
+            "You try a playful jab to test the mood between you.",
+            "You add a bit of playful pressure and watch for their answer."
+        ],
         intent: "tease",
         conditions: {
             romanceEligible: true,
@@ -657,6 +871,7 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "trade",
         priority: 170,
+        repeat: "always",
         label: "Trade",
         action: "trade",
         conditions: { tradeAvailable: true }
@@ -664,10 +879,19 @@ const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "sharp-question",
         priority: 180,
+        repeat: "session",
         label: (npc, ctx) => ctx.hostility >= 55 ? "Warn them sharply" : "Question them sharply",
-        text: (npc, ctx) => ctx.hostility >= 55
-            ? "You warn them not to make trouble."
-            : "You look at them sharply and demand a straight answer.",
+        textVariants: [
+            (npc, ctx) => ctx.hostility >= 55
+                ? "You make it clear you will not tolerate trouble."
+                : "You press them for a straighter answer.",
+            (npc, ctx) => ctx.hostility >= 55
+                ? "You answer their edge with one of your own."
+                : "You cut through the pleasantries and push for the point.",
+            (npc, ctx) => ctx.hostility >= 55
+                ? "You give them a sharp warning and leave no doubt you mean it."
+                : "You challenge them to stop circling and answer plainly."
+        ],
         intent: "aggression",
         relationshipImpact: { mood: -1, favor: -5, hostility: 5, aggression: 1, intent: "aggression", markMet: true, actionTag: "sharp-question" }
     },
@@ -685,9 +909,16 @@ const NPC_CONVERSATION_CATALOGUE = [
 function getNPCConversationContext(npc, extraContext = {}) {
     if (!npc) return null;
     ensureNPCRelationshipState(npc);
+    const conversationState = ensureNPCConversationState(npc);
 
     const room = extraContext.room || (typeof G === "object" ? G.activeRoom : null) || null;
     const actionTags = getNPCActionTags(npc, 20);
+    const story = typeof ensureStoryStateShape === "function"
+        ? ensureStoryStateShape(typeof G === "object" ? G.story : null)
+        : ((typeof G === "object" && G && G.story && typeof G.story === "object") ? G.story : null);
+    const externalState = extraContext.externalState && typeof extraContext.externalState === "object"
+        ? extraContext.externalState
+        : {};
 
     return {
         npc,
@@ -715,7 +946,30 @@ function getNPCConversationContext(npc, extraContext = {}) {
         roomType: String(room && room.type || "").toLowerCase(),
         roomRole: String(room && room.role || "").toLowerCase(),
         zoneName: String(room && room.zone || "").toLowerCase(),
-        aggressionCount: npc.memory && typeof npc.memory.aggressionCount === "number" ? npc.memory.aggressionCount : 0
+        aggressionCount: npc.memory && typeof npc.memory.aggressionCount === "number" ? npc.memory.aggressionCount : 0,
+        usedOptionIds: Array.isArray(conversationState && conversationState.usedOptionIds)
+            ? conversationState.usedOptionIds.slice()
+            : [],
+        sessionUsedOptionIds: Array.isArray(conversationState && conversationState.sessionUsedOptionIds)
+            ? conversationState.sessionUsedOptionIds.slice()
+            : [],
+        interactionCount: conversationState && typeof conversationState.interactionCount === "number"
+            ? conversationState.interactionCount
+            : 0,
+        sessionInteractionCount: conversationState && typeof conversationState.sessionInteractionCount === "number"
+            ? conversationState.sessionInteractionCount
+            : 0,
+        lastOptionId: conversationState && typeof conversationState.lastOptionId === "string"
+            ? conversationState.lastOptionId
+            : "",
+        optionUsage: conversationState && conversationState.optionUsage && typeof conversationState.optionUsage === "object"
+            ? { ...conversationState.optionUsage }
+            : {},
+        storyTurn: story && typeof story.turnCounter === "number" ? story.turnCounter : 0,
+        storyEventCounter: story && typeof story.eventCounter === "number" ? story.eventCounter : 0,
+        storyFlags: story && story.flags && typeof story.flags === "object" ? story.flags : {},
+        storyRecentEvents: story && Array.isArray(story.recentEvents) ? story.recentEvents.slice() : [],
+        externalState
     };
 }
 
@@ -755,6 +1009,30 @@ function conversationConditionMatches(conditions, ctx) {
     if (conditions.excludeRoles && _npcValueInList(ctx.role, conditions.excludeRoles)) return false;
     if (conditions.roleIncludes && !_npcTextIncludesAny(ctx.role, conditions.roleIncludes)) return false;
     if (conditions.excludeRoleIncludes && _npcTextIncludesAny(ctx.role, conditions.excludeRoleIncludes)) return false;
+    if (conditions.requiredStoryFlags && !_npcHasNamedFlags(ctx.storyFlags, conditions.requiredStoryFlags)) return false;
+    if (conditions.excludedStoryFlags && _npcHasAnyNamedFlags(ctx.storyFlags, conditions.excludedStoryFlags)) return false;
+    if (conditions.requiredExternalFlags && !_npcHasNamedFlags(ctx.externalState, conditions.requiredExternalFlags)) return false;
+    if (conditions.excludedExternalFlags && _npcHasAnyNamedFlags(ctx.externalState, conditions.excludedExternalFlags)) return false;
+    if (conditions.requiredStoryEventTypes && !_npcRecentEventMatches(ctx.storyRecentEvents, {
+        types: conditions.requiredStoryEventTypes
+    })) {
+        return false;
+    }
+    if (conditions.requiredStoryEventTags && !_npcRecentEventMatches(ctx.storyRecentEvents, {
+        tags: conditions.requiredStoryEventTags
+    })) {
+        return false;
+    }
+    if (conditions.requiredOptionIds && !_npcActionTagsInclude(ctx.usedOptionIds, conditions.requiredOptionIds)) return false;
+    if (conditions.requiredSessionOptionIds && !_npcActionTagsInclude(ctx.sessionUsedOptionIds, conditions.requiredSessionOptionIds)) return false;
+    if (conditions.excludedOptionIds && _npcNormalizeList(conditions.excludedOptionIds)
+        .some(id => _npcActionTagsInclude(ctx.usedOptionIds, [id]))) {
+        return false;
+    }
+    if (conditions.excludedSessionOptionIds && _npcNormalizeList(conditions.excludedSessionOptionIds)
+        .some(id => _npcActionTagsInclude(ctx.sessionUsedOptionIds, [id]))) {
+        return false;
+    }
 
     if (typeof conditions.minFavor === "number" && ctx.favor < conditions.minFavor) return false;
     if (typeof conditions.maxFavor === "number" && ctx.favor > conditions.maxFavor) return false;
@@ -768,6 +1046,10 @@ function conversationConditionMatches(conditions, ctx) {
     if (typeof conditions.maxDisinhibition === "number" && ctx.disinhibition > conditions.maxDisinhibition) return false;
     if (typeof conditions.minAggressionCount === "number" && ctx.aggressionCount < conditions.minAggressionCount) return false;
     if (typeof conditions.maxAggressionCount === "number" && ctx.aggressionCount > conditions.maxAggressionCount) return false;
+    if (typeof conditions.minInteractionCount === "number" && ctx.interactionCount < conditions.minInteractionCount) return false;
+    if (typeof conditions.maxInteractionCount === "number" && ctx.interactionCount > conditions.maxInteractionCount) return false;
+    if (typeof conditions.minSessionInteractionCount === "number" && ctx.sessionInteractionCount < conditions.minSessionInteractionCount) return false;
+    if (typeof conditions.maxSessionInteractionCount === "number" && ctx.sessionInteractionCount > conditions.maxSessionInteractionCount) return false;
 
     if (conditions.requiredActionTags && !_npcActionTagsInclude(ctx.actionTags, conditions.requiredActionTags)) return false;
     if (conditions.excludedActionTags && _npcNormalizeList(conditions.excludedActionTags)
@@ -780,9 +1062,70 @@ function conversationConditionMatches(conditions, ctx) {
     return true;
 }
 
+function conversationOptionResetAvailable(entry, ctx, usage) {
+    if (!entry || !ctx || !usage) return false;
+
+    const resetConfig = entry.resetTimer != null ? entry.resetTimer : entry.decay;
+    if (resetConfig == null && !entry.resetOnStoryFlags && !entry.resetOnStoryEventTypes &&
+        !entry.resetOnStoryEventTags && !entry.resetOnExternalFlags && typeof entry.resetWhen !== "function") {
+        return false;
+    }
+
+    const normalizedReset = typeof resetConfig === "number"
+        ? { turns: resetConfig }
+        : (resetConfig && typeof resetConfig === "object" ? resetConfig : {});
+
+    if (typeof normalizedReset.turns === "number" && typeof usage.lastUsedTurn === "number") {
+        if ((ctx.storyTurn - usage.lastUsedTurn) >= normalizedReset.turns) return true;
+    }
+
+    const storyFlagNames = normalizedReset.storyFlags || entry.resetOnStoryFlags;
+    if (storyFlagNames && _npcHasAnyNamedFlags(ctx.storyFlags, storyFlagNames)) return true;
+
+    const externalFlagNames = normalizedReset.externalFlags || entry.resetOnExternalFlags;
+    if (externalFlagNames && _npcHasAnyNamedFlags(ctx.externalState, externalFlagNames)) return true;
+
+    const eventTypes = normalizedReset.storyEventTypes || entry.resetOnStoryEventTypes;
+    const eventTags = normalizedReset.storyEventTags || entry.resetOnStoryEventTags;
+    if ((eventTypes || eventTags) && _npcRecentEventMatches(ctx.storyRecentEvents, {
+        types: eventTypes,
+        tags: eventTags
+    }, usage.lastUsedEventCounter || 0)) {
+        return true;
+    }
+
+    if (typeof entry.resetWhen === "function" && entry.resetWhen(ctx.npc, ctx, usage) === true) {
+        return true;
+    }
+
+    return false;
+}
+
+function conversationRepeatAvailable(entry, ctx) {
+    const repeat = String(entry && entry.repeat || "always").toLowerCase();
+    const optionId = String(entry && entry.id || "").trim();
+    if (!optionId) return true;
+    const usage = ctx && ctx.optionUsage && typeof ctx.optionUsage === "object"
+        ? ctx.optionUsage[optionId]
+        : null;
+
+    if (repeat === "never") {
+        if (!ctx.usedOptionIds.includes(optionId)) return true;
+        return conversationOptionResetAvailable(entry, ctx, usage);
+    }
+
+    if (repeat === "session") {
+        if (!ctx.sessionUsedOptionIds.includes(optionId)) return true;
+        return conversationOptionResetAvailable(entry, ctx, usage);
+    }
+
+    return true;
+}
+
 function buildConversationOption(entry, npc, ctx) {
-    const label = _npcResolveConversationValue(entry.label, npc, ctx);
-    const text = _npcResolveConversationValue(entry.text, npc, ctx);
+    const optionId = String(entry.id || "").trim();
+    const label = _npcPickConversationVariant(npc, `${optionId}:label`, entry.labelVariants, entry.label, ctx);
+    const text = _npcPickConversationVariant(npc, `${optionId}:text`, entry.textVariants, entry.text, ctx);
     const action = _npcResolveConversationValue(entry.action, npc, ctx);
 
     if (!label || (!text && !action)) return null;
@@ -806,6 +1149,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     if (!ctx) return [];
 
     return NPC_CONVERSATION_CATALOGUE
+        .filter(entry => conversationRepeatAvailable(entry, ctx))
         .filter(entry => conversationConditionMatches(entry.conditions, ctx))
         .sort((a, b) => (a.priority || 0) - (b.priority || 0))
         .map(entry => buildConversationOption(entry, npc, ctx))
