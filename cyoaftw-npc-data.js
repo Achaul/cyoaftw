@@ -460,6 +460,30 @@ function _npcResolveConversationValue(value, npc, ctx) {
     return typeof value === "function" ? value(npc, ctx) : value;
 }
 
+function _npcLowercaseFirst(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+function _npcBuildPlayerConversationText(label, action) {
+    const text = String(label || "").trim();
+    if (!text) return action ? "" : "You act.";
+
+    const lower = text.toLowerCase();
+    if (lower === "say goodbye") return "You say goodbye and step away.";
+    if (lower === "trade") return "You open trade.";
+    if (lower === "tease playfully") return "You tease them playfully.";
+    if (lower === "flirt lightly") return "You flirt lightly.";
+    if (lower === "keep things calm") return "You try to keep things calm.";
+    if (lower === "offer help") return "You offer help.";
+    if (lower === "compliment them") return "You compliment them.";
+    if (lower === "comfort them") return "You try to comfort them.";
+    if (lower === "apologize") return "You apologize.";
+
+    return `You ${_npcLowercaseFirst(text)}.`;
+}
+
 function ensureNPCConversationState(npc) {
     if (!npc) return null;
     npc.memory = npc.memory || {};
@@ -1125,16 +1149,24 @@ function conversationRepeatAvailable(entry, ctx) {
 function buildConversationOption(entry, npc, ctx) {
     const optionId = String(entry.id || "").trim();
     const label = _npcPickConversationVariant(npc, `${optionId}:label`, entry.labelVariants, entry.label, ctx);
-    const text = _npcPickConversationVariant(npc, `${optionId}:text`, entry.textVariants, entry.text, ctx);
     const action = _npcResolveConversationValue(entry.action, npc, ctx);
+    const promptText = _npcPickConversationVariant(npc, `${optionId}:text`, entry.textVariants, entry.text, ctx);
+    const playerText = _npcPickConversationVariant(
+        npc,
+        `${optionId}:playerText`,
+        entry.playerTextVariants,
+        entry.playerText || _npcBuildPlayerConversationText(label, action),
+        ctx
+    );
 
-    if (!label || (!text && !action)) return null;
+    if (!label || (!playerText && !action)) return null;
 
     const impact = _npcResolveConversationValue(entry.relationshipImpact, npc, ctx);
     return {
         id: entry.id,
         label,
-        text,
+        text: playerText,
+        promptText: promptText || playerText,
         action,
         intent: _npcResolveConversationValue(entry.intent, npc, ctx),
         className: _npcResolveConversationValue(entry.className, npc, ctx),

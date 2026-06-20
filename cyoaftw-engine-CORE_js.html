@@ -2044,7 +2044,9 @@ async function npcRespond(npc, interaction) {
     }
 
     const room = G.activeRoom;
-    const playerInput = typeof interaction === "string" ? interaction : (interaction && interaction.text ? interaction.text : "");
+    const playerInput = typeof interaction === "string"
+        ? interaction
+        : (interaction && (interaction.promptText || interaction.text) ? (interaction.promptText || interaction.text) : "");
     const intent = interaction && interaction.intent ? interaction.intent : "talk";
     const speechProfile = typeof syncNPCSpeechProfile === "function"
         ? syncNPCSpeechProfile(npc, room, null)
