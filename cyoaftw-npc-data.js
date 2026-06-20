@@ -209,8 +209,13 @@ const NPC_ACTION_RELATION_WEIGHTS = {
     greeting: 1,
     help: 2,
     "offer-help": 3,
+    "ask-background": 1,
     "ask-place": 0,
+    "ask-work": 1,
+    "ask-watch": 0,
     "ask-seen": 0,
+    "ask-need": 2,
+    "ask-people": 1,
     "ask-rumor": 0,
     question: 0,
     calm: 2,
@@ -285,8 +290,13 @@ function formatNPCActionTag(tag) {
         greeting: "greeted you politely",
         help: "offered help",
         "offer-help": "offered help",
+        "ask-background": "asked what brought you here",
         "ask-place": "asked about the area",
+        "ask-work": "asked about your work",
+        "ask-watch": "asked who you were watching for",
         "ask-seen": "asked what you had seen",
+        "ask-need": "asked what you needed most",
+        "ask-people": "asked about your people",
         "ask-rumor": "asked for rumors",
         question: "asked questions",
         calm: "tried to keep things calm",
@@ -416,6 +426,390 @@ function getNPCRelationshipSpeechGuidance(npc) {
     }
 
     return { baseline, direction, cue, instruction };
+}
+
+function _npcNormalizeList(value) {
+    if (value == null) return [];
+    const raw = Array.isArray(value) ? value : [value];
+    return raw
+        .map(item => String(item || "").toLowerCase().trim())
+        .filter(Boolean);
+}
+
+function _npcValueInList(value, options) {
+    const list = _npcNormalizeList(options);
+    if (!list.length) return false;
+    const key = String(value || "").toLowerCase().trim();
+    return !!key && list.includes(key);
+}
+
+function _npcTextIncludesAny(text, options) {
+    const list = _npcNormalizeList(options);
+    if (!list.length) return false;
+    const haystack = String(text || "").toLowerCase();
+    return list.some(entry => haystack.includes(entry));
+}
+
+function _npcActionTagsInclude(tags, required) {
+    const active = new Set(_npcNormalizeList(tags));
+    const needed = _npcNormalizeList(required);
+    return needed.every(tag => active.has(tag));
+}
+
+function _npcResolveConversationValue(value, npc, ctx) {
+    return typeof value === "function" ? value(npc, ctx) : value;
+}
+
+const NPC_CONVERSATION_CATALOGUE = [
+    {
+        id: "greet-intro",
+        priority: 10,
+        label: "Greet them",
+        text: "You greet them and wait to see how they respond.",
+        intent: "greeting",
+        relationshipImpact: { mood: 1, favor: 4, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" },
+        conditions: { metPlayer: false }
+    },
+    {
+        id: "greet-familiar",
+        priority: 11,
+        label: "Check in with them",
+        text: npc => `You greet ${npc.name} like someone you have already met and wait for their reaction.`,
+        intent: "greeting",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" },
+        conditions: { metPlayer: true }
+    },
+    {
+        id: "ask-place",
+        priority: 20,
+        label: "Ask about this place",
+        text: "What can you tell me about this place?",
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-place" }
+    },
+    {
+        id: "ask-seen",
+        priority: 30,
+        label: "Ask what they have seen",
+        text: "Have you seen anything unusual nearby?",
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-seen" }
+    },
+    {
+        id: "ask-background",
+        priority: 40,
+        label: "Ask what brought them here",
+        text: "What brought you here in the first place?",
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-background" },
+        conditions: {
+            metPlayer: true,
+            maxHostility: 75,
+            excludedActionTags: ["ask-background"]
+        }
+    },
+    {
+        id: "offer-help",
+        priority: 50,
+        label: "Offer help",
+        text: "You look like you might need help. What is going on?",
+        intent: "help",
+        relationshipImpact: { mood: 1, favor: 5, hostility: -1, intent: "help", markMet: true, actionTag: "offer-help" }
+    },
+    {
+        id: "keep-calm",
+        priority: 60,
+        label: "Keep things calm",
+        text: "You keep your distance and ask what they want.",
+        intent: "calm",
+        relationshipImpact: { mood: 1, favor: 2, hostility: -2, intent: "calm", markMet: true, actionTag: "keep-calm" },
+        conditions: {
+            any: [
+                { minHostility: 60 },
+                { maxFavor: -21 }
+            ]
+        }
+    },
+    {
+        id: "ask-rumor",
+        priority: 70,
+        label: "Ask for a rumor",
+        text: "Have you heard any rumors or secrets worth knowing?",
+        intent: "rumor",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-rumor" },
+        conditions: {
+            maxHostility: 59,
+            minFavor: -20
+        }
+    },
+    {
+        id: "ask-work",
+        priority: 80,
+        label: npc => npc && npc.role ? `Ask about their work as ${npc.role}` : "Ask about their work",
+        text: npc => npc && npc.role
+            ? `What is it like working here as ${npc.role}?`
+            : "What kind of work keeps you busy around here?",
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-work" },
+        conditions: {
+            metPlayer: true,
+            roleIncludes: ["guard", "keeper", "merchant", "trader", "bartender", "vendor", "healer", "priest", "archivist", "smith", "cook", "miner", "scout"],
+            excludedActionTags: ["ask-work"]
+        }
+    },
+    {
+        id: "ask-watch",
+        priority: 90,
+        label: "Ask who they are watching for",
+        text: "Who are you keeping an eye out for?",
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-watch" },
+        conditions: {
+            roleIncludes: ["guard", "scout"],
+            maxHostility: 70,
+            excludedActionTags: ["ask-watch"]
+        }
+    },
+    {
+        id: "ask-need",
+        priority: 100,
+        label: "Ask what they need most",
+        text: "What do you need most right now?",
+        intent: "help",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, intent: "help", markMet: true, actionTag: "ask-need" },
+        conditions: {
+            requiredActionTags: ["offer-help"],
+            maxHostility: 70,
+            excludedActionTags: ["ask-need"]
+        }
+    },
+    {
+        id: "ask-people",
+        priority: 110,
+        label: npc => npc && npc.species ? `Ask about ${npc.species} customs` : "Ask about their people",
+        text: npc => npc && npc.species
+            ? `What should I know about ${npc.species} customs before I make a fool of myself?`
+            : "What should I know about your people before I make a fool of myself?",
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-people" },
+        conditions: {
+            metPlayer: true,
+            excludeSpecies: ["human"],
+            minFavor: 0,
+            maxHostility: 65,
+            excludedActionTags: ["ask-people"]
+        }
+    },
+    {
+        id: "compliment",
+        priority: 120,
+        label: "Compliment them",
+        text: "You try to offer a sincere compliment.",
+        intent: "flattery",
+        relationshipImpact: { mood: 1, favor: 6, hostility: -1, attraction: 3, arousal: 1, intent: "flattery", markMet: true, actionTag: "compliment" }
+    },
+    {
+        id: "apologize",
+        priority: 130,
+        label: "Apologize",
+        text: "You apologize and try to smooth things over.",
+        intent: "apology"
+    },
+    {
+        id: "comfort",
+        priority: 140,
+        label: "Comfort them",
+        text: "You speak gently and try to reassure them.",
+        intent: "comfort",
+        conditions: {
+            any: [
+                { minFavor: 5 },
+                { maxHostility: 55 }
+            ]
+        }
+    },
+    {
+        id: "flirt",
+        priority: 150,
+        label: "Flirt lightly",
+        text: "You use a little charm in your voice and test the waters.",
+        intent: "flirt",
+        conditions: {
+            romanceEligible: true,
+            maxHostility: 70
+        }
+    },
+    {
+        id: "tease",
+        priority: 160,
+        label: "Tease playfully",
+        text: "You tease them lightly.",
+        intent: "tease",
+        conditions: {
+            romanceEligible: true,
+            any: [
+                { minFavor: 10 },
+                { maxHostility: 45 },
+                { minAttraction: 15 }
+            ]
+        }
+    },
+    {
+        id: "trade",
+        priority: 170,
+        label: "Trade",
+        action: "trade",
+        conditions: { tradeAvailable: true }
+    },
+    {
+        id: "sharp-question",
+        priority: 180,
+        label: (npc, ctx) => ctx.hostility >= 55 ? "Warn them sharply" : "Question them sharply",
+        text: (npc, ctx) => ctx.hostility >= 55
+            ? "You warn them not to make trouble."
+            : "You look at them sharply and demand a straight answer.",
+        intent: "aggression",
+        relationshipImpact: { mood: -1, favor: -5, hostility: 5, aggression: 1, intent: "aggression", markMet: true, actionTag: "sharp-question" }
+    },
+    {
+        id: "goodbye",
+        priority: 190,
+        label: "Say goodbye",
+        text: "You say goodbye and step away.",
+        action: "disengage",
+        intent: "goodbye",
+        relationshipImpact: { mood: 0, favor: 1, intent: "goodbye", markMet: true, actionTag: "goodbye" }
+    }
+];
+
+function getNPCConversationContext(npc, extraContext = {}) {
+    if (!npc) return null;
+    ensureNPCRelationshipState(npc);
+
+    const room = extraContext.room || (typeof G === "object" ? G.activeRoom : null) || null;
+    const actionTags = getNPCActionTags(npc, 20);
+
+    return {
+        npc,
+        room,
+        role: String(npc.role || "").toLowerCase(),
+        species: String(npc.species || "").toLowerCase(),
+        temperament: String(npc.temperament || "").toLowerCase(),
+        favor: npc.memory && typeof npc.memory.favorability === "number" ? npc.memory.favorability : 0,
+        hostility: typeof npc.hostility === "number" ? npc.hostility : 0,
+        attraction: npc.memory && typeof npc.memory.attraction === "number" ? npc.memory.attraction : 0,
+        arousal: npc.memory && typeof npc.memory.arousal === "number" ? npc.memory.arousal : 0,
+        disinhibition: npc.memory && typeof npc.memory.disinhibition === "number" ? npc.memory.disinhibition : 0,
+        metPlayer: !!(npc.memory && npc.memory.metPlayer),
+        mood: String(npc.memory && npc.memory.lastMood || "neutral").toLowerCase(),
+        disposition: typeof getCurrentNPCDisposition === "function"
+            ? String(getCurrentNPCDisposition(npc) || "").toLowerCase()
+            : "neutral",
+        relationship: typeof getRelationshipLabel === "function"
+            ? String(getRelationshipLabel(npc) || "").toLowerCase()
+            : "neutral",
+        isHumanoid: npc.isHumanoid === true,
+        romanceEligible: typeof isAdultHumanoidNPC === "function" ? isAdultHumanoidNPC(npc) : false,
+        tradeAvailable: typeof shouldShowPostReplyTradeAction === "function" ? shouldShowPostReplyTradeAction(npc) : false,
+        actionTags,
+        roomType: String(room && room.type || "").toLowerCase(),
+        roomRole: String(room && room.role || "").toLowerCase(),
+        zoneName: String(room && room.zone || "").toLowerCase(),
+        aggressionCount: npc.memory && typeof npc.memory.aggressionCount === "number" ? npc.memory.aggressionCount : 0
+    };
+}
+
+function conversationConditionMatches(conditions, ctx) {
+    if (!conditions) return true;
+    if (!ctx) return false;
+
+    if (Array.isArray(conditions.all) && !conditions.all.every(entry => conversationConditionMatches(entry, ctx))) {
+        return false;
+    }
+
+    if (Array.isArray(conditions.any) && conditions.any.length &&
+        !conditions.any.some(entry => conversationConditionMatches(entry, ctx))) {
+        return false;
+    }
+
+    if (conditions.not && conversationConditionMatches(conditions.not, ctx)) {
+        return false;
+    }
+
+    if (typeof conditions.metPlayer === "boolean" && ctx.metPlayer !== conditions.metPlayer) return false;
+    if (typeof conditions.isHumanoid === "boolean" && ctx.isHumanoid !== conditions.isHumanoid) return false;
+    if (typeof conditions.romanceEligible === "boolean" && ctx.romanceEligible !== conditions.romanceEligible) return false;
+    if (typeof conditions.tradeAvailable === "boolean" && ctx.tradeAvailable !== conditions.tradeAvailable) return false;
+
+    if (conditions.species && !_npcValueInList(ctx.species, conditions.species)) return false;
+    if (conditions.excludeSpecies && _npcValueInList(ctx.species, conditions.excludeSpecies)) return false;
+    if (conditions.temperaments && !_npcValueInList(ctx.temperament, conditions.temperaments)) return false;
+    if (conditions.excludeTemperaments && _npcValueInList(ctx.temperament, conditions.excludeTemperaments)) return false;
+    if (conditions.relationships && !_npcValueInList(ctx.relationship, conditions.relationships)) return false;
+    if (conditions.dispositions && !_npcValueInList(ctx.disposition, conditions.dispositions)) return false;
+    if (conditions.roomTypes && !_npcValueInList(ctx.roomType, conditions.roomTypes)) return false;
+    if (conditions.roomRoles && !_npcValueInList(ctx.roomRole, conditions.roomRoles)) return false;
+    if (conditions.zoneNames && !_npcValueInList(ctx.zoneName, conditions.zoneNames)) return false;
+
+    if (conditions.roles && !_npcValueInList(ctx.role, conditions.roles)) return false;
+    if (conditions.excludeRoles && _npcValueInList(ctx.role, conditions.excludeRoles)) return false;
+    if (conditions.roleIncludes && !_npcTextIncludesAny(ctx.role, conditions.roleIncludes)) return false;
+    if (conditions.excludeRoleIncludes && _npcTextIncludesAny(ctx.role, conditions.excludeRoleIncludes)) return false;
+
+    if (typeof conditions.minFavor === "number" && ctx.favor < conditions.minFavor) return false;
+    if (typeof conditions.maxFavor === "number" && ctx.favor > conditions.maxFavor) return false;
+    if (typeof conditions.minHostility === "number" && ctx.hostility < conditions.minHostility) return false;
+    if (typeof conditions.maxHostility === "number" && ctx.hostility > conditions.maxHostility) return false;
+    if (typeof conditions.minAttraction === "number" && ctx.attraction < conditions.minAttraction) return false;
+    if (typeof conditions.maxAttraction === "number" && ctx.attraction > conditions.maxAttraction) return false;
+    if (typeof conditions.minArousal === "number" && ctx.arousal < conditions.minArousal) return false;
+    if (typeof conditions.maxArousal === "number" && ctx.arousal > conditions.maxArousal) return false;
+    if (typeof conditions.minDisinhibition === "number" && ctx.disinhibition < conditions.minDisinhibition) return false;
+    if (typeof conditions.maxDisinhibition === "number" && ctx.disinhibition > conditions.maxDisinhibition) return false;
+    if (typeof conditions.minAggressionCount === "number" && ctx.aggressionCount < conditions.minAggressionCount) return false;
+    if (typeof conditions.maxAggressionCount === "number" && ctx.aggressionCount > conditions.maxAggressionCount) return false;
+
+    if (conditions.requiredActionTags && !_npcActionTagsInclude(ctx.actionTags, conditions.requiredActionTags)) return false;
+    if (conditions.excludedActionTags && _npcNormalizeList(conditions.excludedActionTags)
+        .some(tag => _npcActionTagsInclude(ctx.actionTags, [tag]))) {
+        return false;
+    }
+
+    if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
+
+    return true;
+}
+
+function buildConversationOption(entry, npc, ctx) {
+    const label = _npcResolveConversationValue(entry.label, npc, ctx);
+    const text = _npcResolveConversationValue(entry.text, npc, ctx);
+    const action = _npcResolveConversationValue(entry.action, npc, ctx);
+
+    if (!label || (!text && !action)) return null;
+
+    const impact = _npcResolveConversationValue(entry.relationshipImpact, npc, ctx);
+    return {
+        id: entry.id,
+        label,
+        text,
+        action,
+        intent: _npcResolveConversationValue(entry.intent, npc, ctx),
+        className: _npcResolveConversationValue(entry.className, npc, ctx),
+        relationshipImpact: impact && typeof impact === "object" ? { ...impact } : impact
+    };
+}
+
+function queryConversationCatalogue(npc, extraContext = {}) {
+    if (!npc) return [];
+
+    const ctx = getNPCConversationContext(npc, extraContext);
+    if (!ctx) return [];
+
+    return NPC_CONVERSATION_CATALOGUE
+        .filter(entry => conversationConditionMatches(entry.conditions, ctx))
+        .sort((a, b) => (a.priority || 0) - (b.priority || 0))
+        .map(entry => buildConversationOption(entry, npc, ctx))
+        .filter(Boolean);
 }
 
 function normalizeSpeechStyle(style) {
