@@ -29,14 +29,12 @@ window.G = {
 const CONVERSATION_PREFETCH_GRACE_MS = 220;
 const runtimeConversationState = {
     replyCache: {},
-    bundlePromises: {},
-    replyPromises: {}
+    bundlePromises: {}
 };
 
 function clearConversationRuntimeState() {
     runtimeConversationState.replyCache = {};
     runtimeConversationState.bundlePromises = {};
-    runtimeConversationState.replyPromises = {};
 }
 
 // ── SETUP STATE (window scope for onclick access) ─────────────────
@@ -2134,26 +2132,36 @@ function buildConversationBatchInstruction(npc, options, room) {
     const relevantOptions = Array.isArray(options)
         ? options.filter(option => option && !option.action && (option.promptText || option.text))
         : [];
-    const optionLines = relevantOptions.map(option => {
+    const optionList = relevantOptions.map(option => {
         const playerText = String(option.promptText || option.text || "").replace(/\s+/g, " ").trim();
-        const intent = String(option.intent || "talk");
-        return `- id: ${option.id}\n  intent: ${intent}\n  player: "${playerText}"`;
+        return {
+            id: String(option.id || "").trim(),
+            intent: String(option.intent || "talk"),
+            player: playerText
+        };
     });
 
     return [
         ...getNPCConversationReplyBaseLines(npc, room),
-        "Generate one reply for each option below.",
-        "Return strict JSON only.",
-        "Use this shape exactly: {\"replies\":{\"option-id\":\"reply text\"}}",
-        "Every key inside replies must be one of the listed ids.",
-        "Do not include markdown fences, explanations, or extra keys.",
-        "OPTIONS:",
-        ...optionLines
+        "Generate one short NPC reply for each player approach below.",
+        "Return only valid JSON.",
+        "Use this exact shape:",
+        "{\"replies\":[{\"id\":\"option-id\",\"text\":\"reply text\"}]}",
+        "Rules:",
+        "- Include exactly one reply object for every option id provided.",
+        "- Copy each id exactly.",
+        "- Keep each text to 1 to 3 short sentences.",
+        "- Use double-quoted JSON strings and escape internal quotes properly.",
+        "- Do not add markdown fences, comments, or extra keys.",
+        `OPTIONS_JSON: ${JSON.stringify(optionList)}`
     ].join("\n");
 }
 
 function tryParseConversationJSON(rawText) {
-    const source = String(rawText || "").trim();
+    const source = String(rawText || "")
+        .replace(/[“”]/g, "\"")
+        .replace(/[‘’]/g, "'")
+        .trim();
     if (!source) return null;
 
     const candidates = [source];
@@ -2176,7 +2184,13 @@ function tryParseConversationJSON(rawText) {
         try {
             return JSON.parse(candidate);
         } catch (err) {
-            // Try the next candidate.
+            try {
+                const repaired = candidate
+                    .replace(/,\s*([}\]])/g, "$1");
+                return JSON.parse(repaired);
+            } catch (repairErr) {
+                // Try the next candidate.
+            }
         }
     }
 
@@ -2187,18 +2201,29 @@ function normalizeConversationReplyMap(payload, optionIds) {
     const ids = new Set(Array.isArray(optionIds) ? optionIds.map(id => String(id || "").trim()) : []);
     const replies = {};
 
-    if (Array.isArray(payload)) {
-        payload.forEach(entry => {
+    function collectFromArray(entries) {
+        entries.forEach(entry => {
             if (!entry || typeof entry !== "object") return;
             const optionId = String(entry.id || entry.optionId || "").trim();
             const text = entry.reply || entry.text || entry.response || "";
             if (ids.has(optionId) && text) replies[optionId] = normalizeNPCReplyText(text);
         });
+    }
+
+    if (Array.isArray(payload)) {
+        collectFromArray(payload);
+        return replies;
+    }
+
+    if (payload && typeof payload === "object" && Array.isArray(payload.replies)) {
+        collectFromArray(payload.replies);
         return replies;
     }
 
     const container = payload && typeof payload === "object"
-        ? (payload.replies && typeof payload.replies === "object" ? payload.replies : payload)
+        ? (payload.replies && payload.replies && !Array.isArray(payload.replies) && typeof payload.replies === "object"
+            ? payload.replies
+            : payload)
         : null;
     if (container && typeof container === "object") {
         Object.entries(container).forEach(([key, value]) => {
@@ -2459,58 +2484,46 @@ function queueConversationPrefetch(npc, options) {
         };
     });
 
-    const missingOptions = optionSnapshots.filter(option =>
-        !runtimeConversationState.replyCache[option.replyKey] &&
-        !runtimeConversationState.replyPromises[option.replyKey]
-    );
+    const missingOptions = optionSnapshots.filter(option => !runtimeConversationState.replyCache[option.replyKey]);
     if (!missingOptions.length) return options;
+    if (runtimeConversationState.bundlePromises[bundleKey]) return options;
+    if (G.prefetchQueue.find(task => task && task.key === bundleKey)) return options;
 
-    missingOptions.reverse().forEach(option => {
-        const taskKey = `talk-task:${option.replyKey}`;
-        if (G.prefetchQueue.find(task => task && task.key === taskKey)) return;
+    const prompt = buildPrompt(
+        room,
+        npc,
+        buildConversationBatchInstruction(npc, relevantOptions, room),
+        { includeRandomQuirk: false }
+    );
+    const optionIds = missingOptions.map(option => option.id);
 
-        let resolveReply;
-        runtimeConversationState.replyPromises[option.replyKey] = new Promise(resolve => {
-            resolveReply = resolve;
-        });
-
-        const prompt = buildPrompt(
-            room,
-            npc,
-            buildSingleConversationInstruction(npc, {
-                promptText: option.promptText,
-                text: option.promptText,
-                intent: option.intent
-            }, room),
-            { includeRandomQuirk: false }
-        );
-
-        G.prefetchQueue.unshift({
-            key: taskKey,
-            run: async () => {
-                const result = await ai({ instruction: prompt, endButtons: "none" });
-                const rawText = typeof result === "string" ? result : result && result.text ? result.text : "";
-                const replyText = normalizeNPCReplyText(rawText);
-                if (replyText) {
-                    runtimeConversationState.replyCache[option.replyKey] = replyText;
-                }
-            },
-            finalize: () => {
-                delete runtimeConversationState.replyPromises[option.replyKey];
-                if (resolveReply) resolveReply();
-            }
-        });
+    let resolveBundle;
+    runtimeConversationState.bundlePromises[bundleKey] = new Promise(resolve => {
+        resolveBundle = resolve;
     });
 
-    const bundleMembers = optionSnapshots
-        .filter(option => !runtimeConversationState.replyCache[option.replyKey])
-        .map(option => runtimeConversationState.replyPromises[option.replyKey])
-        .filter(Boolean);
-    if (bundleMembers.length) {
-        runtimeConversationState.bundlePromises[bundleKey] = Promise.all(bundleMembers).finally(() => {
+    G.prefetchQueue.unshift({
+        key: bundleKey,
+        run: async () => {
+            const result = await ai({ instruction: prompt, endButtons: "none" });
+            const rawText = typeof result === "string" ? result : result && result.text ? result.text : "";
+            const replyMap = parseConversationReplyPayload(rawText, optionIds);
+
+            missingOptions.forEach(option => {
+                if (replyMap[option.id]) {
+                    runtimeConversationState.replyCache[option.replyKey] = replyMap[option.id];
+                }
+            });
+
+            if (!Object.keys(replyMap).length) {
+                console.warn("Conversation prefetch returned no parseable replies:", rawText.slice(0, 400));
+            }
+        },
+        finalize: () => {
             delete runtimeConversationState.bundlePromises[bundleKey];
-        });
-    }
+            if (resolveBundle) resolveBundle();
+        }
+    });
 
     runPrefetchQueue();
     return options;
@@ -2521,8 +2534,7 @@ async function waitForConversationReply(replyKey, bundleKey, waitMs = CONVERSATI
         return runtimeConversationState.replyCache[replyKey];
     }
 
-    const pending = (replyKey && runtimeConversationState.replyPromises[replyKey]) ||
-        (bundleKey ? runtimeConversationState.bundlePromises[bundleKey] : null);
+    const pending = bundleKey ? runtimeConversationState.bundlePromises[bundleKey] : null;
     if (!pending) return "";
 
     await Promise.race([
