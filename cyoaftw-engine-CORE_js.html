@@ -2508,13 +2508,18 @@ function queueConversationPrefetch(npc, options) {
             const result = await ai({ instruction: prompt, endButtons: "none" });
             const rawText = typeof result === "string" ? result : result && result.text ? result.text : "";
             const replyMap = parseConversationReplyPayload(rawText, optionIds);
+            let storedCount = 0;
 
             missingOptions.forEach(option => {
                 if (replyMap[option.id]) {
                     runtimeConversationState.replyCache[option.replyKey] = replyMap[option.id];
+                    storedCount += 1;
                 }
             });
 
+            if (storedCount > 0) {
+                console.log(`Conversation prefetch cached ${storedCount}/${missingOptions.length} replies for ${npc.name || "NPC"}.`);
+            }
             if (!Object.keys(replyMap).length) {
                 console.warn("Conversation prefetch returned no parseable replies:", rawText.slice(0, 400));
             }
@@ -2581,7 +2586,9 @@ async function npcRespond(npc, interaction) {
         ? interaction
         : { text: playerInput, promptText: playerInput, intent };
 
-    if (!choice.action) {
+    // If this choice came from the rendered talk menu, it already carries the
+    // batch key/reply key from that menu's JSON prefetch. Do not overwrite it.
+    if (!choice.action && !choice._conversationBundleKey) {
         queueConversationPrefetch(npc, [choice]);
     }
 
