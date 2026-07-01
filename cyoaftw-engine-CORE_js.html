@@ -1044,78 +1044,25 @@ function getAdjacentCoords(coords, direction) {
     return `${origin.x + off.x},${origin.y + off.y}`;
 }
 
-function resolveZoneTemplate(zoneName) {
-    return typeof getZoneTemplate === "function" ? getZoneTemplate(zoneName) : null;
-}
-
-function resolveRoomTemplate(roomType) {
-    return typeof getRoomTemplate === "function" ? getRoomTemplate(roomType) : null;
-}
-
-function resolveBuildRoomInstance(roomType, zoneName) {
-    if (typeof buildRoomInstance === "function") {
-        return buildRoomInstance(roomType, zoneName);
-    }
-
-    const template = resolveRoomTemplate(roomType);
-    if (!template) {
-        return {
-            type: roomType || "Street",
-            zone: zoneName || "Town",
-            role: "interior",
-            name: roomType || "Street",
-            displayName: roomType || "Street",
-            baseDescription: "",
-            description: null,
-            allowedZones: [],
-            parentCluster: [],
-            isConnector: false,
-            structural: [],
-            creatures: [],
-            items: [],
-            image: null,
-            exits: {}
-        };
-    }
-
-    return {
-        type: template.type,
-        zone: zoneName || template.zone,
-        role: template.role,
-        name: template.displayName || template.type,
-        displayName: template.displayName || template.type,
-        baseDescription: template.baseDescription || "",
-        description: null,
-        allowedZones: template.allowedZones || [],
-        parentCluster: template.parentCluster || [],
-        isConnector: template.isConnector || false,
-        structural: Array.isArray(template.structural) ? template.structural.map(s => ({ ...s })) : [],
-        creatures: [],
-        items: [],
-        image: typeof getRoomImage === "function" ? getRoomImage(template.imageKey || template.type) : null,
-        exits: {}
-    };
-}
-
 function getBuildableRoomTypesForZone(zoneName) {
-    const zoneTemplate = resolveZoneTemplate(zoneName);
+    const zoneTemplate = getZoneTemplate(zoneName);
     const roomTypes = zoneTemplate && Array.isArray(zoneTemplate.roomTypes)
         ? zoneTemplate.roomTypes
         : [];
 
-    return roomTypes.filter(roomType => !!resolveRoomTemplate(roomType));
+    return roomTypes.filter(roomType => !!getRoomTemplate(roomType));
 }
 
 function chooseRoomTypeForZone(zoneName, fallbackRoomType) {
     const buildableTypes = getBuildableRoomTypesForZone(zoneName);
     if (buildableTypes.length > 0) return rand(buildableTypes);
 
-    if (fallbackRoomType && resolveRoomTemplate(fallbackRoomType)) {
+    if (fallbackRoomType && getRoomTemplate(fallbackRoomType)) {
         return fallbackRoomType;
     }
 
-    if (resolveRoomTemplate("Street")) return "Street";
-    if (resolveRoomTemplate("Corridor")) return "Corridor";
+    if (getRoomTemplate("Street")) return "Street";
+    if (getRoomTemplate("Corridor")) return "Corridor";
     return fallbackRoomType || "Street";
 }
 
@@ -1822,10 +1769,10 @@ function createRoomSkeleton(coords, zoneName, roomType) {
     const parsed = parseCoords(coords);
     if (!parsed) return null;
 
-    const buildRoomType = resolveRoomTemplate(roomType)
+    const buildRoomType = getRoomTemplate(roomType)
         ? roomType
         : chooseRoomTypeForZone(zoneName, "Street");
-    const room = resolveBuildRoomInstance(buildRoomType, zoneName);
+    const room = buildRoomInstance(buildRoomType, zoneName);
     if (!room) return null;
 
     room.coords = parsed.key;
@@ -1898,7 +1845,7 @@ function spawnNPCsForRoom(room, zoneName) {
     const npcs = [];
     if (room.role === "spine") return npcs;
 
-    const zone = resolveZoneTemplate(zoneName);
+    const zone = getZoneTemplate(zoneName);
     if (!zone) return npcs;
 
     const count = room.role === "landmark" ? randInt(1, 3) : randInt(0, 2);
@@ -2040,7 +1987,7 @@ function schedulePrefetch() {
             build: () => {
                 const z  = room.zone || "Town";
                 const rt = chooseRoomTypeForZone(z, "Street");
-                const pr = resolveBuildRoomInstance(rt, z);
+                const pr = buildRoomInstance(rt, z);
                 return buildPrompt(pr, null,
                     "Write 1 sentence of atmospheric description for this location. Be vivid and brief."
                 );
