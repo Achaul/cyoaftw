@@ -1986,6 +1986,33 @@ function movePlayer(direction) {
 
 // ── PREFETCH ─────────────────────────────────────────────────────
 
+function getPrefetchTaskPriority(task) {
+    return task && typeof task.priority === "number" ? task.priority : 0;
+}
+
+function enqueuePrefetchTask(task) {
+    if (!task || !task.key) return false;
+    if (G.prefetchQueue.find(entry => entry && entry.key === task.key)) return false;
+    G.prefetchQueue.push(task);
+    return true;
+}
+
+function dequeueNextPrefetchTask() {
+    if (!Array.isArray(G.prefetchQueue) || !G.prefetchQueue.length) return null;
+
+    let bestIndex = 0;
+    let bestPriority = getPrefetchTaskPriority(G.prefetchQueue[0]);
+    for (let i = 1; i < G.prefetchQueue.length; i++) {
+        const priority = getPrefetchTaskPriority(G.prefetchQueue[i]);
+        if (priority > bestPriority) {
+            bestPriority = priority;
+            bestIndex = i;
+        }
+    }
+
+    return G.prefetchQueue.splice(bestIndex, 1)[0] || null;
+}
+
 function schedulePrefetch() {
     const room = G.activeRoom;
     if (!room) return;
@@ -1993,10 +2020,9 @@ function schedulePrefetch() {
     Object.entries(room.exits).forEach(([dir, coords]) => {
         const key = `desc:${coords}`;
         if (G.prefetchCache[key]) return;
-        if (G.prefetchQueue.find(t => t.key === key)) return;
-
-        G.prefetchQueue.push({
+        enqueuePrefetchTask({
             key,
+            priority: 0,
             build: () => {
                 const z  = room.zone || "Town";
                 const rt = chooseRoomTypeForZone(z, "Street");
@@ -2015,7 +2041,7 @@ async function runPrefetchQueue() {
     if (G.isPrefetching || G.prefetchQueue.length === 0) return;
     G.isPrefetching = true;
 
-    const task = G.prefetchQueue.shift();
+    const task = dequeueNextPrefetchTask();
     try {
         if (task && typeof task.run === "function") {
             await task.run();
@@ -2511,8 +2537,9 @@ function queueConversationPrefetch(npc, options) {
         resolveBundle = resolve;
     });
 
-    G.prefetchQueue.unshift({
+    enqueuePrefetchTask({
         key: bundleKey,
+        priority: 100,
         run: async () => {
             const jsonPrefix = "{\"replies\":[";
             const result = await ai({
@@ -5022,6 +5049,9 @@ function selectNPC(npc) {
     setNarration(`${npc.name} ${npc.action || "is standing nearby"}.${inspection ? "\n\n" + inspection : ""}`);
     setExitGridVisible(false);
     renderNPCActionMenu(npc);
+    if (canConverseWithNPC(npc)) {
+        queueConversationPrefetch(npc, getChatOptions(npc));
+    }
     saveGameState();
 }
 
