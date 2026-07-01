@@ -2145,8 +2145,9 @@ function buildConversationBatchInstruction(npc, options, room) {
         ...getNPCConversationReplyBaseLines(npc, room),
         "Generate one short NPC reply for each player approach below.",
         "Return only valid JSON.",
-        "Use this exact shape:",
-        "{\"replies\":[{\"id\":\"option-id\",\"text\":\"reply text\"}]}",
+        "The engine already starts the output with: {\"replies\":[",
+        "Continue that JSON array with reply objects and close the JSON cleanly.",
+        "Each reply object must look like: {\"id\":\"option-id\",\"text\":\"reply text\"}",
         "Rules:",
         "- Include exactly one reply object for every option id provided.",
         "- Copy each id exactly.",
@@ -2178,6 +2179,14 @@ function tryParseConversationJSON(rawText) {
     const lastBracket = source.lastIndexOf("]");
     if (firstBracket >= 0 && lastBracket > firstBracket) {
         candidates.push(source.slice(firstBracket, lastBracket + 1));
+    }
+
+    if (source.startsWith("{\"replies\":[") && !source.endsWith("]}")) {
+        candidates.push(`${source}"]}`);
+        candidates.push(`${source}]}`);
+    }
+    if (source.startsWith("[") && !source.endsWith("]")) {
+        candidates.push(`${source}]`);
     }
 
     for (const candidate of candidates) {
@@ -2505,8 +2514,16 @@ function queueConversationPrefetch(npc, options) {
     G.prefetchQueue.unshift({
         key: bundleKey,
         run: async () => {
-            const result = await ai({ instruction: prompt, endButtons: "none" });
-            const rawText = typeof result === "string" ? result : result && result.text ? result.text : "";
+            const jsonPrefix = "{\"replies\":[";
+            const result = await ai({
+                instruction: prompt,
+                startWith: jsonPrefix,
+                endButtons: "none"
+            });
+            const continuation = typeof result === "string" ? result : result && result.text ? result.text : "";
+            const rawText = String(continuation || "").trim().startsWith("{")
+                ? String(continuation || "").trim()
+                : `${jsonPrefix}${String(continuation || "").trim()}`;
             const replyMap = parseConversationReplyPayload(rawText, optionIds);
             let storedCount = 0;
 
