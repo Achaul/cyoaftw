@@ -633,6 +633,36 @@ const NPC_CONVERSATION_CATALOGUE = [
         conditions: { metPlayer: false }
     },
     {
+        id: "greet-known",
+        priority: 15,
+        repeat: "session",
+        resetTimer: { turns: 3 },
+        label: (npc, ctx) => {
+            if (ctx.hostility >= 70) return "Acknowledge them carefully";
+            if (ctx.favor >= 35 || ctx.relationship === "trusted" || ctx.relationship === "friendly") {
+                return "Greet them warmly";
+            }
+            if (ctx.sessionUsedOptionIds.includes("greet-known")) return "Check in with them again";
+            return "Greet them again";
+        },
+        textVariants: [
+            (npc, ctx) => ctx.hostility >= 70
+                ? "You acknowledge them without crowding them and keep your tone careful."
+                : "You greet them like someone you have already spoken with and leave the tone open.",
+            (npc, ctx) => ctx.hostility >= 70
+                ? "You offer a measured acknowledgment instead of pretending the tension is gone."
+                : "You offer a familiar greeting and watch how they receive it this time.",
+            (npc, ctx) => ctx.favor >= 35
+                ? "You greet them with easy familiarity, as though picking up a conversation already in motion."
+                : "You greet them again without making it sound like a first introduction."
+        ],
+        intent: "greeting",
+        relationshipImpact: (npc, ctx) => ctx.hostility >= 70
+            ? { mood: 0, favor: 1, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" }
+            : { mood: 1, favor: 2, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" },
+        conditions: { metPlayer: true }
+    },
+    {
         id: "ask-place",
         priority: 20,
         repeat: "session",

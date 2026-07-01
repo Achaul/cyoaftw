@@ -263,8 +263,9 @@ function buildNPCRecentExchangeBlock(npc, maxTurns = 4) {
     ].join("\n");
 }
 
-function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
+function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
     if (!npc) return "";
+    const config = options && typeof options === "object" ? options : {};
 
     const gender = npc.gender || "unknown";
     let pronoun = "they";
@@ -281,11 +282,12 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
     const quirks = Array.isArray(profile.quirks) && profile.quirks.length
         ? profile.quirks : [];
     let quirksLine = "";
-    if (quirks.length && Math.random() < 0.3) {
+    if (quirks.length && config.includeRandomQuirk !== false && Math.random() < 0.3) {
         quirksLine = `- Quirk: ${quirks[Math.floor(Math.random() * quirks.length)]} (occasional, do not repeat every line)`;
     }
 
     const mood = npc.memory && npc.memory.lastMood ? npc.memory.lastMood : npc.mood || "neutral";
+    const metPlayer = !!(npc.memory && npc.memory.metPlayer);
     const favorability = npc.memory && typeof npc.memory.favorability === "number"
         ? npc.memory.favorability : 0;
     const hostility = typeof npc.hostility === "number"
@@ -388,6 +390,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
         reactionNotes.length ? `- Reaction biases: ${reactionNotes.join("; ")}` : "",
         motive ? `- Current motive: ${motive}` : "",
         `- Mood: ${mood}`,
+        `- Familiarity with player: ${metPlayer ? "already acquainted; do not treat this as a first introduction" : "first meeting or not yet properly introduced"}`,
         `- Relationship to player: ${relationship}`,
         relationshipGuidance ? `- Default attitude toward player: ${relationshipGuidance.baseline} (${relationshipGuidance.direction})` : "",
         relationshipGuidance ? `- Subtle reaction cue: ${relationshipGuidance.cue}` : "",
@@ -412,11 +415,11 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT") {
 }
 
 // ── MASTER PROMPT BUILDER ────────────────────────────────────────
-function buildPrompt(room, npc, instruction) {
+function buildPrompt(room, npc, instruction, options = {}) {
     const locCtx = buildLocationNarrativeContext(room);
     const sceneBlock = serializeSceneBlock(locCtx);
     const storyBlock = serializeStoryDirectorBlock(window.G ? window.G.story : null);
-    const npcBlock = npc ? buildNPCPersonaBlock(npc) : "";
+    const npcBlock = npc ? buildNPCPersonaBlock(npc, "SPEAKER CONTEXT", options) : "";
     const recentExchangeBlock = npc ? buildNPCRecentExchangeBlock(npc) : "";
 
     return [

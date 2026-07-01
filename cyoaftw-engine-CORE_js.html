@@ -26,6 +26,17 @@ window.G = {
     isPrefetching: false
 };
 
+const CONVERSATION_PREFETCH_GRACE_MS = 220;
+const runtimeConversationState = {
+    replyCache: {},
+    bundlePromises: {}
+};
+
+function clearConversationRuntimeState() {
+    runtimeConversationState.replyCache = {};
+    runtimeConversationState.bundlePromises = {};
+}
+
 // ── SETUP STATE (window scope for onclick access) ─────────────────
 
 window.setupStats = {
@@ -1452,6 +1463,7 @@ async function beginAdventure() {
         G.prefetchCache = {};
         G.prefetchQueue = [];
         G.isPrefetching = false;
+        clearConversationRuntimeState();
     });
 
     let startingRoom = null;
@@ -1663,6 +1675,7 @@ async function resumeSavedGame() {
         G.prefetchCache = {};
         G.prefetchQueue = [];
         G.isPrefetching = false;
+        clearConversationRuntimeState();
     });
 
     if (!G.activeRoom) {
@@ -2004,11 +2017,17 @@ async function runPrefetchQueue() {
 
     const task = G.prefetchQueue.shift();
     try {
-        const prompt = task.build();
-        const result = await ai({ instruction: prompt, endButtons: "none" });
-        G.prefetchCache[task.key] = result.text || result;
+        if (task && typeof task.run === "function") {
+            await task.run();
+        } else {
+            const prompt = task.build();
+            const result = await ai({ instruction: prompt, endButtons: "none" });
+            G.prefetchCache[task.key] = result.text || result;
+        }
     } catch(e) {
         console.warn("Prefetch failed:", task.key, e);
+    } finally {
+        if (task && typeof task.finalize === "function") task.finalize();
     }
 
     G.isPrefetching = false;
@@ -2016,6 +2035,480 @@ async function runPrefetchQueue() {
 }
 
 // ── NPC INTERACTION ──────────────────────────────────────────────
+
+function hashConversationKey(value) {
+    const source = String(value || "");
+    let hash = 5381;
+    for (let i = 0; i < source.length; i++) {
+        hash = ((hash << 5) + hash) + source.charCodeAt(i);
+        hash = hash >>> 0;
+    }
+    return hash.toString(36);
+}
+
+function buildRecentConversationDigest(npc, maxTurns = 4) {
+    if (!npc || !npc.memory || !Array.isArray(npc.memory.recentLines)) return "";
+    return npc.memory.recentLines
+        .slice(-maxTurns)
+        .map(line => `${line && line.speaker || "npc"}:${line && line.intent || "talk"}:${line && line.text || ""}`)
+        .join("|")
+        .slice(0, 320);
+}
+
+function buildConversationBundleKey(npc, options, room, ctx) {
+    const relevantOptions = Array.isArray(options)
+        ? options.filter(option => option && !option.action && (option.promptText || option.text))
+        : [];
+    const signature = JSON.stringify({
+        npcId: npc && npc.id ? npc.id : npc && npc.name ? npc.name : "npc",
+        room: room && room.coords ? room.coords : room && room.name ? room.name : "",
+        metPlayer: !!(ctx && ctx.metPlayer),
+        relationship: ctx && ctx.relationship || "",
+        disposition: ctx && ctx.disposition || "",
+        favor: ctx && typeof ctx.favor === "number" ? ctx.favor : 0,
+        hostility: ctx && typeof ctx.hostility === "number" ? ctx.hostility : 0,
+        attraction: ctx && typeof ctx.attraction === "number" ? ctx.attraction : 0,
+        arousal: ctx && typeof ctx.arousal === "number" ? ctx.arousal : 0,
+        interactionCount: ctx && typeof ctx.interactionCount === "number" ? ctx.interactionCount : 0,
+        sessionInteractionCount: ctx && typeof ctx.sessionInteractionCount === "number" ? ctx.sessionInteractionCount : 0,
+        lastOptionId: ctx && ctx.lastOptionId || "",
+        recent: buildRecentConversationDigest(npc),
+        options: relevantOptions.map(option => ({
+            id: option.id || "",
+            intent: option.intent || "",
+            text: option.promptText || option.text || ""
+        }))
+    });
+    return `talk:${hashConversationKey(signature)}`;
+}
+
+function getConversationReplyKey(bundleKey, optionId) {
+    return `${bundleKey}:${String(optionId || "").trim()}`;
+}
+
+function getNPCConversationReplyBaseLines(npc, room) {
+    const speechProfile = typeof syncNPCSpeechProfile === "function"
+        ? syncNPCSpeechProfile(npc, room, null)
+        : (typeof getNPCSpeechProfile === "function" ? getNPCSpeechProfile(npc, room, null) : null);
+    const relationshipGuidance = typeof getNPCRelationshipSpeechGuidance === "function"
+        ? getNPCRelationshipSpeechGuidance(npc)
+        : null;
+    const knowsPlayer = !!(npc && npc.memory && npc.memory.metPlayer);
+
+    return [
+        `You are ${npc.name}, a ${npc.species}${npc.role ? ` working here as ${npc.role}` : ""}.`,
+        knowsPlayer
+            ? "You already know the player. Do not treat them as a stranger or restart introductions."
+            : "If this is a first meeting, answer like someone being approached for the first time.",
+        "Stay in character and stay brief: 1 to 3 short sentences.",
+        "Answer the player's question or approach directly before adding any attitude, suspicion, or warmth.",
+        "Use normal spoken language. Keep it grounded and easy to read.",
+        "Do not break character. Do not refer to yourself as an AI.",
+        "Do not write purple prose, fantasy-trope narration, or stagey lines about eyes, fingers, tavern stones, cages, air, or whispers unless the player directly asks about them.",
+        "Do not default to vague hints. If the NPC is evasive, let them be plain and evasive rather than cryptic and theatrical.",
+        "If you include a visible action, keep it to one short clause at most.",
+        relationshipGuidance ? `Relationship baseline: ${relationshipGuidance.baseline}. ${relationshipGuidance.instruction}` : "",
+        relationshipGuidance ? `Subtle cue for this reply: ${relationshipGuidance.cue}. Keep it understated.` : "",
+        speechProfile ? `Speech target: ${speechProfile.style}. Example tone: "${speechProfile.sample}"` : "",
+        speechProfile ? `Speech habits: ${speechProfile.sentenceLength} sentences, ${speechProfile.vocabulary}, ${speechProfile.cadence}.` : "",
+        speechProfile && speechProfile.avoid.length ? `Avoid these habits: ${speechProfile.avoid.join(", ")}.` : "",
+        "If there is romantic tension, keep it mild, readable, and non-explicit."
+    ].filter(Boolean);
+}
+
+function buildSingleConversationInstruction(npc, interaction, room) {
+    const playerInput = typeof interaction === "string"
+        ? interaction
+        : (interaction && (interaction.promptText || interaction.text) ? (interaction.promptText || interaction.text) : "");
+    const intent = interaction && interaction.intent ? interaction.intent : "talk";
+    return [
+        ...getNPCConversationReplyBaseLines(npc, room),
+        `The player says: "${playerInput}"`,
+        `Conversation intent: ${intent}.`
+    ].join("\n");
+}
+
+function buildConversationBatchInstruction(npc, options, room) {
+    const relevantOptions = Array.isArray(options)
+        ? options.filter(option => option && !option.action && (option.promptText || option.text))
+        : [];
+    const optionLines = relevantOptions.map(option => {
+        const playerText = String(option.promptText || option.text || "").replace(/\s+/g, " ").trim();
+        const intent = String(option.intent || "talk");
+        return `- id: ${option.id}\n  intent: ${intent}\n  player: "${playerText}"`;
+    });
+
+    return [
+        ...getNPCConversationReplyBaseLines(npc, room),
+        "Generate one reply for each option below.",
+        "Return strict JSON only.",
+        "Use this shape exactly: {\"replies\":{\"option-id\":\"reply text\"}}",
+        "Every key inside replies must be one of the listed ids.",
+        "Do not include markdown fences, explanations, or extra keys.",
+        "OPTIONS:",
+        ...optionLines
+    ].join("\n");
+}
+
+function tryParseConversationJSON(rawText) {
+    const source = String(rawText || "").trim();
+    if (!source) return null;
+
+    const candidates = [source];
+    const fenceMatch = source.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenceMatch && fenceMatch[1]) candidates.push(fenceMatch[1].trim());
+
+    const firstBrace = source.indexOf("{");
+    const lastBrace = source.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+        candidates.push(source.slice(firstBrace, lastBrace + 1));
+    }
+
+    const firstBracket = source.indexOf("[");
+    const lastBracket = source.lastIndexOf("]");
+    if (firstBracket >= 0 && lastBracket > firstBracket) {
+        candidates.push(source.slice(firstBracket, lastBracket + 1));
+    }
+
+    for (const candidate of candidates) {
+        try {
+            return JSON.parse(candidate);
+        } catch (err) {
+            // Try the next candidate.
+        }
+    }
+
+    return null;
+}
+
+function normalizeConversationReplyMap(payload, optionIds) {
+    const ids = new Set(Array.isArray(optionIds) ? optionIds.map(id => String(id || "").trim()) : []);
+    const replies = {};
+
+    if (Array.isArray(payload)) {
+        payload.forEach(entry => {
+            if (!entry || typeof entry !== "object") return;
+            const optionId = String(entry.id || entry.optionId || "").trim();
+            const text = entry.reply || entry.text || entry.response || "";
+            if (ids.has(optionId) && text) replies[optionId] = normalizeNPCReplyText(text);
+        });
+        return replies;
+    }
+
+    const container = payload && typeof payload === "object"
+        ? (payload.replies && typeof payload.replies === "object" ? payload.replies : payload)
+        : null;
+    if (container && typeof container === "object") {
+        Object.entries(container).forEach(([key, value]) => {
+            const optionId = String(key || "").trim();
+            if (!ids.has(optionId)) return;
+            if (typeof value === "string") {
+                replies[optionId] = normalizeNPCReplyText(value);
+                return;
+            }
+            if (value && typeof value === "object") {
+                const text = value.reply || value.text || value.response || "";
+                if (text) replies[optionId] = normalizeNPCReplyText(text);
+            }
+        });
+    }
+
+    return replies;
+}
+
+function parseConversationReplyPayload(rawText, optionIds) {
+    const parsed = tryParseConversationJSON(rawText);
+    const normalized = normalizeConversationReplyMap(parsed, optionIds);
+    if (Object.keys(normalized).length) return normalized;
+
+    const ids = new Set(Array.isArray(optionIds) ? optionIds.map(id => String(id || "").trim()) : []);
+    const replies = {};
+    String(rawText || "").split(/\r?\n/).forEach(line => {
+        const match = line.match(/^\s*(?:[-*]\s*)?\[?([a-z0-9-]+)\]?\s*[:=-]\s*(.+)\s*$/i);
+        if (!match) return;
+        const optionId = String(match[1] || "").trim();
+        if (!ids.has(optionId)) return;
+        replies[optionId] = normalizeNPCReplyText(match[2] || "");
+    });
+    return replies;
+}
+
+function getConversationRelationshipBand(npc) {
+    const hostility = npc && typeof npc.hostility === "number" ? npc.hostility : 0;
+    const favor = npc && npc.memory && typeof npc.memory.favorability === "number"
+        ? npc.memory.favorability
+        : 0;
+    if (hostility >= 70) return "hostile";
+    if (favor >= 30 && hostility <= 35) return "friendly";
+    return "neutral";
+}
+
+const NPC_FALLBACK_REPLIES = {
+    greeting: {
+        friendly: [
+            "They greet you back with easy familiarity.",
+            "They answer warmly, like this is a conversation already in motion."
+        ],
+        neutral: [
+            "They return the greeting with a small nod.",
+            "They greet you back and wait to see where you take the conversation."
+        ],
+        hostile: [
+            "They acknowledge you, but keep their guard up.",
+            "They answer curtly, without much warmth."
+        ]
+    },
+    curious: {
+        friendly: [
+            "They answer readily, seeming willing to talk.",
+            "They give you a direct answer without much hesitation."
+        ],
+        neutral: [
+            "They offer a short answer and keep it practical.",
+            "They answer plainly, without dressing it up."
+        ],
+        hostile: [
+            "They answer, but only just enough to satisfy the question.",
+            "They give you a guarded reply and leave it at that."
+        ]
+    },
+    rumor: {
+        friendly: [
+            "They lean in and share a rumor in a low voice.",
+            "They pass along a bit of local gossip, sounding more open than cautious."
+        ],
+        neutral: [
+            "They mention a rumor, though they sound unsure how much of it is true.",
+            "They share a scrap of hearsay without claiming to know the whole truth."
+        ],
+        hostile: [
+            "They mention a rumor reluctantly, as if they would rather not be involved.",
+            "They give you a thin scrap of gossip and stop there."
+        ]
+    },
+    help: {
+        friendly: [
+            "They seem to soften at the offer and answer more openly.",
+            "They admit what would help, sounding relieved to be asked."
+        ],
+        neutral: [
+            "They consider the offer and answer cautiously.",
+            "They tell you what they need, but keep their tone measured."
+        ],
+        hostile: [
+            "They do not relax, but they answer anyway.",
+            "They hear the offer out, though suspicion still edges their voice."
+        ]
+    },
+    calm: {
+        friendly: [
+            "They ease a little and answer in a steadier tone.",
+            "They seem willing to let the tension drop for the moment."
+        ],
+        neutral: [
+            "They answer more evenly once the pressure eases.",
+            "They let the moment settle and respond without snapping."
+        ],
+        hostile: [
+            "They do not fully relax, but the edge softens a little.",
+            "They answer through their tension instead of escalating it."
+        ]
+    },
+    flattery: {
+        friendly: [
+            "They take the compliment well and answer with a faint smile.",
+            "They seem pleased, even if they try not to show too much of it."
+        ],
+        neutral: [
+            "They accept the compliment with a restrained nod.",
+            "They seem a little surprised, but not displeased."
+        ],
+        hostile: [
+            "They look unconvinced, though they do not reject the compliment outright.",
+            "They take the words warily and give you a careful reply."
+        ]
+    },
+    apology: {
+        friendly: [
+            "They accept the apology without making a spectacle of it.",
+            "They seem willing to let the matter settle for now."
+        ],
+        neutral: [
+            "They accept the apology, though cautiously.",
+            "They acknowledge the apology and answer more evenly."
+        ],
+        hostile: [
+            "They do not forgive quickly, but they hear you out.",
+            "They accept the apology in words, if not fully in spirit."
+        ]
+    },
+    comfort: {
+        friendly: [
+            "They seem to take some comfort in what you said.",
+            "They answer more softly after that."
+        ],
+        neutral: [
+            "They accept the reassurance, though a little guardedly.",
+            "They steady themselves enough to answer."
+        ],
+        hostile: [
+            "They do not fully welcome the comfort, but they do not push it away either.",
+            "They answer stiffly, as if unsure what to do with the kindness."
+        ]
+    },
+    flirt: {
+        friendly: [
+            "They catch the tone and answer with a hint of warmth.",
+            "They seem amused by it and do not shut the door on the moment."
+        ],
+        neutral: [
+            "They notice the flirtation and answer carefully.",
+            "They take the remark in stride and give you a measured reply."
+        ],
+        hostile: [
+            "They do not seem eager to encourage that tone.",
+            "They answer coolly, making it clear they are not fully receptive."
+        ]
+    },
+    tease: {
+        friendly: [
+            "They seem willing to play along and answer in kind.",
+            "They take the jab with a bit of amused patience."
+        ],
+        neutral: [
+            "They answer with a restrained reaction, not quite rising to it.",
+            "They take the teasing well enough, though cautiously."
+        ],
+        hostile: [
+            "They do not appreciate the jab much, but they do answer.",
+            "They answer dryly, with a warning edge still in it."
+        ]
+    },
+    aggression: {
+        friendly: [
+            "They look taken aback by the edge in your tone, but answer anyway.",
+            "They answer carefully, as if trying not to let the moment turn worse."
+        ],
+        neutral: [
+            "They answer more sharply now, matching some of your edge.",
+            "They stop wasting words and respond plainly."
+        ],
+        hostile: [
+            "They answer with open tension, ready for trouble if it comes.",
+            "They give you a hard reply and make no effort to hide the hostility."
+        ]
+    },
+    goodbye: {
+        friendly: [
+            "They part from you on easier terms than before.",
+            "They give you a parting word that sounds genuine enough."
+        ],
+        neutral: [
+            "They acknowledge the parting and let you go.",
+            "They give a brief farewell."
+        ],
+        hostile: [
+            "They seem glad enough to let the exchange end there.",
+            "They give you a curt parting answer."
+        ]
+    },
+    talk: {
+        friendly: [
+            "They answer openly, without making you drag it out of them.",
+            "They seem willing enough to keep talking."
+        ],
+        neutral: [
+            "They answer in a practical, conversational way.",
+            "They give you a short, direct reply."
+        ],
+        hostile: [
+            "They answer with caution still in their voice.",
+            "They keep the reply short and guarded."
+        ]
+    }
+};
+
+function pickNPCConversationFallbackReply(npc, interaction) {
+    const intentKey = String(interaction && interaction.intent || "talk").toLowerCase();
+    const band = getConversationRelationshipBand(npc);
+    const bucket = NPC_FALLBACK_REPLIES[intentKey] || NPC_FALLBACK_REPLIES.talk;
+    const pool = bucket[band] || bucket.neutral || NPC_FALLBACK_REPLIES.talk.neutral;
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function queueConversationPrefetch(npc, options) {
+    if (!npc || !Array.isArray(options) || !options.length) return options;
+    const room = G.activeRoom;
+    const relevantOptions = options.filter(option => option && !option.action && (option.promptText || option.text));
+    if (!relevantOptions.length) return options;
+
+    const ctx = typeof getNPCConversationContext === "function"
+        ? getNPCConversationContext(npc, { room })
+        : null;
+    const bundleKey = buildConversationBundleKey(npc, relevantOptions, room, ctx);
+    const optionSnapshots = relevantOptions.map(option => {
+        option._conversationBundleKey = bundleKey;
+        option._conversationReplyKey = getConversationReplyKey(bundleKey, option.id);
+        return {
+            id: option.id,
+            replyKey: option._conversationReplyKey
+        };
+    });
+
+    const missingOptions = optionSnapshots.filter(option => !runtimeConversationState.replyCache[option.replyKey]);
+    if (!missingOptions.length || runtimeConversationState.bundlePromises[bundleKey]) return options;
+    if (G.prefetchQueue.find(task => task && task.key === bundleKey)) return options;
+
+    const prompt = buildPrompt(
+        room,
+        npc,
+        buildConversationBatchInstruction(npc, relevantOptions, room),
+        { includeRandomQuirk: false }
+    );
+    const optionIds = missingOptions.map(option => option.id);
+
+    let resolveBundle;
+    runtimeConversationState.bundlePromises[bundleKey] = new Promise(resolve => {
+        resolveBundle = resolve;
+    });
+
+    G.prefetchQueue.unshift({
+        key: bundleKey,
+        run: async () => {
+            const result = await ai({ instruction: prompt, endButtons: "none" });
+            const rawText = typeof result === "string" ? result : result && result.text ? result.text : "";
+            const replyMap = parseConversationReplyPayload(rawText, optionIds);
+            missingOptions.forEach(option => {
+                if (replyMap[option.id]) {
+                    runtimeConversationState.replyCache[option.replyKey] = replyMap[option.id];
+                }
+            });
+        },
+        finalize: () => {
+            delete runtimeConversationState.bundlePromises[bundleKey];
+            if (resolveBundle) resolveBundle();
+        }
+    });
+
+    runPrefetchQueue();
+    return options;
+}
+
+async function waitForConversationReply(replyKey, bundleKey, waitMs = CONVERSATION_PREFETCH_GRACE_MS) {
+    if (replyKey && runtimeConversationState.replyCache[replyKey]) {
+        return runtimeConversationState.replyCache[replyKey];
+    }
+
+    const pending = bundleKey ? runtimeConversationState.bundlePromises[bundleKey] : null;
+    if (!pending) return "";
+
+    await Promise.race([
+        pending,
+        new Promise(resolve => setTimeout(resolve, waitMs))
+    ]);
+
+    return replyKey ? (runtimeConversationState.replyCache[replyKey] || "") : "";
+}
 
 function rememberNPCConversationLine(npc, speaker, text, intent = "talk") {
     if (!npc || !text) return;
@@ -2048,46 +2541,48 @@ async function npcRespond(npc, interaction) {
         ? interaction
         : (interaction && (interaction.promptText || interaction.text) ? (interaction.promptText || interaction.text) : "");
     const intent = interaction && interaction.intent ? interaction.intent : "talk";
-    const speechProfile = typeof syncNPCSpeechProfile === "function"
-        ? syncNPCSpeechProfile(npc, room, null)
-        : (typeof getNPCSpeechProfile === "function" ? getNPCSpeechProfile(npc, room, null) : null);
-    const relationshipGuidance = typeof getNPCRelationshipSpeechGuidance === "function"
-        ? getNPCRelationshipSpeechGuidance(npc)
-        : null;
-
-    const instruction = [
-        `You are ${npc.name}, a ${npc.species}${npc.role ? ` working here as ${npc.role}` : ""}.`,
-        `The player says: "${playerInput}"`,
-        `Conversation intent: ${intent}.`,
-        "Respond in character and stay brief: 1 to 3 short sentences.",
-        "Answer the player's question or approach directly before adding any attitude, suspicion, or warmth.",
-        "Use normal spoken language. Keep it grounded and easy to read.",
-        "Do not break character. Do not refer to yourself as an AI.",
-        "Do not write purple prose, fantasy-trope narration, or stagey lines about eyes, fingers, tavern stones, cages, air, or whispers unless the player directly asks about them.",
-        "Do not default to vague hints. If the NPC is evasive, let them be plain and evasive rather than cryptic and theatrical.",
-        "If you include a visible action, keep it to one short clause at most.",
-        relationshipGuidance ? `Relationship baseline: ${relationshipGuidance.baseline}. ${relationshipGuidance.instruction}` : "",
-        relationshipGuidance ? `Subtle cue for this reply: ${relationshipGuidance.cue}. Keep it understated.` : "",
-        speechProfile ? `Speech target: ${speechProfile.style}. Example tone: "${speechProfile.sample}"` : "",
-        speechProfile ? `Speech habits: ${speechProfile.sentenceLength} sentences, ${speechProfile.vocabulary}, ${speechProfile.cadence}.` : "",
-        speechProfile && speechProfile.avoid.length ? `Avoid these habits: ${speechProfile.avoid.join(", ")}.` : "",
-        "If there is romantic tension, keep it mild, readable, and non-explicit."
-    ].filter(Boolean).join("\n");
-
-    const prompt = buildPrompt(room, npc, instruction);
-
-    addTypingIndicator();
-
     let responseText = "";
-    try {
-        const result = await ai({ instruction: prompt, endButtons: "none" });
-        responseText = normalizeNPCReplyText(typeof result === "string" ? result : result.text || "");
-    } catch (err) {
-        console.error("NPC response failed:", err);
-        responseText = `${npc.name} hesitates, unable to answer just now.`;
+    const choice = interaction && typeof interaction === "object"
+        ? interaction
+        : { text: playerInput, promptText: playerInput, intent };
+
+    if (!choice.action && !choice._conversationBundleKey) {
+        queueConversationPrefetch(npc, [choice]);
     }
 
-    removeTypingIndicator();
+    if (choice._conversationReplyKey && runtimeConversationState.replyCache[choice._conversationReplyKey]) {
+        responseText = runtimeConversationState.replyCache[choice._conversationReplyKey];
+    } else {
+        addTypingIndicator();
+        responseText = await waitForConversationReply(choice._conversationReplyKey, choice._conversationBundleKey);
+        removeTypingIndicator();
+    }
+
+    if (!responseText) {
+        responseText = pickNPCConversationFallbackReply(npc, choice);
+        if (choice._conversationBundleKey) {
+            waitForConversationReply(choice._conversationReplyKey, choice._conversationBundleKey, 1200)
+                .catch(() => "");
+        }
+        try {
+            const prompt = buildPrompt(
+                room,
+                npc,
+                buildSingleConversationInstruction(npc, choice, room),
+                { includeRandomQuirk: false }
+            );
+            ai({ instruction: prompt, endButtons: "none" })
+                .then(result => {
+                    const lateReply = normalizeNPCReplyText(typeof result === "string" ? result : result && result.text ? result.text : "");
+                    if (lateReply && choice._conversationReplyKey && !runtimeConversationState.replyCache[choice._conversationReplyKey]) {
+                        runtimeConversationState.replyCache[choice._conversationReplyKey] = lateReply;
+                    }
+                })
+                .catch(err => console.warn("Late NPC reply generation failed:", err));
+        } catch (err) {
+            console.warn("Unable to queue late NPC reply generation:", err);
+        }
+    }
 
     addChatMessage("left", npc.name, responseText);
     updateStoryOnNpcInteraction(npc, playerInput, responseText);
@@ -3069,7 +3564,7 @@ function startNPCConversation(npc) {
     }
 
     G.activeNPCMode = "talk";
-    renderChatOptions(npc);
+    renderChatOptions(npc, getChatOptions(npc));
     setNarration(`You prepare to speak with ${npc.name}.`);
     saveGameState();
 }
@@ -3682,16 +4177,19 @@ function setChatOptionsDisabled(disabled) {
     }
 }
 
-function renderChatOptions(npc) {
+function renderChatOptions(npc, options = null) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
 
     el.innerHTML = "";
     if (!canConverseWithNPC(npc)) return;
 
-    getChatOptions(npc).forEach(option => {
+    const chatOptions = Array.isArray(options) ? options : getChatOptions(npc);
+    queueConversationPrefetch(npc, chatOptions);
+
+    chatOptions.forEach(option => {
         const btn = document.createElement("button");
-        btn.className = "chat-option-btn";
+        btn.className = `chat-option-btn${option.className ? " " + option.className : ""}`;
         btn.textContent = option.label;
         btn.onclick = () => chooseChatOption(option);
         el.appendChild(btn);
