@@ -2716,7 +2716,7 @@ async function npcRespond(npc, interaction) {
         }
     }
 
-    addChatMessage("left", npc.name, responseText);
+    addChatMessage("left", npc.name, responseText, { mode: "spoken" });
     updateStoryOnNpcInteraction(npc, playerInput, responseText);
 
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
@@ -4259,7 +4259,7 @@ function buyTradeItem(npc, item) {
     adjustCoins(npc, price);
     recordTradeMemory(npc, [], [purchasedItem], price, 0);
 
-    addChatMessage("left", "narrator", `You buy ${getItemName(item)} for ${price}g.`);
+    addChatMessage("left", "Narrator", `You buy ${getItemName(item)} for ${price}g.`, { mode: "narration" });
     renderStats();
     renderTradeOptions(npc);
     saveGameState();
@@ -4293,7 +4293,7 @@ function sellTradeItem(npc, item) {
     adjustCoins(npc, -price);
     recordTradeMemory(npc, [soldItem], [], 0, price);
 
-    addChatMessage("left", "narrator", `You sell ${getItemName(item)} for ${price}g.`);
+    addChatMessage("left", "Narrator", `You sell ${getItemName(item)} for ${price}g.`, { mode: "narration" });
     renderStats();
     renderTradeOptions(npc);
     saveGameState();
@@ -4349,7 +4349,7 @@ function chooseChatOption(option) {
         return;
     }
 
-    addChatMessage("player", G.player.name, choice.text);
+    addChatMessage("player", "Narrator", choice.text, { mode: "narration" });
     advanceNPCAffectTime(1);
     advanceStoryTurn(1);
     if (npc && typeof recordNPCConversationChoice === "function") {
@@ -4595,7 +4595,7 @@ function clearChatLog() {
     if (el) el.innerHTML = "";
 }
 
-function buildChatTextParts(text) {
+function buildChatTextParts(text, mode = "auto") {
     const source = String(text || "")
         .replace(/[“”]/g, "\"")
         .replace(/[‘’]/g, "'")
@@ -4604,7 +4604,15 @@ function buildChatTextParts(text) {
 
     if (!source) return [];
 
+    if (mode === "narration") {
+        return [{ type: "narration", text: source }];
+    }
+
     const quoteCount = (source.match(/"/g) || []).length;
+    if (mode === "spoken" && (quoteCount < 2 || quoteCount % 2 !== 0)) {
+        return [{ type: "spoken", text: `"${source}"` }];
+    }
+
     if (quoteCount < 2 || quoteCount % 2 !== 0) {
         return [{ type: "plain", text: source }];
     }
@@ -4657,10 +4665,11 @@ function buildChatTextParts(text) {
     return merged;
 }
 
-function renderChatBubbleText(bubble, side, text) {
+function renderChatBubbleText(bubble, side, text, options = {}) {
     if (!bubble) return;
 
-    const parts = buildChatTextParts(text);
+    const mode = options && typeof options.mode === "string" ? options.mode : "auto";
+    const parts = buildChatTextParts(text, mode);
     if (!parts.length) {
         bubble.textContent = text || "";
         return;
@@ -4711,7 +4720,7 @@ function shouldShowPostReplyTradeAction(npc) {
     return hasNpcReply && (isMerchantLikeNPC(npc) || establishedTrader);
 }
 
-function addChatMessage(side, speaker, text) {
+function addChatMessage(side, speaker, text, options = {}) {
     const log = document.getElementById("chatLogEl");
     if (!log) return;
 
@@ -4724,7 +4733,7 @@ function addChatMessage(side, speaker, text) {
 
     const bubble      = document.createElement("div");
     bubble.className  = "chat-bubble";
-    renderChatBubbleText(bubble, side, text);
+    renderChatBubbleText(bubble, side, text, options);
 
     msg.appendChild(avatar);
     msg.appendChild(bubble);
