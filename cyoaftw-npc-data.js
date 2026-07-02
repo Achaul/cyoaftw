@@ -663,6 +663,20 @@ const NPC_CONVERSATION_CATALOGUE = [
         conditions: { metPlayer: true }
     },
     {
+        id: "ask-name",
+        priority: 18,
+        repeat: "never",
+        label: "Ask their name",
+        textVariants: [
+            "You ask their name in a straightforward, polite way.",
+            "You ask what you should call them and give them room to answer in their own way.",
+            "You ask them to introduce themselves properly."
+        ],
+        intent: "introduction",
+        relationshipImpact: { mood: 0, favor: 2, hostility: -1, intent: "introduction", markMet: true, actionTag: "ask-name" },
+        conditions: { metPlayer: false }
+    },
+    {
         id: "ask-place",
         priority: 20,
         repeat: "session",

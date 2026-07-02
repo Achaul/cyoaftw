@@ -4665,31 +4665,107 @@ function buildChatTextParts(text, mode = "auto") {
     return merged;
 }
 
+function getChatTextRenderParts(side, text, options = {}) {
+    const mode = options && typeof options.mode === "string" ? options.mode : "auto";
+    const parts = buildChatTextParts(text, mode);
+    const speechClass = side === "player" ? "player-speech" : "npc-speech";
+    const voiceClass = side === "player" ? "player-voice" : "npc-voice";
+    return parts.map(part => ({
+        text: part.text,
+        className: part.type === "spoken"
+            ? speechClass
+            : part.type === "narration"
+                ? voiceClass
+                : ""
+    }));
+}
+
+function shouldAnimateChatMessage(side, speaker, options = {}) {
+    if (options && typeof options.animate === "boolean") return options.animate;
+    return side !== "player" || String(speaker || "").toLowerCase() === "narrator";
+}
+
+function getChatTypingMsPerChar(side, speaker, options = {}) {
+    if (options && typeof options.msPerChar === "number" && options.msPerChar > 0) {
+        return options.msPerChar;
+    }
+    if (String(speaker || "").toLowerCase() === "narrator") return 12;
+    return side === "player" ? 12 : 18;
+}
+
 function renderChatBubbleText(bubble, side, text, options = {}) {
     if (!bubble) return;
 
-    const mode = options && typeof options.mode === "string" ? options.mode : "auto";
-    const parts = buildChatTextParts(text, mode);
+    const parts = getChatTextRenderParts(side, text, options);
     if (!parts.length) {
         bubble.textContent = text || "";
         return;
     }
 
-    const speechClass = side === "player" ? "player-speech" : "npc-speech";
-    const voiceClass = side === "player" ? "player-voice" : "npc-voice";
-
     bubble.textContent = "";
     parts.forEach(part => {
         const span = document.createElement("span");
-        const className = part.type === "spoken"
-            ? speechClass
-            : part.type === "narration"
-                ? voiceClass
-                : "";
-        span.className = `chat-fragment ${className}`.trim();
+        span.className = `chat-fragment ${part.className || ""}`.trim();
         span.textContent = part.text;
         bubble.appendChild(span);
     });
+}
+
+function animateChatBubbleText(bubble, side, speaker, text, options = {}) {
+    if (!bubble) return;
+
+    const parts = getChatTextRenderParts(side, text, options);
+    if (!parts.length) {
+        bubble.textContent = text || "";
+        return;
+    }
+
+    if (!shouldAnimateChatMessage(side, speaker, options)) {
+        renderChatBubbleText(bubble, side, text, options);
+        return;
+    }
+
+    const fragments = [];
+    bubble.textContent = "";
+    parts.forEach(part => {
+        const span = document.createElement("span");
+        span.className = `chat-fragment ${part.className || ""}`.trim();
+        span.textContent = "";
+        bubble.appendChild(span);
+        fragments.push({
+            el: span,
+            text: part.text
+        });
+    });
+
+    const totalChars = fragments.reduce((sum, part) => sum + part.text.length, 0);
+    if (totalChars <= 0) return;
+
+    const msPerChar = getChatTypingMsPerChar(side, speaker, options);
+    const log = document.getElementById("chatLogEl");
+    const start = performance.now();
+
+    function paint(charCount) {
+        let remaining = charCount;
+        fragments.forEach(fragment => {
+            const visibleChars = Math.max(0, Math.min(fragment.text.length, remaining));
+            fragment.el.textContent = fragment.text.slice(0, visibleChars);
+            remaining -= fragment.text.length;
+        });
+        if (log) log.scrollTop = log.scrollHeight;
+    }
+
+    function step(now) {
+        const elapsed = Math.max(0, now - start);
+        const charCount = Math.min(totalChars, Math.ceil(elapsed / msPerChar));
+        paint(charCount);
+        if (charCount < totalChars) {
+            requestAnimationFrame(step);
+        }
+    }
+
+    paint(0);
+    requestAnimationFrame(step);
 }
 
 function isMerchantLikeNPC(npc) {
@@ -4733,7 +4809,7 @@ function addChatMessage(side, speaker, text, options = {}) {
 
     const bubble      = document.createElement("div");
     bubble.className  = "chat-bubble";
-    renderChatBubbleText(bubble, side, text, options);
+    animateChatBubbleText(bubble, side, speaker, text, options);
 
     msg.appendChild(avatar);
     msg.appendChild(bubble);
