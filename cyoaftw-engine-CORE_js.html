@@ -29,12 +29,14 @@ window.G = {
 const CONVERSATION_PREFETCH_GRACE_MS = 220;
 const runtimeConversationState = {
     replyCache: {},
-    bundlePromises: {}
+    bundlePromises: {},
+    sessionReplyCache: {}
 };
 
 function clearConversationRuntimeState() {
     runtimeConversationState.replyCache = {};
     runtimeConversationState.bundlePromises = {};
+    runtimeConversationState.sessionReplyCache = {};
 }
 
 // ── SETUP STATE (window scope for onclick access) ─────────────────
@@ -2112,6 +2114,51 @@ function getConversationReplyKey(bundleKey, optionId) {
     return `${bundleKey}:${String(optionId || "").trim()}`;
 }
 
+function getConversationSessionReplyKey(npc, optionId) {
+    if (!npc) return "";
+    const optionKey = String(optionId || "").trim();
+    if (!optionKey) return "";
+    const state = typeof ensureNPCConversationState === "function"
+        ? ensureNPCConversationState(npc)
+        : null;
+    const sessionNumber = state && typeof state.sessionNumber === "number" ? state.sessionNumber : 0;
+    const npcKey = npc.id || npc.name || "npc";
+    return `${npcKey}:${sessionNumber}:${optionKey}`;
+}
+
+function getCachedConversationReply(npc, choice) {
+    if (!choice) return "";
+    if (choice._conversationReplyKey && runtimeConversationState.replyCache[choice._conversationReplyKey]) {
+        return runtimeConversationState.replyCache[choice._conversationReplyKey];
+    }
+
+    const sessionKey = getConversationSessionReplyKey(npc, choice.id);
+    if (sessionKey && runtimeConversationState.sessionReplyCache[sessionKey]) {
+        return runtimeConversationState.sessionReplyCache[sessionKey];
+    }
+
+    return "";
+}
+
+function storeCachedConversationReply(npc, option, replyText) {
+    const normalized = normalizeNPCReplyText(replyText);
+    if (!normalized) return "";
+
+    if (option && option.replyKey) {
+        runtimeConversationState.replyCache[option.replyKey] = normalized;
+    } else if (option && option._conversationReplyKey) {
+        runtimeConversationState.replyCache[option._conversationReplyKey] = normalized;
+    }
+
+    const optionId = option && (option.id || option.optionId);
+    const sessionKey = getConversationSessionReplyKey(npc, optionId);
+    if (sessionKey) {
+        runtimeConversationState.sessionReplyCache[sessionKey] = normalized;
+    }
+
+    return normalized;
+}
+
 function getNPCConversationReplyBaseLines(npc, room) {
     const speechProfile = typeof syncNPCSpeechProfile === "function"
         ? syncNPCSpeechProfile(npc, room, null)
@@ -2556,7 +2603,7 @@ function queueConversationPrefetch(npc, options) {
 
             missingOptions.forEach(option => {
                 if (replyMap[option.id]) {
-                    runtimeConversationState.replyCache[option.replyKey] = replyMap[option.id];
+                    storeCachedConversationReply(npc, option, replyMap[option.id]);
                     storedCount += 1;
                 }
             });
@@ -2636,9 +2683,8 @@ async function npcRespond(npc, interaction) {
         queueConversationPrefetch(npc, [choice]);
     }
 
-    if (choice._conversationReplyKey && runtimeConversationState.replyCache[choice._conversationReplyKey]) {
-        responseText = runtimeConversationState.replyCache[choice._conversationReplyKey];
-    } else {
+    responseText = getCachedConversationReply(npc, choice);
+    if (!responseText) {
         addTypingIndicator();
         responseText = await waitForConversationReply(choice._conversationReplyKey, choice._conversationBundleKey);
         removeTypingIndicator();
@@ -2660,8 +2706,8 @@ async function npcRespond(npc, interaction) {
             ai({ instruction: prompt, endButtons: "none" })
                 .then(result => {
                     const lateReply = normalizeNPCReplyText(typeof result === "string" ? result : result && result.text ? result.text : "");
-                    if (lateReply && choice._conversationReplyKey && !runtimeConversationState.replyCache[choice._conversationReplyKey]) {
-                        runtimeConversationState.replyCache[choice._conversationReplyKey] = lateReply;
+                    if (lateReply && !getCachedConversationReply(npc, choice)) {
+                        storeCachedConversationReply(npc, choice, lateReply);
                     }
                 })
                 .catch(err => console.warn("Late NPC reply generation failed:", err));
