@@ -1223,11 +1223,28 @@ function getCurrentStoryTurn() {
     return G.story.turnCounter || 0;
 }
 
-function advanceStoryTurn(steps = 1) {
-    G.story = ensureStoryStateShape(G.story);
-    const amount = Math.max(0, Math.floor(steps || 0));
-    G.story.turnCounter += amount;
-    return G.story.turnCounter;
+// === In cyoaftw-nsfw-system.js ===
+function extendAdvanceStoryTurn() {
+  const original = window.advanceStoryTurn;
+  window.advanceStoryTurn = function(steps = 1) {
+    const result = original.apply(this, arguments);
+
+    // Decay lust/attraction for all NPCs every 10/20 turns
+    if (window.G.story.turnCounter % 10 === 0) {
+      for (const npc of Object.values(window.G.npcs || {})) {
+        if (npc.relationship) {
+          // Lust decays by 1 every 10 turns
+          npc.relationship.lust = Math.max(0, (npc.relationship.lust || 0) - 1);
+          // Attraction decays by 0.5 every 20 turns
+          if (window.G.story.turnCounter % 20 === 0) {
+            npc.relationship.attraction = Math.max(0, (npc.relationship.attraction || 0) - 0.5);
+          }
+        }
+      }
+    }
+
+    return result;
+  };
 }
 
 function setStoryFlag(flag, value = true) {
