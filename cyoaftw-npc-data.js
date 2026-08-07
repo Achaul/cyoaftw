@@ -466,6 +466,32 @@ function _npcLowercaseFirst(value) {
     return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
+// === Updated ensureNPCConversationState() ===
+function ensureNPCConversationState(npc) {
+  if (!npc.conversationState) {
+    npc.conversationState = {};
+  }
+  const state = npc.conversationState;
+
+  // Existing fields
+  if (!state.usedOptionIds) state.usedOptionIds = [];
+  if (!state.sessionUsedOptionIds) state.sessionUsedOptionIds = [];
+  if (!state.lastVariantByOption) state.lastVariantByOption = {};
+  if (!state.optionUsage) state.optionUsage = {};
+  if (!state.interactionCount) state.interactionCount = 0;
+  if (!state.sessionInteractionCount) state.sessionInteractionCount = 0;
+  if (!state.sessionNumber) state.sessionNumber = 0;
+  if (!state.lastOptionId) state.lastOptionId = null;
+
+  // New adult system fields
+  if (!npc.relationship) npc.relationship = {};
+  if (npc.relationship.lust === undefined) npc.relationship.lust = 0;
+  if (npc.relationship.attraction === undefined) npc.relationship.attraction = 0;
+  if (npc.relationship.orientation === undefined) {
+    npc.relationship.orientation = ["hetero", "bi", "homo"][Math.floor(Math.random() * 3)];
+  }
+}
+
 function _npcBuildPlayerConversationText(label, action) {
     const text = String(label || "").trim();
     if (!text) return action ? "" : "You act.";
@@ -973,6 +999,40 @@ const NPC_CONVERSATION_CATALOGUE = [
         relationshipImpact: { mood: 0, favor: 1, intent: "goodbye", markMet: true, actionTag: "goodbye" }
     }
 ];
+
+// === Updated getNPCConversationContext() ===
+function getNPCConversationContext(npc, extraContext = {}) {
+  const ctx = {
+    npc: npc,
+    player: window.G.player,
+    relationship: npc.relationship || {},
+    // Include lust, attraction, orientation
+    lust: npc.relationship?.lust || 0,
+    attraction: npc.relationship?.attraction || 0,
+    orientation: npc.relationship?.orientation || "bi", // Default to bi for safety
+    story: window.G.story,
+    // ... (other existing fields)
+  };
+  return { ...ctx, ...extraContext };
+}
+
+// === Updated conversationConditionMatches() ===
+function conversationConditionMatches(conditions, ctx) {
+  if (!conditions) return true;
+
+  // Existing checks (species, role, favor, hostility, etc.)
+  if (conditions.species && ctx.npc.species !== conditions.species) return false;
+  if (conditions.role && ctx.npc.role !== conditions.role) return false;
+  if (conditions.minFavor !== undefined && ctx.npc.relationship.favor < conditions.minFavor) return false;
+  if (conditions.maxHostility !== undefined && ctx.npc.relationship.hostility > conditions.maxHostility) return false;
+
+  // New adult system checks
+  if (conditions.minLust !== undefined && ctx.npc.relationship.lust < conditions.minLust) return false;
+  if (conditions.minAttraction !== undefined && ctx.npc.relationship.attraction < conditions.minAttraction) return false;
+  if (conditions.orientation && ctx.npc.relationship.orientation !== conditions.orientation) return false;
+
+  return true;
+}
 
 function getNPCConversationContext(npc, extraContext = {}) {
     if (!npc) return null;
