@@ -48,7 +48,7 @@
       text: "You flirt with them, testing their interest...",
       priority: 10,
       repeat: "session",
-      conditions: { minFavor: 5, minAttraction: 0 },
+      conditions: { minFavor: 0, minAttraction: 0 },
       relationshipImpact: { lust: +2, attraction: +1 },
       resetTimer: { turns: 5 }
     },
@@ -57,7 +57,7 @@
       label: "Seduce",
       text: "You make a bold advance...",
       priority: 20,
-      conditions: { minLust: 10, minAttraction: 5 },
+      conditions: { minLust: 0, minAttraction: 0 },
       relationshipImpact: { lust: +5, attraction: +2 },
       action: function(npc) { console.log("[NSFW] Seduction attempt with " + npc.name); }
     }
