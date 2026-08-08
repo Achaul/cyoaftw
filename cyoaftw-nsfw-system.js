@@ -28,8 +28,8 @@
   // --- Apply Attraction Impact ---
   function applyAttractionImpact(npc, impact) {
     if (!npc.relationship) npc.relationship = {};
-    const temperamentMod = window.getTemperamentModifier(npc.temperament);
-    const multiplier = 1.0 + (temperamentMod * 0.1); // Scale by 10% per point
+    const temperamentMod = window.getTemperamentModifier ? window.getTemperamentModifier(npc.temperament) : 0;
+    const multiplier = 1.0 + (temperamentMod * 0.1);
     npc.relationship.attraction = (npc.relationship.attraction || 0) + Math.round(impact * multiplier);
     npc.relationship.attraction = Math.max(0, Math.min(100, npc.relationship.attraction));
   }
@@ -37,7 +37,7 @@
   // --- Apply Lust Impact ---
   function applyLustImpact(npc, impact, envModifier = 1.0) {
     if (!npc.relationship) npc.relationship = {};
-    const temperamentMod = window.getTemperamentModifier(npc.temperament);
+    const temperamentMod = window.getTemperamentModifier ? window.getTemperamentModifier(npc.temperament) : 0;
     const temperamentMultiplier = 1.0 + (temperamentMod * 0.1);
     const charismaMultiplier = getPlayerCharismaModifier();
     const totalModifier = envModifier * temperamentMultiplier * charismaMultiplier;
@@ -70,19 +70,47 @@
 
   // --- Inject NSFW Options ---
   function injectNSFWOptions() {
-    if (!NSFW_SYSTEM_ENABLED || !window.NPC_CONVERSATION_CATALOGUE) return;
-    window.NPC_CONVERSATION_CATALOGUE.push(...NSFW_CONVERSATION_CATALOGUE);
+    if (!NSFW_SYSTEM_ENABLED) return;
+    if (!window.NPC_CONVERSATION_CATALOGUE) {
+      window.NPC_CONVERSATION_CATALOGUE = [];
+    }
+    const existingIds = new Set(window.NPC_CONVERSATION_CATALOGUE.map(opt => opt.id));
+    NSFW_CONVERSATION_CATALOGUE.forEach(option => {
+      if (!existingIds.has(option.id)) {
+        window.NPC_CONVERSATION_CATALOGUE.push(option);
+      }
+    });
+  }
+
+  // --- Initialize NPC Relationship State ---
+  function ensureNPCRelationshipState(npc) {
+    if (!npc) return;
+    if (!npc.relationship) {
+      npc.relationship = {
+        lust: 0,
+        attraction: 0,
+        orientation: "bi"
+      };
+    }
+    if (typeof npc.relationship.lust !== "number") npc.relationship.lust = 0;
+    if (typeof npc.relationship.attraction !== "number") npc.relationship.attraction = 0;
+    if (!npc.relationship.orientation) npc.relationship.orientation = "bi";
   }
 
   // --- Extend chooseChatOption() ---
   function extendChooseChatOption() {
+    if (typeof window.chooseChatOption !== "function") {
+      console.warn("[NSFW System] chooseChatOption not found, retrying later...");
+      setTimeout(extendChooseChatOption, 1000);
+      return;
+    }
     const original = window.chooseChatOption;
     window.chooseChatOption = function(option) {
       const result = original.apply(this, arguments);
       const npc = window.G.activeNPC;
       if (!npc || !option.relationshipImpact) return result;
 
-      const envModifier = getEnvironmentalModifier(window.G.currentRoom);
+      const envModifier = getEnvironmentalModifier(window.G.activeRoom);
       if (option.relationshipImpact.lust) {
         applyLustImpact(npc, option.relationshipImpact.lust, envModifier);
       }
@@ -98,12 +126,18 @@
 
   // --- Extend advanceStoryTurn() for Decay ---
   function extendAdvanceStoryTurn() {
+    if (typeof window.advanceStoryTurn !== "function") {
+      console.warn("[NSFW System] advanceStoryTurn not found, retrying later...");
+      setTimeout(extendAdvanceStoryTurn, 1000);
+      return;
+    }
     const original = window.advanceStoryTurn;
     window.advanceStoryTurn = function(steps = 1) {
       const result = original.apply(this, arguments);
-      if (window.G.story.turnCounter % 10 === 0) {
-        for (const npc of Object.values(window.G.npcs || {})) {
-          if (npc.relationship) {
+      if (window.G.story && window.G.story.turnCounter % 10 === 0) {
+        const allNPCs = Object.values(window.G.roomMap || {}).flatMap(room => room.creatures || []);
+        for (const npc of allNPCs) {
+          if (npc && npc.relationship) {
             npc.relationship.lust = Math.max(0, (npc.relationship.lust || 0) - 1);
             if (window.G.story.turnCounter % 20 === 0) {
               npc.relationship.attraction = Math.max(0, (npc.relationship.attraction || 0) - 0.5);
@@ -115,90 +149,27 @@
     };
   }
 
-function generatePhysicalTraits(type = "Unknown", gender = null) {
-    const lowerType = type.toLowerCase();
-    const template = (creatureTemplates.find(t => t.type.toLowerCase() === lowerType) || {});
-    const sensual = template.sensualProfile || {};
-    const appearanceProfile = template.appearanceProfile || "naturalSkin";
-    const isHumanoid = template.isHumanoid ?? true;
-    const size = template.size || "medium";
-
-    /* =====================================================
-       HELPERS
-    ===================================================== */
-    const pickByWeights = (options) => {
-        const total = options.reduce((sum, o) => sum + o.w, 0);
-        let roll = Math.random() * total;
-        for (let o of options) {
-            if (roll < o.w) return o.v;
-            roll -= o.w;
-        }
-        return options[0]?.v;
-    };
-
-    const pickFrom = (arr) => arr[Math.floor(Math.random() * arr.length)];
-
-    /* =====================================================
-       NSFW STATS INITIALIZATION
-    ===================================================== */
-    // Initialize lust and attraction to 0
-    let lust = 0;
-    let attraction = 0;
-
-    // Initialize orientation (default: random)
-    let orientation = pickFrom(["hetero", "bi", "homo"]);
-
-    // Override orientation based on template or gender
-    if (template.orientation) {
-        orientation = template.orientation;
-    } else if (gender) {
-        // Example: Force "homo" for same-gender NPCs in certain templates
-        if (lowerType === "succubus" || lowerType === "incubus") {
-            orientation = "bi"; // Succubi/Incubi are always bi
-        }
-    }
-
-    // Override lust/attraction if template specifies
-    if (template.sensualProfile?.initialLust !== undefined) {
-        lust = template.sensualProfile.initialLust;
-    }
-    if (template.sensualProfile?.initialAttraction !== undefined) {
-        attraction = template.sensualProfile.initialAttraction;
-    }
-
-    /* =====================================================
-       ANATOMY STRUCTURE (UNCHANGED)
-    ===================================================== */
-    const anatomy = {};
-
-    // --- Rest of the existing function (skin, fur, hair, etc.) ---
-    // ... (all your existing code for anatomy, skin tones, etc.) ...
-
-    /* =====================================================
-       RETURN STATE WITH NSFW STATS
-    ===================================================== */
-    return {
-        anatomy,
-        size,
-        bodyweight,
-        // Add NSFW stats to the returned object
-        relationship: {
-            lust,
-            attraction,
-            orientation
-        }
-    };
-}
-
   // --- Initialize ---
   function initNSFWSystem() {
-    if (!window.G || !window.NPC_CONVERSATION_CATALOGUE) {
+    if (!window.G) {
       setTimeout(initNSFWSystem, 1000);
       return;
     }
+
+    window.ensureNPCRelationshipState = ensureNPCRelationshipState;
     injectNSFWOptions();
     extendChooseChatOption();
     extendAdvanceStoryTurn();
+
+    if (typeof window.createNPC === "function") {
+      const originalCreateNPC = window.createNPC;
+      window.createNPC = function(species, room, zoneTemplate, options = {}) {
+        const npc = originalCreateNPC(species, room, zoneTemplate, options);
+        ensureNPCRelationshipState(npc);
+        return npc;
+      };
+    }
+
     console.log("[NSFW System] Initialized with passive stats");
   }
 

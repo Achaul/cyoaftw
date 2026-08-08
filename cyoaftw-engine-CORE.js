@@ -1,4 +1,3 @@
-<script>
 // ── GAME STATE ───────────────────────────────────────────────────
 
 window.G = {
@@ -1223,7 +1222,17 @@ function getCurrentStoryTurn() {
     return G.story.turnCounter || 0;
 }
 
-// === In cyoaftw-nsfw-system.js ===
+// === Base advanceStoryTurn function ===
+window.advanceStoryTurn = function(steps = 1) {
+    G.story = ensureStoryStateShape(G.story);
+    G.story.turnCounter = (G.story.turnCounter || 0) + steps;
+    if (typeof decayNPCStatesInWorld === "function") {
+        decayNPCStatesInWorld(G.roomMap, steps);
+    }
+    return G.story.turnCounter;
+};
+
+// === extendAdvanceStoryTurn (for NSFW system compatibility) ===
 function extendAdvanceStoryTurn() {
   const original = window.advanceStoryTurn;
   window.advanceStoryTurn = function(steps = 1) {
@@ -1231,8 +1240,9 @@ function extendAdvanceStoryTurn() {
 
     // Decay lust/attraction for all NPCs every 10/20 turns
     if (window.G.story.turnCounter % 10 === 0) {
-      for (const npc of Object.values(window.G.npcs || {})) {
-        if (npc.relationship) {
+      const allNPCs = Object.values(window.G.roomMap || {}).flatMap(room => room.creatures || []);
+      for (const npc of allNPCs) {
+        if (npc && npc.relationship) {
           // Lust decays by 1 every 10 turns
           npc.relationship.lust = Math.max(0, (npc.relationship.lust || 0) - 1);
           // Attraction decays by 0.5 every 20 turns
@@ -1905,36 +1915,44 @@ function createNPC(species, room, zoneTemplate, options = {}) {
     const temperament = profile.temperament;
 
     const npc = {
-        id:               `${species.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`,
-        name:             isHumanoid ? `${gender === "male" ? "a male" : "a female"} ${species}` : `a ${species}`,
-        species,
-        isHumanoid,
-        gender,
-        role,
-        temperament,
-        hostility:        typeof getBaseHostilityForTemperament === "function"
-            ? getBaseHostilityForTemperament(temperament)
-            : (temperament === "hostile" ? randInt(60, 90) : randInt(0, 40)),
-        age,
-        ageCategory,
-        personalityProfile: profile,
-        personalityTraits:  profile.traits,
-        speechStyle:        "common",
-        hp: 10, hpMax: 10,
-        inventory: [],
-        equipped:  {},
-        memory: {
-            metPlayer:       false,
-            favorability:    typeof getBaseFavorabilityForTemperament === "function"
-                ? getBaseFavorabilityForTemperament(temperament)
-                : (temperament === "hostile" ? -40 : 0),
-            lastMood:        "neutral",
-            playerActions:   [],
-            playerActionTags: [],
-            recentLines:     [],
-            aggressionCount: 0
-        }
+    id: `${species.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: isHumanoid ? `${gender === "male" ? "a male" : "a female"} ${species}` : `a ${species}`,
+    species,
+    isHumanoid,
+    gender,
+    role,
+    temperament,
+    hostility: typeof getBaseHostilityForTemperament === "function"
+        ? getBaseHostilityForTemperament(temperament)
+        : (temperament === "hostile" ? randInt(60, 90) : randInt(0, 40)),
+    age,
+    ageCategory,
+    personalityProfile: profile,
+    personalityTraits: profile.traits,
+    speechStyle: "common",
+    hp: 10,
+    hpMax: 10,
+    inventory: [],
+    equipped: {},
+    memory: {
+        metPlayer: false,
+        favorability: typeof getBaseFavorabilityForTemperament === "function"
+        ? getBaseFavorabilityForTemperament(temperament)
+        : (temperament === "hostile" ? -40 : 0),
+        lastMood: "neutral",
+        playerActions: [],
+        playerActionTags: [],
+        recentLines: [],
+        aggressionCount: 0
+    },
+    // --- ADD THIS LINE ---
+    relationship: {
+        lust: 0,
+        attraction: 0,
+        orientation: "bi"
+    }
     };
+
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
     if (typeof syncNPCSpeechProfile === "function") syncNPCSpeechProfile(npc, room, zoneTemplate);
 
@@ -1949,6 +1967,8 @@ function createNPC(species, room, zoneTemplate, options = {}) {
     npc.behavior = generateNPCBehavior(npc);
     return npc;
 }
+
+window.createNPC = createNPC;
 
 // ── MOVEMENT ─────────────────────────────────────────────────────
 
@@ -4378,6 +4398,8 @@ function chooseChatOption(option) {
     npcRespond(npc, choice);
 }
 
+window.chooseChatOption = chooseChatOption;
+
 function disengageFromNPC(text) {
     const npc = G.activeNPC;
     if (!npc) return;
@@ -5481,4 +5503,3 @@ function hideSpinner() {
     setLoadingProgress(0);
     document.getElementById("loadingSpinner").classList.remove("active");
 }
-</script>
