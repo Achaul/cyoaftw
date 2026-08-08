@@ -1010,6 +1010,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
     lust: npc.relationship?.lust || 0,
     attraction: npc.relationship?.attraction || 0,
     orientation: npc.relationship?.orientation || "bi", // Default to bi for safety
+    everGreeted: !!(npc.memory && npc.memory.everGreeted),
     story: window.G.story,
     // ... (other existing fields)
   };
@@ -1060,6 +1061,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
         arousal: npc.memory && typeof npc.memory.arousal === "number" ? npc.memory.arousal : 0,
         disinhibition: npc.memory && typeof npc.memory.disinhibition === "number" ? npc.memory.disinhibition : 0,
         metPlayer: !!(npc.memory && npc.memory.metPlayer),
+        everGreeted: !!(npc.memory && npc.memory.everGreeted),
         mood: String(npc.memory && npc.memory.lastMood || "neutral").toLowerCase(),
         disposition: typeof getCurrentNPCDisposition === "function"
             ? String(getCurrentNPCDisposition(npc) || "").toLowerCase()
@@ -1286,7 +1288,21 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     const ctx = getNPCConversationContext(npc, extraContext);
     if (!ctx) return [];
 
-    return NPC_CONVERSATION_CATALOGUE
+    const everGreeted = npc.memory && npc.memory.everGreeted === true;
+    
+    // Filter by greeting gate: only greeting and disengage options until first greeting
+    let filtered = NPC_CONVERSATION_CATALOGUE;
+    if (!everGreeted) {
+        filtered = NPC_CONVERSATION_CATALOGUE.filter(entry => {
+            const isGreeting = entry.intent === "greeting" || 
+                entry.id === "greet-intro" || 
+                entry.id === "greet-known";
+            const isDisengage = entry.action === "disengage" || entry.id === "goodbye";
+            return isGreeting || isDisengage;
+        });
+    }
+
+    return filtered
         .filter(entry => conversationRepeatAvailable(entry, ctx))
         .filter(entry => conversationConditionMatches(entry.conditions, ctx))
         .sort((a, b) => (a.priority || 0) - (b.priority || 0))
