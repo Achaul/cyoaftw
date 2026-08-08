@@ -48,7 +48,6 @@
       text: "You flirt with them, testing their interest...",
       priority: 10,
       repeat: "session",
-      conditions: { minFavor: 0, minAttraction: 0 },
       relationshipImpact: { lust: +2, attraction: +1 },
       resetTimer: { turns: 5 }
     },
@@ -57,7 +56,6 @@
       label: "Seduce",
       text: "You make a bold advance...",
       priority: 20,
-      conditions: { minLust: 0, minAttraction: 0 },
       relationshipImpact: { lust: +5, attraction: +2 },
       action: function(npc) { console.log("[NSFW] Seduction attempt with " + npc.name); }
     }
@@ -261,6 +259,11 @@
     window.generatePhysicalTraits = generatePhysicalTraits;
     injectNSFWOptions();
     extendChooseChatOption();
+    if (!window.queryConversationCatalogue) {
+      window.queryConversationCatalogue = function(npc, context) {
+        return window.NPC_CONVERSATION_CATALOGUE || [];
+      };
+    }
     extendAdvanceStoryTurn();
     if (typeof window.createNPC === "function") {
       const orig = window.createNPC;
