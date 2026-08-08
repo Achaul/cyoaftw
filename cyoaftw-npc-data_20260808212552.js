@@ -1290,10 +1290,16 @@ function queryConversationCatalogue(npc, extraContext = {}) {
 
     const everGreeted = npc.memory && npc.memory.everGreeted === true;
     
+    // Merge local catalogue with window catalogue (for NSFW options)
+    const fullCatalogue = [
+        ...NPC_CONVERSATION_CATALOGUE,
+        ...(window.NPC_CONVERSATION_CATALOGUE || [])
+    ];
+    
     // Filter by greeting gate: only greeting and disengage options until first greeting
-    let filtered = NPC_CONVERSATION_CATALOGUE;
+    let filtered = fullCatalogue;
     if (!everGreeted) {
-        filtered = NPC_CONVERSATION_CATALOGUE.filter(entry => {
+        filtered = fullCatalogue.filter(entry => {
             const isGreeting = entry.intent === "greeting" || 
                 entry.id === "greet-intro" || 
                 entry.id === "greet-known";
