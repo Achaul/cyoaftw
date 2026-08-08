@@ -48,6 +48,7 @@
       text: "You flirt with them, testing their interest...",
       priority: 10,
       repeat: "session",
+      conditions: { romanceEligible: true, maxHostility: 70 },
       relationshipImpact: { lust: +2, attraction: +1 },
       resetTimer: { turns: 5 }
     },
