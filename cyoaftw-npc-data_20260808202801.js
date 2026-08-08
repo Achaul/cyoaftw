@@ -1166,6 +1166,8 @@ function conversationConditionMatches(conditions, ctx) {
     if (typeof conditions.maxFavor === "number" && ctx.favor > conditions.maxFavor) return false;
     if (typeof conditions.minHostility === "number" && ctx.hostility < conditions.minHostility) return false;
     if (typeof conditions.maxHostility === "number" && ctx.hostility > conditions.maxHostility) return false;
+    if (typeof conditions.minLust === "number" && ctx.lust < conditions.minLust) return false;
+    if (typeof conditions.maxLust === "number" && ctx.lust > conditions.maxLust) return false;
     if (typeof conditions.minAttraction === "number" && ctx.attraction < conditions.minAttraction) return false;
     if (typeof conditions.maxAttraction === "number" && ctx.attraction > conditions.maxAttraction) return false;
     if (typeof conditions.minArousal === "number" && ctx.arousal < conditions.minArousal) return false;

@@ -54,19 +54,40 @@
     {
       id: "seduce",
       label: "Seduce",
-      text: "You make a bold advance...",
+      text: "You suggest a romantic follow-up, like meeting for dinner or a private walk...",
       priority: 20,
-      relationshipImpact: { lust: +5, attraction: +2 },
-      action: function(npc) { console.log("[NSFW] Seduction attempt with " + npc.name); }
+      conditions: { minAttraction: 15 },
+      isInquiry: true,
+      relationshipImpact: { lust: +3, attraction: +5 },
+      onAccept: { lust: +5, attraction: +8 },
+      onReject: { hostility: +10, attraction: -5 },
+      resetTimer: { turns: 10 }
+    },
+    {
+      id: "proposition",
+      label: "Proposition",
+      text: "You make a direct physical advance, testing if they're up for something quick and immediate...",
+      priority: 25,
+      conditions: { minAttraction: 10, minLust: 15 },
+      isInquiry: true,
+      relationshipImpact: { lust: +8, attraction: +2 },
+      onAccept: { lust: +12, attraction: +3 },
+      onReject: { hostility: +15, lust: -3 },
+      resetTimer: { turns: 15 },
+      action: function(npc) { console.log("[NSFW] Proposition made to " + npc.name); }
     }
   ];
 
   function injectNSFWOptions() {
     if (!NSFW_SYSTEM_ENABLED) return;
     if (!window.NPC_CONVERSATION_CATALOGUE) window.NPC_CONVERSATION_CATALOGUE = [];
-    const existingIds = new Set(window.NPC_CONVERSATION_CATALOGUE.map(opt => opt.id));
     NSFW_CONVERSATION_CATALOGUE.forEach(option => {
-      if (!existingIds.has(option.id)) window.NPC_CONVERSATION_CATALOGUE.push(option);
+      const existingIndex = window.NPC_CONVERSATION_CATALOGUE.findIndex(o => o.id === option.id);
+      if (existingIndex >= 0) {
+        window.NPC_CONVERSATION_CATALOGUE[existingIndex] = option;
+      } else {
+        window.NPC_CONVERSATION_CATALOGUE.push(option);
+      }
     });
   }
 
@@ -208,6 +229,40 @@
     return { anatomy: anatomy, size: size, bodyweight: bodyweight };
   }
 
+  function applyInquiryResponse(npc, option, responseText) {
+    if (!npc || !option || !option.isInquiry) return responseText;
+    const acceptedMatch = responseText.match(/^\[ACCEPTED\]\s+(.*)/s);
+    const rejectedMatch = responseText.match(/^\[REJECTED\]\s+(.*)/s);
+    if (acceptedMatch) {
+      const cleanText = acceptedMatch[1];
+      if (option.onAccept) {
+        applyRelationshipImpacts(npc, option.onAccept);
+      }
+      console.log("[NSFW] Inquiry ACCEPTED for " + (option.id || "unknown"));
+      return cleanText;
+    }
+    if (rejectedMatch) {
+      const cleanText = rejectedMatch[1];
+      if (option.onReject) {
+        applyRelationshipImpacts(npc, option.onReject);
+      }
+      console.log("[NSFW] Inquiry REJECTED for " + (option.id || "unknown"));
+      return cleanText;
+    }
+    return responseText;
+  }
+
+  function applyRelationshipImpacts(npc, impacts) {
+    if (!npc || !impacts) return;
+    if (!npc.relationship) npc.relationship = {};
+    if (impacts.lust) applyLustImpact(npc, impacts.lust);
+    if (impacts.attraction) applyAttractionImpact(npc, impacts.attraction);
+    if (impacts.hostility) {
+      npc.relationship.hostility = (npc.relationship.hostility || 0) + impacts.hostility;
+      npc.relationship.hostility = Math.max(0, Math.min(100, npc.relationship.hostility));
+    }
+  }
+
   function extendChooseChatOption() {
     if (typeof window.chooseChatOption !== "function") {
       console.warn("[NSFW System] chooseChatOption not found, retrying...");
@@ -257,6 +312,7 @@
     }
     window.ensureNPCRelationshipState = ensureNPCRelationshipState;
     window.generatePhysicalTraits = generatePhysicalTraits;
+    window.applyInquiryResponse = applyInquiryResponse;
     injectNSFWOptions();
     extendChooseChatOption();
     if (!window.queryConversationCatalogue) {
