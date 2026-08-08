@@ -115,6 +115,81 @@
     };
   }
 
+function generatePhysicalTraits(type = "Unknown", gender = null) {
+    const lowerType = type.toLowerCase();
+    const template = (creatureTemplates.find(t => t.type.toLowerCase() === lowerType) || {});
+    const sensual = template.sensualProfile || {};
+    const appearanceProfile = template.appearanceProfile || "naturalSkin";
+    const isHumanoid = template.isHumanoid ?? true;
+    const size = template.size || "medium";
+
+    /* =====================================================
+       HELPERS
+    ===================================================== */
+    const pickByWeights = (options) => {
+        const total = options.reduce((sum, o) => sum + o.w, 0);
+        let roll = Math.random() * total;
+        for (let o of options) {
+            if (roll < o.w) return o.v;
+            roll -= o.w;
+        }
+        return options[0]?.v;
+    };
+
+    const pickFrom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+    /* =====================================================
+       NSFW STATS INITIALIZATION
+    ===================================================== */
+    // Initialize lust and attraction to 0
+    let lust = 0;
+    let attraction = 0;
+
+    // Initialize orientation (default: random)
+    let orientation = pickFrom(["hetero", "bi", "homo"]);
+
+    // Override orientation based on template or gender
+    if (template.orientation) {
+        orientation = template.orientation;
+    } else if (gender) {
+        // Example: Force "homo" for same-gender NPCs in certain templates
+        if (lowerType === "succubus" || lowerType === "incubus") {
+            orientation = "bi"; // Succubi/Incubi are always bi
+        }
+    }
+
+    // Override lust/attraction if template specifies
+    if (template.sensualProfile?.initialLust !== undefined) {
+        lust = template.sensualProfile.initialLust;
+    }
+    if (template.sensualProfile?.initialAttraction !== undefined) {
+        attraction = template.sensualProfile.initialAttraction;
+    }
+
+    /* =====================================================
+       ANATOMY STRUCTURE (UNCHANGED)
+    ===================================================== */
+    const anatomy = {};
+
+    // --- Rest of the existing function (skin, fur, hair, etc.) ---
+    // ... (all your existing code for anatomy, skin tones, etc.) ...
+
+    /* =====================================================
+       RETURN STATE WITH NSFW STATS
+    ===================================================== */
+    return {
+        anatomy,
+        size,
+        bodyweight,
+        // Add NSFW stats to the returned object
+        relationship: {
+            lust,
+            attraction,
+            orientation
+        }
+    };
+}
+
   // --- Initialize ---
   function initNSFWSystem() {
     if (!window.G || !window.NPC_CONVERSATION_CATALOGUE) {
