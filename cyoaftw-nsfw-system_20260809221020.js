@@ -356,6 +356,61 @@
 
             return responseText + ` ${npc.name} suggests going to the ${targetRoom.displayName || targetRoom.type}.`;
           }
+        } else {
+          // Fallback: No suitable room found, NPC states the issue
+          // Clear any pending destination so player can choose
+          delete npc._pendingSeductionDestination;
+          delete npc._pendingSeductionOption;
+
+          if (option.id === "proposition") {
+            // For proposition: player can ask NPC to follow to a spot
+            const followOption = {
+              id: "ask-npc-to-follow",
+              label: `Ask ${npc.name} to follow you`,
+              text: `You ask ${npc.name} to follow you to a more private location.`,
+              promptText: `You ask ${npc.name} to follow you to a more private location.`,
+              priority: 5,
+              intent: "seduction-followup",
+              action: function(selectedNPC) {
+                // Set flag so player can lead the NPC
+                selectedNPC._pendingSeductionOption = "follow-player";
+              },
+              relationshipImpact: { lust: +2, attraction: +2 }
+            };
+
+            if (!window.NPC_CONVERSATION_CATALOGUE.some(o => o.id === followOption.id)) {
+              window.NPC_CONVERSATION_CATALOGUE.push(followOption);
+            }
+
+            return responseText + ` ${npc.name} looks around nervously. "I... I don't see anywhere suitable here. Perhaps you could lead the way?"`;
+          } else {
+            // For seduce: NPC agrees to meet later at a specific location
+            const meetupRoom = findNearestRoomOfTypes(startCoords, ["Tavern", "Inn", "Inn Common"]);
+            
+            if (meetupRoom) {
+              // Store original location so NPC can return if player doesn't meet
+              // Use _homeCoords if available, otherwise use startCoords
+              npc._originalLocation = npc._homeCoords || startCoords;
+              
+              // Store meetup info on NPC
+              npc._meetupLocation = meetupRoom.coords;
+              npc._meetupRoomType = meetupRoom.type || "Inn";
+              npc._meetupRoomName = meetupRoom.displayName || meetupRoom.type;
+              
+              // Set trigger: meet after 2 turns
+              npc._meetupTriggerTurn = (window.G.story && typeof window.G.story.turnCounter === "number" 
+                  ? window.G.story.turnCounter + 2 
+                  : 2);
+              
+              // Set return trigger: if not met after 12 more turns, return to home
+              npc._meetupReturnTurn = npc._meetupTriggerTurn + 12;
+              
+              return responseText + ` ${npc.name} smiles warmly. "I would enjoy that. Meet me at the ${meetupRoom.displayName || meetupRoom.type} in a little while."`;
+            } else {
+              // No meetup location found at all
+              return responseText + ` ${npc.name} smiles warmly. "I would enjoy that. Let's find a good spot later."`;
+            }
+          }
         }
       }
 
@@ -388,6 +443,113 @@
     }
   }
 
+  function handleMealDateInteraction(npc, option) {
+    if (!npc || !option) return false;
+    
+    // Check if this is a meetup NPC at their meetup location
+    const isMeetupActive = npc._meetupArrived && npc._meetupLocation && 
+                          window.G && window.G.player && window.G.player.coords === npc._meetupLocation;
+    
+    if (!isMeetupActive) return false;
+    
+    // Handle meal-related options
+    if (option.id === "split-bill") {
+      applyRelationshipImpacts(npc, { lust: +1, attraction: +2 });
+      if (typeof window.addChatMessage === "function") {
+        const npcName = npc.name || "They";
+        window.addChatMessage("left", npcName, `"That's fair. I appreciate you not assuming." She smiles and takes a sip of her drink.`);
+      }
+      // Mark meal as completed
+      npc._mealShared = true;
+      return true;
+    }
+    
+    if (option.id === "pay-for-meal") {
+      applyRelationshipImpacts(npc, { lust: +3, attraction: +4 });
+      if (typeof window.addChatMessage === "function") {
+        const npcName = npc.name || "They";
+        window.addChatMessage("left", npcName, `"You didn't have to... but thank you." She looks at you with renewed interest.`);
+      }
+      npc._mealShared = true;
+      npc._playerPaid = true;
+      return true;
+    }
+    
+    if (option.id === "small-talk") {
+      applyRelationshipImpacts(npc, { lust: +2, attraction: +1 });
+      if (typeof window.addChatMessage === "function") {
+        const npcName = npc.name || "They";
+        const topics = [
+          `"The food here is excellent, don't you think?" She takes a bite and watches you.`,
+          `"I don't usually do this... meeting someone like this." She seems genuinely curious about you.`,
+          `"You're different from most people I meet. In a good way." She leans in slightly.`,
+          `"I've been meaning to try this place. Good choice." She smiles warmly.`
+        ];
+        window.addChatMessage("left", npcName, topics[Math.floor(Math.random() * topics.length)]);
+      }
+      return true;
+    }
+    
+    return false;
+  }
+
+  function injectMeetupConversationOptions() {
+    const meetupOptions = [
+      {
+        id: "split-bill",
+        label: "Suggest splitting the bill",
+        text: "You suggest sharing the cost of the meal equally.",
+        priority: 30,
+        conditions: {
+          custom: function(npc, ctx) {
+            return npc && npc._meetupArrived && ctx && 
+                   ctx.room && ctx.room.coords === npc._meetupLocation &&
+                   !npc._mealShared;
+          }
+        },
+        relationshipImpact: { lust: +1, attraction: +2 }
+      },
+      {
+        id: "pay-for-meal",
+        label: "Offer to pay for the meal",
+        text: "You offer to cover the entire cost of the meal.",
+        priority: 30,
+        conditions: {
+          custom: function(npc, ctx) {
+            return npc && npc._meetupArrived && ctx && 
+                   ctx.room && ctx.room.coords === npc._meetupLocation &&
+                   !npc._mealShared;
+          }
+        },
+        relationshipImpact: { lust: +3, attraction: +4 }
+      },
+      {
+        id: "small-talk",
+        label: "Engage in small talk",
+        text: "You make light conversation while sharing the meal.",
+        priority: 30,
+        conditions: {
+          custom: function(npc, ctx) {
+            return npc && npc._meetupArrived && ctx && 
+                   ctx.room && ctx.room.coords === npc._meetupLocation &&
+                   npc._mealShared;
+          }
+        },
+        relationshipImpact: { lust: +2, attraction: +1 },
+        repeat: "always"
+      }
+    ];
+    
+    meetupOptions.forEach(option => {
+      const existingIndex = window.NPC_CONVERSATION_CATALOGUE.findIndex(o => o.id === option.id);
+      if (existingIndex >= 0) {
+        window.NPC_CONVERSATION_CATALOGUE[existingIndex] = option;
+      } else {
+        window.NPC_CONVERSATION_CATALOGUE.push(option);
+      }
+    });
+  }
+
   function extendChooseChatOption() {
     if (typeof window.chooseChatOption !== "function") {
       console.warn("[NSFW System] chooseChatOption not found, retrying...");
@@ -401,14 +563,28 @@
       if (!npc || !option.relationshipImpact) return result;
       
       // Log NSFW actions for debugging - only for specific NSFW option IDs
-      if (option.id === "proposition") {
-        console.log("[NSFW] Proposition made to " + npc.name);
+      if (option.id === "proposition" || option.id === "seduce" || option.id === "split-bill" || option.id === "pay-for-meal" || option.id === "small-talk") {
+        console.log("[NSFW] Action:", option.id, "with", npc.name);
       }
       
       const envMod = getEnvironmentalModifier(window.G.activeRoom);
       if (option.relationshipImpact.lust) applyLustImpact(npc, option.relationshipImpact.lust, envMod);
       if (option.relationshipImpact.attraction) applyAttractionImpact(npc, option.relationshipImpact.attraction);
       if (option.action && typeof option.action === "function") option.action(npc);
+      
+      // Handle meal date interaction
+      const handled = handleMealDateInteraction(npc, option);
+      
+      // Clear meetup flags if player interacts with NPC at meetup location
+      if (npc._meetupArrived) {
+        delete npc._meetupArrived;
+        delete npc._meetupReturnTurn;
+        delete npc._meetupLocation;
+        delete npc._meetupRoomType;
+        delete npc._meetupRoomName;
+        delete npc._originalLocation;
+      }
+      
       return result;
     };
   }
@@ -429,11 +605,85 @@
             if (window.G.story.turnCounter % 20 === 0) {
               npc.relationship.attraction = Math.max(0, (npc.relationship.attraction || 0) - 0.5);
             }
+            
+            // Handle delayed seduction meetups
+            if (npc._meetupTriggerTurn && window.G.story.turnCounter >= npc._meetupTriggerTurn) {
+              const currentRoom = window.G.roomMap[npc._meetupLocation];
+              if (currentRoom && typeof teleportNPC === "function") {
+                // Teleport NPC to meetup location
+                teleportNPC(npc, npc._meetupLocation);
+                
+                // Notify player
+                if (typeof window.addGameMessage === "function") {
+                  window.addGameMessage("info", `${npc.name} is now waiting at the ${npc._meetupRoomName || npc._meetupRoomType}.`);
+                } else if (typeof window.setNarration === "function") {
+                  window.setNarration(`${npc.name} is now waiting at the ${npc._meetupRoomName || npc._meetupRoomType}.`);
+                }
+                
+                // Mark that NPC has arrived at meetup
+                npc._meetupArrived = true;
+              }
+              // Clean up the trigger but keep other info for return check
+              delete npc._meetupTriggerTurn;
+            }
+            
+            // Handle return if player doesn't meet: after 12 turns at meetup, return to home
+            if (npc._meetupArrived && npc._meetupReturnTurn && window.G.story.turnCounter >= npc._meetupReturnTurn) {
+              // Determine where to return: use _homeCoords if available, otherwise _originalLocation
+              const returnLocation = npc._homeCoords || npc._originalLocation;
+              if (typeof teleportNPC === "function" && returnLocation) {
+                teleportNPC(npc, returnLocation);
+                
+                // Notify player
+                if (typeof window.addGameMessage === "function") {
+                  window.addGameMessage("info", `${npc.name} grew tired of waiting and returned home.`);
+                } else if (typeof window.setNarration === "function") {
+                  window.setNarration(`${npc.name} grew tired of waiting and returned home.`);
+                }
+              }
+              // Clean up all meetup flags
+              delete npc._meetupArrived;
+              delete npc._meetupReturnTurn;
+              delete npc._meetupLocation;
+              delete npc._meetupRoomType;
+              delete npc._meetupRoomName;
+              delete npc._originalLocation;
+            }
           }
         });
       }
       return result;
     };
+  }
+
+  // Teleport an NPC to a new room
+  function teleportNPC(npc, targetCoords) {
+    if (!npc || !targetCoords || !window.G || !window.G.roomMap) return false;
+    
+    const targetRoom = window.G.roomMap[targetCoords];
+    if (!targetRoom) return false;
+    
+    // Remove NPC from current room if they're in one
+    if (npc._currentRoomCoords) {
+      const currentRoom = window.G.roomMap[npc._currentRoomCoords];
+      if (currentRoom && currentRoom.creatures) {
+        currentRoom.creatures = currentRoom.creatures.filter(c => c !== npc);
+      }
+    }
+    
+    // Add NPC to target room
+    if (!targetRoom.creatures) targetRoom.creatures = [];
+    if (!targetRoom.creatures.includes(npc)) {
+      targetRoom.creatures.push(npc);
+    }
+    
+    // Update NPC's location tracking
+    npc._currentRoomCoords = targetCoords;
+    if (typeof npc.coords !== "undefined") {
+      npc.coords = targetCoords;
+    }
+    
+    return true;
   }
 
   function initNSFWSystem() {
@@ -444,7 +694,9 @@
     window.ensureNPCRelationshipState = ensureNPCRelationshipState;
     window.generatePhysicalTraits = generatePhysicalTraits;
     window.applyInquiryResponse = applyInquiryResponse;
+    window.teleportNPC = teleportNPC;
     injectNSFWOptions();
+    injectMeetupConversationOptions();
     extendChooseChatOption();
     if (!window.queryConversationCatalogue) {
       window.queryConversationCatalogue = function(npc, context) {
@@ -465,7 +717,7 @@
         return npc;
       };
     }
-    console.log("[NSFW System] Initialized with passive stats and physical traits");
+    console.log("[NSFW System] Initialized with passive stats and physical traits and meetup date options");
   }
 
   initNSFWSystem();
