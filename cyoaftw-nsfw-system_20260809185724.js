@@ -75,7 +75,7 @@
       onAccept: { lust: +12, attraction: +3 },
       onReject: { hostility: +15, lust: -3 },
       resetTimer: { turns: 15 },
-      action: function(npc) { console.log("[NSFW] Proposition made to " + npc.name); }
+
     }
   ];
 
@@ -399,6 +399,12 @@
       const result = orig.apply(this, arguments);
       const npc = window.G.activeNPC;
       if (!npc || !option.relationshipImpact) return result;
+      
+      // Log NSFW actions for debugging - only for specific NSFW option IDs
+      if (option.id === "proposition") {
+        console.log("[NSFW] Proposition made to " + npc.name);
+      }
+      
       const envMod = getEnvironmentalModifier(window.G.activeRoom);
       if (option.relationshipImpact.lust) applyLustImpact(npc, option.relationshipImpact.lust, envMod);
       if (option.relationshipImpact.attraction) applyAttractionImpact(npc, option.relationshipImpact.attraction);
