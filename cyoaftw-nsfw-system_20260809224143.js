@@ -687,12 +687,22 @@
     const targetRoom = window.G.roomMap[targetCoords];
     if (!targetRoom) return false;
     
-    // Remove NPC from current room if they're in one
-    if (npc._currentRoomCoords) {
+    // Remove NPC from current room - search all rooms if _currentRoomCoords not set
+    if (npc._currentRoomCoords && window.G.roomMap[npc._currentRoomCoords]) {
       const currentRoom = window.G.roomMap[npc._currentRoomCoords];
       if (currentRoom && currentRoom.creatures) {
         currentRoom.creatures = currentRoom.creatures.filter(c => c !== npc);
       }
+    } else {
+      // Search all rooms to find where this NPC currently is
+      Object.values(window.G.roomMap).forEach(room => {
+        if (room && room.creatures) {
+          const index = room.creatures.indexOf(npc);
+          if (index >= 0) {
+            room.creatures.splice(index, 1);
+          }
+        }
+      });
     }
     
     // Add NPC to target room
