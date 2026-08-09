@@ -230,6 +230,65 @@
     return { anatomy: anatomy, size: size, bodyweight: bodyweight };
   }
 
+  // Helper: Find nearest room of specific types (BFS)
+  function findNearestRoomOfTypes(startCoords, types) {
+    const visited = new Set();
+    const queue = [{ coords: startCoords, distance: 0 }];
+    const typeSet = new Set(types.map(t => t.toLowerCase()));
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (visited.has(current.coords)) continue;
+      visited.add(current.coords);
+
+      const room = window.G.roomMap[current.coords];
+      if (room && typeSet.has((room.type || "").toLowerCase())) {
+        return room;
+      }
+
+      if (room?.exits) {
+        Object.values(room.exits).forEach(exit => {
+          if (exit?.key && !visited.has(exit.key)) {
+            queue.push({ coords: exit.key, distance: current.distance + 1 });
+          }
+        });
+      }
+    }
+    return null;
+  }
+
+  // Helper: Find nearest private room (no creatures or specific types)
+  function findNearestPrivateRoom(startCoords) {
+    const privateTypes = ["alleyway", "cellar", "storage", "closet"];
+    const privateTypeSet = new Set(privateTypes);
+    const visited = new Set();
+    const queue = [{ coords: startCoords, distance: 0 }];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (visited.has(current.coords)) continue;
+      visited.add(current.coords);
+
+      const room = window.G.roomMap[current.coords];
+      if (room) {
+        const isPrivateType = privateTypeSet.has((room.type || "").toLowerCase());
+        const isEmpty = !room.creatures || room.creatures.length === 0;
+        if (isPrivateType || isEmpty) {
+          return room;
+        }
+      }
+
+      if (room?.exits) {
+        Object.values(room.exits).forEach(exit => {
+          if (exit?.key && !visited.has(exit.key)) {
+            queue.push({ coords: exit.key, distance: current.distance + 1 });
+          }
+        });
+      }
+    }
+    return null;
+  }
+
   function applyInquiryResponse(npc, option, responseText) {
     if (!npc || !option || !option.isInquiry) return responseText;
     const acceptedMatch = responseText.match(/^\[ACCEPTED\]\s+(.*)/s);
@@ -239,6 +298,30 @@
       if (option.onAccept) {
         applyRelationshipImpacts(npc, option.onAccept);
       }
+      if (typeof addToParty === "function") {
+        addToParty(npc);
+      }
+
+      // Handle routing for seduce/proposition
+      if (option.id === "seduce" || option.id === "proposition") {
+        const isForward = npc.temperament === "forward" || npc.temperament === "bold";
+        const startCoords = window.G.player.coords;
+        const targetRoom = option.id === "seduce"
+            ? findNearestRoomOfTypes(startCoords, ["Tavern", "Inn", "Inn Common"])
+            : findNearestPrivateRoom(startCoords);
+
+        if (targetRoom) {
+          if (isForward && typeof window.teleportPlayerToCoords === "function") {
+            setTimeout(() => {
+              window.teleportPlayerToCoords(targetRoom.coords);
+            }, 100);
+            return cleanText + ` ${npc.name} takes your hand. "Follow me to the ${targetRoom.displayName || targetRoom.type}."`;
+          } else {
+            return cleanText + ` ${npc.name} suggests going to the ${targetRoom.displayName || targetRoom.type}.`;
+          }
+        }
+      }
+
       console.log("[NSFW] Inquiry ACCEPTED for " + (option.id || "unknown"));
       return cleanText;
     }
