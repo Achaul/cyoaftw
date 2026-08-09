@@ -318,6 +318,18 @@
         addToParty(npc);
       }
 
+      // Clear any existing meetup state before setting up new one
+      if (option.id === "seduce" || option.id === "proposition") {
+        delete npc._meetupArrived;
+        delete npc._meetupReturnTurn;
+        delete npc._meetupLocation;
+        delete npc._meetupRoomType;
+        delete npc._meetupRoomName;
+        delete npc._originalLocation;
+        delete npc._pendingSeductionDestination;
+        delete npc._pendingSeductionOption;
+      }
+
       // Handle routing for seduce/proposition
       if (option.id === "seduce" || option.id === "proposition") {
         const isForward = npc.temperament === "forward" || npc.temperament === "bold";
@@ -331,19 +343,29 @@
             setTimeout(() => {
               window.teleportPlayerToCoords(targetRoom.coords);
             }, 100);
+            // Mark that NPC is at meetup location for immediate proposition
+            npc._meetupArrived = true;
+            npc._meetupLocation = targetRoom.coords;
+            npc._meetupRoomName = targetRoom.displayName || targetRoom.type;
             return responseText + ` ${npc.name} takes your hand. "Follow me to the ${targetRoom.displayName || targetRoom.type}."`;
           } else {
             npc._pendingSeductionDestination = targetRoom.coords;
             npc._pendingSeductionOption = option.id;
 
+            const homeRoomName = targetRoom.displayName || targetRoom.type;
             const followOption = {
               id: "follow-seduction-suggestion",
-              label: `Go with ${npc.name} to the ${targetRoom.displayName || targetRoom.type}`,
-              text: `You agree to go with ${npc.name} to the ${targetRoom.displayName || targetRoom.type}.`,
+              label: `Go with ${npc.name} to the ${homeRoomName}`,
+              text: `You agree to go with ${npc.name} to the ${homeRoomName}.`,
               priority: 5,
               action: function(selectedNPC) {
                 if (selectedNPC._pendingSeductionDestination && typeof window.teleportPlayerToCoords === "function") {
-                  window.teleportPlayerToCoords(selectedNPC._pendingSeductionDestination);
+                  const dest = selectedNPC._pendingSeductionDestination;
+                  window.teleportPlayerToCoords(dest);
+                  // Mark NPC as at meetup location after player follows
+                  selectedNPC._meetupArrived = true;
+                  selectedNPC._meetupLocation = dest;
+                  selectedNPC._meetupRoomName = homeRoomName;
                   delete selectedNPC._pendingSeductionDestination;
                   delete selectedNPC._pendingSeductionOption;
                 }
@@ -374,6 +396,8 @@
               action: function(selectedNPC) {
                 // Set flag so player can lead the NPC
                 selectedNPC._pendingSeductionOption = "follow-player";
+                // For now, set a flag to indicate they're ready to follow
+                selectedNPC._waitingToFollow = true;
               },
               relationshipImpact: { lust: +2, attraction: +2 }
             };
