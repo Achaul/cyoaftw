@@ -317,6 +317,27 @@
             }, 100);
             return cleanText + ` ${npc.name} takes your hand. "Follow me to the ${targetRoom.displayName || targetRoom.type}."`;
           } else {
+            npc._pendingSeductionDestination = targetRoom.coords;
+            npc._pendingSeductionOption = option.id;
+
+            const followOption = {
+              id: "follow-seduction-suggestion",
+              label: `Go to the ${targetRoom.displayName || targetRoom.type}`,
+              text: `You agree to go to the ${targetRoom.displayName || targetRoom.type} with ${npc.name}.`,
+              priority: 5,
+              action: function(selectedNPC) {
+                if (selectedNPC._pendingSeductionDestination && typeof window.teleportPlayerToCoords === "function") {
+                  window.teleportPlayerToCoords(selectedNPC._pendingSeductionDestination);
+                  delete selectedNPC._pendingSeductionDestination;
+                  delete selectedNPC._pendingSeductionOption;
+                }
+              }
+            };
+
+            if (!window.NPC_CONVERSATION_CATALOGUE.some(o => o.id === followOption.id)) {
+              window.NPC_CONVERSATION_CATALOGUE.push(followOption);
+            }
+
             return cleanText + ` ${npc.name} suggests going to the ${targetRoom.displayName || targetRoom.type}.`;
           }
         }

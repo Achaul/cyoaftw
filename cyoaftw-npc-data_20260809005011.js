@@ -1312,6 +1312,12 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     return filtered
         .filter(entry => conversationRepeatAvailable(entry, ctx))
         .filter(entry => conversationConditionMatches(entry.conditions, ctx))
+        .filter(entry => {
+          if (entry.id === "follow-seduction-suggestion") {
+            return npc && npc._pendingSeductionDestination;
+          }
+          return true;
+        })
         .sort((a, b) => (a.priority || 0) - (b.priority || 0))
         .map(entry => buildConversationOption(entry, npc, ctx))
         .filter(Boolean);
