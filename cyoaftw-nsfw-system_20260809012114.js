@@ -289,12 +289,28 @@
     return null;
   }
 
-  function applyInquiryResponse(npc, option, responseText) {
+  function applyInquiryResponse(npc, option, responseText, affirmativeFromCache) {
     if (!npc || !option || !option.isInquiry) return responseText;
-    const acceptedMatch = responseText.match(/^\[ACCEPTED\]\s+(.*)/s);
-    const rejectedMatch = responseText.match(/^\[REJECTED\]\s+(.*)/s);
-    if (acceptedMatch) {
-      const cleanText = acceptedMatch[1];
+    
+    // Use explicit affirmative field if provided (from cached reply object)
+    let isAccepted = affirmativeFromCache === true;
+    let isRejected = affirmativeFromCache === false;
+    
+    // Fallback: parse from text if not provided (for backwards compatibility)
+    if (isAccepted === undefined && isRejected === undefined) {
+        const acceptedMatch = responseText.match(/^\[ACCEPTED\]\s+(.*)/s);
+        const rejectedMatch = responseText.match(/^\[REJECTED\]\s+(.*)/s);
+        if (acceptedMatch) {
+            isAccepted = true;
+            responseText = acceptedMatch[1];
+        } else if (rejectedMatch) {
+            isRejected = true;
+            responseText = rejectedMatch[1];
+        }
+    }
+    
+    // Process acceptance
+    if (isAccepted) {
       if (option.onAccept) {
         applyRelationshipImpacts(npc, option.onAccept);
       }
@@ -315,7 +331,7 @@
             setTimeout(() => {
               window.teleportPlayerToCoords(targetRoom.coords);
             }, 100);
-            return cleanText + ` ${npc.name} takes your hand. "Follow me to the ${targetRoom.displayName || targetRoom.type}."`;
+            return responseText + ` ${npc.name} takes your hand. "Follow me to the ${targetRoom.displayName || targetRoom.type}."`;
           } else {
             npc._pendingSeductionDestination = targetRoom.coords;
             npc._pendingSeductionOption = option.id;
@@ -338,22 +354,26 @@
               window.NPC_CONVERSATION_CATALOGUE.push(followOption);
             }
 
-            return cleanText + ` ${npc.name} suggests going to the ${targetRoom.displayName || targetRoom.type}.`;
+            return responseText + ` ${npc.name} suggests going to the ${targetRoom.displayName || targetRoom.type}.`;
           }
         }
       }
 
       console.log("[NSFW] Inquiry ACCEPTED for " + (option.id || "unknown"));
-      return cleanText;
+      return responseText;
     }
-    if (rejectedMatch) {
-      const cleanText = rejectedMatch[1];
+    
+    // Process rejection
+    if (isRejected) {
       if (option.onReject) {
         applyRelationshipImpacts(npc, option.onReject);
       }
       console.log("[NSFW] Inquiry REJECTED for " + (option.id || "unknown"));
-      return cleanText;
+      return responseText;
     }
+    
+    // No affirmative/rejected determination - return original
+    return responseText;
     return responseText;
   }
 
