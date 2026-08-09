@@ -1271,6 +1271,7 @@ function buildConversationOption(entry, npc, ctx) {
     if (!label || (!playerText && !action)) return null;
 
     const impact = _npcResolveConversationValue(entry.relationshipImpact, npc, ctx);
+    const isInquiry = entry.isInquiry === true;
     return {
         id: entry.id,
         label,
@@ -1279,7 +1280,11 @@ function buildConversationOption(entry, npc, ctx) {
         action,
         intent: _npcResolveConversationValue(entry.intent, npc, ctx),
         className: _npcResolveConversationValue(entry.className, npc, ctx),
-        relationshipImpact: impact && typeof impact === "object" ? { ...impact } : impact
+        relationshipImpact: impact && typeof impact === "object" ? { ...impact } : impact,
+        isInquiry: isInquiry,
+        onAccept: entry.onAccept,
+        onReject: entry.onReject,
+        resetTimer: entry.resetTimer
     };
 }
 
