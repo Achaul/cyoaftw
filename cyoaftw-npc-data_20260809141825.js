@@ -1290,6 +1290,10 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     if (!ctx) return [];
 
     const everGreeted = npc.memory && npc.memory.everGreeted === true;
+    const greetedThisSession = ctx.sessionUsedOptionIds && (
+        ctx.sessionUsedOptionIds.includes("greet-intro") || 
+        ctx.sessionUsedOptionIds.includes("greet-known")
+    );
     
     // Merge local catalogue with window catalogue (for NSFW options)
     const fullCatalogue = [
@@ -1297,9 +1301,9 @@ function queryConversationCatalogue(npc, extraContext = {}) {
         ...(window.NPC_CONVERSATION_CATALOGUE || [])
     ];
     
-    // Filter by greeting gate: only greeting and disengage options until first greeting
+    // Filter by greeting gate: only greeting and disengage options until greeting in current session
     let filtered = fullCatalogue;
-    if (!everGreeted) {
+    if (!greetedThisSession) {
         filtered = fullCatalogue.filter(entry => {
             const isGreeting = entry.intent === "greeting" || 
                 entry.id === "greet-intro" || 
