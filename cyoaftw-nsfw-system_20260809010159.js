@@ -322,8 +322,8 @@
 
             const followOption = {
               id: "follow-seduction-suggestion",
-              label: `Go to the ${targetRoom.displayName || targetRoom.type}`,
-              text: `You agree to go to the ${targetRoom.displayName || targetRoom.type} with ${npc.name}.`,
+              label: `Go with ${npc.name} to the ${targetRoom.displayName || targetRoom.type}`,
+              text: `You agree to go with ${npc.name} to the ${targetRoom.displayName || targetRoom.type}.`,
               priority: 5,
               action: function(selectedNPC) {
                 if (selectedNPC._pendingSeductionDestination && typeof window.teleportPlayerToCoords === "function") {
