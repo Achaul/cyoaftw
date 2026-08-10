@@ -810,8 +810,8 @@
     injectNSFWOptions();
     injectMeetupConversationOptions();
     extendChooseChatOption();
-    if (!window.queryConversationCatalogue) {
-      window.queryConversationCatalogue = function(npc, context) {
+    // Always replace to ensure our filtering logic is used
+    window.queryConversationCatalogue = function(npc, context) {
         const allOptions = window.NPC_CONVERSATION_CATALOGUE || [];
         
         // Check if we're in a date/meetup context (primary indicator)
@@ -911,7 +911,6 @@
         
         return allOptions;
       };
-    }
     extendAdvanceStoryTurn();
     if (typeof window.createNPC === "function") {
       const orig = window.createNPC;
