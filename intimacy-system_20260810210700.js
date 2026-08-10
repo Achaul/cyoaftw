@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  * 
- * Version: 2026-08-10-0506
+ * Version: 2026-08-10-0507
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -13,8 +13,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-10-0506";
-    console.log("[Intimacy System] Loaded v2026-08-10-0506");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-10-0507";
+    console.log("[Intimacy System] Loaded v2026-08-10-0507");
 }
 
 // ============================================================================
@@ -280,8 +280,12 @@ function generateValidActions(npc, player, positionId = null) {
         
         // Check if action is valid for current state
         if (isActionValid(actId, npc, player, currentPosition, clothingState)) {
+            // Determine if player is the actor (true) or NPC is the actor (false)
+            // playerIsBottom means player is receiving, so NPC is actor
+            const isPlayerActor = !act.playerIsBottom;
+            
             // Check position accessibility for tool-target
-            if (checkToolTargetAccessibility(act.tool, act.target, currentPosition, clothingState, false)) {
+            if (checkToolTargetAccessibility(act.tool, act.target, currentPosition, clothingState, isPlayerActor)) {
                 validActions.push({ ...act, actId });
             }
         }

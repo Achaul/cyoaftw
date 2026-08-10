@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-08-10-0506
+ * Version: 2026-08-10-0507
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-08-10-0506";
-    console.log("[Intimacy Acts] Loaded v2026-08-10-0506");
+    window.INTIMACY_ACTS_VERSION = "2026-08-10-0507";
+    console.log("[Intimacy Acts] Loaded v2026-08-10-0507");
 }
 
 // ============================================================================

@@ -1,11 +1,11 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-10-0506
+// === cyoaftw-nsfw-system.js === - v2026-08-10-0507
 (function() {
   'use strict';
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-10-0506";
-    console.log("[NSFW System] Loaded v2026-08-10-0506");
+    window.NSFW_SYSTEM_VERSION = "2026-08-10-0507";
+    console.log("[NSFW System] Loaded v2026-08-10-0507");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
