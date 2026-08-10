@@ -1,11 +1,11 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-10-0600
+// === cyoaftw-nsfw-system.js === - v2026-08-10-0601
 (function() {
   'use strict';
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-10-0600";
-    console.log("[NSFW System] Loaded v2026-08-10-0600 - Fixed catalogue deduplication and Phase 2 filtering");
+    window.NSFW_SYSTEM_VERSION = "2026-08-10-0601";
+    console.log("[NSFW System] Loaded v2026-08-10-0601 - Fixed intimacy action filtering, touch_intimately starts encounter");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -208,6 +208,7 @@ if (typeof window !== "undefined") {
         intimacyActive: false 
       },
       action: "intimacy",
+      startEncounter: true,
       intimacyAction: "tease_groin",
       relationshipImpact: { lust: +10, attraction: +4 },
       resetTimer: { turns: 15 },

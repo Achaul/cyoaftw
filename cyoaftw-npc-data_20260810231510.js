@@ -1,3 +1,10 @@
+// ── cyoaftw-npc-data.js v2026-08-10-0601 ── Fixed intimacy action filtering
+// Version identifier for debugging cached files
+if (typeof window !== "undefined") {
+    window.NPC_DATA_VERSION = "2026-08-10-0601";
+    console.log("[NPC Data] Loaded v2026-08-10-0601 - Fixed intimacy action filtering");
+}
+
 // ── DATA ARRAYS ──────────────────────────────────────────────────
 
 const ARCHETYPES = [
@@ -1242,6 +1249,47 @@ function conversationConditionMatches(conditions, ctx) {
 
     if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
 
+    // Phase 2 conditions: location and privacy checks
+    if (conditions.locationCheck === "private") {
+      const room = ctx.room;
+      if (!room) return false;
+      if (typeof isPrivateLocation === "function") {
+        if (!isPrivateLocation(room)) return false;
+      } else {
+        const privateTypes = ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower"];
+        const roomType = room.type || room.displayName || "";
+        const roomRole = room.role || "";
+        const isPrivate = privateTypes.some(t => 
+          roomType.toLowerCase().includes(t.toLowerCase()) ||
+          roomRole.toLowerCase().includes(t.toLowerCase())
+        );
+        if (!isPrivate) return false;
+      }
+    }
+
+    if (conditions.aloneWithTarget === true) {
+      const room = ctx.room;
+      if (!room || !room.creatures) return false;
+      if (typeof isAloneWithTarget === "function") {
+        if (!isAloneWithTarget(room, ctx.npc)) return false;
+      } else {
+        let othersPresent = 0;
+        for (const creature of room.creatures) {
+          if (creature.isPlayer) continue;
+          if (creature === ctx.npc) continue;
+          if (creature.isHumanoid || creature.humanoid) {
+            othersPresent++;
+          }
+        }
+        if (othersPresent > 0) return false;
+      }
+    }
+
+    if (conditions.intimacyActive !== undefined) {
+      const isActive = ctx.npc.intimacy && ctx.npc.intimacy.encounter && ctx.npc.intimacy.encounter.active;
+      if (conditions.intimacyActive !== isActive) return false;
+    }
+
     return true;
 }
 
@@ -1387,6 +1435,11 @@ function queryConversationCatalogue(npc, extraContext = {}) {
         .filter(entry => {
           if (entry.id === "follow-seduction-suggestion") {
             return npc && npc._pendingSeductionDestination;
+          }
+          // Filter out intimacy actions that don't start an encounter
+          // These should only appear in the intimacy action menu, not in conversation
+          if (entry.action === "intimacy" && !entry.startEncounter) {
+            return false;
           }
           return true;
         })
