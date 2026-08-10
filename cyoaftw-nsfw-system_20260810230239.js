@@ -1,11 +1,11 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-10-0508
+// === cyoaftw-nsfw-system.js === - v2026-08-10-0600
 (function() {
   'use strict';
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-10-0508";
-    console.log("[NSFW System] Loaded v2026-08-10-0508");
+    window.NSFW_SYSTEM_VERSION = "2026-08-10-0600";
+    console.log("[NSFW System] Loaded v2026-08-10-0600 - Fixed catalogue deduplication and Phase 2 filtering");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -88,9 +88,9 @@ if (typeof window !== "undefined") {
     },
     // ===== PHASE 2: PRIVATE (Private location, only player + target present) =====
     {
-      id: "undress_self",
-      label: "Undress yourself",
-      text: "You begin removing your clothing...",
+      id: "remove_self_top",
+      label: "Remove your top",
+      text: "You remove your top clothing...",
       priority: 30,
       repeat: "encounter",
       conditions: { 
@@ -100,15 +100,33 @@ if (typeof window !== "undefined") {
         intimacyActive: false 
       },
       action: "intimacy",
-      intimacyAction: "undress_player",
-      relationshipImpact: { lust: +5, attraction: +3 },
+      intimacyAction: "remove_player_top",
+      relationshipImpact: { lust: +3, attraction: +2 },
       resetTimer: { turns: 20 },
       phase: 2
     },
     {
-      id: "undress_them",
-      label: "Undress them",
-      text: "You help them remove their clothing...",
+      id: "remove_self_bottom",
+      label: "Remove your bottom",
+      text: "You remove your bottom clothing...",
+      priority: 30,
+      repeat: "encounter",
+      conditions: { 
+        minAttraction: 30, 
+        locationCheck: "private",
+        aloneWithTarget: true,
+        intimacyActive: false 
+      },
+      action: "intimacy",
+      intimacyAction: "remove_player_bottom",
+      relationshipImpact: { lust: +4, attraction: +3 },
+      resetTimer: { turns: 20 },
+      phase: 2
+    },
+    {
+      id: "remove_them_top",
+      label: "Remove their top",
+      text: "You help them remove their top...",
       priority: 30,
       repeat: "encounter",
       conditions: { 
@@ -118,8 +136,62 @@ if (typeof window !== "undefined") {
         intimacyActive: false 
       },
       action: "intimacy",
-      intimacyAction: "undress_npc",
+      intimacyAction: "remove_npc_top",
+      relationshipImpact: { lust: +6, attraction: +4 },
+      resetTimer: { turns: 20 },
+      phase: 2
+    },
+    {
+      id: "remove_them_bottom",
+      label: "Remove their bottom",
+      text: "You help them remove their bottom clothing...",
+      priority: 30,
+      repeat: "encounter",
+      conditions: { 
+        minAttraction: 40, 
+        locationCheck: "private",
+        aloneWithTarget: true,
+        intimacyActive: false 
+      },
+      action: "intimacy",
+      intimacyAction: "remove_npc_bottom",
       relationshipImpact: { lust: +8, attraction: +5 },
+      resetTimer: { turns: 20 },
+      phase: 2
+    },
+    {
+      id: "remove_self_underwear",
+      label: "Remove your underwear",
+      text: "You remove your underwear...",
+      priority: 35,
+      repeat: "encounter",
+      conditions: { 
+        minAttraction: 35, 
+        locationCheck: "private",
+        aloneWithTarget: true,
+        intimacyActive: false 
+      },
+      action: "intimacy",
+      intimacyAction: "remove_player_underwear",
+      relationshipImpact: { lust: +5, attraction: +3 },
+      resetTimer: { turns: 20 },
+      phase: 2
+    },
+    {
+      id: "remove_them_underwear",
+      label: "Remove their underwear",
+      text: "You help them remove their underwear...",
+      priority: 35,
+      repeat: "encounter",
+      conditions: { 
+        minAttraction: 45, 
+        locationCheck: "private",
+        aloneWithTarget: true,
+        intimacyActive: false 
+      },
+      action: "intimacy",
+      intimacyAction: "remove_npc_underwear",
+      relationshipImpact: { lust: +10, attraction: +6 },
       resetTimer: { turns: 20 },
       phase: 2
     },
@@ -899,13 +971,21 @@ if (typeof window !== "undefined") {
         // If in Phase 2 context (private location, alone with target), filter to only show Phase 2 NSFW options
         if (isPhase2Context) {
           const nsfwOptionIds = ["goodbye", "disengage", "step-away"];
-          const filtered = filteredOptions.filter(option => 
-            nsfwOptionIds.includes(option.id) ||
-            option.phase === 2 ||  // Phase 2 intimacy options only
-            option.action === "intimacy"
-          );
+          const filtered = filteredOptions.filter(option => {
+            // Include exit options
+            if (nsfwOptionIds.includes(option.id)) return true;
+            // Include Phase 2 options
+            if (option.phase === 2) return true;
+            // Include intimacy actions
+            if (option.action === "intimacy") return true;
+            // Explicitly exclude Phase 1 options
+            if (option.phase === 1) return false;
+            // Exclude options without phase (base catalogue social options)
+            if (option.phase === undefined) return false;
+            return false;
+          });
           if (npc && npc.name) {
-            console.log(`[DEBUG] Phase 2 filtering applied for ${npc.name}. Options:`, filtered.map(o => o.id));
+            console.log(`[DEBUG] Phase 2 filtering applied for ${npc.name}. Options:`, filtered.map(o => ({id: o.id, phase: o.phase, action: o.action})));
           }
           return filtered;
         }

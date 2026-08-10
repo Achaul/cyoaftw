@@ -1355,10 +1355,19 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     );
     
     // Merge local catalogue with window catalogue (for NSFW options)
-    const fullCatalogue = [
-        ...NPC_CONVERSATION_CATALOGUE,
-        ...(window.NPC_CONVERSATION_CATALOGUE || [])
-    ];
+    // Deduplicate by ID, giving priority to window catalogue (NSFW) options
+    const windowCatalogue = window.NPC_CONVERSATION_CATALOGUE || [];
+    const fullCatalogue = [...NPC_CONVERSATION_CATALOGUE];
+    
+    // Add window catalogue options, overwriting duplicates
+    for (const windowOption of windowCatalogue) {
+        const existingIndex = fullCatalogue.findIndex(o => o.id === windowOption.id);
+        if (existingIndex >= 0) {
+            fullCatalogue[existingIndex] = windowOption;
+        } else {
+            fullCatalogue.push(windowOption);
+        }
+    }
     
     // Filter by greeting gate: only greeting and disengage options until greeting in current session
     let filtered = fullCatalogue;

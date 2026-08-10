@@ -13,8 +13,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-10-0508";
-    console.log("[Intimacy System] Loaded v2026-08-10-0508");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-10-0600";
+    console.log("[Intimacy System] Loaded v2026-08-10-0600 - Catalogue deduplication fix");
 }
 
 // ============================================================================
