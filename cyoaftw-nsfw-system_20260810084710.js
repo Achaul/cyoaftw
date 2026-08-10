@@ -811,8 +811,17 @@
     injectMeetupConversationOptions();
     extendChooseChatOption();
     // Always replace to ensure our filtering logic is used
+    // Save original function if it exists (for greeting gate, etc.)
+    const originalQueryConversationCatalogue = window.queryConversationCatalogue;
+    
     window.queryConversationCatalogue = function(npc, context) {
         const allOptions = window.NPC_CONVERSATION_CATALOGUE || [];
+        
+        // First, apply original filtering (e.g., greeting gate) if it exists
+        let filteredOptions = allOptions;
+        if (typeof originalQueryConversationCatalogue === "function") {
+          filteredOptions = originalQueryConversationCatalogue(npc, context) || allOptions;
+        }
         
         // Check if we're in a date/meetup context (primary indicator)
         const isAtMeetup = npc && npc._meetupArrived && context && context.room && 
@@ -835,10 +844,16 @@
           const isPrivate = (typeof isPrivateLocation === "function" && isPrivateLocation(room)) ||
                            (room.type && ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower", "Home"].some(t => room.type.includes(t))) ||
                            (room.displayName && room.displayName.toLowerCase().includes("room"));
-          if (!isPrivate) return false;
+          if (!isPrivate) {
+            if (npc && npc.name) console.log(`[DEBUG] Phase 2 check: ${npc.name} - NOT private (room: ${room.type || room.displayName})`);
+            return false;
+          }
           
           // Check alone with target
-          if (!room.creatures) return false;
+          if (!room.creatures) {
+            if (npc && npc.name) console.log(`[DEBUG] Phase 2 check: ${npc.name} - no creatures array`);
+            return false;
+          }
           let othersPresent = 0;
           for (const creature of room.creatures) {
             if (creature.isPlayer) continue;
@@ -850,8 +865,8 @@
           const result = othersPresent === 0;
           
           // Debug logging
-          if (npc && npc.name && result) {
-            console.log(`[DEBUG] Phase 2 context detected for ${npc.name} in ${room.type || room.displayName || 'unknown'} (private: ${isPrivate}, alone: ${othersPresent === 0})`);
+          if (npc && npc.name) {
+            console.log(`[DEBUG] Phase 2 context for ${npc.name}: private=${isPrivate}, alone=${result} (othersPresent=${othersPresent}, room=${room.type || room.displayName})`);
           }
           
           return result;
@@ -861,7 +876,7 @@
         
         // Debug logging for context detection
         if (npc && npc.name) {
-          console.log(`[DEBUG] Context for ${npc.name}: isIntimacyActive=${isIntimacyActive}, isPhase2Context=${isPhase2Context}, isDateContext=${isDateContext}`);
+          console.log(`[DEBUG] NSFW Context for ${npc.name}: isIntimacyActive=${isIntimacyActive}, isPhase2Context=${isPhase2Context}, isDateContext=${isDateContext}`);
           if (isAtMeetup) console.log(`[DEBUG] At meetup location: ${npc._meetupLocation}`);
           if (hasPendingSeduction) console.log(`[DEBUG] Has pending seduction: ${npc._pendingSeductionOption}`);
         }
@@ -869,19 +884,18 @@
         // If intimacy encounter is active, only show intimacy-related options
         if (isIntimacyActive) {
           const intimacyOptionIds = ["goodbye"]; // Only allow exiting
-          return allOptions.filter(option => 
+          return filteredOptions.filter(option => 
             intimacyOptionIds.includes(option.id) ||
             option.action === "intimacy"
           );
         }
         
-        // If in Phase 2 context (private location, alone with target), filter to only show NSFW options
+        // If in Phase 2 context (private location, alone with target), filter to only show Phase 2 NSFW options
         if (isPhase2Context) {
-          const nsfwOptionIds = ["goodbye", "disengage"];
-          const filtered = allOptions.filter(option => 
+          const nsfwOptionIds = ["goodbye", "disengage", "step-away"];
+          const filtered = filteredOptions.filter(option => 
             nsfwOptionIds.includes(option.id) ||
-            option.phase === 1 ||  // Phase 1 NSFW options (flirt, seduce, proposition)
-            option.phase === 2 ||  // Phase 2 intimacy options
+            option.phase === 2 ||  // Phase 2 intimacy options only
             option.action === "intimacy"
           );
           if (npc && npc.name) {
@@ -894,7 +908,7 @@
         if (isDateContext) {
           const dateOptionIds = ["split-bill", "pay-for-meal", "small-talk", "flirt", 
                                  "follow-seduction-suggestion", "ask-npc-to-follow", "goodbye"];
-          const filtered = allOptions.filter(option => 
+          const filtered = filteredOptions.filter(option => 
             dateOptionIds.includes(option.id) || 
             (option.nsfw === true) ||  // Keep other NSFW options
             (option.tags && option.tags.includes("date"))  // Keep options tagged as date
@@ -906,10 +920,10 @@
         }
         
         if (npc && npc.name) {
-          console.log(`[DEBUG] No filtering applied for ${npc.name}. Showing all options.`);
+          console.log(`[DEBUG] No NSFW filtering applied for ${npc.name}. Options:`, filteredOptions.map(o => o.id));
         }
         
-        return allOptions;
+        return filteredOptions;
       };
     extendAdvanceStoryTurn();
     if (typeof window.createNPC === "function") {
