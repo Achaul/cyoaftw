@@ -266,9 +266,12 @@ function generateValidActions(npc, player, positionId = null) {
         }
     }
     
+    // Add stage-specific filtering first (before categorizing)
+    const filteredActions = applyStageFilteringToArray(validActions, stage);
+    
     // Sort actions by category for menu organization
     const categorizedActions = {};
-    for (const action of validActions) {
+    for (const action of filteredActions) {
         const category = getActionCategory(action.actId);
         if (!categorizedActions[category]) {
             categorizedActions[category] = [];
@@ -276,14 +279,46 @@ function generateValidActions(npc, player, positionId = null) {
         categorizedActions[category].push(action);
     }
     
-    // Add stage-specific filtering
-    const filteredActions = applyStageFiltering(categorizedActions, stage);
+    // Flatten back to array for consistency
+    const result = [];
+    for (const category in categorizedActions) {
+        result.push(...categorizedActions[category]);
+    }
     
-    return filteredActions;
+    return result;
 }
 
 /**
- * Apply stage-specific filtering to actions
+ * Apply stage-specific filtering to actions array
+ */
+function applyStageFilteringToArray(actions, stage) {
+    return actions.filter(action => {
+        // Stage 1: Clothed - only external actions
+        if (stage === INTIMACY_STAGES.CLOTHED) {
+            // Always allow clothing actions
+            if (action.type === ACT_TYPES.CLOTHING) return true;
+            
+            // Remove penetration and continue actions
+            if (action.type === ACT_TYPES.PENETRATE || action.type === ACT_TYPES.CONTINUE) return false;
+            
+            // Remove genital and anal actions that require nudity
+            if (action.target === "genitals" || action.target === "anus") {
+                if (action.reqCloth !== CLOTHING_REQUIREMENTS.ANY) return false;
+            }
+        }
+        
+        // Stage 2: Partial - allow clothing removal and some exposure
+        if (stage === INTIMACY_STAGES.PARTIAL) {
+            // Still hide full penetration until nude
+            if (action.type === ACT_TYPES.PENETRATE || action.type === ACT_TYPES.CONTINUE) return false;
+        }
+        
+        return true;
+    });
+}
+
+/**
+ * Apply stage-specific filtering to actions (legacy - for categorized object)
  */
 function applyStageFiltering(categorizedActions, stage) {
     const filtered = { ...categorizedActions };

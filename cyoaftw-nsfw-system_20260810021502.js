@@ -847,10 +847,24 @@
               othersPresent++;
             }
           }
-          return othersPresent === 0;
+          const result = othersPresent === 0;
+          
+          // Debug logging
+          if (npc && npc.name && result) {
+            console.log(`[DEBUG] Phase 2 context detected for ${npc.name} in ${room.type || room.displayName || 'unknown'} (private: ${isPrivate}, alone: ${othersPresent === 0})`);
+          }
+          
+          return result;
         })();
         
         const isDateContext = isAtMeetup || hasPendingSeduction;
+        
+        // Debug logging for context detection
+        if (npc && npc.name) {
+          console.log(`[DEBUG] Context for ${npc.name}: isIntimacyActive=${isIntimacyActive}, isPhase2Context=${isPhase2Context}, isDateContext=${isDateContext}`);
+          if (isAtMeetup) console.log(`[DEBUG] At meetup location: ${npc._meetupLocation}`);
+          if (hasPendingSeduction) console.log(`[DEBUG] Has pending seduction: ${npc._pendingSeductionOption}`);
+        }
         
         // If intimacy encounter is active, only show intimacy-related options
         if (isIntimacyActive) {
@@ -864,23 +878,35 @@
         // If in Phase 2 context (private location, alone with target), filter to only show NSFW options
         if (isPhase2Context) {
           const nsfwOptionIds = ["goodbye", "disengage"];
-          return allOptions.filter(option => 
+          const filtered = allOptions.filter(option => 
             nsfwOptionIds.includes(option.id) ||
             option.phase === 1 ||  // Phase 1 NSFW options (flirt, seduce, proposition)
             option.phase === 2 ||  // Phase 2 intimacy options
             option.action === "intimacy"
           );
+          if (npc && npc.name) {
+            console.log(`[DEBUG] Phase 2 filtering applied for ${npc.name}. Options:`, filtered.map(o => o.id));
+          }
+          return filtered;
         }
         
         // If in date context, filter to only show date-related and flirting actions
         if (isDateContext) {
           const dateOptionIds = ["split-bill", "pay-for-meal", "small-talk", "flirt", 
                                  "follow-seduction-suggestion", "ask-npc-to-follow", "goodbye"];
-          return allOptions.filter(option => 
+          const filtered = allOptions.filter(option => 
             dateOptionIds.includes(option.id) || 
             (option.nsfw === true) ||  // Keep other NSFW options
             (option.tags && option.tags.includes("date"))  // Keep options tagged as date
           );
+          if (npc && npc.name) {
+            console.log(`[DEBUG] Date filtering applied for ${npc.name}. Options:`, filtered.map(o => o.id));
+          }
+          return filtered;
+        }
+        
+        if (npc && npc.name) {
+          console.log(`[DEBUG] No filtering applied for ${npc.name}. Showing all options.`);
         }
         
         return allOptions;

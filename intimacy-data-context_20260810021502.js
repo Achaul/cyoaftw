@@ -351,7 +351,12 @@ function getNaturalLabel(actId) {
 function filterActionsByPhase(actions, phase) {
     const filtered = [];
     
-    for (const action of actions) {
+    // Handle both array and object (categorized) formats
+    const actionsArray = Array.isArray(actions) ? actions : (
+        actions ? Object.values(actions).flat() : []
+    );
+    
+    for (const action of actionsArray) {
         const act = action.actId ? getAct(action.actId) : action;
         if (!act) continue;
         
