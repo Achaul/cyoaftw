@@ -1,11 +1,11 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-10-0602
+// === cyoaftw-nsfw-system.js === - v2026-08-10-0603
 (function() {
   'use strict';
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-10-0602";
-    console.log("[NSFW System] Loaded v2026-08-10-0602 - Clothing removal options only in intimacy menu");
+    window.NSFW_SYSTEM_VERSION = "2026-08-10-0603";
+    console.log("[NSFW System] Loaded v2026-08-10-0603 - Date context shows transition actions");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -963,6 +963,24 @@ if (typeof window !== "undefined") {
           );
         }
         
+        // If in date context, filter to only show date-related and flirting actions
+        // Check this BEFORE Phase 2 so date context takes precedence
+        if (isDateContext) {
+          const dateOptionIds = ["split-bill", "pay-for-meal", "small-talk", "flirt", 
+                                 "follow-seduction-suggestion", "ask-npc-to-follow", "goodbye",
+                                 "touch_intimately", "start_intimacy"];
+          const filtered = filteredOptions.filter(option => 
+            dateOptionIds.includes(option.id) || 
+            (option.nsfw === true) ||  // Keep other NSFW options
+            (option.tags && option.tags.includes("date")) ||
+            (option.phase === 2 && (option.startEncounter === true || option.action !== "intimacy"))
+          );
+          if (npc && npc.name) {
+            console.log(`[DEBUG] Date filtering applied for ${npc.name}. Options:`, filtered.map(o => o.id));
+          }
+          return filtered;
+        }
+        
         // If in Phase 2 context (private location, alone with target), filter to only show Phase 2 NSFW options
         if (isPhase2Context) {
           const nsfwOptionIds = ["goodbye", "disengage", "step-away"];
@@ -981,21 +999,6 @@ if (typeof window !== "undefined") {
           });
           if (npc && npc.name) {
             console.log(`[DEBUG] Phase 2 filtering applied for ${npc.name}. Options:`, filtered.map(o => ({id: o.id, phase: o.phase, action: o.action})));
-          }
-          return filtered;
-        }
-        
-        // If in date context, filter to only show date-related and flirting actions
-        if (isDateContext) {
-          const dateOptionIds = ["split-bill", "pay-for-meal", "small-talk", "flirt", 
-                                 "follow-seduction-suggestion", "ask-npc-to-follow", "goodbye"];
-          const filtered = filteredOptions.filter(option => 
-            dateOptionIds.includes(option.id) || 
-            (option.nsfw === true) ||  // Keep other NSFW options
-            (option.tags && option.tags.includes("date"))  // Keep options tagged as date
-          );
-          if (npc && npc.name) {
-            console.log(`[DEBUG] Date filtering applied for ${npc.name}. Options:`, filtered.map(o => o.id));
           }
           return filtered;
         }
