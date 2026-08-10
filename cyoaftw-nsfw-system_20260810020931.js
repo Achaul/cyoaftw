@@ -822,7 +822,55 @@
         const hasPendingSeduction = npc && (npc._pendingSeductionDestination || npc._pendingSeductionOption) && 
                                    !npc._meetupArrived;
         
+        // Check if intimacy encounter is active
+        const isIntimacyActive = npc && npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active;
+        
+        // Check if we're in a Phase 2 context (private location, alone with target, intimacy not active)
+        const isPhase2Context = (() => {
+          if (!npc || !context || !context.room) return false;
+          if (isIntimacyActive) return false;
+          
+          // Check private location
+          const room = context.room;
+          const isPrivate = (typeof isPrivateLocation === "function" && isPrivateLocation(room)) ||
+                           (room.type && ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower", "Home"].some(t => room.type.includes(t))) ||
+                           (room.displayName && room.displayName.toLowerCase().includes("room"));
+          if (!isPrivate) return false;
+          
+          // Check alone with target
+          if (!room.creatures) return false;
+          let othersPresent = 0;
+          for (const creature of room.creatures) {
+            if (creature.isPlayer) continue;
+            if (creature === npc) continue;
+            if (creature.isHumanoid || creature.humanoid) {
+              othersPresent++;
+            }
+          }
+          return othersPresent === 0;
+        })();
+        
         const isDateContext = isAtMeetup || hasPendingSeduction;
+        
+        // If intimacy encounter is active, only show intimacy-related options
+        if (isIntimacyActive) {
+          const intimacyOptionIds = ["goodbye"]; // Only allow exiting
+          return allOptions.filter(option => 
+            intimacyOptionIds.includes(option.id) ||
+            option.action === "intimacy"
+          );
+        }
+        
+        // If in Phase 2 context (private location, alone with target), filter to only show NSFW options
+        if (isPhase2Context) {
+          const nsfwOptionIds = ["goodbye", "disengage"];
+          return allOptions.filter(option => 
+            nsfwOptionIds.includes(option.id) ||
+            option.phase === 1 ||  // Phase 1 NSFW options (flirt, seduce, proposition)
+            option.phase === 2 ||  // Phase 2 intimacy options
+            option.action === "intimacy"
+          );
+        }
         
         // If in date context, filter to only show date-related and flirting actions
         if (isDateContext) {
