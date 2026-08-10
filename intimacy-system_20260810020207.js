@@ -503,7 +503,7 @@ function handleClothingAction(npc, player, act, clothingState) {
     }
     
     return {
-        action: actId,
+        action: act.id,
         type: "clothing",
         clothingState: { ...clothingState },
         text: `You ${act.desc.charAt(0).toLowerCase() + act.desc.slice(1)}.`
@@ -825,7 +825,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
             const responseText = result && (result.text || result);
             
             return {
-                action: actId,
+                action: act.id,
                 type: act.type,
                 responseText: responseText || buildFallbackResponse(npc, player, act),
                 context: context
@@ -833,7 +833,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         } catch (error) {
             console.error(`[Intimacy] AI generation failed: ${error}`);
             return {
-                action: actId,
+                action: act.id,
                 type: act.type,
                 responseText: buildFallbackResponse(npc, player, act),
                 context: context
@@ -842,7 +842,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     } else {
         // Fallback if ai function not available
         return {
-            action: actId,
+            action: act.id,
             type: act.type,
             responseText: buildFallbackResponse(npc, player, act),
             context: context
