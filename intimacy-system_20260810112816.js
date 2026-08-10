@@ -2,6 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  * 
+ * Version: 2026-08-10-0502
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -9,6 +10,12 @@
  * - Clothing state tracking
  * - One-at-a-time AI response generation
  */
+
+// Version identifier for debugging cached files
+if (typeof window !== "undefined") {
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-10-0502";
+    console.log("[Intimacy System] Loaded v2026-08-10-0502");
+}
 
 // ============================================================================
 // IMPORTS / DEPENDENCIES
