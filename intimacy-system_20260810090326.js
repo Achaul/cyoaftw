@@ -204,6 +204,11 @@ function startIntimacyEncounter(npc, player, positionId = null) {
     npc.intimacy.encounter.startedAt = Date.now();
     npc.intimacy.encounter.lastActivityAt = Date.now();
     
+    // Set game mode to intimacy
+    if (typeof G !== "undefined") {
+        G.activeNPCMode = "intimacy";
+    }
+    
     console.log(`[Intimacy] Started encounter with ${npc.name || 'NPC'} in position: ${pos}`);
     
     return true;
@@ -221,6 +226,12 @@ function endIntimacyEncounter(npc) {
     
     // Reset penetration state
     npc.intimacy.penetration = { active: false, tool: null, target: null, depth: 0 };
+    
+    // Reset game mode
+    if (typeof G !== "undefined") {
+        G.activeNPCMode = null;
+        G.activeNPC = null;
+    }
     
     console.log(`[Intimacy] Ended encounter with ${npc.name || 'NPC'}`);
     
