@@ -42,6 +42,7 @@
   }
 
   const NSFW_CONVERSATION_CATALOGUE = [
+    // ===== PHASE 1: SOCIAL (Available anywhere with appropriate relationship) =====
     {
       id: "flirt",
       label: "Flirt",
@@ -50,7 +51,8 @@
       repeat: "session",
       conditions: { romanceEligible: true, maxHostility: 70 },
       relationshipImpact: { lust: +2, attraction: +1 },
-      resetTimer: { turns: 5 }
+      resetTimer: { turns: 5 },
+      phase: 1
     },
     {
       id: "seduce",
@@ -62,7 +64,8 @@
       relationshipImpact: { lust: +3, attraction: +5 },
       onAccept: { lust: +5, attraction: +8 },
       onReject: { hostility: +10, attraction: -5 },
-      resetTimer: { turns: 10 }
+      resetTimer: { turns: 10 },
+      phase: 1
     },
     {
       id: "proposition",
@@ -75,7 +78,80 @@
       onAccept: { lust: +12, attraction: +3 },
       onReject: { hostility: +15, lust: -3 },
       resetTimer: { turns: 15 },
-
+      phase: 1
+    },
+    // ===== PHASE 2: PRIVATE (Private location, only player + target present) =====
+    {
+      id: "undress_self",
+      label: "Undress yourself",
+      text: "You begin removing your clothing...",
+      priority: 30,
+      repeat: "encounter",
+      conditions: { 
+        minAttraction: 30, 
+        locationCheck: "private",
+        aloneWithTarget: true,
+        intimacyActive: false 
+      },
+      action: "intimacy",
+      intimacyAction: "undress_player",
+      relationshipImpact: { lust: +5, attraction: +3 },
+      resetTimer: { turns: 20 },
+      phase: 2
+    },
+    {
+      id: "undress_them",
+      label: "Undress them",
+      text: "You help them remove their clothing...",
+      priority: 30,
+      repeat: "encounter",
+      conditions: { 
+        minAttraction: 40, 
+        locationCheck: "private",
+        aloneWithTarget: true,
+        intimacyActive: false 
+      },
+      action: "intimacy",
+      intimacyAction: "undress_npc",
+      relationshipImpact: { lust: +8, attraction: +5 },
+      resetTimer: { turns: 20 },
+      phase: 2
+    },
+    {
+      id: "touch_intimately",
+      label: "Touch them intimately",
+      text: "You reach out to touch them suggestively...",
+      priority: 30,
+      repeat: "encounter",
+      conditions: { 
+        minAttraction: 35, 
+        locationCheck: "private",
+        aloneWithTarget: true,
+        intimacyActive: false 
+      },
+      action: "intimacy",
+      intimacyAction: "tease_groin",
+      relationshipImpact: { lust: +10, attraction: +4 },
+      resetTimer: { turns: 15 },
+      phase: 2
+    },
+    {
+      id: "start_intimacy",
+      label: "Make a move",
+      text: "You make your intentions clear and initiate intimacy...",
+      priority: 35,
+      repeat: "encounter",
+      conditions: { 
+        minAttraction: 45, 
+        minLust: 25,
+        locationCheck: "private",
+        aloneWithTarget: true,
+        intimacyActive: false 
+      },
+      action: "intimacy",
+      startEncounter: true,
+      relationshipImpact: { lust: +15, attraction: +8 },
+      phase: 2
     }
   ];
 
@@ -599,8 +675,10 @@
       // Handle meal date interaction
       const handled = handleMealDateInteraction(npc, option);
       
-      // Clear meetup flags if player interacts with NPC at meetup location
-      if (npc._meetupArrived) {
+      // Clear meetup flags only if this is a non-date action (player is leaving the date context)
+      // Date actions (split-bill, pay-for-meal, small-talk, flirt) should NOT clear the flags
+      const dateActions = ["split-bill", "pay-for-meal", "small-talk", "flirt", "seduce", "proposition"];
+      if (npc._meetupArrived && !dateActions.includes(option.id)) {
         delete npc._meetupArrived;
         delete npc._meetupReturnTurn;
         delete npc._meetupLocation;
@@ -734,7 +812,30 @@
     extendChooseChatOption();
     if (!window.queryConversationCatalogue) {
       window.queryConversationCatalogue = function(npc, context) {
-        return window.NPC_CONVERSATION_CATALOGUE || [];
+        const allOptions = window.NPC_CONVERSATION_CATALOGUE || [];
+        
+        // Check if we're in a date/meetup context (primary indicator)
+        const isAtMeetup = npc && npc._meetupArrived && context && context.room && 
+                          context.room.coords === npc._meetupLocation;
+        
+        // Check if there's a pending seduction/proposition that needs follow-up (show follow option only)
+        const hasPendingSeduction = npc && (npc._pendingSeductionDestination || npc._pendingSeductionOption) && 
+                                   !npc._meetupArrived;
+        
+        const isDateContext = isAtMeetup || hasPendingSeduction;
+        
+        // If in date context, filter to only show date-related and flirting actions
+        if (isDateContext) {
+          const dateOptionIds = ["split-bill", "pay-for-meal", "small-talk", "flirt", 
+                                 "follow-seduction-suggestion", "ask-npc-to-follow", "goodbye"];
+          return allOptions.filter(option => 
+            dateOptionIds.includes(option.id) || 
+            (option.nsfw === true) ||  // Keep other NSFW options
+            (option.tags && option.tags.includes("date"))  // Keep options tagged as date
+          );
+        }
+        
+        return allOptions;
       };
     }
     extendAdvanceStoryTurn();

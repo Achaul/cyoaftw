@@ -1032,6 +1032,56 @@ function conversationConditionMatches(conditions, ctx) {
   if (conditions.minAttraction !== undefined && ctx.npc.relationship.attraction < conditions.minAttraction) return false;
   if (conditions.orientation && ctx.npc.relationship.orientation !== conditions.orientation) return false;
 
+  // Phase 2 conditions: location and privacy checks
+  if (conditions.locationCheck === "private") {
+    // Check if current room is private
+    const room = ctx.room;
+    if (!room) return false;
+    
+    // Use intimacy context detection if available
+    if (typeof isPrivateLocation === "function") {
+      if (!isPrivateLocation(room)) return false;
+    } else {
+      // Fallback: check room type
+      const privateTypes = ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower"];
+      const roomType = room.type || room.displayName || "";
+      const roomRole = room.role || "";
+      const isPrivate = privateTypes.some(t => 
+        roomType.toLowerCase().includes(t.toLowerCase()) ||
+        roomRole.toLowerCase().includes(t.toLowerCase())
+      );
+      if (!isPrivate) return false;
+    }
+  }
+
+  if (conditions.aloneWithTarget === true) {
+    // Check if only player and this NPC are present
+    const room = ctx.room;
+    if (!room || !room.creatures) return false;
+    
+    // Use intimacy context detection if available
+    if (typeof isAloneWithTarget === "function") {
+      if (!isAloneWithTarget(room, ctx.npc)) return false;
+    } else {
+      // Fallback: count humanoids
+      let othersPresent = 0;
+      for (const creature of room.creatures) {
+        if (creature.isPlayer) continue;
+        if (creature === ctx.npc) continue;
+        if (creature.isHumanoid || creature.humanoid) {
+          othersPresent++;
+        }
+      }
+      if (othersPresent > 0) return false;
+    }
+  }
+
+  if (conditions.intimacyActive !== undefined) {
+    // Check if intimacy encounter is active
+    const isActive = ctx.npc.intimacy && ctx.npc.intimacy.encounter && ctx.npc.intimacy.encounter.active;
+    if (conditions.intimacyActive !== isActive) return false;
+  }
+
   return true;
 }
 
@@ -1284,7 +1334,11 @@ function buildConversationOption(entry, npc, ctx) {
         isInquiry: isInquiry,
         onAccept: entry.onAccept,
         onReject: entry.onReject,
-        resetTimer: entry.resetTimer
+        resetTimer: entry.resetTimer,
+        // Intimacy system additions
+        intimacyAction: entry.intimacyAction,
+        startEncounter: entry.startEncounter,
+        phase: entry.phase
     };
 }
 
