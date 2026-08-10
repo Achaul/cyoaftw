@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  * 
- * Version: 2026-08-10-0503
+ * Version: 2026-08-10-0505
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -13,8 +13,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-10-0503";
-    console.log("[Intimacy System] Loaded v2026-08-10-0503");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-10-0505";
+    console.log("[Intimacy System] Loaded v2026-08-10-0505");
 }
 
 // ============================================================================
@@ -1213,28 +1213,52 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     // Convert to menu format with natural labels
     const menu = [];
     
-    // Add categories in preferred order
-    const categoryOrder = ["Kissing", "Breasts", "Genital", "Anal", "Lower Body", "Body", "Impact", "Penetration", "Climax", "Clothing", "End"];
+    // Define phase groups with their categories
+    const phaseGroups = {
+        social: ["Kissing", "Body"],
+        private: ["Clothing", "Breasts", "Lower Body", "Genital", "Anal", "Impact"],
+        intimate: ["Penetration", "Climax", "End"]
+    };
     
-    for (const category of categoryOrder) {
-        if (categorized[category] && categorized[category].length > 0) {
-            menu.push({
-                type: "category",
-                label: category,
-                actions: categorized[category].map(a => ({
-                    id: a.actId,
-                    label: getNaturalLabel(a.actId),
-                    description: a.desc,
-                    type: a.type,
-                    phaseRequired: getMinimumPhaseForAction(a.actId)
-                }))
-            });
+    // Process each phase group in order
+    const phaseOrder = ["social", "private", "intimate"];
+    let addedSeparator = false;
+    
+    for (const phaseGroup of phaseOrder) {
+        const categories = phaseGroups[phaseGroup];
+        let phaseHasActions = false;
+        
+        for (const category of categories) {
+            if (categorized[category] && categorized[category].length > 0) {
+                // Add separator before this phase if we've already added content from previous phase
+                if (menu.length > 0 && !addedSeparator) {
+                    menu.push({ type: "separator" });
+                    addedSeparator = true;
+                }
+                menu.push({
+                    type: "category",
+                    label: category,
+                    actions: categorized[category].map(a => ({
+                        id: a.actId,
+                        label: getNaturalLabel(a.actId),
+                        description: a.desc,
+                        type: a.type,
+                        phaseRequired: getMinimumPhaseForAction(a.actId)
+                    }))
+                });
+                phaseHasActions = true;
+            }
+        }
+        
+        // Reset separator flag after each phase group
+        if (phaseHasActions) {
+            addedSeparator = false;
         }
     }
     
-    // Add any remaining categories
+    // Add any remaining categories not in phase groups
     for (const [category, actions] of Object.entries(categorized)) {
-        if (!categoryOrder.includes(category) && actions.length > 0) {
+        if (!Object.values(phaseGroups).flat().includes(category) && actions.length > 0) {
             menu.push({
                 type: "category",
                 label: category,
