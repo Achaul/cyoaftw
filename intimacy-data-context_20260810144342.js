@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - CONTEXT DETECTION
  * Detects game state to determine appropriate intimacy options
- * Version: 2026-08-10-0502
+ * Version: 2026-08-10-0503
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_CONTEXT_VERSION = "2026-08-10-0502";
-    console.log("[Intimacy Context] Loaded v2026-08-10-0502");
+    window.INTIMACY_CONTEXT_VERSION = "2026-08-10-0503";
+    console.log("[Intimacy Context] Loaded v2026-08-10-0503");
 }
 
 // ============================================================================
