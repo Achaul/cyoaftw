@@ -1,8 +1,8 @@
-// ── cyoaftw-npc-data.js v2026-08-10-0601 ── Fixed intimacy action filtering
+// ── cyoaftw-npc-data.js v2026-08-10-0602 ── Fixed intimacy action filtering
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-08-10-0601";
-    console.log("[NPC Data] Loaded v2026-08-10-0601 - Fixed intimacy action filtering");
+    window.NPC_DATA_VERSION = "2026-08-10-0602";
+    console.log("[NPC Data] Loaded v2026-08-10-0602 - Clothing removal only in intimacy menu");
 }
 
 // ── DATA ARRAYS ──────────────────────────────────────────────────

@@ -1,11 +1,11 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-10-0601
+// === cyoaftw-nsfw-system.js === - v2026-08-10-0602
 (function() {
   'use strict';
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-10-0601";
-    console.log("[NSFW System] Loaded v2026-08-10-0601 - Fixed intimacy action filtering, touch_intimately starts encounter");
+    window.NSFW_SYSTEM_VERSION = "2026-08-10-0602";
+    console.log("[NSFW System] Loaded v2026-08-10-0602 - Clothing removal options only in intimacy menu");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -102,8 +102,7 @@ if (typeof window !== "undefined") {
       action: "intimacy",
       intimacyAction: "remove_player_top",
       relationshipImpact: { lust: +3, attraction: +2 },
-      resetTimer: { turns: 20 },
-      phase: 2
+      resetTimer: { turns: 20 }
     },
     {
       id: "remove_self_bottom",
@@ -120,8 +119,7 @@ if (typeof window !== "undefined") {
       action: "intimacy",
       intimacyAction: "remove_player_bottom",
       relationshipImpact: { lust: +4, attraction: +3 },
-      resetTimer: { turns: 20 },
-      phase: 2
+      resetTimer: { turns: 20 }
     },
     {
       id: "remove_them_top",
@@ -138,8 +136,7 @@ if (typeof window !== "undefined") {
       action: "intimacy",
       intimacyAction: "remove_npc_top",
       relationshipImpact: { lust: +6, attraction: +4 },
-      resetTimer: { turns: 20 },
-      phase: 2
+      resetTimer: { turns: 20 }
     },
     {
       id: "remove_them_bottom",
@@ -156,8 +153,7 @@ if (typeof window !== "undefined") {
       action: "intimacy",
       intimacyAction: "remove_npc_bottom",
       relationshipImpact: { lust: +8, attraction: +5 },
-      resetTimer: { turns: 20 },
-      phase: 2
+      resetTimer: { turns: 20 }
     },
     {
       id: "remove_self_underwear",
@@ -174,8 +170,7 @@ if (typeof window !== "undefined") {
       action: "intimacy",
       intimacyAction: "remove_player_underwear",
       relationshipImpact: { lust: +5, attraction: +3 },
-      resetTimer: { turns: 20 },
-      phase: 2
+      resetTimer: { turns: 20 }
     },
     {
       id: "remove_them_underwear",
@@ -192,8 +187,7 @@ if (typeof window !== "undefined") {
       action: "intimacy",
       intimacyAction: "remove_npc_underwear",
       relationshipImpact: { lust: +10, attraction: +6 },
-      resetTimer: { turns: 20 },
-      phase: 2
+      resetTimer: { turns: 20 }
     },
     {
       id: "touch_intimately",
@@ -977,8 +971,8 @@ if (typeof window !== "undefined") {
             if (nsfwOptionIds.includes(option.id)) return true;
             // Include Phase 2 options
             if (option.phase === 2) return true;
-            // Include intimacy actions
-            if (option.action === "intimacy") return true;
+            // Include intimacy actions that start an encounter (transition actions only)
+            if (option.action === "intimacy" && option.startEncounter === true) return true;
             // Explicitly exclude Phase 1 options
             if (option.phase === 1) return false;
             // Exclude options without phase (base catalogue social options)
