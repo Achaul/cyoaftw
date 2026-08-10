@@ -10,6 +10,7 @@
 
 const PRIVATE_ROOM_TYPES = [
     "Guest Room",
+    "Home",
     "Inn Common",
     "Inn",
     "Bedroom",

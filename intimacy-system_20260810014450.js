@@ -506,7 +506,7 @@ function handleClothingAction(npc, player, act, clothingState) {
         action: actId,
         type: "clothing",
         clothingState: { ...clothingState },
-        text: `You ${act.desc}`
+        text: `You ${act.desc.charAt(0).toLowerCase() + act.desc.slice(1)}.`
     };
 }
 
