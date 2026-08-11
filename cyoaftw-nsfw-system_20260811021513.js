@@ -1,11 +1,11 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-10-0603
+// === cyoaftw-nsfw-system.js === - v2026-08-10-0604
 (function() {
   'use strict';
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-10-0603";
-    console.log("[NSFW System] Loaded v2026-08-10-0603 - Date context shows transition actions");
+    window.NSFW_SYSTEM_VERSION = "2026-08-10-0604";
+    console.log("[NSFW System] Loaded v2026-08-10-0604 - Transition actions available after follow");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -196,7 +196,12 @@ if (typeof window !== "undefined") {
       priority: 30,
       repeat: "encounter",
       conditions: { 
-        minAttraction: 35, 
+        custom: function(npc, ctx) {
+          // Allow if attraction/lust thresholds met, OR if NPC followed player (pending seduction)
+          const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
+          const meetsThresholds = npc.relationship.attraction >= 35;
+          return hasPendingFollow || meetsThresholds;
+        },
         locationCheck: "private",
         aloneWithTarget: true,
         intimacyActive: false 
@@ -215,8 +220,12 @@ if (typeof window !== "undefined") {
       priority: 35,
       repeat: "encounter",
       conditions: { 
-        minAttraction: 45, 
-        minLust: 25,
+        custom: function(npc, ctx) {
+          // Allow if attraction/lust thresholds met, OR if NPC followed player (pending seduction)
+          const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
+          const meetsThresholds = npc.relationship.attraction >= 45 && npc.relationship.lust >= 25;
+          return hasPendingFollow || meetsThresholds;
+        },
         locationCheck: "private",
         aloneWithTarget: true,
         intimacyActive: false 
@@ -675,9 +684,12 @@ if (typeof window !== "undefined") {
         priority: 30,
         conditions: {
           custom: function(npc, ctx) {
-            return npc && npc._meetupArrived && ctx && 
-                   ctx.room && ctx.room.coords === npc._meetupLocation &&
-                   !npc._mealShared;
+            // Allow at meetup location OR when NPC followed player to private location
+            const atMeetup = npc && npc._meetupArrived && ctx && 
+                           ctx.room && ctx.room.coords === npc._meetupLocation &&
+                           !npc._mealShared;
+            const followedToPrivate = npc && npc._pendingSeductionOption === "follow-player" && ctx && ctx.room;
+            return atMeetup || followedToPrivate;
           }
         },
         relationshipImpact: { lust: +1, attraction: +2 }
@@ -689,9 +701,12 @@ if (typeof window !== "undefined") {
         priority: 30,
         conditions: {
           custom: function(npc, ctx) {
-            return npc && npc._meetupArrived && ctx && 
-                   ctx.room && ctx.room.coords === npc._meetupLocation &&
-                   !npc._mealShared;
+            // Allow at meetup location OR when NPC followed player to private location
+            const atMeetup = npc && npc._meetupArrived && ctx && 
+                           ctx.room && ctx.room.coords === npc._meetupLocation &&
+                           !npc._mealShared;
+            const followedToPrivate = npc && npc._pendingSeductionOption === "follow-player" && ctx && ctx.room;
+            return atMeetup || followedToPrivate;
           }
         },
         relationshipImpact: { lust: +3, attraction: +4 }
@@ -703,9 +718,12 @@ if (typeof window !== "undefined") {
         priority: 30,
         conditions: {
           custom: function(npc, ctx) {
-            return npc && npc._meetupArrived && ctx && 
-                   ctx.room && ctx.room.coords === npc._meetupLocation &&
-                   npc._mealShared;
+            // Allow at meetup location with meal shared OR when NPC followed player to private location
+            const atMeetup = npc && npc._meetupArrived && ctx && 
+                           ctx.room && ctx.room.coords === npc._meetupLocation &&
+                           npc._mealShared;
+            const followedToPrivate = npc && npc._pendingSeductionOption === "follow-player" && ctx && ctx.room;
+            return atMeetup || followedToPrivate;
           }
         },
         relationshipImpact: { lust: +2, attraction: +1 },
