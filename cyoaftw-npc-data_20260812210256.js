@@ -1,8 +1,8 @@
-// ── cyoaftw-npc-data.js v2026-08-10-0604 ── Fixed intimacy action filtering
+// ── cyoaftw-npc-data.js v2026-08-10-0606 ── Fixed intimacy action filtering
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-08-10-0604";
-    console.log("[NPC Data] Loaded v2026-08-10-0604 - Transition actions available after follow");
+    window.NPC_DATA_VERSION = "2026-08-10-0606";
+    console.log("[NPC Data] Loaded v2026-08-10-0606 - Transition actions bypass alone check on follow");
 }
 
 // ── DATA ARRAYS ──────────────────────────────────────────────────

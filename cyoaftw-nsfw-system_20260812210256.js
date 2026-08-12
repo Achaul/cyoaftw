@@ -1,11 +1,11 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-10-0604
+// === cyoaftw-nsfw-system.js === - v2026-08-10-0606
 (function() {
   'use strict';
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-10-0604";
-    console.log("[NSFW System] Loaded v2026-08-10-0604 - Transition actions available after follow");
+    window.NSFW_SYSTEM_VERSION = "2026-08-10-0606";
+    console.log("[NSFW System] Loaded v2026-08-10-0606 - Transition actions bypass alone check on follow");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -197,14 +197,25 @@ if (typeof window !== "undefined") {
       repeat: "encounter",
       conditions: { 
         custom: function(npc, ctx) {
-          // Allow if attraction/lust thresholds met, OR if NPC followed player (pending seduction)
+          // Allow if (attraction thresholds met AND alone AND private) OR if NPC followed player (bypass alone/private checks)
           const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
-          const meetsThresholds = npc.relationship.attraction >= 35;
-          return hasPendingFollow || meetsThresholds;
-        },
-        locationCheck: "private",
-        aloneWithTarget: true,
-        intimacyActive: false 
+          const meetsThresholds = (npc.relationship && npc.relationship.attraction >= 35);
+          const isPrivate = ctx && ctx.room && (typeof isPrivateLocation === "function" 
+              ? isPrivateLocation(ctx.room) 
+              : ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower"].some(t => 
+                  (ctx.room.type || ctx.room.displayName || "").toLowerCase().includes(t.toLowerCase())));
+          const isAlone = ctx && ctx.room && ctx.room.creatures && (() => {
+            let others = 0;
+            for (const c of ctx.room.creatures) {
+              if (c.isPlayer) continue;
+              if (c === npc) continue;
+              if (c.isHumanoid || c.humanoid) others++;
+            }
+            return others === 0;
+          })();
+          const isIntimacyActive = npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active;
+          return hasPendingFollow || (meetsThresholds && isPrivate && isAlone && !isIntimacyActive);
+        }
       },
       action: "intimacy",
       startEncounter: true,
@@ -221,14 +232,27 @@ if (typeof window !== "undefined") {
       repeat: "encounter",
       conditions: { 
         custom: function(npc, ctx) {
-          // Allow if attraction/lust thresholds met, OR if NPC followed player (pending seduction)
+          // Allow if (attraction/lust thresholds met AND alone AND private) OR if NPC followed player (bypass alone/private checks)
           const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
-          const meetsThresholds = npc.relationship.attraction >= 45 && npc.relationship.lust >= 25;
-          return hasPendingFollow || meetsThresholds;
-        },
-        locationCheck: "private",
-        aloneWithTarget: true,
-        intimacyActive: false 
+          const attraction = (npc.relationship && typeof npc.relationship.attraction === "number") ? npc.relationship.attraction : 0;
+          const lust = (npc.relationship && typeof npc.relationship.lust === "number") ? npc.relationship.lust : 0;
+          const meetsThresholds = attraction >= 45 && lust >= 25;
+          const isPrivate = ctx && ctx.room && (typeof isPrivateLocation === "function" 
+              ? isPrivateLocation(ctx.room) 
+              : ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower"].some(t => 
+                  (ctx.room.type || ctx.room.displayName || "").toLowerCase().includes(t.toLowerCase())));
+          const isAlone = ctx && ctx.room && ctx.room.creatures && (() => {
+            let others = 0;
+            for (const c of ctx.room.creatures) {
+              if (c.isPlayer) continue;
+              if (c === npc) continue;
+              if (c.isHumanoid || c.humanoid) others++;
+            }
+            return others === 0;
+          })();
+          const isIntimacyActive = npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active;
+          return hasPendingFollow || (meetsThresholds && isPrivate && isAlone && !isIntimacyActive);
+        }
       },
       action: "intimacy",
       startEncounter: true,
@@ -991,7 +1015,10 @@ if (typeof window !== "undefined") {
             dateOptionIds.includes(option.id) || 
             (option.nsfw === true) ||  // Keep other NSFW options
             (option.tags && option.tags.includes("date")) ||
-            (option.phase === 2 && (option.startEncounter === true || option.action !== "intimacy"))
+            (option.phase === 2 && (option.startEncounter === true || option.action !== "intimacy")) ||
+            (option.intent === "greeting") ||  // Include greeting options
+            (option.id === "greet-intro") ||  // Include specific greeting options
+            (option.id === "greet-known")
           );
           if (npc && npc.name) {
             console.log(`[DEBUG] Date filtering applied for ${npc.name}. Options:`, filtered.map(o => o.id));
