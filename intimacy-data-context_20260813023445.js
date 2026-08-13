@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - CONTEXT DETECTION
  * Detects game state to determine appropriate intimacy options
- * Version: 2026-08-10-0606
+ * Version: 2026-08-12-0606
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_CONTEXT_VERSION = "2026-08-10-0606";
-    console.log("[Intimacy Context] Loaded v2026-08-10-0606 - Private phase on pending seduction");
+    window.INTIMACY_CONTEXT_VERSION = "2026-08-12-0606";
+    console.log("[Intimacy Context] Loaded v2026-08-12-0606 - Equipment-based clothing checks");
 }
 
 // ============================================================================

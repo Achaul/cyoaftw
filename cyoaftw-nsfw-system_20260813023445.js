@@ -1,11 +1,11 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-10-0606
+// === cyoaftw-nsfw-system.js === - v2026-08-10-0607
 (function() {
   'use strict';
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-10-0606";
-    console.log("[NSFW System] Loaded v2026-08-10-0606 - Transition actions bypass alone check on follow");
+    window.NSFW_SYSTEM_VERSION = "2026-08-10-0607";
+    console.log("[NSFW System] Loaded v2026-08-10-0607 - Date options only in food locations");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -699,6 +699,15 @@ if (typeof window !== "undefined") {
     return false;
   }
 
+  // Helper to check if room offers food
+  function isFoodLocation(room) {
+    if (!room) return false;
+    const foodTypes = ["Inn", "Tavern", "Inn Common", "Kitchen", "Dining", "Restaurant", "Bar", "Taproom"];
+    const roomType = (room.type || room.displayName || "").toLowerCase();
+    const roomRole = (room.role || "").toLowerCase();
+    return foodTypes.some(t => roomType.includes(t.toLowerCase()) || roomRole.includes(t.toLowerCase()));
+  }
+
   function injectMeetupConversationOptions() {
     const meetupOptions = [
       {
@@ -708,6 +717,9 @@ if (typeof window !== "undefined") {
         priority: 30,
         conditions: {
           custom: function(npc, ctx) {
+            // Only show in food locations
+            if (!isFoodLocation(ctx && ctx.room)) return false;
+            
             // Allow at meetup location OR when NPC followed player to private location
             const atMeetup = npc && npc._meetupArrived && ctx && 
                            ctx.room && ctx.room.coords === npc._meetupLocation &&
@@ -725,6 +737,9 @@ if (typeof window !== "undefined") {
         priority: 30,
         conditions: {
           custom: function(npc, ctx) {
+            // Only show in food locations
+            if (!isFoodLocation(ctx && ctx.room)) return false;
+            
             // Allow at meetup location OR when NPC followed player to private location
             const atMeetup = npc && npc._meetupArrived && ctx && 
                            ctx.room && ctx.room.coords === npc._meetupLocation &&
@@ -742,6 +757,9 @@ if (typeof window !== "undefined") {
         priority: 30,
         conditions: {
           custom: function(npc, ctx) {
+            // Only show in food locations
+            if (!isFoodLocation(ctx && ctx.room)) return false;
+            
             // Allow at meetup location with meal shared OR when NPC followed player to private location
             const atMeetup = npc && npc._meetupArrived && ctx && 
                            ctx.room && ctx.room.coords === npc._meetupLocation &&

@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-08-10-0508
+ * Version: 2026-08-12-0600
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-08-10-0600";
-    console.log("[Intimacy Acts] Loaded v2026-08-10-0600");
+    window.INTIMACY_ACTS_VERSION = "2026-08-12-0600";
+    console.log("[Intimacy Acts] Loaded v2026-08-12-0600 - Equipment-based clothing checks");
 }
 
 // ============================================================================
@@ -374,6 +374,17 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
         }
     }
     
+    // Check if character has actual clothing equipped for clothing removal actions
+    if (act.type === ACT_TYPES.CLOTHING) {
+        // For undress actions, check if target has any clothing equipped
+        if (act.id === "undress_player" || act.id === "undress_npc" || act.clothingItem || act.clothingAction) {
+            const target = act.target === "npc" ? npc : player;
+            if (!hasClothingEquipped(target)) {
+                return false;
+            }
+        }
+    }
+    
     // Check gender requirements
     if (act.maleOnly || act.femaleOnly) {
         const playerGender = (player && player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
@@ -389,6 +400,24 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
     // More checks can be added here (prior actions, lube, skills, etc.)
     
     return true;
+}
+
+/**
+ * Check if character has clothing equipped in relevant equipment slots
+ * Clothing slots: head, upper, lower, hands, feet
+ */
+function hasClothingEquipped(character) {
+    if (!character || !character.equipped) return false;
+    
+    const clothingSlots = ["head", "upper", "lower", "hands", "feet"];
+    
+    for (const slot of clothingSlots) {
+        if (character.equipped[slot]) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 /**
@@ -487,6 +516,7 @@ if (typeof module !== 'undefined' && module.exports) {
         getIntimacyStage,
         isFullyNude,
         isActionValid,
+        hasClothingEquipped,
         checkClothingRequirement,
         getActionCategory
     };
@@ -507,5 +537,6 @@ if (typeof window !== 'undefined') {
     window.getAllActIds = getAllActIds;
     window.getIntimacyStage = getIntimacyStage;
     window.isActionValid = isActionValid;
+    window.hasClothingEquipped = hasClothingEquipped;
     window.getActionCategory = getActionCategory;
 }
