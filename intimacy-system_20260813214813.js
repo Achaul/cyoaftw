@@ -13,8 +13,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-12-0606";
-    console.log("[Intimacy System] Loaded v2026-08-12-0606 - Equipment-based clothing checks");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-12-0607";
+    console.log("[Intimacy System] Loaded v2026-08-12-0607 - Equipment checks + COT Priority 1 + 2 COMPLETE");
 }
 
 // ============================================================================
