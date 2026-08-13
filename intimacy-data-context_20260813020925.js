@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - CONTEXT DETECTION
  * Detects game state to determine appropriate intimacy options
- * Version: 2026-08-10-0508
+ * Version: 2026-08-10-0606
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_CONTEXT_VERSION = "2026-08-10-0600";
-    console.log("[Intimacy Context] Loaded v2026-08-10-0600");
+    window.INTIMACY_CONTEXT_VERSION = "2026-08-10-0606";
+    console.log("[Intimacy Context] Loaded v2026-08-10-0606 - Private phase on pending seduction");
 }
 
 // ============================================================================
@@ -169,7 +169,10 @@ function getCurrentIntimacyPhase(room, targetNpc, npc) {
     const isPrivate = isPrivateLocation(room);
     const isAlone = isAloneWithTarget(room, targetNpc);
     
-    if (isPrivate && isAlone) {
+    // Allow PRIVATE phase if: (private + alone) OR (private + pending seduction/follow)
+    const hasPendingSeduction = npc && (npc._pendingSeductionDestination || npc._pendingSeductionOption);
+    
+    if ((isPrivate && isAlone) || (isPrivate && hasPendingSeduction)) {
         return INTIMACY_PHASES.PRIVATE;
     }
     
