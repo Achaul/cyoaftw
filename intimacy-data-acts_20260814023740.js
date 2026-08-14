@@ -443,13 +443,37 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
         }
     }
     
-    // Check if character has actual clothing equipped for clothing removal actions
+    // Check if character has clothing for clothing removal actions
+    // Use intimacy clothing state if available, otherwise check equipped items
     if (act.type === ACT_TYPES.CLOTHING) {
-        // For undress actions, check if target has any clothing equipped
+        // For undress actions, check if target has clothing that can be removed
         if (act.id === "undress_player" || act.id === "undress_npc" || act.clothingItem || act.clothingAction) {
-            const target = act.target === "npc" ? npc : player;
-            if (!hasClothingEquipped(target)) {
-                return false;
+            const targetIsPlayer = act.target === "player";
+            const targetKey = targetIsPlayer ? "player" : "npc";
+            
+            // If we have intimacy clothing state, use it
+            if (clothingState && clothingState[targetKey]) {
+                const targetClothing = clothingState[targetKey];
+                
+                // For complete undress, check if target has any clothing
+                if (act.id === "undress_player" || act.id === "undress_npc") {
+                    if (!targetClothing.top && !targetClothing.bottom && !targetClothing.undergarments) {
+                        return false; // Already fully undressed
+                    }
+                }
+                // For specific clothing items, check if that item is worn
+                else if (act.clothingItem) {
+                    if (!targetClothing[act.clothingItem]) {
+                        return false; // That specific clothing item is not worn
+                    }
+                }
+            }
+            // Fallback: check if character has any clothing equipped
+            else {
+                const target = targetIsPlayer ? player : npc;
+                if (!hasClothingEquipped(target)) {
+                    return false;
+                }
             }
         }
     }

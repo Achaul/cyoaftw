@@ -1,8 +1,8 @@
-// ── cyoaftw-npc-data.js v2026-08-10-0607 ── Fixed intimacy action filtering
+// ── cyoaftw-npc-data.js v2026-08-12-0607 ── Fixed intimacy action filtering
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-08-10-0607";
-    console.log("[NPC Data] Loaded v2026-08-10-0607 - Date options only in food locations");
+    window.NPC_DATA_VERSION = "2026-08-12-0607";
+    console.log("[NPC Data] Loaded v2026-08-12-0607 - Equipment checks + COT Priority 1 + 2 COMPLETE");
 }
 
 // ── DATA ARRAYS ──────────────────────────────────────────────────

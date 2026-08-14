@@ -284,8 +284,14 @@ function generateValidActions(npc, player, positionId = null) {
             // playerIsBottom means player is receiving, so NPC is actor
             const isPlayerActor = !act.playerIsBottom;
             
-            // Check position accessibility for tool-target
-            if (checkToolTargetAccessibility(act.tool, act.target, currentPosition, clothingState, isPlayerActor)) {
+            // For CLOTHING and END actions, skip tool/target accessibility check
+            // Clothing actions only need clothing state validation (handled by isActionValid)
+            // END actions don't need accessibility checks
+            if (act.type === ACT_TYPES.CLOTHING || act.type === ACT_TYPES.END) {
+                validActions.push({ ...act, actId });
+            }
+            // For other actions, check position accessibility for tool-target
+            else if (checkToolTargetAccessibility(act.tool, act.target, currentPosition, clothingState, isPlayerActor)) {
                 validActions.push({ ...act, actId });
             }
         }
@@ -315,28 +321,31 @@ function generateValidActions(npc, player, positionId = null) {
 
 /**
  * Apply stage-specific filtering to actions array
+ * Note: Clothing accessibility is already handled by checkToolTargetAccessibility,
+ * so we only filter by action type here.
  */
 function applyStageFilteringToArray(actions, stage) {
     return actions.filter(action => {
-        // Stage 1: Clothed - only external actions
+        // Clothing actions are always allowed
+        if (action.type === ACT_TYPES.CLOTHING) return true;
+        
+        // END actions are always allowed
+        if (action.type === ACT_TYPES.END) return true;
+        
+        // Stage 1: Clothed - allow all non-penetrative actions
         if (stage === INTIMACY_STAGES.CLOTHED) {
-            // Always allow clothing actions
-            if (action.type === ACT_TYPES.CLOTHING) return true;
-            
-            // Remove penetration and continue actions
+            // Remove penetration and continue actions until partially undressed
             if (action.type === ACT_TYPES.PENETRATE || action.type === ACT_TYPES.CONTINUE) return false;
-            
-            // Remove genital and anal actions that require nudity
-            if (action.target === "genitals" || action.target === "anus") {
-                if (action.reqCloth !== CLOTHING_REQUIREMENTS.ANY) return false;
-            }
         }
         
-        // Stage 2: Partial - allow clothing removal and some exposure
+        // Stage 2: Partial - allow all except full penetration
         if (stage === INTIMACY_STAGES.PARTIAL) {
-            // Still hide full penetration until nude
+            // Still hide full penetration until fully nude
             if (action.type === ACT_TYPES.PENETRATE || action.type === ACT_TYPES.CONTINUE) return false;
         }
+        
+        // Stage 3: Nude - allow all actions
+        // No filtering needed
         
         return true;
     });

@@ -219,7 +219,6 @@ if (typeof window !== "undefined") {
       },
       action: "intimacy",
       startEncounter: true,
-      intimacyAction: "tease_groin",
       relationshipImpact: { lust: +10, attraction: +4 },
       resetTimer: { turns: 15 },
       phase: 2
