@@ -1,7 +1,14 @@
 /**
  * INTIMACY SYSTEM - POSITION DEFINITIONS
  * Position data for the NSFW intimacy action menu
+ * Version: 2026-08-12-0607
  */
+
+// Version identifier for debugging cached files
+if (typeof window !== "undefined") {
+    window.INTIMACY_POSITIONS_VERSION = "2026-08-12-0607";
+    console.log("[Intimacy Positions] Loaded v2026-08-12-0607 - Equipment checks + COT Priority 1 + 2 COMPLETE");
+}
 
 const INTIMACY_POSITIONS = {
     // ===== STANDING POSITIONS =====

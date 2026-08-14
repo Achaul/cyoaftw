@@ -1,7 +1,7 @@
 /**
  * INTIMACY SYSTEM - CONTEXT DETECTION
  * Detects game state to determine appropriate intimacy options
- * Version: 2026-08-12-0606
+ * Version: 2026-08-12-0607
  */
 
 // Version identifier for debugging cached files

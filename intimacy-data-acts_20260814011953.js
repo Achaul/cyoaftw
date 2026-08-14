@@ -1,7 +1,7 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-08-12-0604
+ * Version: 2026-08-12-0605
  */
 
 // Version identifier for debugging cached files
