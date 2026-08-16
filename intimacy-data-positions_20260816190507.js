@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - POSITION DEFINITIONS
  * Position data for the NSFW intimacy action menu
- * Version: 2026-08-16-0003
+ * Version: 2026-08-16-004
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_POSITIONS_VERSION = "2026-08-16-0003";
-    console.log("[Intimacy Positions] Loaded v2026-08-16-0003 - Added vagina/clitoris/penis to accessible targets");
+    window.INTIMACY_POSITIONS_VERSION = "2026-08-16-004";
+    console.log("[Intimacy Positions] Loaded v2026-08-16-004 - Fixed gender filters for NPC targeting");
 }
 
 const INTIMACY_POSITIONS = {

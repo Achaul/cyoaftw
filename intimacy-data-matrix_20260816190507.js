@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - LOT MATRIX
  * Tool-Verb-Target matrix for generating valid intimacy actions
- * Version: 2026-08-16-003
+ * Version: 2026-08-16-004
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_MATRIX_VERSION = "2026-08-16-003";
-    console.log("[Intimacy Matrix] Loaded v2026-08-16-003 - Gender filtering + Pronoun system");
+    window.INTIMACY_MATRIX_VERSION = "2026-08-16-004";
+    console.log("[Intimacy Matrix] Loaded v2026-08-16-004 - Fixed gender filters for NPC targeting");
 }
 
 // ============================================================================
