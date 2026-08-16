@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - CONTEXT DETECTION
  * Detects game state to determine appropriate intimacy options
- * Version: 2026-08-16-0001
+ * Version: 2026-08-16-003
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_CONTEXT_VERSION = "2026-08-16-0001";
-    console.log("[Intimacy Context] Loaded v2026-08-16-0001 - Fixed receiver clothing check");
+    window.INTIMACY_CONTEXT_VERSION = "2026-08-16-003";
+    console.log("[Intimacy Context] Loaded v2026-08-16-003 - Gender filtering + Pronoun system");
 }
 
 // ============================================================================
@@ -345,10 +345,38 @@ const NATURAL_LABELS = {
 };
 
 /**
- * Get natural display label for an act
+ * Get natural display label for an act, with optional gender personalization
+ * If npc and player are provided, uses gendered labels when available
  */
-function getNaturalLabel(actId) {
-    return NATURAL_LABELS[actId] || getAct(actId)?.label || actId;
+function getNaturalLabel(actId, npc, player) {
+    // First check NATURAL_LABELS for override
+    if (NATURAL_LABELS[actId]) {
+        // If gendered label function exists and we have npc/player info, try to apply gender
+        if (typeof getGenderedLabel === 'function' && npc && player) {
+            const act = getAct(actId);
+            if (act && act.label) {
+                const gendered = getGenderedLabel(act, npc, player);
+                if (gendered && gendered !== act.label) {
+                    return gendered;
+                }
+            }
+        }
+        return NATURAL_LABELS[actId];
+    }
+    
+    // Fallback to act label
+    const act = getAct(actId);
+    if (!act) return actId;
+    
+    // Try gendered label if we have npc/player
+    if (typeof getGenderedLabel === 'function' && npc && player) {
+        const gendered = getGenderedLabel(act, npc, player);
+        if (gendered && gendered !== act.label) {
+            return gendered;
+        }
+    }
+    
+    return act.label || actId;
 }
 
 // ============================================================================

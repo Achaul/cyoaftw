@@ -2,19 +2,20 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  * 
- * Version: 2026-08-16-0001
+ * Version: 2026-08-16-003
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
  * - Position-aware accessibility
  * - Clothing state tracking
  * - One-at-a-time AI response generation
+ * - Gender filtering and pronoun system
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-0001";
-    console.log("[Intimacy System] Loaded v2026-08-16-0001 - Fixed clothing accessibility check for receiver");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-003";
+    console.log("[Intimacy System] Loaded v2026-08-16-003 - Gender filtering + Pronoun system");
 }
 
 // ============================================================================
@@ -458,7 +459,9 @@ function getTargetCoveredParts(target) {
         buttocks: ["buttocks"],
         anus: ["anus"],
         vagina: ["vagina"],
+        clitoris: ["clitoris"],
         penis: ["penis"],
+        testicles: ["testicles"],
         thighs: ["thighs"],
         legs: ["legs"],
         feet: ["feet"],
@@ -1281,7 +1284,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                     label: category,
                     actions: categorized[category].map(a => ({
                         id: a.actId,
-                        label: getNaturalLabel(a.actId),
+                        label: getNaturalLabel(a.actId, npc, player),
                         description: a.desc,
                         type: a.type,
                         phaseRequired: getMinimumPhaseForAction(a.actId)
@@ -1305,7 +1308,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                 label: category,
                 actions: actions.map(a => ({
                     id: a.actId,
-                    label: getNaturalLabel(a.actId),
+                    label: getNaturalLabel(a.actId, npc, player),
                     description: a.desc,
                     type: a.type,
                     phaseRequired: getMinimumPhaseForAction(a.actId)
