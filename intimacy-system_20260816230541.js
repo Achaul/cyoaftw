@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-007";
-    console.log("[Intimacy System] Loaded v2026-08-16-007 - Smart end-action validation based on lastAction");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-008";
+    console.log("[Intimacy System] Loaded v2026-08-16-008 - UI restoration on endIntimacyEncounter");
 }
 
 // ============================================================================
@@ -242,6 +242,18 @@ function endIntimacyEncounter(npc) {
     if (typeof G !== "undefined") {
         G.activeNPCMode = null;
         G.activeNPC = null;
+    }
+    
+    // Restore UI state for intimacy mode
+    if (typeof document !== "undefined") {
+        const roomDescEl = document.getElementById("roomDescEl");
+        if (roomDescEl) roomDescEl.style.display = "";
+        const narrationEl = document.getElementById("narrationEl");
+        if (narrationEl) narrationEl.style.display = "";
+        const placeholderEl = document.getElementById("npcPlaceholderEl");
+        const detailEl = document.getElementById("npcDetailEl");
+        if (placeholderEl) placeholderEl.style.display = "";
+        if (detailEl) detailEl.classList.remove("active");
     }
     
     console.log(`[Intimacy] Ended encounter with ${npc.name || 'NPC'}`);
