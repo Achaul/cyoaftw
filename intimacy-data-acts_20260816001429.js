@@ -505,7 +505,42 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
         if (act.femaleOnly && !actorIsPlayer && npcGender !== "female") return false;
     }
     
-    // More checks can be added here (prior actions, lube, skills, etc.)
+    // Check if prior actions are required
+    if (act.requiresPrior && act.requiresPrior.length > 0) {
+        const intimacy = npc && npc.intimacy;
+        const actionHistory = intimacy && intimacy.actionHistory ? intimacy.actionHistory : [];
+        
+        // Check if any of the required prior actions have been performed
+        const hasPriorAction = act.requiresPrior.some(priorActId => {
+            return actionHistory.some(historyEntry => historyEntry.actId === priorActId);
+        });
+        
+        if (!hasPriorAction) {
+            return false;
+        }
+    }
+    
+    // Check if lube is required
+    if (act.requiresLube) {
+        const intimacy = npc && npc.intimacy;
+        const hasLube = intimacy && intimacy.hasLube;
+        if (!hasLube) {
+            return false;
+        }
+    }
+    
+    // Check if consent is required
+    if (act.requiresConsent) {
+        // For now, just check if NPC has high enough attraction/lust
+        // In a real implementation, this would check a consent flag
+        const npcAttraction = (npc.relationship && npc.relationship.attraction) || 0;
+        const npcLust = (npc.relationship && npc.relationship.lust) || 0;
+        if (npcAttraction < 50 || npcLust < 30) {
+            return false;
+        }
+    }
+    
+    // More checks can be added here (skills, etc.)
     
     return true;
 }

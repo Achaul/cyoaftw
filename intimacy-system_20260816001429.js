@@ -290,6 +290,11 @@ function generateValidActions(npc, player, positionId = null) {
             if (act.type === ACT_TYPES.CLOTHING || act.type === ACT_TYPES.END) {
                 validActions.push({ ...act, actId });
             }
+            // For actions that work regardless of clothing (reqCloth: ANY), also skip accessibility check
+            // This allows "over clothes" actions like grope_breasts_clothed
+            else if (act.reqCloth === CLOTHING_REQUIREMENTS.ANY) {
+                validActions.push({ ...act, actId });
+            }
             // For other actions, check position accessibility for tool-target
             else if (checkToolTargetAccessibility(act.tool, act.target, currentPosition, clothingState, isPlayerActor)) {
                 validActions.push({ ...act, actId });
@@ -492,9 +497,9 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // Store last action for continuity
     intimacy.lastAction = { actId, timestamp: Date.now() };
     
-    // Add to history (keep last 5 actions)
+    // Add to history (keep last 20 actions for prior action checking)
     intimacy.actionHistory.push({ actId, timestamp: Date.now() });
-    if (intimacy.actionHistory.length > 5) {
+    if (intimacy.actionHistory.length > 20) {
         intimacy.actionHistory.shift();
     }
     
