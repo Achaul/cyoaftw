@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - POSITION DEFINITIONS
  * Position data for the NSFW intimacy action menu
- * Version: 2026-08-16-0001
+ * Version: 2026-08-16-0003
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_POSITIONS_VERSION = "2026-08-16-0001";
-    console.log("[Intimacy Positions] Loaded v2026-08-16-0001 - Fixed receiver clothing check");
+    window.INTIMACY_POSITIONS_VERSION = "2026-08-16-0003";
+    console.log("[Intimacy Positions] Loaded v2026-08-16-0003 - Added vagina/clitoris/penis to accessible targets");
 }
 
 const INTIMACY_POSITIONS = {
@@ -18,10 +18,10 @@ const INTIMACY_POSITIONS = {
         npcRole: "standing",
         furniture: ["small standing room", "large standing room", "open space"],
         accessibleTargets: {
-            player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin"],
-            npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin"]
+            player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles"],
+            npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles"]
         },
-        validTools: ["hand", "mouth", "fingers"],
+        validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
         analFriendly: false,
         description: "Both standing, facing each other"
     },
@@ -32,10 +32,10 @@ const INTIMACY_POSITIONS = {
         npcRole: "in front",
         furniture: ["small standing room", "large standing room", "open space"],
         accessibleTargets: {
-            player: ["neck", "shoulders", "hips", "buttocks", "groin"],
-            npc: ["back", "neck", "shoulders", "hips", "buttocks", "anus"]
+            player: ["neck", "shoulders", "hips", "buttocks", "groin", "vagina"],
+            npc: ["back", "neck", "shoulders", "hips", "buttocks", "anus", "vagina"]
         },
-        validTools: ["hand", "mouth", "fingers", "penis"],
+        validTools: ["hand", "mouth", "fingers", "penis", "vagina"],
         analFriendly: true,
         description: "Player standing behind the NPC"
     },
@@ -46,10 +46,10 @@ const INTIMACY_POSITIONS = {
         npcRole: "pinning",
         furniture: ["vertical surface", "wall"],
         accessibleTargets: {
-            player: ["face", "mouth", "lips", "neck", "chest", "hips"],
-            npc: ["face", "mouth", "lips", "neck", "chest", "hips"]
+            player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina"],
+            npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina"]
         },
-        validTools: ["hand", "mouth", "fingers"],
+        validTools: ["hand", "mouth", "fingers", "vagina"],
         analFriendly: false,
         description: "NPC has player pinned against a wall"
     },
@@ -60,10 +60,10 @@ const INTIMACY_POSITIONS = {
         npcRole: "pinned",
         furniture: ["vertical surface", "wall"],
         accessibleTargets: {
-            player: ["neck", "shoulders", "back", "hips", "buttocks", "groin"],
-            npc: ["back", "neck", "shoulders", "hips", "buttocks", "anus"]
+            player: ["neck", "shoulders", "back", "hips", "buttocks", "groin", "vagina"],
+            npc: ["back", "neck", "shoulders", "hips", "buttocks", "anus", "vagina"]
         },
-        validTools: ["hand", "fingers", "penis"],
+        validTools: ["hand", "fingers", "penis", "vagina"],
         analFriendly: true,
         description: "Player has NPC pinned against a wall from behind"
     },
@@ -75,10 +75,10 @@ const INTIMACY_POSITIONS = {
         npcRole: "between thighs",
         furniture: ["seat", "chair", "lap"],
         accessibleTargets: {
-            player: ["face", "mouth", "lips", "neck", "chest", "thighs"],
-            npc: ["face", "mouth", "lips", "neck", "chest", "thighs"]
+            player: ["face", "mouth", "lips", "neck", "chest", "thighs", "groin", "vagina"],
+            npc: ["face", "mouth", "lips", "neck", "chest", "thighs", "groin", "vagina"]
         },
-        validTools: ["hand", "mouth", "fingers"],
+        validTools: ["hand", "mouth", "fingers", "vagina"],
         analFriendly: false,
         description: "NPC sitting on player's lap"
     },
@@ -89,8 +89,8 @@ const INTIMACY_POSITIONS = {
         npcRole: "seated",
         furniture: ["seat", "chair"],
         accessibleTargets: {
-            player: ["face", "mouth", "lips", "neck", "chest", "groin"],
-            npc: ["face", "mouth", "lips", "neck", "chest", "groin"]
+            player: ["face", "mouth", "lips", "neck", "chest", "groin", "vagina"],
+            npc: ["face", "mouth", "lips", "neck", "chest", "groin", "vagina"]
         },
         validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
         analFriendly: false,
@@ -104,8 +104,8 @@ const INTIMACY_POSITIONS = {
         npcRole: "bottom",
         furniture: ["flat surface", "bed", "ground"],
         accessibleTargets: {
-            player: ["face", "mouth", "lips", "neck", "chest", "groin"],
-            npc: ["face", "mouth", "lips", "neck", "chest", "groin", "thighs", "hips"]
+            player: ["face", "mouth", "lips", "neck", "chest", "groin", "vagina", "clitoris"],
+            npc: ["face", "mouth", "lips", "neck", "chest", "groin", "vagina", "clitoris", "thighs", "hips"]
         },
         validTools: ["hand", "mouth", "fingers", "penis", "vagina"],
         analFriendly: false,
@@ -118,8 +118,8 @@ const INTIMACY_POSITIONS = {
         npcRole: "on all fours",
         furniture: ["flat surface", "bed", "ground"],
         accessibleTargets: {
-            player: ["hips", "buttocks", "groin", "anus"],
-            npc: ["back", "hips", "buttocks", "groin", "anus", "thighs"]
+            player: ["hips", "buttocks", "groin", "vagina", "anus"],
+            npc: ["back", "hips", "buttocks", "groin", "vagina", "anus", "thighs"]
         },
         validTools: ["hand", "fingers", "mouth", "penis"],
         analFriendly: true,
@@ -132,8 +132,8 @@ const INTIMACY_POSITIONS = {
         npcRole: "bent over",
         furniture: ["vertical surface", "table", "bed", "railing"],
         accessibleTargets: {
-            player: ["hips", "buttocks", "groin"],
-            npc: ["back", "hips", "buttocks", "groin", "anus"]
+            player: ["hips", "buttocks", "groin", "vagina"],
+            npc: ["back", "hips", "buttocks", "groin", "vagina", "anus"]
         },
         validTools: ["hand", "fingers", "mouth", "penis"],
         analFriendly: true,
@@ -146,10 +146,10 @@ const INTIMACY_POSITIONS = {
         npcRole: "in front",
         furniture: ["flat surface", "bed"],
         accessibleTargets: {
-            player: ["back", "hips", "buttocks", "groin"],
-            npc: ["back", "hips", "buttocks"]
+            player: ["back", "hips", "buttocks", "groin", "vagina"],
+            npc: ["back", "hips", "buttocks", "groin", "vagina"]
         },
-        validTools: ["hand", "fingers", "penis"],
+        validTools: ["hand", "fingers", "penis", "vagina"],
         analFriendly: true,
         description: "Both lying on side, player behind NPC"
     },
@@ -175,10 +175,10 @@ const INTIMACY_POSITIONS = {
         npcRole: "kneeling",
         furniture: ["open space", "floor", "bed"],
         accessibleTargets: {
-            player: ["face", "mouth", "lips", "chest", "groin"],
-            npc: ["face", "mouth", "lips", "chest", "groin"]
+            player: ["face", "mouth", "lips", "chest", "groin", "vagina"],
+            npc: ["face", "mouth", "lips", "chest", "groin", "vagina"]
         },
-        validTools: ["hand", "mouth", "fingers"],
+        validTools: ["hand", "mouth", "fingers", "vagina"],
         analFriendly: false,
         description: "NPC kneeling over player"
     },
@@ -190,8 +190,8 @@ const INTIMACY_POSITIONS = {
         npcRole: "top",
         furniture: ["flat surface", "bed"],
         accessibleTargets: {
-            player: ["face", "mouth", "lips", "neck", "chest", "groin"],
-            npc: ["face", "mouth", "lips", "chest", "groin", "hips"]
+            player: ["face", "mouth", "lips", "neck", "chest", "groin", "vagina"],
+            npc: ["face", "mouth", "lips", "chest", "groin", "vagina", "hips"]
         },
         validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
         analFriendly: false,
@@ -204,8 +204,8 @@ const INTIMACY_POSITIONS = {
         npcRole: "top",
         furniture: ["flat surface", "bed"],
         accessibleTargets: {
-            player: ["face", "groin"],
-            npc: ["back", "hips", "buttocks", "groin", "anus"]
+            player: ["face", "groin", "vagina"],
+            npc: ["back", "hips", "buttocks", "groin", "vagina", "anus"]
         },
         validTools: ["hand", "fingers", "vagina", "penis"],
         analFriendly: true,
