@@ -6,8 +6,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_MATRIX_VERSION = "2026-08-16-006";
-    console.log("[Intimacy Matrix] Loaded v2026-08-16-006 - Added disabled action hints + Top/Bottom roles");
+    window.INTIMACY_MATRIX_VERSION = "2026-08-16-007";
+    console.log("[Intimacy Matrix] Loaded v2026-08-16-007 - Smart end-action validation based on lastAction");
 }
 
 // ============================================================================

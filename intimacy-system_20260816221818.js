@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-006";
-    console.log("[Intimacy System] Loaded v2026-08-16-006 - Added disabled action hints + Top/Bottom roles");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-007";
+    console.log("[Intimacy System] Loaded v2026-08-16-007 - Smart end-action validation based on lastAction");
 }
 
 // ============================================================================
@@ -411,6 +411,41 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         });
         if (!hasPriorAction) {
             return { valid: false, reason: "prior required" };
+        }
+    }
+
+    // Check END actions - must match corresponding start/continue action from lastAction
+    if (act.type === ACT_TYPES.END) {
+        const intimacy = npc && npc.intimacy;
+        const lastAction = intimacy && intimacy.lastAction ? intimacy.lastAction.actId : null;
+        
+        if (!lastAction) {
+            // No prior action, only allow generic end actions
+            if (actId !== "stop" && actId !== "pause") {
+                return { valid: false, reason: "no active action" };
+            }
+        } else {
+            // Define mapping of END actions to their corresponding start/continue actions
+            const END_ACTION_MAPPING = {
+                // Fingering end actions (vaginal and anal)
+                stop_fingering: ["finger_pussy", "finger_pussy_fast", "enter_pussy_finger", "finger_anus", "finger_anus_fast", "enter_anus_finger"],
+                pull_off_of_finger: ["finger_pussy", "finger_pussy_fast", "enter_pussy_finger", "finger_anus", "finger_anus_fast", "enter_anus_finger"],
+                
+                // Vaginal/Anal penetration end actions
+                pull_out: ["enter_pussy", "thrust_pussy", "enter_anus", "thrust_anus"],
+                pull_off: ["enter_pussy", "thrust_pussy", "enter_anus", "thrust_anus"],
+                
+                // Hand job end actions
+                release_cock: ["stroke_penis", "grip_penis"],
+                
+                // Oral end actions
+                pull_out_of_mouth: ["deepthroat_penis", "suck_penis", "fuck_mouth", "deepthroat_penis_player", "accept_penis_mouth"]
+            };
+            
+            const requiredStartActions = END_ACTION_MAPPING[actId];
+            if (requiredStartActions && !requiredStartActions.includes(lastAction)) {
+                return { valid: false, reason: "no active action" };
+            }
         }
     }
     
