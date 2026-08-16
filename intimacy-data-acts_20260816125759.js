@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-08-12-0607
+ * Version: 2026-08-16-0001
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-08-12-0607";
-    console.log("[Intimacy Acts] Loaded v2026-08-12-0607 - Equipment checks + COT Priority 2 complete (17 total): ride_face, stretch_butthole, hump_ass_back_onto_cock");
+    window.INTIMACY_ACTS_VERSION = "2026-08-16-0001";
+    console.log("[Intimacy Acts] Loaded v2026-08-16-0001 - Fixed receiver clothing check");
 }
 
 // ============================================================================

@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - LOT MATRIX
  * Tool-Verb-Target matrix for generating valid intimacy actions
- * Version: 2026-08-12-0607
+ * Version: 2026-08-16-0001
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_MATRIX_VERSION = "2026-08-12-0607";
-    console.log("[Intimacy Matrix] Loaded v2026-08-12-0607 - Equipment checks + COT Priority 1 + 2 COMPLETE");
+    window.INTIMACY_MATRIX_VERSION = "2026-08-16-0001";
+    console.log("[Intimacy Matrix] Loaded v2026-08-16-0001 - Fixed receiver clothing check");
 }
 
 // ============================================================================

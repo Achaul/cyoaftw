@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - CONTEXT DETECTION
  * Detects game state to determine appropriate intimacy options
- * Version: 2026-08-12-0607
+ * Version: 2026-08-16-0001
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_CONTEXT_VERSION = "2026-08-12-0607";
-    console.log("[Intimacy Context] Loaded v2026-08-12-0607 - Equipment checks + COT Priority 1 + 2 COMPLETE");
+    window.INTIMACY_CONTEXT_VERSION = "2026-08-16-0001";
+    console.log("[Intimacy Context] Loaded v2026-08-16-0001 - Fixed receiver clothing check");
 }
 
 // ============================================================================
@@ -227,15 +227,15 @@ const NATURAL_LABELS = {
     remove_player_bottom: "Remove your bottom",
     remove_player_underwear: "Remove your underwear",
     undress_player: "Undress yourself",
-    remove_npc_top: "Undress them (top)",
-    remove_npc_bottom: "Undress them (bottom)",
-    remove_npc_underwear: "Undress them (underwear)",
+    remove_npc_top: "Remove their top",
+    remove_npc_bottom: "Remove their bottom",
+    remove_npc_underwear: "Remove their underwear",
     undress_npc: "Undress them completely",
     move_top_aside: "Move your top aside",
     pull_down_bottom: "Pull down your bottom",
     lift_skirt: "Lift your skirt",
-    move_npc_top_aside: "Expose their chest",
-    pull_down_npc_bottom: "Pull down their clothing",
+    move_npc_top_aside: "Move their top aside",
+    pull_down_npc_bottom: "Pull down their bottom",
     
     // Stage 3: Nude Foreplay - Gentle
     grope_breasts: "Touch their breasts",

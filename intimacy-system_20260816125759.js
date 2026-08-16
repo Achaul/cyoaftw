@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  * 
- * Version: 2026-08-12-0607
+ * Version: 2026-08-16-0001
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -13,8 +13,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-12-0607";
-    console.log("[Intimacy System] Loaded v2026-08-12-0607 - Equipment checks + COT Priority 1 + 2 COMPLETE");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-0001";
+    console.log("[Intimacy System] Loaded v2026-08-16-0001 - Fixed clothing accessibility check for receiver");
 }
 
 // ============================================================================
@@ -402,13 +402,19 @@ function checkToolTargetAccessibility(tool, target, positionId, clothingState, i
     if (!accessibleTargets.includes(target)) return false;
     
     // Check clothing - target must be exposed
+    // The target belongs to the RECEIVER (person being acted upon), not the actor
+    const receiverKey = isPlayerAction ? "npc" : "player";
+    const receiverClothing = clothingState[receiverKey];
+    
+    // If no clothing state for receiver, allow the action
+    if (!receiverClothing) return true;
+    
     const targetCovers = getTargetCoveredParts(target);
-    const actorClothing = clothingState[actorKey];
     
     for (const part of targetCovers) {
         const partClothing = getClothingForBodyPart(part);
         for (const item of partClothing) {
-            if (actorClothing[item] === true) {
+            if (receiverClothing[item] === true) {
                 // Target is covered by clothing
                 return false;
             }

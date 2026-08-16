@@ -1,8 +1,8 @@
-// ── cyoaftw-npc-data.js v2026-08-12-0607 ── Fixed intimacy action filtering
+// ── cyoaftw-npc-data.js v2026-08-16-0001 ── Fixed receiver clothing accessibility
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-08-12-0607";
-    console.log("[NPC Data] Loaded v2026-08-12-0607 - Equipment checks + COT Priority 1 + 2 COMPLETE");
+    window.NPC_DATA_VERSION = "2026-08-16-0001";
+    console.log("[NPC Data] Loaded v2026-08-16-0001 - Fixed receiver clothing accessibility");
 }
 
 // ── DATA ARRAYS ──────────────────────────────────────────────────
