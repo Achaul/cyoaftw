@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-004";
-    console.log("[Intimacy System] Loaded v2026-08-16-004 - Fixed gender filters for NPC targeting");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-006";
+    console.log("[Intimacy System] Loaded v2026-08-16-006 - Added disabled action hints + Top/Bottom roles");
 }
 
 // ============================================================================
@@ -323,6 +323,214 @@ function generateValidActions(npc, player, positionId = null) {
     }
     
     return result;
+}
+
+/**
+ * Check if action is valid and return reason if not
+ * Returns { valid: boolean, reason?: string } for an action
+ */
+function checkActionValidity(actId, npc, player, positionId, clothingState) {
+    const act = getAct(actId);
+    if (!act) return { valid: false, reason: "unknown action" };
+    
+    // Check position requirement
+    if (act.pos && act.pos.length > 0 && !act.pos.includes(positionId)) {
+        return { valid: false, reason: "no position" };
+    }
+    
+    // Check clothing requirement
+    if (act.reqCloth) {
+        const targetOverride = act.type === ACT_TYPES.CLOTHING ? act.target : null;
+        if (!checkClothingRequirement(act.reqCloth, clothingState, act.playerIsBottom, targetOverride)) {
+            return { valid: false, reason: "clothed" };
+        }
+    }
+    
+    // Check clothing for clothing actions
+    if (act.type === ACT_TYPES.CLOTHING) {
+        if (act.id === "undress_player" || act.id === "undress_npc" || act.clothingItem || act.clothingAction) {
+            const targetIsPlayer = act.target === "player";
+            const targetKey = targetIsPlayer ? "player" : "npc";
+            if (clothingState && clothingState[targetKey]) {
+                const targetClothing = clothingState[targetKey];
+                if (act.id === "undress_player" || act.id === "undress_npc") {
+                    if (!targetClothing.top && !targetClothing.bottom && !targetClothing.undergarments) {
+                        return { valid: false, reason: "already nude" };
+                    }
+                } else if (act.clothingItem) {
+                    if (!targetClothing[act.clothingItem]) {
+                        return { valid: false, reason: "not worn" };
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check "over clothes" actions when target is nude
+    if (act.id && act.id.includes("_clothed")) {
+        const isPlayerTarget = act.target === "player" || act.playerIsBottom === false;
+        const targetKey = isPlayerTarget ? "player" : "npc";
+        const targetClothing = clothingState && clothingState[targetKey];
+        if (targetClothing && !targetClothing.top && !targetClothing.bottom && !targetClothing.undergarments) {
+            return { valid: false, reason: "clothed" };
+        }
+    }
+    
+    // Check gender requirements
+    if (act.maleOnly || act.femaleOnly || act.requiresNpcMale || act.requiresNpcFemale || act.requiresActorMale || act.requiresActorFemale) {
+        const playerGender = (player && player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+        const npcGender = (npc.gender || "female").toLowerCase();
+        const actorIsPlayer = !act.playerIsBottom;
+        
+        if (act.maleOnly) {
+            if (actorIsPlayer && playerGender !== "male") return { valid: false, reason: "wrong gender" };
+            if (!actorIsPlayer && npcGender !== "male") return { valid: false, reason: "wrong gender" };
+        }
+        if (act.femaleOnly) {
+            if (actorIsPlayer && playerGender !== "female") return { valid: false, reason: "wrong gender" };
+            if (!actorIsPlayer && npcGender !== "female") return { valid: false, reason: "wrong gender" };
+        }
+        if (act.requiresActorMale) {
+            if (actorIsPlayer && playerGender !== "male") return { valid: false, reason: "wrong gender" };
+            if (!actorIsPlayer && npcGender !== "male") return { valid: false, reason: "wrong gender" };
+        }
+        if (act.requiresActorFemale) {
+            if (actorIsPlayer && playerGender !== "female") return { valid: false, reason: "wrong gender" };
+            if (!actorIsPlayer && npcGender !== "female") return { valid: false, reason: "wrong gender" };
+        }
+        if (act.requiresNpcMale && npcGender !== "male") return { valid: false, reason: "wrong gender" };
+        if (act.requiresNpcFemale && npcGender !== "female") return { valid: false, reason: "wrong gender" };
+    }
+    
+    // Check prior actions
+    if (act.requiresPrior && act.requiresPrior.length > 0) {
+        const intimacy = npc && npc.intimacy;
+        const actionHistory = intimacy && intimacy.actionHistory ? intimacy.actionHistory : [];
+        const hasPriorAction = act.requiresPrior.some(priorActId => {
+            return actionHistory.some(historyEntry => historyEntry.actId === priorActId);
+        });
+        if (!hasPriorAction) {
+            return { valid: false, reason: "prior required" };
+        }
+    }
+    
+    // Check lube
+    if (act.requiresLube) {
+        const intimacy = npc && npc.intimacy;
+        const hasLube = intimacy && intimacy.hasLube;
+        if (!hasLube) {
+            return { valid: false, reason: "no lube" };
+        }
+    }
+    
+    // Check consent
+    if (act.requiresConsent) {
+        const npcAttraction = (npc.relationship && npc.relationship.attraction) || 0;
+        const npcLust = (npc.relationship && npc.relationship.lust) || 0;
+        if (npcAttraction < 50 || npcLust < 30) {
+            return { valid: false, reason: "no consent" };
+        }
+    }
+    
+    // Check tool/target accessibility for non-clothing, non-ANY actions
+    const isPlayerActor = !act.playerIsBottom;
+    if (act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.END && act.reqCloth !== CLOTHING_REQUIREMENTS.ANY) {
+        if (!checkToolTargetAccessibility(act.tool, act.target, positionId, clothingState, isPlayerActor)) {
+            return { valid: false, reason: "no access" };
+        }
+    }
+    
+    return { valid: true };
+}
+
+/**
+ * Generate all actions with validity status for displaying disabled actions with hints
+ */
+function generateAllActionsWithStatus(npc, player, positionId = null) {
+    if (!npc || !player) return { valid: [], invalid: [] };
+    
+    const intimacy = npc.intimacy || initializeIntimacyState(npc);
+    const clothingState = intimacy.clothing;
+    const currentPosition = positionId || intimacy.position.player;
+    const stage = getIntimacyStage(clothingState);
+    
+    const validActions = [];
+    const invalidActions = [];
+    const actionIds = getAllActIds();
+    
+    for (const actId of actionIds) {
+        const act = getAct(actId);
+        if (!act) continue;
+        
+        const checkResult = checkActionValidity(actId, npc, player, currentPosition, clothingState);
+        
+        if (checkResult.valid) {
+            // Apply stage filtering
+            if (applyStageFilteringToSingleAction(act, stage)) {
+                validActions.push({ ...act, actId });
+            }
+        } else {
+            // Include invalid action with reason
+            invalidActions.push({ ...act, actId, disabled: true, disabledReason: checkResult.reason });
+        }
+    }
+    
+    // Sort invalid actions by category for menu organization
+    const categorizedInvalid = {};
+    for (const action of invalidActions) {
+        const category = getActionCategory(action.actId);
+        if (!categorizedInvalid[category]) {
+            categorizedInvalid[category] = [];
+        }
+        categorizedInvalid[category].push(action);
+    }
+    
+    // Flatten categorized invalid actions
+    const flatInvalid = [];
+    for (const category in categorizedInvalid) {
+        flatInvalid.push(...categorizedInvalid[category]);
+    }
+    
+    // Sort valid actions by category
+    const categorizedValid = {};
+    for (const action of validActions) {
+        const category = getActionCategory(action.actId);
+        if (!categorizedValid[category]) {
+            categorizedValid[category] = [];
+        }
+        categorizedValid[category].push(action);
+    }
+    
+    // Flatten valid actions
+    const flatValid = [];
+    for (const category in categorizedValid) {
+        flatValid.push(...categorizedValid[category]);
+    }
+    
+    return { valid: flatValid, invalid: flatInvalid };
+}
+
+/**
+ * Apply stage filtering to a single action
+ */
+function applyStageFilteringToSingleAction(action, stage) {
+    // Clothing actions are always allowed
+    if (action.type === ACT_TYPES.CLOTHING) return true;
+    
+    // END actions are always allowed
+    if (action.type === ACT_TYPES.END) return true;
+    
+    // Stage 1: Clothed - only external actions
+    if (stage === INTIMACY_STAGES.CLOTHED) {
+        if (action.type === ACT_TYPES.PENETRATE || action.type === ACT_TYPES.CONTINUE) return false;
+    }
+    
+    // Stage 2: Partial - still hide full penetration
+    if (stage === INTIMACY_STAGES.PARTIAL) {
+        if (action.type === ACT_TYPES.PENETRATE || action.type === ACT_TYPES.CONTINUE) return false;
+    }
+    
+    return true;
 }
 
 /**
@@ -1225,6 +1433,7 @@ function organizeActionsForMenu(validActions) {
 
 /**
  * Get menu-ready action list with phase-based filtering
+ * Now includes disabled actions with hints for better UX
  * @param {Object} npc - The NPC
  * @param {Object} player - The player
  * @param {Object} room - Current room (for context detection)
@@ -1253,6 +1462,18 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     }
     
     const categorized = organizeActionsForMenu(validActions);
+    
+    // Also get disabled actions with their reasons for showing hints
+    const allActionsWithStatus = generateAllActionsWithStatus(npc, player, positionId);
+    
+    // Filter disabled actions by phase as well
+    const filteredDisabledActions = allActionsWithStatus.invalid.filter(action => {
+        // Create a mock action object for phase filtering
+        const mockAction = { ...action, actId: action.actId };
+        return filterActionsByPhase([mockAction], phase).length > 0;
+    });
+    
+    const categorizedDisabled = organizeActionsForMenu(filteredDisabledActions);
     
     // Convert to menu format with natural labels
     const menu = [];
@@ -1287,10 +1508,25 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                         label: getNaturalLabel(a.actId, npc, player),
                         description: a.desc,
                         type: a.type,
-                        phaseRequired: getMinimumPhaseForAction(a.actId)
+                        phaseRequired: getMinimumPhaseForAction(a.actId),
+                        disabled: false
                     }))
                 });
                 phaseHasActions = true;
+            }
+            
+            // Add disabled actions as hints for this category
+            if (categorizedDisabled[category] && categorizedDisabled[category].length > 0) {
+                if (!phaseHasActions && menu.length > 0 && !addedSeparator) {
+                    menu.push({ type: "separator" });
+                    addedSeparator = true;
+                }
+                
+                // Only add disabled category if there are valid actions in this phase group
+                // OR if we should always show disabled actions
+                if (phaseHasActions || Object.values(categorized).some(c => c && c.length > 0)) {
+                    // We'll add disabled actions inline with valid ones below
+                }
             }
         }
         
@@ -1311,9 +1547,44 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                     label: getNaturalLabel(a.actId, npc, player),
                     description: a.desc,
                     type: a.type,
-                    phaseRequired: getMinimumPhaseForAction(a.actId)
+                    phaseRequired: getMinimumPhaseForAction(a.actId),
+                    disabled: false
                 }))
             });
+        }
+    }
+    
+    // Add disabled actions to their categories in the menu
+    // We need to merge disabled actions into existing categories
+    for (const [category, disabledActions] of Object.entries(categorizedDisabled)) {
+        if (disabledActions && disabledActions.length > 0) {
+            // Find existing category in menu
+            let categoryItem = menu.find(m => m.type === "category" && m.label === category);
+            
+            if (!categoryItem) {
+                // Create new category for disabled actions if it doesn't exist
+                categoryItem = {
+                    type: "category",
+                    label: category,
+                    actions: []
+                };
+                menu.push(categoryItem);
+            }
+            
+            // Add disabled actions to the category
+            for (const disabledAction of disabledActions) {
+                const hintText = getDisabledHintText(disabledAction.disabledReason);
+                categoryItem.actions.push({
+                    id: disabledAction.actId,
+                    label: getNaturalLabel(disabledAction.actId, npc, player),
+                    description: disabledAction.desc,
+                    type: disabledAction.type,
+                    phaseRequired: getMinimumPhaseForAction(disabledAction.actId),
+                    disabled: true,
+                    disabledReason: disabledAction.disabledReason,
+                    disabledHint: hintText
+                });
+            }
         }
     }
     
@@ -1325,6 +1596,27 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         isPrivate: room ? isPrivateLocation(room) : false,
         isAlone: room ? isAloneWithTarget(room, npc) : false
     };
+}
+
+/**
+ * Get hint text for disabled actions
+ */
+function getDisabledHintText(reason) {
+    if (!reason) return "";
+    
+    const reasonMappings = {
+        "unknown action": "(unknown)",
+        "no position": "(no position)",
+        "clothed": "(clothed)",
+        "already nude": "(already nude)",
+        "not worn": "(not worn)",
+        "wrong gender": "(wrong gender)",
+        "prior required": "(requires prior action)",
+        "no lube": "(no lube)",
+        "": ""
+    };
+    
+    return reasonMappings[reason] || `(${reason})`;
 }
 
 /**
@@ -1489,6 +1781,10 @@ if (typeof module !== 'undefined' && module.exports) {
         getClothingForBodyPart,
         getTargetCoveredParts,
         isActionValid,
+        checkActionValidity,
+        generateAllActionsWithStatus,
+        applyStageFilteringToSingleAction,
+        getDisabledHintText,
         
         // Action execution
         executeIntimacyAction,
@@ -1544,4 +1840,8 @@ if (typeof window !== 'undefined') {
     window.executeIntimacyAction = executeIntimacyAction;
     window.getMenuActions = getMenuActions;
     window.CLIMAX_CONFIG = CLIMAX_CONFIG;
+    window.checkActionValidity = checkActionValidity;
+    window.generateAllActionsWithStatus = generateAllActionsWithStatus;
+    window.applyStageFilteringToSingleAction = applyStageFilteringToSingleAction;
+    window.getDisabledHintText = getDisabledHintText;
 }

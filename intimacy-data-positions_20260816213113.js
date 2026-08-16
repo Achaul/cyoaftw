@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - POSITION DEFINITIONS
  * Position data for the NSFW intimacy action menu
- * Version: 2026-08-16-004
+ * Version: 2026-08-16-006
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_POSITIONS_VERSION = "2026-08-16-004";
-    console.log("[Intimacy Positions] Loaded v2026-08-16-004 - Fixed gender filters for NPC targeting");
+    window.INTIMACY_POSITIONS_VERSION = "2026-08-16-006";
+    console.log("[Intimacy Positions] Loaded v2026-08-16-006 - Added disabled action hints + Top/Bottom roles");
 }
 
 const INTIMACY_POSITIONS = {

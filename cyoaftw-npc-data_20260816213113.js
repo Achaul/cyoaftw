@@ -1,8 +1,8 @@
-// ── cyoaftw-npc-data.js v2026-08-16-0004 ── Fixed gender filters for NPC targeting
+// ── cyoaftw-npc-data.js v2026-08-16-0004 ── Added Receive category + position fixes
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.NPC_DATA_VERSION = "2026-08-16-0004";
-    console.log("[NPC Data] Loaded v2026-08-16-0004 - Fixed gender filters for NPC targeting");
+    console.log("[NPC Data] Loaded v2026-08-16-0004 - Added Receive category + position fixes");
 }
 
 // ── DATA ARRAYS ──────────────────────────────────────────────────

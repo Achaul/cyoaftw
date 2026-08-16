@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-08-16-004
+ * Version: 2026-08-16-006
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-08-16-004";
-    console.log("[Intimacy Acts] Loaded v2026-08-16-004 - Fixed gender filters for NPC targeting");
+    window.INTIMACY_ACTS_VERSION = "2026-08-16-006";
+    console.log("[Intimacy Acts] Loaded v2026-08-16-006 - Added disabled action hints + Top/Bottom roles");
 }
 
 // ============================================================================
@@ -280,9 +280,9 @@ const SEX_ACTS = {
     
     kiss_anus: { id: "kiss_anus", tool: "mouth", target: "anus", verb: "kiss", type: ACT_TYPES.TEASE, label: "Kiss anus", desc: "Kiss their anus", arousal: { p: 8, n: 40 }, pos: ["Doggy", "Bent Over", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
     lick_anus: { id: "lick_anus", tool: "mouth", target: "anus", verb: "lick", type: ACT_TYPES.TEASE, label: "Lick anus", desc: "Lick their anus", arousal: { p: 10, n: 50 }, pos: ["Doggy", "Bent Over", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
-    suck_anus: { id: "suck_anus", tool: "mouth", target: "anus", verb: "suck", type: ACT_TYPES.TEASE, label: "Suck anus", desc: "Suck on their anus", arousal: { p: 10, n: 55 }, pos: ["Doggy", "Bent Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
+    suck_anus: { id: "suck_anus", tool: "mouth", target: "anus", verb: "suck", type: ACT_TYPES.TEASE, label: "Suck anus", desc: "Suck on their anus", arousal: { p: 10, n: 55 }, pos: ["Doggy", "Bent Over", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
     rim_anus: { id: "rim_anus", tool: "mouth", target: "anus", verb: "rim", type: ACT_TYPES.TEASE, label: "Rim anus", desc: "Rim their anus with your tongue", arousal: { p: 15, n: 60 }, pos: ["Doggy", "Bent Over", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
-    tongue_anus: { id: "tongue_anus", tool: "tongue", target: "anus", verb: "penetrate", type: ACT_TYPES.TEASE, label: "Tongue anus", desc: "Penetrate their anus with your tongue", arousal: { p: 15, n: 65 }, pos: ["Doggy", "Bent Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPrior: ["lick_anus", "rim_anus"] },
+    tongue_anus: { id: "tongue_anus", tool: "tongue", target: "anus", verb: "penetrate", type: ACT_TYPES.TEASE, label: "Tongue anus", desc: "Penetrate their anus with your tongue", arousal: { p: 15, n: 65 }, pos: ["Doggy", "Bent Over", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPrior: ["lick_anus", "rim_anus"] },
     
     // NEW: Priority 2 - Stretch Butthole (anal preparation)
     stretch_butthole: { id: "stretch_butthole", tool: "fingers", target: "anus", verb: "stretch", type: ACT_TYPES.TEASE, label: "Stretch butthole", desc: "Stretch their anal opening with your fingers", arousal: { p: 15, n: 55 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Missionary", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresLube: true, requiresPrior: ["finger_anus", "enter_anus_finger"] },
@@ -706,6 +706,11 @@ function checkClothingRequirement(requirement, clothingState, isPlayerBottom, ta
 function getActionCategory(actId) {
     const act = getAct(actId);
     if (!act) return "Other";
+    
+    // Separate passive actions (player is receiving) into "Receive" category
+    if (act.playerIsBottom === true) {
+        return "Receive";
+    }
     
     if (act.type === ACT_TYPES.CLOTHING) {
         return "Clothing";

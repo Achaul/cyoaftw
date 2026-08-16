@@ -5,7 +5,7 @@
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.NSFW_SYSTEM_VERSION = "2026-08-16-0004";
-    console.log("[NSFW System] Loaded v2026-08-16-0004 - Fixed gender filters for NPC targeting");
+    console.log("[NSFW System] Loaded v2026-08-16-0004 - Added Receive category + position fixes");
 }
 
   const NSFW_SYSTEM_ENABLED = true;

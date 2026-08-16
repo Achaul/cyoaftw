@@ -11,7 +11,7 @@
  * 4. Property Translation - How COT properties map to CYOADEV properties
  * 5. Position Mapping - COT positions -> CYOADEV positions
  * 
- * Version: 2026-08-16-004
+ * Version: 2026-08-16-006
  * Source: CourseOfTemptation.html lines 78626-81496 (setup.sexacts)
  */
 
@@ -19,8 +19,8 @@
 // VERSION IDENTIFIER
 // ============================================================================
 if (typeof window !== "undefined") {
-    window.INTIMACY_COT_MAPPING_VERSION = "2026-08-16-004";
-    console.log("[Intimacy COT Mapping] Loaded v2026-08-16-004 - Fixed gender filters for NPC targeting");
+    window.INTIMACY_COT_MAPPING_VERSION = "2026-08-16-006";
+    console.log("[Intimacy COT Mapping] Loaded v2026-08-16-006 - Added disabled action hints + Top/Bottom roles");
 }
 
 // ============================================================================
