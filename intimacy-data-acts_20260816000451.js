@@ -438,7 +438,9 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
     
     // Check clothing
     if (act.reqCloth) {
-        if (!checkClothingRequirement(act.reqCloth, clothingState, act.playerIsBottom)) {
+        // For clothing actions, use the explicit target from the action
+        const targetOverride = act.type === ACT_TYPES.CLOTHING ? act.target : null;
+        if (!checkClothingRequirement(act.reqCloth, clothingState, act.playerIsBottom, targetOverride)) {
             return false;
         }
     }
@@ -528,13 +530,13 @@ function hasClothingEquipped(character) {
 
 /**
  * Check clothing requirement
+ * For clothing actions with explicit target, check that target's clothing
  * When playerIsBottom is true, the player is the target (receiving), so check player's clothing
  * When playerIsBottom is false/undefined, the NPC is the target, so check NPC's clothing
  */
-function checkClothingRequirement(requirement, clothingState, isPlayerBottom) {
-    // playerIsBottom: true means player is target (NPC is actor)
-    // playerIsBottom: false/undefined means NPC is target (player is actor)
-    const target = isPlayerBottom ? "player" : "npc";
+function checkClothingRequirement(requirement, clothingState, isPlayerBottom, targetOverride = null) {
+    // If targetOverride is provided (e.g., from action.target for clothing actions), use it
+    const target = targetOverride || (isPlayerBottom ? "player" : "npc");
     const targetClothing = clothingState && clothingState[target];
     
     if (!targetClothing) return true; // If no clothing state, allow the action
@@ -581,13 +583,28 @@ function getActionCategory(actId) {
         return "Penetration";
     }
     
-    // Group by target
+    // Group by target and action intent
     if (act.target === "mouth" || act.target === "lips" || act.target === "face" || act.target === "neck") {
         return "Kissing";
     }
     
-    if (act.target === "chest" || act.target === "nipples") {
+    // Check if this is specifically a breast/nipple action
+    const actIdLower = (act.id || "").toLowerCase();
+    const labelLower = (act.label || "").toLowerCase();
+    const isBreastAction = actIdLower.includes("breast") || actIdLower.includes("nipple") || 
+                           labelLower.includes("breast") || labelLower.includes("nipple");
+    
+    if (act.target === "chest" && isBreastAction) {
         return "Breasts";
+    }
+    
+    if (act.target === "nipples") {
+        return "Breasts";
+    }
+    
+    // Chest actions that aren't about breasts go to Body
+    if (act.target === "chest") {
+        return "Body";
     }
     
     if (act.target === "vagina" || act.target === "penis") {
