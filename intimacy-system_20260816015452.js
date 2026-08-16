@@ -273,7 +273,7 @@ function generateValidActions(npc, player, positionId = null) {
     
     const validActions = [];
     const actionIds = getAllActIds();
-    
+
     for (const actId of actionIds) {
         const act = getAct(actId);
         if (!act) continue;
@@ -304,7 +304,7 @@ function generateValidActions(npc, player, positionId = null) {
     
     // Add stage-specific filtering first (before categorizing)
     const filteredActions = applyStageFilteringToArray(validActions, stage);
-    
+
     // Sort actions by category for menu organization
     const categorizedActions = {};
     for (const action of filteredActions) {
