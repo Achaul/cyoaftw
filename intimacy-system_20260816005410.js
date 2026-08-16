@@ -1206,6 +1206,11 @@ function organizeActionsForMenu(validActions) {
         categorized[category].push(action);
     }
     
+    // Debug: log categories and counts
+    if (window.DEBUG_INTIMACY) {
+        console.log("[DEBUG] organizeActionsForMenu categories:", Object.keys(categorized).map(k => `${k}:${categorized[k].length}`).join(", "));
+    }
+    
     return categorized;
 }
 
@@ -1223,8 +1228,20 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     // Generate all valid actions for current state
     let validActions = generateValidActions(npc, player, positionId);
     
+    // Debug: log valid action count
+    if (npc && npc.name) {
+        const clothingActions = validActions.filter(a => a.type === ACT_TYPES.CLOTHING);
+        console.log(`[DEBUG] Generated ${validActions.length} valid actions for ${npc.name}, ${clothingActions.length} clothing actions`);
+    }
+    
     // Filter by phase (removes actions not appropriate for current context)
     validActions = filterActionsByPhase(validActions, phase);
+    
+    // Debug: log after phase filtering
+    if (npc && npc.name) {
+        const clothingActions = validActions.filter(a => a.type === ACT_TYPES.CLOTHING);
+        console.log(`[DEBUG] After phase filter: ${validActions.length} actions for ${npc.name}, ${clothingActions.length} clothing actions, phase=${phase}`);
+    }
     
     const categorized = organizeActionsForMenu(validActions);
     

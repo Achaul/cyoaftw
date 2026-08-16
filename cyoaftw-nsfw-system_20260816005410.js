@@ -101,8 +101,10 @@ if (typeof window !== "undefined") {
       },
       action: "intimacy",
       intimacyAction: "remove_player_top",
+      startEncounter: true,
       relationshipImpact: { lust: +3, attraction: +2 },
-      resetTimer: { turns: 20 }
+      resetTimer: { turns: 20 },
+      phase: 2
     },
     {
       id: "remove_self_bottom",
@@ -118,8 +120,10 @@ if (typeof window !== "undefined") {
       },
       action: "intimacy",
       intimacyAction: "remove_player_bottom",
+      startEncounter: true,
       relationshipImpact: { lust: +4, attraction: +3 },
-      resetTimer: { turns: 20 }
+      resetTimer: { turns: 20 },
+      phase: 2
     },
     {
       id: "remove_them_top",
@@ -135,8 +139,10 @@ if (typeof window !== "undefined") {
       },
       action: "intimacy",
       intimacyAction: "remove_npc_top",
+      startEncounter: true,
       relationshipImpact: { lust: +6, attraction: +4 },
-      resetTimer: { turns: 20 }
+      resetTimer: { turns: 20 },
+      phase: 2
     },
     {
       id: "remove_them_bottom",
@@ -152,8 +158,10 @@ if (typeof window !== "undefined") {
       },
       action: "intimacy",
       intimacyAction: "remove_npc_bottom",
+      startEncounter: true,
       relationshipImpact: { lust: +8, attraction: +5 },
-      resetTimer: { turns: 20 }
+      resetTimer: { turns: 20 },
+      phase: 2
     },
     {
       id: "remove_self_underwear",
@@ -169,8 +177,10 @@ if (typeof window !== "undefined") {
       },
       action: "intimacy",
       intimacyAction: "remove_player_underwear",
+      startEncounter: true,
       relationshipImpact: { lust: +5, attraction: +3 },
-      resetTimer: { turns: 20 }
+      resetTimer: { turns: 20 },
+      phase: 2
     },
     {
       id: "remove_them_underwear",
@@ -186,8 +196,10 @@ if (typeof window !== "undefined") {
       },
       action: "intimacy",
       intimacyAction: "remove_npc_underwear",
+      startEncounter: true,
       relationshipImpact: { lust: +10, attraction: +6 },
-      resetTimer: { turns: 20 }
+      resetTimer: { turns: 20 },
+      phase: 2
     },
     {
       id: "touch_intimately",

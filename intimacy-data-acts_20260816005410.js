@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-08-12-0605
+ * Version: 2026-08-12-0607
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-08-12-0605";
-    console.log("[Intimacy Acts] Loaded v2026-08-12-0605 - COT Priority 2 complete (17 total): ride_face, stretch_butthole, hump_ass_back_onto_cock");
+    window.INTIMACY_ACTS_VERSION = "2026-08-12-0607";
+    console.log("[Intimacy Acts] Loaded v2026-08-12-0607 - Equipment checks + COT Priority 2 complete (17 total): ride_face, stretch_butthole, hump_ass_back_onto_cock");
 }
 
 // ============================================================================
@@ -267,15 +267,15 @@ const SEX_ACTS = {
     pause: { id: "pause", type: ACT_TYPES.END, label: "Pause", desc: "Pause and take a break", arousal: { p: -5, n: -5 }, pos: ["Standing", "Perched", "Missionary", "Doggy", "Bent Over", "Spooning", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
     
     // NEW: End fingering actions from COT
-    stop_fingering: { id: "stop_fingering", type: ACT_TYPES.END, label: "Stop fingering", desc: "Remove your fingers from their pussy", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Doggy", "Bent Over", "Spooning", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
-    pull_off_of_finger: { id: "pull_off_of_finger", type: ACT_TYPES.END, label: "Pull off finger", desc: "Pull your pussy off their fingers", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Doggy", "Bent Over", "Spooning", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true },
+    stop_fingering: { id: "stop_fingering", type: ACT_TYPES.END, label: "Stop fingering", desc: "Remove your fingers from their pussy", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Doggy", "Bent Over", "Spooning", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPrior: ["finger_pussy", "enter_pussy_finger"] },
+    pull_off_of_finger: { id: "pull_off_of_finger", type: ACT_TYPES.END, label: "Pull off finger", desc: "Pull your pussy off their fingers", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Doggy", "Bent Over", "Spooning", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPrior: ["finger_pussy", "hump_hand"] },
     
     // NEW: End PIV/Penetration actions from COT
     pull_out: { id: "pull_out", type: ACT_TYPES.END, label: "Pull out", desc: "Pull your penis out of their pussy", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Missionary", "Doggy", "Bent Over", "Against Wall", "Against Wall From Behind", "Cowgirl", "Reverse Cowgirl"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, requiresPrior: ["enter_pussy", "thrust_pussy", "fuck_pussy", "pump_pussy"] },
     pull_off: { id: "pull_off", type: ACT_TYPES.END, label: "Pull off", desc: "Pull your pussy off their penis", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Missionary", "Doggy", "Bent Over", "Against Wall", "Against Wall From Behind", "Cowgirl", "Reverse Cowgirl"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, playerIsBottom: true, requiresPrior: ["enter_pussy", "thrust_pussy", "fuck_pussy", "pump_pussy"] },
     
     // NEW: End oral actions from COT
-    release_cock: { id: "release_cock", type: ACT_TYPES.END, label: "Release cock", desc: "Release their penis from your hand", arousal: { p: 0, n: 0 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
+    release_cock: { id: "release_cock", type: ACT_TYPES.END, label: "Release cock", desc: "Release their penis from your hand", arousal: { p: 0, n: 0 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPrior: ["stroke_penis", "grip_penis", "squeeze_penis", "tease_cock_with_fingers"] },
     pull_out_of_mouth: { id: "pull_out_of_mouth", type: ACT_TYPES.END, label: "Pull out of mouth", desc: "Pull your penis out of their mouth", arousal: { p: 0, n: 0 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Oral Service", "Prone Oral Service", "Kneeling By Face", "Squatting Before", "Riding Face"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPrior: ["deepthroat_penis", "suck_penis", "fuck_mouth"] },
 
     // ===== NEW: Priority 2 - SPECIAL PAIRING ACTIONS =====
@@ -460,22 +460,27 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
                 // For complete undress, check if target has any clothing
                 if (act.id === "undress_player" || act.id === "undress_npc") {
                     if (!targetClothing.top && !targetClothing.bottom && !targetClothing.undergarments) {
+                        console.log(`[DEBUG] isActionValid: ${act.id} rejected - target already fully undressed`);
                         return false; // Already fully undressed
                     }
                 }
                 // For specific clothing items, check if that item is worn
                 else if (act.clothingItem) {
                     if (!targetClothing[act.clothingItem]) {
+                        console.log(`[DEBUG] isActionValid: ${act.id} rejected - ${act.clothingItem} not worn (${JSON.stringify(targetClothing)})`);
                         return false; // That specific clothing item is not worn
                     }
+                    console.log(`[DEBUG] isActionValid: ${act.id} PASSED - ${act.clothingItem} is worn`);
                 }
             }
             // Fallback: check if character has any clothing equipped
             else {
                 const target = targetIsPlayer ? player : npc;
                 if (!hasClothingEquipped(target)) {
+                    console.log(`[DEBUG] isActionValid: ${act.id} rejected - no clothing equipped`);
                     return false;
                 }
+                console.log(`[DEBUG] isActionValid: ${act.id} PASSED - clothing equipped`);
             }
         }
     }
@@ -642,7 +647,7 @@ function getActionCategory(actId) {
         return "Body";
     }
     
-    if (act.target === "vagina" || act.target === "penis") {
+    if (act.target === "vagina" || act.target === "penis" || act.target === "clitoris") {
         return "Genital";
     }
     
