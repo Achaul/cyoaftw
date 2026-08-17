@@ -15,7 +15,7 @@ if (typeof window !== "undefined") {
 // Structure: TOOL -> TARGET -> [VERBS]
 // ============================================================================
 
-const INTIMACY_MATRIX = {
+var INTIMACY_MATRIX = {
     // Hands - versatile, can reach most targets
     hand: {
         // Face/Head

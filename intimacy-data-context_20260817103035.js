@@ -15,7 +15,7 @@ if (typeof window !== "undefined") {
 // Rooms where intimate actions are socially acceptable
 // ============================================================================
 
-const PRIVATE_ROOM_TYPES = [
+var PRIVATE_ROOM_TYPES = [
     "Guest Room",
     "Home",
     "Inn Common",
@@ -39,7 +39,7 @@ const PRIVATE_ROOM_TYPES = [
     "Dungeon Chamber"
 ];
 
-const SOCIAL_ROOM_TYPES = [
+var SOCIAL_ROOM_TYPES = [
     "Town Square",
     "Square",
     "Street",
@@ -63,7 +63,7 @@ const SOCIAL_ROOM_TYPES = [
 // INTIMACY PHASES
 // ============================================================================
 
-const INTIMACY_PHASES = {
+var INTIMACY_PHASES = {
     SOCIAL: 1,        // Flirt, seduce, proposition only
     PRIVATE: 2,       // Undressing, foreplay (private location, only 2 people)
     INTIMATE: 3       // Full intimacy menu (after consent/penetration)
@@ -211,7 +211,7 @@ function canPenetrate(room, targetNpc, npc) {
 // Maps clinical act IDs to natural, immersive display text
 // ============================================================================
 
-const NATURAL_LABELS = {
+var NATURAL_LABELS = {
     // Stage 1: Social/Clothed
     kiss_lips: "Kiss their lips",
     kiss_cheek: "Kiss their cheek",

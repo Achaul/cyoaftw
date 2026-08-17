@@ -40,7 +40,7 @@ if (typeof require !== 'undefined') {
 // ============================================================================
 
 // Climax and cooldown constants
-const CLIMAX_CONFIG = {
+var CLIMAX_CONFIG = {
     // Cooldown periods in milliseconds (for males only)
     MALE_COOLDOWN_SHORT: 30000,      // 30 seconds - quick recovery
     MALE_COOLDOWN_NORMAL: 300000,    // 5 minutes - average
@@ -1765,7 +1765,7 @@ function buildFallbackResponse(npc, player, act, intimacy) {
 /**
  * Arousal level descriptors for context-aware responses
  */
-const INTIMACY_AROUSAL_DESCRIPTORS = {
+var INTIMACY_AROUSAL_DESCRIPTORS = {
     low: { desc: "slightly aroused", threshold: 0, max: 20 },
     mild: { desc: "warming up", threshold: 21, max: 40 },
     moderate: { desc: "aroused", threshold: 41, max: 60 },
@@ -1835,25 +1835,25 @@ function pickRandom(arr) {
  * Body part-specific reaction templates
  * Organized by target body part for context-aware responses
  */
-const BODY_PART_REACTIONS = {
+var BODY_PART_REACTIONS = {
     // Hair
     hair: {
-        mild: ["tilts their head", "closes their eyes briefly", "smiles softly", "sighs contentedly"],
+        mild: ["tilts her head", "closes her eyes briefly", "smiles softly", "sighs contentedly"],
         moderate: ["lets out a soft moan", "nuzzles into your touch", "murmurs with pleasure", "arches slightly into your hand"],
-        high: ["gasps softly", "presses their head against your hand", "whispers your name", "shivers at your touch"],
-        intense: ["moans with delight", "grinds their head against you", "begs for more", "trembles with pleasure"]
+        high: ["gasps softly", "presses her head against your hand", "whispers your name", "shivers at your touch"],
+        intense: ["moans with delight", "grinds her head against you", "begs for more", "trembles with pleasure"]
     },
     
     // Breasts/Nipples
     breasts: {
-        mild: ["breathes a little faster", "lets out a soft sigh", "glances at you shyly", "bit their lip"],
-        moderate: ["lets out a soft moan", "arches their back slightly", "presses into your touch", "gasps softly"],
+        mild: ["breathes a little faster", "lets out a soft sigh", "glances at you shyly", "bits her lip"],
+        moderate: ["lets out a soft moan", "arches her back slightly", "presses into your touch", "gasps softly"],
         high: ["moans with pleasure", "grinds against your hand", "whispers encouragement", "shivers at your touch"],
-        intense: ["gasps and moans loudly", "pushes their chest into your face", "begs you not to stop", "trembles with arousal"]
+        intense: ["gasps and moans loudly", "pushes her chest into your face", "begs you not to stop", "trembles with arousal"]
     },
     nipples: {
-        mild: ["lets out a tiny gasp", "shivers slightly", "bit their lip", "tenses slightly"],
-        moderate: ["lets out a soft moan", "arches their back", "gasps at the sensation", "presses into your touch"],
+        mild: ["lets out a tiny gasp", "shivers slightly", "bits her lip", "tenses slightly"],
+        moderate: ["lets out a soft moan", "arches her back", "gasps at the sensation", "presses into your touch"],
         high: ["moans loudly", "twitches with pleasure", "whispers your name", "grinds against you"],
         intense: ["screams with pleasure", "begs for more", "trembles uncontrollably", "nails dig into you"]
     },
@@ -1861,35 +1861,35 @@ const BODY_PART_REACTIONS = {
     // Vagina/Pussy
     vagina: {
         mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "smiles warmly"],
-        moderate: ["lets out a soft moan", "spreads their legs slightly", "gasps with pleasure", "presses against your hand"],
+        moderate: ["lets out a soft moan", "spreads her legs slightly", "gasps with pleasure", "presses against your hand"],
         high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers with arousal"],
-        intense: ["gasps and moans", "bucking their hips", "begs for more", "soaked with arousal"]
+        intense: ["gasps and moans", "bucks her hips", "begs for more", "soaked with arousal"]
     },
     pussy: {
         mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "smiles warmly"],
-        moderate: ["lets out a soft moan", "spreads their legs slightly", "gasps with pleasure", "presses against your hand"],
+        moderate: ["lets out a soft moan", "spreads her legs slightly", "gasps with pleasure", "presses against your hand"],
         high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers with arousal"],
-        intense: ["gasps and moans", "bucking their hips", "begs for more", "soaked with arousal"]
+        intense: ["gasps and moans", "bucks her hips", "begs for more", "soaked with arousal"]
     },
     clitoris: {
-        mild: ["lets out a tiny gasp", "shivers", "bit their lip", "tenses"],
-        moderate: ["lets out a soft moan", "presses against your fingers", "gasps sharply", "arches their back"],
+        mild: ["lets out a tiny gasp", "shivers", "bits her lip", "tenses"],
+        moderate: ["lets out a soft moan", "presses against your fingers", "gasps sharply", "arches her back"],
         high: ["moans loudly", "grinds against you", "whispers please don't stop", "trembles with pleasure"],
-        intense: ["screams with pleasure", "bucking wildly", "begs desperately", "nearly climaxing"]
+        intense: ["screams with pleasure", "bucks wildly", "begs desperately", "nearly climaxing"]
     },
     
     // Buttocks/Anus
     buttocks: {
-        mild: ["lets out a soft sigh", "shifts their weight", "glances back at you", "smiles"],
+        mild: ["lets out a soft sigh", "shifts her weight", "glances back at you", "smiles"],
         moderate: ["lets out a soft moan", "presses back against you", "gasps with pleasure", "arches slightly"],
         high: ["moans loudly", "grinds back against you", "whispers encouragement", "shivers with arousal"],
-        intense: ["gasps and moans", "pushing back hard", "begs for more", "trembling with need"]
+        intense: ["gasps and moans", "pushes back hard", "begs for more", "trembles with need"]
     },
     anus: {
         mild: ["tenses slightly", "lets out a soft sigh", "shifts nervously", "glances back"],
         moderate: ["lets out a soft moan", "presses back against your touch", "gasps at the sensation", "relaxes slightly"],
         high: ["moans with pleasure", "pushes back against you", "whispers yes", "shivers with arousal"],
-        intense: ["gasps and moans loudly", "pushing back eagerly", "begs to be filled", "trembling with need"]
+        intense: ["gasps and moans loudly", "pushes back eagerly", "begs to be filled", "trembles with need"]
     },
     
     // Penis
@@ -1897,13 +1897,13 @@ const BODY_PART_REACTIONS = {
         mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "tenses"],
         moderate: ["lets out a soft moan", "hardens further", "gasps with pleasure", "presses into your touch"],
         high: ["moans loudly", "thrusts into your hand", "whispers your name", "shivers with arousal"],
-        intense: ["gasps and moans", "bucking their hips", "begs for more", "nearly climaxing"]
+        intense: ["gasps and moans", "bucks his hips", "begs for more", "nearly climaxing"]
     },
     cock: {
         mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "tenses"],
         moderate: ["lets out a soft moan", "hardens further", "gasps with pleasure", "presses into your touch"],
         high: ["moans loudly", "thrusts into your hand", "whispers your name", "shivers with arousal"],
-        intense: ["gasps and moans", "bucking their hips", "begs for more", "nearly climaxing"]
+        intense: ["gasps and moans", "bucks his hips", "begs for more", "nearly climaxing"]
     },
     testicles: {
         mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "tenses"],
@@ -2021,7 +2021,7 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
         `<lets out a ${vocalization}.>`,
         `<shivers ${intensity}.>`,
         `<${reaction} with ${pleasureIntensity}.>`,
-        `<${reaction}.>`,
+        `<${reaction} at your touch on ${possessivePronoun} ${bodyPartDesc}.>`,
         `<${reaction} softly.>`,
         `<${reaction} with pleasure.>`
     ];
@@ -2037,20 +2037,30 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     const tool = act.tool || "penis";
     const target = act.target || "vagina";
     
+    // Get more descriptive vocabulary based on arousal
+    const vocalization = getVocalization(arousalLevel);
+    const pleasureIntensity = getPleasureIntensity(arousalLevel);
+    
     const templates = {
         enter: [
-            `<gasps.>`,
-            `<welcomes you inside with a ${getVocalization(arousalLevel)}.>`,
-            `<moans.>`,
-            `<arches ${possessivePronoun} back.>`,
-            `<${reaction} with ${getPleasureIntensity(arousalLevel)}.>`
+            `<gasps as ${possessivePronoun} ${bodyPartDesc} accepts you.>`,
+            `<welcomes you inside with a ${vocalization}, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.>`,
+            `<moans softly as you fill ${possessivePronoun} ${bodyPartDesc}.>`,
+            `<arches ${possessivePronoun} back, ${possessivePronoun} ${bodyPartDesc} enveloping you.>`,
+            `<${reaction} with ${pleasureIntensity} as you ${verb} ${possessivePronoun} ${bodyPartDesc}.>`,
+            `<takes you in deeply, ${possessivePronoun} ${bodyPartDesc} greedy for more.>`,
+            `<whispers your name as you ${verb} ${objectPronoun}.>`,
+            `<clutches at you as you sink into ${possessivePronoun} ${bodyPartDesc}.>`
         ],
         continue: [
-            `<moans with each thrust.>`,
-            `<matches your rhythm.>`,
-            `<${reaction}.>`,
-            `<grinds back against you.>`,
-            `<whispers encouragement.>`
+            `<moans with each thrust, ${possessivePronoun} ${bodyPartDesc} gripping you tightly.>`,
+            `<matches your rhythm, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.>`,
+            `<${reaction} as you move within ${objectPronoun}.>`,
+            `<grinds back against you, taking you deeper.>`,
+            `<whispers encouragement as you continue.>`,
+            `<${possessivePronoun} ${bodyPartDesc} pulses around you with each movement.>`,
+            `<raises ${possessivePronoun} hips to meet your thrusts.>`,
+            `<${reaction} with ${pleasureIntensity} at the sensation.>`
         ]
     };
     

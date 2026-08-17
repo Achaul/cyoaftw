@@ -14,7 +14,7 @@ if (typeof window !== "undefined") {
 // CONSTANTS
 // ============================================================================
 
-const ACT_TYPES = {
+var ACT_TYPES = {
     TEASE: "tease",           // Non-penetrative, builds arousal
     PENETRATE: "penetrate",   // Initial penetration
     CONTINUE: "continue",     // Continues existing penetration
@@ -23,7 +23,7 @@ const ACT_TYPES = {
     IMPACT: "impact"          // Causes sensation/pain
 };
 
-const CLOTHING_REQUIREMENTS = {
+var CLOTHING_REQUIREMENTS = {
     ANY: "any",           // Works clothed or nude
     TOP_OFF: "top_off",   // Requires top to be off
     BOTTOM_OFF: "bottom_off", // Requires bottom to be off
@@ -32,7 +32,7 @@ const CLOTHING_REQUIREMENTS = {
     BOTTOM_ON: "bottom_on"  // Requires bottom to be on
 };
 
-const VIRGINITY_TYPES = {
+var VIRGINITY_TYPES = {
     VAGINAL: "vaginal",
     ANAL: "anal"
 };
@@ -41,7 +41,7 @@ const VIRGINITY_TYPES = {
 // PRONOUN SYSTEM
 // ============================================================================
 
-const PRONOUNS = {
+var PRONOUNS = {
     male: {
         possessive: "his",
         object: "him",
@@ -124,7 +124,7 @@ function getGenderedLabel(act, npc, player) {
 // CLOTHING DEFINITIONS
 // ============================================================================
 
-const INTIMACY_CLOTHING_ITEMS = {
+var INTIMACY_CLOTHING_ITEMS = {
     top: {
         label: "Top",
         covers: ["chest", "nipples", "shoulders", "upper back"],
@@ -145,7 +145,7 @@ const INTIMACY_CLOTHING_ITEMS = {
     }
 };
 
-const DEFAULT_CLOTHING_STATE = {
+var DEFAULT_CLOTHING_STATE = {
     player: { top: true, bottom: true, undergarments: true },
     npc: { top: true, bottom: true, undergarments: true }
 };
@@ -157,7 +157,7 @@ const DEFAULT_CLOTHING_STATE = {
 // Compact act definition format:
 // { id, tool, target, verb, type, label, description, arousal, positions, reqClothing, ... }
 
-const SEX_ACTS = {
+var SEX_ACTS = {
     // ===== STAGE 1: CLOTHED ACTIONS =====
     kiss_lips: { id: "kiss_lips", tool: "mouth", target: "mouth", verb: "kiss", type: ACT_TYPES.TEASE, label: "Kiss lips", desc: "Kiss them on the lips", arousal: { p: 5, n: 5 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
     kiss_cheek: { id: "kiss_cheek", tool: "mouth", target: "face", verb: "kiss", type: ACT_TYPES.TEASE, label: "Kiss cheek", desc: "Give a gentle kiss on the cheek", arousal: { p: 3, n: 3 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
@@ -402,7 +402,7 @@ const SEX_ACTS = {
 // AROUSAL CONFIGURATION
 // ============================================================================
 
-const AROUSAL_CONFIG = {
+var AROUSAL_CONFIG = {
     MINOR_AROUSAL: 100,
     MODERATE_AROUSAL: 300,
     HIGH_AROUSAL: 500,
@@ -422,7 +422,7 @@ const AROUSAL_CONFIG = {
 // INTIMACY STAGES
 // ============================================================================
 
-const INTIMACY_STAGES = {
+var INTIMACY_STAGES = {
     CLOTHED: 1,
     PARTIAL: 2,
     NUDE: 3

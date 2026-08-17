@@ -10,7 +10,7 @@ if (typeof window !== "undefined") {
     console.log("[Intimacy Positions] Loaded v2026-08-16-007 - Smart end-action validation based on lastAction");
 }
 
-const INTIMACY_POSITIONS = {
+var INTIMACY_POSITIONS = {
     // ===== STANDING POSITIONS =====
     "Standing": {
         label: "standing face to face",

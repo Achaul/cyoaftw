@@ -100,7 +100,7 @@ if (typeof window !== "undefined") {
  * Maps COT action types to CYOADEV action types
  * COT uses arrays, CYOADEV uses single values
  */
-const COT_TO_CYOADEV_ACTION_TYPE = {
+var COT_TO_CYOADEV_ACTION_TYPE = {
     "tease": "TEASE",
     "penetrate": "PENETRATE",
     "continue": "CONTINUE",
@@ -117,7 +117,7 @@ const COT_TO_CYOADEV_ACTION_TYPE = {
  * Maps COT body parts to CYOADEV body parts
  * Note: COT uses plural forms, CYOADEV uses singular
  */
-const COT_TO_CYOADEV_BODY_PARTS = {
+var COT_TO_CYOADEV_BODY_PARTS = {
     // Mouth/Tongue
     "mouth": "mouth",
     "tongue": "tongue",
@@ -192,7 +192,7 @@ const COT_TO_CYOADEV_BODY_PARTS = {
  * CYOADEV uses simple position names: "Missionary", "Doggy", etc.
  * The role (top/bottom) is handled separately in CYOADEV via playerIsBottom
  */
-const COT_TO_CYOADEV_POSITIONS = {
+var COT_TO_CYOADEV_POSITIONS = {
     // Primary positions (no role specified)
     "Standing": "Standing",
     "Missionary": "Missionary",
@@ -238,7 +238,7 @@ const COT_TO_CYOADEV_POSITIONS = {
  * :top = player is on top/active (playerIsBottom: false)
  * :bottom = player is underneath/passive (playerIsBottom: true)
  */
-const COT_ROLE_TO_PLAYERISBOTTOM = {
+var COT_ROLE_TO_PLAYERISBOTTOM = {
     ":top": false,       // Player is top/active
     ":bottom": true,     // Player is bottom/passive
     "": null             // No role specified = either
@@ -252,7 +252,7 @@ const COT_ROLE_TO_PLAYERISBOTTOM = {
  * Maps COT action categories (based on comments in source) to CYOADEV menu categories
  * This is used for UI organization
  */
-const COT_CATEGORY_TO_CYOADEV_MENU = {
+var COT_CATEGORY_TO_CYOADEV_MENU = {
     // COT comment categories -> CYOADEV categories
     "kissing": "Kissing",
     "mostly foreplay actions": "Foreplay",
@@ -269,7 +269,7 @@ const COT_CATEGORY_TO_CYOADEV_MENU = {
  * Maps CYOADEV action targets to menu categories
  * This is used in getActionCategory() in intimacy-data-acts.js
  */
-const TARGET_TO_MENU_CATEGORY = {
+var TARGET_TO_MENU_CATEGORY = {
     // Mouth/Face
     "mouth": "Kissing",
     "lips": "Kissing",
@@ -310,7 +310,7 @@ const TARGET_TO_MENU_CATEGORY = {
  * Direct mapping from COT action names to CYOADEV action IDs
  * Format: { cotActionName: cyoadvActionId or null (if not implemented) }
  */
-const COT_ACTION_TO_CYOADEV_ID = {
+var COT_ACTION_TO_CYOADEV_ID = {
     // ===== KISSING =====
     "Kiss": "kiss_lips",
     
@@ -446,7 +446,7 @@ const COT_ACTION_TO_CYOADEV_ID = {
  * Actions from COT that are NOT implemented in CYOADEV
  * Organized by category for prioritization
  */
-const MISSING_COT_ACTIONS = {
+var MISSING_COT_ACTIONS = {
     "Clothing/Position Adjustments": [],
     
     "Oral - Balls": [],
@@ -523,7 +523,7 @@ const MISSING_COT_ACTIONS = {
 /**
  * How to translate COT action properties to CYOADEV properties
  */
-const PROPERTY_TRANSLATION_GUIDE = {
+var PROPERTY_TRANSLATION_GUIDE = {
     // Action Type
     // COT: "action type": ["tease", "penetrate", ...]
     // CYOADEV: type: ACT_TYPES.TEASE
@@ -604,7 +604,7 @@ const PROPERTY_TRANSLATION_GUIDE = {
  * Priority 2 = Medium (common actions)
  * Priority 3 = Low (niche/specialized)
  */
-const IMPLEMENTATION_PRIORITY = {
+var IMPLEMENTATION_PRIORITY = {
     // Priority 1: Core foreplay and penetration
     "Pull Hand To Pussy": 1,
     "Hump Hand": 1,
