@@ -1068,23 +1068,6 @@ function handlePenetrationAction(npc, player, act, intimacy, actId) {
         }
     }
 }
-    
-    // End penetration when appropriate end actions are taken
-    if (act.type === ACT_TYPES.END) {
-        if (actId === "pull_out" || actId === "pull_off" || actId === "pull_out_of_mouth" || 
-            act.id === "pull_out" || act.id === "pull_off" || act.id === "pull_out_of_mouth") {
-            // Reset penetration state when pulling out
-            intimacy.penetration = {
-                active: false,
-                tool: null,
-                target: null,
-                depth: 0,
-                startedAt: null,
-                playerIsBottom: false
-            };
-        }
-    }
-}
 
 /**
  * Handle virginity loss
