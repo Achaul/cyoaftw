@@ -728,49 +728,82 @@ function getActionCategory(actId) {
         return "Impact";
     }
     
-    if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
-        if (act.triggersClimax) return "Climax";
-        return "Penetration";
-    }
-    
-    // Group by target and action intent
-    if (act.target === "mouth" || act.target === "lips" || act.target === "face" || act.target === "neck") {
-        return "Kissing";
-    }
-    
-    // Check if this is specifically a breast/nipple action
+    // Categorize by body area first, then action type
     const actIdLower = (act.id || "").toLowerCase();
     const labelLower = (act.label || "").toLowerCase();
+    const target = act.target || "";
+    
+    // Mouth/Lips/Face/Neck actions
+    if (target === "mouth" || target === "lips" || target === "face" || target === "neck" ||
+        actIdLower.includes("kiss") || labelLower.includes("kiss")) {
+        return "Mouth & Lips";
+    }
+    
+    // Hair
+    if (target === "hair" || actIdLower.includes("hair") || labelLower.includes("hair")) {
+        return "Hair";
+    }
+    
+    // Breasts/Nipples
     const isBreastAction = actIdLower.includes("breast") || actIdLower.includes("nipple") || 
-                           labelLower.includes("breast") || labelLower.includes("nipple");
-    
-    if (act.target === "chest" && isBreastAction) {
+                           labelLower.includes("breast") || labelLower.includes("nipple") ||
+                           target === "nipples" || target === "chest";
+    if (isBreastAction) {
         return "Breasts";
     }
     
-    if (act.target === "nipples") {
-        return "Breasts";
+    // Vagina/Pussy/Clitoris
+    if (target === "vagina" || target === "pussy" || target === "clitoris" ||
+        actIdLower.includes("pussy") || actIdLower.includes("vagina") || actIdLower.includes("clitoris") ||
+        labelLower.includes("pussy") || labelLower.includes("vagina") || labelLower.includes("clitoris") ||
+        actIdLower.includes("clit") || labelLower.includes("clit") ||
+        actIdLower.includes("fold") || labelLower.includes("fold")) {
+        return "Pussy";
     }
     
-    // Chest actions that aren't about breasts go to Body
-    if (act.target === "chest") {
-        return "Body";
+    // Penis/Cock
+    if (target === "penis" || target === "cock" ||
+        actIdLower.includes("cock") || actIdLower.includes("penis") ||
+        labelLower.includes("cock") || labelLower.includes("penis") ||
+        actIdLower.includes("dick") || labelLower.includes("dick")) {
+        return "Cock";
     }
     
-    if (act.target === "vagina" || act.target === "penis" || act.target === "clitoris") {
-        return "Genital";
+    // Anus/Buttocks
+    if (target === "anus" || target === "buttocks" || target === "butt" || target === "ass" ||
+        actIdLower.includes("anal") || actIdLower.includes("anus") || actIdLower.includes("butt") || actIdLower.includes("ass") ||
+        labelLower.includes("anal") || labelLower.includes("anus") || labelLower.includes("butt") || labelLower.includes("ass") ||
+        target === "sphincter") {
+        return "Anus";
     }
     
-    if (act.target === "anus" || act.target === "buttocks") {
-        return "Anal";
-    }
-    
-    if (act.target === "groin" || act.target === "hips" || act.target === "thighs") {
+    // Lower body (hips, thighs, groin)
+    if (target === "groin" || target === "hips" || target === "thighs" ||
+        actIdLower.includes("groin") || actIdLower.includes("thigh") ||
+        labelLower.includes("groin") || labelLower.includes("thigh")) {
         return "Lower Body";
     }
     
-    if (act.target === "hair" || act.target === "shoulders" || act.target === "back" || act.target === "stomach") {
+    // Body (general)
+    if (target === "chest" || target === "shoulders" || target === "back" || target === "stomach" || target === "arms" ||
+        target === "hands" || target === "legs" || target === "feet") {
         return "Body";
+    }
+    
+    // Now handle action types for actions that don't have a specific body target
+    if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
+        if (act.triggersClimax) return "Climax";
+        // For penetration, try to infer from action ID
+        if (actIdLower.includes("pussy") || actIdLower.includes("vagina") || actIdLower.includes("clit")) return "Pussy";
+        if (actIdLower.includes("anus") || actIdLower.includes("anal") || actIdLower.includes("butt") || actIdLower.includes("ass")) return "Anus";
+        if (actIdLower.includes("cock") || actIdLower.includes("penis") || actIdLower.includes("dick")) return "Cock";
+        if (actIdLower.includes("mouth") || actIdLower.includes("kiss") || actIdLower.includes("oral")) return "Mouth & Lips";
+        return "Penetration";
+    }
+    
+    // Impact actions (spanking, etc.)
+    if (act.type === ACT_TYPES.IMPACT) {
+        return "Impact";
     }
     
     return "Other";

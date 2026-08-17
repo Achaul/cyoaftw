@@ -533,13 +533,37 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         }
     }
     
-    // Check lube
+    // Check lube - now checks per-body-part lube
     if (act.requiresLube) {
         const intimacy = npc && npc.intimacy;
-        const hasLube = intimacy && intimacy.hasLube;
-        if (!hasLube) {
+        if (!intimacy || !intimacy.lube) {
             return { valid: false, reason: "no lube" };
         }
+        
+        // Map action target to lube body part
+        const target = act.target || "";
+        const actIdLower = (act.id || "").toLowerCase();
+        let lubePart = "general";
+        
+        if (target === "vagina" || target === "pussy" || target === "clitoris" ||
+            actIdLower.includes("pussy") || actIdLower.includes("vagina") || actIdLower.includes("clitoris") ||
+            actIdLower.includes("clit") || actIdLower.includes("fold")) {
+            lubePart = "vagina";
+        } else if (target === "anus" || target === "buttocks" || target === "butt" || target === "ass" ||
+                   actIdLower.includes("anal") || actIdLower.includes("anus") || actIdLower.includes("butt") || actIdLower.includes("ass")) {
+            lubePart = "anus";
+        } else if (target === "mouth" || target === "lips" || target === "face" ||
+                   actIdLower.includes("mouth") || actIdLower.includes("oral") || actIdLower.includes("kiss")) {
+            lubePart = "mouth";
+        }
+        
+        const partLube = intimacy.lube[lubePart];
+        if (!partLube || !partLube.hasLube) {
+            return { valid: false, reason: "no lube" };
+        }
+        
+        // Also update legacy flag for backwards compatibility
+        intimacy.hasLube = true;
     }
     
     // Check climax context: climax actions should only be available when appropriate
@@ -777,16 +801,22 @@ function applyStageFiltering(categorizedActions, stage) {
     
     // Stage 1: Clothed - only external actions
     if (stage === INTIMACY_STAGES.CLOTHED) {
-        // Remove clothing removal actions if we want them always available
-        // Remove penetration and continue actions
+        // Remove penetration and continue actions (now categorized by body area)
+        // These will be in Pussy, Cock, Anus, Mouth & Lips categories
         delete filtered.Penetration;
         
-        // Remove genital and anal actions that require nudity
-        if (filtered.Genital) {
-            filtered.Genital = filtered.Genital.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+        // Remove pussy, cock, and anus actions that require nudity
+        if (filtered.Pussy) {
+            filtered.Pussy = filtered.Pussy.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+        }
+        if (filtered.Cock) {
+            filtered.Cock = filtered.Cock.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
         }
         if (filtered.Anal) {
             filtered.Anal = filtered.Anal.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+        }
+        if (filtered["Mouth & Lips"]) {
+            filtered["Mouth & Lips"] = filtered["Mouth & Lips"].filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
         }
     }
     
@@ -1025,12 +1055,19 @@ function handlePenetrationAction(npc, player, act, intimacy, actId) {
             startedAt: Date.now(),
             playerIsBottom: playerIsBottom
         };
+        
+        // Consume lube when penetration starts
+        consumeLubeForPenetration(npc, act);
     } else if (act.type === ACT_TYPES.CONTINUE) {
         // Continue penetration
         if (intimacy.penetration.active) {
             intimacy.penetration.depth = Math.min(intimacy.penetration.depth + 1, 5);
+            
+            // Consume lube for continued penetration
+            consumeLubeForPenetration(npc, act);
         }
     }
+}
     
     // End penetration when appropriate end actions are taken
     if (act.type === ACT_TYPES.END) {
@@ -1126,6 +1163,39 @@ function handleLubeFromAction(npc, act) {
         const targetPart = ejaculationActions[act.id];
         addLube(npc, targetPart, 80);
     }
+}
+
+/**
+ * Consume lube for penetration actions
+ * Determines which body part needs lube based on the penetration target
+ */
+function consumeLubeForPenetration(npc, act) {
+    if (!npc || !npc.intimacy || !npc.intimacy.lube) return;
+    
+    const target = act.target || "";
+    const tool = act.tool || "";
+    const actIdLower = (act.id || "").toLowerCase();
+    
+    // Determine which body part's lube to consume
+    let lubePart = "general";
+    
+    // For penetration, the target is what's being penetrated
+    if (target === "vagina" || target === "pussy" || target === "clitoris" ||
+        actIdLower.includes("pussy") || actIdLower.includes("vagina") || actIdLower.includes("clitoris") ||
+        actIdLower.includes("clit") || actIdLower.includes("fold")) {
+        lubePart = "vagina";
+    } else if (target === "anus" || target === "buttocks" || target === "butt" || target === "ass" ||
+               actIdLower.includes("anal") || actIdLower.includes("anus") || actIdLower.includes("butt") || actIdLower.includes("ass")) {
+        lubePart = "anus";
+    } else if (target === "mouth" || target === "lips" || target === "face" ||
+               actIdLower.includes("mouth") || actIdLower.includes("oral") || actIdLower.includes("kiss")) {
+        lubePart = "mouth";
+    }
+    
+    // Consume lube from the appropriate body part
+    useLube(npc, lubePart, 5);
+    
+    console.log(`[Intimacy] Consumed lube from ${lubePart} for penetration`);
 }
 
 /**
@@ -2171,11 +2241,11 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     // Convert to menu format with natural labels
     const menu = [];
     
-    // Define phase groups with their categories
+    // Define phase groups with their categories (now grouped by body area)
     const phaseGroups = {
-        social: ["Kissing", "Body"],
-        private: ["Clothing", "Breasts", "Lower Body", "Genital", "Anal", "Impact"],
-        intimate: ["Penetration", "Climax", "End"]
+        social: ["Mouth & Lips", "Hair", "Body", "Breasts"],
+        private: ["Clothing", "Breasts", "Lower Body", "Pussy", "Cock", "Anus", "Impact"],
+        intimate: ["Pussy", "Cock", "Anus", "Mouth & Lips", "Climax", "End", "Receive"]
     };
     
     // Process each phase group in order
@@ -2578,6 +2648,7 @@ if (typeof module !== 'undefined' && module.exports) {
         useLube,
         hasLube,
         handleLubeFromAction,
+        consumeLubeForPenetration,
         
         // Position
         changePosition,
