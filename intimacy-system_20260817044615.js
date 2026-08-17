@@ -1669,10 +1669,10 @@ function buildFallbackResponse(npc, player, act, intimacy) {
             `<enjoys the attention.>`
         ],
         penetrate: [
-            `<gasps as you enter ${objectPronoun}.>`,
+            `<gasps.>`,
             `<moans loudly with pleasure.>`,
             `<welcomes you inside.>`,
-            `<arches ${possessivePronoun} back in response.>`
+            `<arches ${possessivePronoun} back.>`
         ],
         continue: [
             `<moans with each thrust.>`,
@@ -1964,9 +1964,9 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
     const templates = [
         `<${reaction} at your touch.>`,
         `<${reaction}, ${tempDesc}.>`,
-        `<${reaction}, ${possessivePronoun} ${bodyPartDesc} responding to your ${tool}.>`,
-        `<lets out a ${vocalization} as you ${verb} ${possessivePronoun} ${bodyPartDesc}.>`,
-        `<shivers ${intensity} as your ${tool} ${verb}s ${possessivePronoun} ${bodyPartDesc}.>`,
+        `<${reaction} at the sensation.>`,
+        `<lets out a ${vocalization}.>`,
+        `<shivers ${intensity}.>`,
         `<${reaction} with ${pleasureIntensity}.>`,
         `<${reaction}.>`,
         `<${reaction} softly.>`,
@@ -1986,18 +1986,18 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     
     const templates = {
         enter: [
-            `<gasps as you ${verb} ${possessivePronoun} ${bodyPartDesc}.>`,
+            `<gasps.>`,
             `<welcomes you inside with a ${getVocalization(arousalLevel)}.>`,
-            `<moans as you slide into ${possessivePronoun} ${bodyPartDesc}.>`,
-            `<arches ${possessivePronoun} back as you ${verb} ${objectPronoun}.>`,
-            `<${reaction} with ${getPleasureIntensity(arousalLevel)} as you fill ${objectPronoun}.>`
+            `<moans.>`,
+            `<arches ${possessivePronoun} back.>`,
+            `<${reaction} with ${getPleasureIntensity(arousalLevel)}.>`
         ],
         continue: [
-            `<moans with each thrust into ${possessivePronoun} ${bodyPartDesc}.>`,
-            `<matches your rhythm, ${possessivePronoun} ${bodyPartDesc} gripping you tightly.>`,
-            `<${reaction} as you move within ${objectPronoun}.>`,
-            `<grinds back against you, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.>`,
-            `<whispers encouragement as you continue.>`
+            `<moans with each thrust.>`,
+            `<matches your rhythm.>`,
+            `<${reaction}.>`,
+            `<grinds back against you.>`,
+            `<whispers encouragement.>`
         ]
     };
     
@@ -2012,8 +2012,8 @@ function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possess
     
     const templates = [
         `<yelps at the sudden contact.>`,
-        `<gasps at the firm ${verb}.>`,
-        `<reacts to the ${verb} with a soft cry.>`,
+        `<gasps.>`,
+        `<reacts with a soft cry.>`,
         `<${reaction} at the impact.>`,
         `<tenses then relaxes into the sensation.>`
     ];
