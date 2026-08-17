@@ -464,7 +464,7 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     }
     
     // Check gender requirements
-    if (act.maleOnly || act.femaleOnly || act.requiresNpcMale || act.requiresNpcFemale || act.requiresActorMale || act.requiresActorFemale) {
+    if (act.maleOnly || act.femaleOnly || act.requiresNpcMale || act.requiresNpcFemale || act.requiresActorMale || act.requiresActorFemale || act.requiresPlayerMale || act.requiresPlayerFemale) {
         const playerGender = (player && player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
         const npcGender = (npc.gender || "female").toLowerCase();
         const actorIsPlayer = !act.playerIsBottom;
@@ -487,6 +487,8 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         }
         if (act.requiresNpcMale && npcGender !== "male") return { valid: false, reason: "wrong gender" };
         if (act.requiresNpcFemale && npcGender !== "female") return { valid: false, reason: "wrong gender" };
+        if (act.requiresPlayerMale && playerGender !== "male") return { valid: false, reason: "wrong gender" };
+        if (act.requiresPlayerFemale && playerGender !== "female") return { valid: false, reason: "wrong gender" };
     }
     
     // Check prior actions
@@ -1842,37 +1844,37 @@ var BODY_PART_REACTIONS = {
     // Hair
     hair: {
         mild: ["tilts her head", "closes her eyes briefly", "smiles softly", "sighs contentedly"],
-        moderate: ["lets out a soft moan", "nuzzles into your touch", "murmurs with pleasure", "arches slightly into your hand"],
-        high: ["gasps softly", "presses her head against your hand", "whispers your name", "shivers at your touch"],
-        intense: ["moans with delight", "grinds her head against you", "begs for more", "trembles with pleasure"]
+        moderate: ["lets out a soft moan", "nuzzles into your touch", "murmurs", "arches slightly"],
+        high: ["gasps softly", "presses her head against your hand", "whispers your name", "shivers"],
+        intense: ["moans with delight", "grinds her head against you", "begs for more", "trembles"]
     },
     
     // Breasts/Nipples
     breasts: {
         mild: ["breathes a little faster", "lets out a soft sigh", "glances at you shyly", "bits her lip"],
         moderate: ["lets out a soft moan", "arches her back slightly", "presses into your touch", "gasps softly"],
-        high: ["moans with pleasure", "grinds against your hand", "whispers encouragement", "shivers at your touch"],
-        intense: ["gasps and moans loudly", "pushes her chest into your face", "begs you not to stop", "trembles with arousal"]
+        high: ["moans", "grinds against your hand", "whispers encouragement", "shivers"],
+        intense: ["gasps and moans loudly", "pushes her chest into your face", "begs you not to stop", "trembles"]
     },
     nipples: {
         mild: ["lets out a tiny gasp", "shivers slightly", "bits her lip", "tenses slightly"],
-        moderate: ["lets out a soft moan", "arches her back", "gasps at the sensation", "presses into your touch"],
-        high: ["moans loudly", "twitches with pleasure", "whispers your name", "grinds against you"],
-        intense: ["screams with pleasure", "begs for more", "trembles uncontrollably", "nails dig into you"]
+        moderate: ["lets out a soft moan", "arches her back", "gasps", "presses into your touch"],
+        high: ["moans loudly", "twitches", "whispers your name", "grinds against you"],
+        intense: ["screams with pleasure", "begs for more", "trembles uncontrollably", "digs her nails into you"]
     },
     
     // Vagina/Pussy
     vagina: {
         mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "smiles warmly"],
-        moderate: ["lets out a soft moan", "spreads her legs slightly", "gasps with pleasure", "presses against your hand"],
-        high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers with arousal"],
-        intense: ["gasps and moans", "bucks her hips", "begs for more", "soaked with arousal"]
+        moderate: ["lets out a soft moan", "spreads her legs slightly", "gasps", "presses against your hand"],
+        high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers"],
+        intense: ["gasps and moans", "bucks her hips", "begs for more", "drips with arousal"]
     },
     pussy: {
         mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "smiles warmly"],
-        moderate: ["lets out a soft moan", "spreads her legs slightly", "gasps with pleasure", "presses against your hand"],
-        high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers with arousal"],
-        intense: ["gasps and moans", "bucks her hips", "begs for more", "soaked with arousal"]
+        moderate: ["lets out a soft moan", "spreads her legs slightly", "gasps", "presses against your hand"],
+        high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers"],
+        intense: ["gasps and moans", "bucks her hips", "begs for more", "drips with arousal"]
     },
     clitoris: {
         mild: ["lets out a tiny gasp", "shivers", "bits her lip", "tenses"],
@@ -1989,10 +1991,10 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
             
         case ACT_TYPES.END:
             return pickRandom([
-                `<nods contentedly.>`,
-                `<takes a deep breath and relaxes.>`,
-                `<smiles warmly at you.>`,
-                `<looks at you with warm eyes.>`
+                `nods contentedly.`,
+                `takes a deep breath and relaxes.`,
+                `smiles warmly at you.`,
+                `looks at you with warm eyes.`
             ]);
             
         default:
@@ -2017,16 +2019,19 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
     const pleasureIntensity = getPleasureIntensity(arousalLevel);
     
     // Select a response template - just the reaction, no action repetition
+    // These will be processed by formatIntimacyNPCResponse which adds subject pronoun
     const templates = [
-        `<${reaction} at your touch.>`,
-        `<${reaction}, ${tempDesc}.>`,
-        `<${reaction} at the sensation.>`,
-        `<lets out a ${vocalization}.>`,
-        `<shivers ${intensity}.>`,
-        `<${reaction} with ${pleasureIntensity}.>`,
-        `<${reaction} at your touch on ${possessivePronoun} ${bodyPartDesc}.>`,
-        `<${reaction} softly.>`,
-        `<${reaction} with pleasure.>`
+        `${reaction} at your touch.`,
+        `${reaction}, ${tempDesc}.`,
+        `${reaction} at the sensation.`,
+        `lets out a ${vocalization}.`,
+        `shivers ${intensity}.`,
+        `${reaction} ${pleasureIntensity}.`,
+        `${reaction} softly.`,
+        `${reaction} with pleasure.`,
+        `${reaction}.`,
+        `${reaction}, breathing ${intensity}.`,
+        `${reaction}, ${pleasureIntensity}.`
     ];
     
     return pickRandom(templates);
@@ -2046,24 +2051,21 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     
     const templates = {
         enter: [
-            `<gasps as ${possessivePronoun} ${bodyPartDesc} accepts you.>`,
-            `<welcomes you inside with a ${vocalization}, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.>`,
-            `<moans softly as you fill ${possessivePronoun} ${bodyPartDesc}.>`,
-            `<arches ${possessivePronoun} back, ${possessivePronoun} ${bodyPartDesc} enveloping you.>`,
-            `<${reaction} with ${pleasureIntensity} as you ${verb} ${possessivePronoun} ${bodyPartDesc}.>`,
-            `<takes you in deeply, ${possessivePronoun} ${bodyPartDesc} greedy for more.>`,
-            `<whispers your name as you ${verb} ${objectPronoun}.>`,
-            `<clutches at you as you sink into ${possessivePronoun} ${bodyPartDesc}.>`
+            `gasps as ${possessivePronoun} ${bodyPartDesc} accepts you.`,
+            `welcomes you inside with a ${vocalization}, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.`,
+            `moans softly as you fill ${possessivePronoun} ${bodyPartDesc}.`,
+            `arches ${possessivePronoun} back, ${possessivePronoun} ${bodyPartDesc} enveloping you.`,
+            `takes you in deeply, ${possessivePronoun} ${bodyPartDesc} greedy for more.`,
+            `whispers your name as you ${verb} ${objectPronoun}.`,
+            `clutches at you as you sink into ${possessivePronoun} ${bodyPartDesc}.`
         ],
         continue: [
-            `<moans with each thrust, ${possessivePronoun} ${bodyPartDesc} gripping you tightly.>`,
-            `<matches your rhythm, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.>`,
-            `<${reaction} as you move within ${objectPronoun}.>`,
-            `<grinds back against you, taking you deeper.>`,
-            `<whispers encouragement as you continue.>`,
-            `<${possessivePronoun} ${bodyPartDesc} pulses around you with each movement.>`,
-            `<raises ${possessivePronoun} hips to meet your thrusts.>`,
-            `<${reaction} with ${pleasureIntensity} at the sensation.>`
+            `moans with each thrust, ${possessivePronoun} ${bodyPartDesc} gripping you tightly.`,
+            `matches your rhythm, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.`,
+            `grinds back against you, taking you deeper.`,
+            `whispers encouragement as you continue.`,
+            `${possessivePronoun} ${bodyPartDesc} pulses around you with each movement.`,
+            `raises ${possessivePronoun} hips to meet your thrusts.`
         ]
     };
     
@@ -2077,11 +2079,11 @@ function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possess
     const verb = act.verb || "touch";
     
     const templates = [
-        `<yelps at the sudden contact.>`,
-        `<gasps.>`,
-        `<reacts with a soft cry.>`,
-        `<${reaction} at the impact.>`,
-        `<tenses then relaxes into the sensation.>`
+        `yelps at the sudden contact.`,
+        `gasps.`,
+        `reacts with a soft cry.`,
+        `${reaction} at the impact.`,
+        `tenses then relaxes into the sensation.`
     ];
     
     return pickRandom(templates);
@@ -2092,9 +2094,9 @@ function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possess
  */
 function buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, reaction) {
     const templates = [
-        `<${reaction}.>`,
-        `<${reaction} with pleasure.>`,
-        `<${reaction} enthusiastically.>`
+        `${reaction}.`,
+        `${reaction} with pleasure.`,
+        `${reaction} enthusiastically.`
     ];
     
     return pickRandom(templates);
@@ -2236,6 +2238,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     
     // Convert to menu format with natural labels
     const menu = [];
+    const addedCategories = new Set();
     
     // Define phase groups with their categories (now grouped by body area)
     const phaseGroups = {
@@ -2253,39 +2256,49 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         let phaseHasActions = false;
         
         for (const category of categories) {
-            if (categorized[category] && categorized[category].length > 0) {
+            // Skip if we've already added this category
+            if (addedCategories.has(category)) continue;
+            
+            const validActions = categorized[category] || [];
+            const disabledActions = categorizedDisabled[category] || [];
+            const hasActions = validActions.length > 0 || disabledActions.length > 0;
+            
+            if (hasActions) {
                 // Add separator before this phase if we've already added content from previous phase
                 if (menu.length > 0 && !addedSeparator) {
                     menu.push({ type: "separator" });
                     addedSeparator = true;
                 }
-                menu.push({
-                    type: "category",
-                    label: category,
-                    actions: categorized[category].map(a => ({
+                
+                // Merge valid and disabled actions
+                const allActions = [
+                    ...validActions.map(a => ({
                         id: a.actId,
                         label: getNaturalLabel(a.actId, npc, player),
                         description: a.desc,
                         type: a.type,
                         phaseRequired: getMinimumPhaseForAction(a.actId),
                         disabled: false
+                    })),
+                    ...disabledActions.map(a => ({
+                        id: a.actId,
+                        label: getNaturalLabel(a.actId, npc, player) + (a.disabledHint ? ` (${a.disabledHint})` : ""),
+                        description: a.desc,
+                        type: a.type,
+                        phaseRequired: getMinimumPhaseForAction(a.actId),
+                        disabled: true,
+                        disabledHint: a.disabledHint
                     }))
-                });
-                phaseHasActions = true;
-            }
-            
-            // Add disabled actions as hints for this category
-            if (categorizedDisabled[category] && categorizedDisabled[category].length > 0) {
-                if (!phaseHasActions && menu.length > 0 && !addedSeparator) {
-                    menu.push({ type: "separator" });
-                    addedSeparator = true;
-                }
+                ];
                 
-                // Only add disabled category if there are valid actions in this phase group
-                // OR if we should always show disabled actions
-                if (phaseHasActions || Object.values(categorized).some(c => c && c.length > 0)) {
-                    // We'll add disabled actions inline with valid ones below
-                }
+                menu.push({
+                    type: "category",
+                    label: category,
+                    actions: allActions
+                });
+                
+                addedCategories.add(category);
+                phaseHasActions = true;
             }
         }
         
@@ -2297,53 +2310,34 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     
     // Add any remaining categories not in phase groups
     for (const [category, actions] of Object.entries(categorized)) {
-        if (!Object.values(phaseGroups).flat().includes(category) && actions.length > 0) {
-            menu.push({
-                type: "category",
-                label: category,
-                actions: actions.map(a => ({
+        if (!Object.values(phaseGroups).flat().includes(category) && actions.length > 0 && !addedCategories.has(category)) {
+            const disabledActions = categorizedDisabled[category] || [];
+            const allActions = [
+                ...actions.map(a => ({
                     id: a.actId,
                     label: getNaturalLabel(a.actId, npc, player),
                     description: a.desc,
                     type: a.type,
                     phaseRequired: getMinimumPhaseForAction(a.actId),
                     disabled: false
-                }))
-            });
-        }
-    }
-    
-    // Add disabled actions to their categories in the menu
-    // We need to merge disabled actions into existing categories
-    for (const [category, disabledActions] of Object.entries(categorizedDisabled)) {
-        if (disabledActions && disabledActions.length > 0) {
-            // Find existing category in menu
-            let categoryItem = menu.find(m => m.type === "category" && m.label === category);
-            
-            if (!categoryItem) {
-                // Create new category for disabled actions if it doesn't exist
-                categoryItem = {
-                    type: "category",
-                    label: category,
-                    actions: []
-                };
-                menu.push(categoryItem);
-            }
-            
-            // Add disabled actions to the category
-            for (const disabledAction of disabledActions) {
-                const hintText = getDisabledHintText(disabledAction.disabledReason);
-                categoryItem.actions.push({
-                    id: disabledAction.actId,
-                    label: getNaturalLabel(disabledAction.actId, npc, player),
-                    description: disabledAction.desc,
-                    type: disabledAction.type,
-                    phaseRequired: getMinimumPhaseForAction(disabledAction.actId),
+                })),
+                ...disabledActions.map(a => ({
+                    id: a.actId,
+                    label: getNaturalLabel(a.actId, npc, player) + (a.disabledHint ? ` (${a.disabledHint})` : ""),
+                    description: a.desc,
+                    type: a.type,
+                    phaseRequired: getMinimumPhaseForAction(a.actId),
                     disabled: true,
-                    disabledReason: disabledAction.disabledReason,
-                    disabledHint: hintText
-                });
-            }
+                    disabledHint: a.disabledHint
+                }))
+            ];
+            
+            menu.push({
+                type: "category",
+                label: category,
+                actions: allActions
+            });
+            addedCategories.add(category);
         }
     }
     
