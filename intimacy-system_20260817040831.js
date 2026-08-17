@@ -1950,8 +1950,9 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
     const tool = act.tool || "hand";
     const target = act.target || "body";
     
-    // Get temperature descriptor based on arousal
+    // Get descriptors based on arousal
     const tempDesc = getTemperatureDescriptor(arousalLevel);
+    const intensity = getReactionIntensity(arousalLevel);
     
     // Select a response template
     const templates = [
