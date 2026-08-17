@@ -52,7 +52,7 @@ if (typeof window !== "undefined") {
     {
       id: "flirt",
       label: "Flirt",
-      text: "You flirt with them, testing their interest...",
+      text: "You flirt with them, running your fingers near their {groin} to test their interest...",
       priority: 10,
       repeat: "session",
       conditions: { romanceEligible: true, maxHostility: 70 },
@@ -90,7 +90,7 @@ if (typeof window !== "undefined") {
     {
       id: "touch_intimately",
       label: "Touch them intimately",
-      text: "You reach out to touch them suggestively...",
+      text: "You reach out to touch their {groin} suggestively...",
       priority: 30,
       repeat: "encounter",
       conditions: { 
@@ -124,7 +124,7 @@ if (typeof window !== "undefined") {
     {
       id: "start_intimacy",
       label: "Make a move",
-      text: "You make your intentions clear and initiate intimacy...",
+      text: "You make your intentions clear, reaching for their {groin} to initiate intimacy...",
       priority: 35,
       repeat: "encounter",
       conditions: { 
