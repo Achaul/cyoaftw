@@ -1,11 +1,11 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-16-0004
+// === cyoaftw-nsfw-system.js === - v2026-08-16-0010
 (function() {
   'use strict';
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-16-0004";
-    console.log("[NSFW System] Loaded v2026-08-16-0004 - Added Receive category + position fixes");
+    window.NSFW_SYSTEM_VERSION = "2026-08-16-0010";
+    console.log("[NSFW System] Loaded v2026-08-16-0010 - Anus description includes size (tight anus, loose anus, etc)");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -294,15 +294,70 @@ if (typeof window !== "undefined") {
         if (tb.areolas) anatomy.breasts.areolas = { size: tb.areolas.size || anatomy.breasts.areolas.size, pigmentation: tb.areolas.color || areolaPigment, texture: tb.areolas.texture || null };
       }
 
-      anatomy.genitalSize = { sizeCategory: pickFrom(["small", "medium", "large"]), description: "natural proportions", status: [], health: 100 };
+      // Genital size tied to creature size
+      // Small creatures (goblin, halfling, dwarf) tend to have smaller genitals
+      // Large creatures (orc) tend to have larger genitals
+      let genitalSizeCategory;
+      if (size === "tiny" || size === "small") {
+        genitalSizeCategory = pickFrom(["small", "small", "medium"]); // 66% small, 33% medium
+      } else if (size === "large") {
+        genitalSizeCategory = pickFrom(["medium", "large", "large"]); // 33% medium, 66% large
+      } else {
+        genitalSizeCategory = pickFrom(["small", "medium", "medium", "large"]); // balanced for medium
+      }
+      anatomy.genitalSize = { sizeCategory: genitalSizeCategory, description: "natural proportions", status: [], health: 100 };
 
       let pubicHairStyle = pickFrom(isCivilized ? ["smooth", "neatly trimmed", "natural", "thick"] : ["a messy natural", "a unkept and thick", "a long thick and wild"]);
       let pubicHairColor = pickFrom(["dark", "brown", "black", "blonde", "auburn", "grey"]);
       anatomy.pubicHair = { style: pubicHairStyle, color: pubicHairColor, description: pubicHairStyle === "smooth" ? "smooth and bare" : pubicHairStyle + " " + pubicHairColor + " hair", status: [], health: 100 };
 
-      const gd = g === "male" ? anatomy.genitalSize.sizeCategory + " member" : (g === "female" ? anatomy.genitalSize.sizeCategory + " sex" : "featureless");
-      anatomy.genitals = { description: gd, pigmentation: contrastPigment, status: [], health: 100 };
-      anatomy.anus = { description: "natural", pigmentation: contrastPigment, status: [], health: 100 };
+      // Use proper genital names with descriptive size terms
+      let genitalDescription = "featureless";
+      if (g === "male") {
+        const gs = anatomy.genitalSize.sizeCategory;
+        if (gs === "medium") {
+          genitalDescription = "penis";
+        } else if (gs === "large") {
+          genitalDescription = "girthy penis";
+        } else if (gs === "small") {
+          genitalDescription = "small penis";
+        }
+      } else if (g === "female") {
+        const gs = anatomy.genitalSize.sizeCategory;
+        if (gs === "medium") {
+          genitalDescription = "vagina";
+        } else if (gs === "large") {
+          genitalDescription = "meaty vagina";
+        } else if (gs === "small") {
+          genitalDescription = "small vagina";
+        }
+      }
+      anatomy.genitals = { description: genitalDescription, pigmentation: contrastPigment, status: [], health: 100 };
+      
+      // Anal orifice size tied to creature size
+      // Small creatures have tight/snug, large creatures have loose/gaping/stretchy
+      let analSizeDescription;
+      if (size === "tiny") {
+        analSizeDescription = pickFrom(["tight", "snug"]);
+      } else if (size === "small") {
+        analSizeDescription = pickFrom(["snug", "tight", "firm"]);
+      } else if (size === "medium") {
+        analSizeDescription = pickFrom(["firm", "snug", "supple"]);
+      } else if (size === "large") {
+        analSizeDescription = pickFrom(["loose", "gaping", "stretchy"]);
+      } else {
+        analSizeDescription = pickFrom(["tight", "snug", "firm", "supple", "loose"]);
+      }
+      
+      // Add sphincter description to anus with size-based descriptors
+      anatomy.anus = { 
+        description: analSizeDescription + " anus",
+        size: analSizeDescription,
+        sphincter: pickFrom(["tight", "snug", "firm", "supple", "responsive"]),
+        pigmentation: contrastPigment, 
+        status: [], 
+        health: 100 
+      };
     }
 
     const bodyweight = pickFrom(["skinny", "smoothly built", "muscular", "chubby", "overweight"]);
