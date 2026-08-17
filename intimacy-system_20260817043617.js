@@ -1658,43 +1658,45 @@ function buildFallbackResponse(npc, player, act, intimacy) {
     // Simple fallback without intimacy context
     const npcName = npc.name || "They";
     const subjectPronoun = getSubjectPronoun(npc) || "They";
+    const possessivePronoun = getPossessivePronoun(npc) || "their";
+    const objectPronoun = getObjectPronoun(npc) || "them";
     
     const responses = {
         tease: [
-            `${subjectPronoun} <lets out a soft moan.>`,
-            `${subjectPronoun} <sighs with pleasure.>`,
-            `${subjectPronoun} <responds enthusiastically.>`,
-            `${subjectPronoun} <enjoys the attention.>`
+            `<lets out a soft moan.>`,
+            `<sighs with pleasure.>`,
+            `<responds enthusiastically.>`,
+            `<enjoys the attention.>`
         ],
         penetrate: [
-            `${subjectPronoun} <gasps as you enter them.>`,
-            `${subjectPronoun} <moans loudly with pleasure.>`,
-            `${subjectPronoun} <welcomes you inside.>`,
-            `${subjectPronoun} <arches their back in response.>`
+            `<gasps as you enter ${objectPronoun}.>`,
+            `<moans loudly with pleasure.>`,
+            `<welcomes you inside.>`,
+            `<arches ${possessivePronoun} back in response.>`
         ],
         continue: [
-            `${subjectPronoun} <moans with each thrust.>`,
-            `${subjectPronoun} <grips you tightly.>`,
-            `${subjectPronoun} <matches your rhythm.>`,
-            `${subjectPronoun} <encourages you to continue.>`
+            `<moans with each thrust.>`,
+            `<grips you tightly.>`,
+            `<matches your rhythm.>`,
+            `<encourages you to continue.>`
         ],
         impact: [
-            `${subjectPronoun} <yelps in surprise and pleasure.>`,
-            `${subjectPronoun} <gasps at the sensation.>`,
-            `${subjectPronoun} <reacts to the sudden contact.>`,
-            `${subjectPronoun} <enjoys the firm touch.>`
+            `<yelps in surprise and pleasure.>`,
+            `<gasps at the sensation.>`,
+            `<reacts to the sudden contact.>`,
+            `<enjoys the firm touch.>`
         ],
         clothing: [
-            `${subjectPronoun} <watches as you undress.>`,
-            `${subjectPronoun} <helps you with your clothing.>`,
-            `${subjectPronoun} <smiles as the clothing comes off.>`,
-            `${subjectPronoun} <anticipates what comes next.>`
+            `<watches as you undress.>`,
+            `<helps you with your clothing.>`,
+            `<smiles as the clothing comes off.>`,
+            `<anticipates what comes next.>`
         ],
         end: [
-            `${subjectPronoun} <nods in acknowledgment.>`,
-            `${subjectPronoun} <takes a deep breath.>`,
-            `${subjectPronoun} <smiles contentedly.>`,
-            `${subjectPronoun} <looks at you expectantly.>`
+            `<nods in acknowledgment.>`,
+            `<takes a deep breath.>`,
+            `<smiles contentedly.>`,
+            `<looks at you expectantly.>`
         ]
     };
     
@@ -1918,34 +1920,36 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
     // Build response based on action type
     switch (act.type) {
         case ACT_TYPES.TEASE:
-            return buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction);
+            return buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction);
             
         case ACT_TYPES.PENETRATE:
-            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction, "enter");
+            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, "enter");
             
         case ACT_TYPES.CONTINUE:
-            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction, "continue");
+            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, "continue");
             
         case ACT_TYPES.IMPACT:
-            return buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction);
+            return buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction);
             
         case ACT_TYPES.END:
             return pickRandom([
-                `${subjectPronoun} <nods contentedly.>`,
-                `${subjectPronoun} <takes a deep breath and relaxes.>`,
-                `${subjectPronoun} <smiles warmly at you.>`,
-                `${subjectPronoun} <looks at you with warm eyes.>`
+                `<nods contentedly.>`,
+                `<takes a deep breath and relaxes.>`,
+                `<smiles warmly at you.>`,
+                `<looks at you with warm eyes.>`
             ]);
             
         default:
-            return buildGenericResponse(npc, subjectPronoun, possessivePronoun, arousalLevel, reaction);
+            return buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, reaction);
     }
 }
 
 /**
  * Build response for tease actions
+ * Note: Don't include subject pronoun - it's added by formatIntimacyNPCResponse
+ * Note: Don't repeat the action - just describe the NPC's reaction
  */
-function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction) {
+function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction) {
     const verb = act.verb || "touch";
     const tool = act.tool || "hand";
     const target = act.target || "body";
@@ -1953,15 +1957,20 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
     // Get descriptors based on arousal
     const tempDesc = getTemperatureDescriptor(arousalLevel);
     const intensity = getReactionIntensity(arousalLevel);
+    const vocalization = getVocalization(arousalLevel);
+    const pleasureIntensity = getPleasureIntensity(arousalLevel);
     
-    // Select a response template
+    // Select a response template - just the reaction, no action repetition
     const templates = [
-        `${subjectPronoun} <${reaction} at your touch.>`,
-        `${subjectPronoun} <${reaction}, ${tempDesc}.>`,
-        `${subjectPronoun} <${reaction}, their ${bodyPartDesc} responding to your ${tool}.>`,
-        `${subjectPronoun} <lets out a ${getVocalization(arousalLevel)} as you ${verb} their ${bodyPartDesc}.>`,
-        `${subjectPronoun} <shivers ${intensity} as your ${tool} ${verb}s their ${bodyPartDesc}.>`,
-        `${subjectPronoun} <${reaction} with ${getPleasureIntensity(arousalLevel)}.>`
+        `<${reaction} at your touch.>`,
+        `<${reaction}, ${tempDesc}.>`,
+        `<${reaction}, ${possessivePronoun} ${bodyPartDesc} responding to your ${tool}.>`,
+        `<lets out a ${vocalization} as you ${verb} ${possessivePronoun} ${bodyPartDesc}.>`,
+        `<shivers ${intensity} as your ${tool} ${verb}s ${possessivePronoun} ${bodyPartDesc}.>`,
+        `<${reaction} with ${pleasureIntensity}.>`,
+        `<${reaction}.>`,
+        `<${reaction} softly.>`,
+        `<${reaction} with pleasure.>`
     ];
     
     return pickRandom(templates);
@@ -1970,25 +1979,25 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
 /**
  * Build response for penetration actions
  */
-function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction, phase) {
+function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, phase) {
     const verb = act.verb || "enter";
     const tool = act.tool || "penis";
     const target = act.target || "vagina";
     
     const templates = {
         enter: [
-            `${subjectPronoun} <gasps as you ${verb} ${possessivePronoun} ${bodyPartDesc}.>`,
-            `${subjectPronoun} <welcomes you inside with a ${getVocalization(arousalLevel)}.>`,
-            `${subjectPronoun} <moans as you slide into their ${bodyPartDesc}.>`,
-            `${subjectPronoun} <arches ${possessivePronoun} back as you ${verb} them.>`,
-            `${subjectPronoun} <${reaction} with ${getPleasureIntensity(arousalLevel)} as you fill them.>`
+            `<gasps as you ${verb} ${possessivePronoun} ${bodyPartDesc}.>`,
+            `<welcomes you inside with a ${getVocalization(arousalLevel)}.>`,
+            `<moans as you slide into ${possessivePronoun} ${bodyPartDesc}.>`,
+            `<arches ${possessivePronoun} back as you ${verb} ${objectPronoun}.>`,
+            `<${reaction} with ${getPleasureIntensity(arousalLevel)} as you fill ${objectPronoun}.>`
         ],
         continue: [
-            `${subjectPronoun} <moans with each thrust into their ${bodyPartDesc}.>`,
-            `${subjectPronoun} <matches your rhythm, ${possessivePronoun} ${bodyPartDesc} gripping you tightly.>`,
-            `${subjectPronoun} <${reaction} as you move within them.>`,
-            `${subjectPronoun} <grinds back against you, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.>`,
-            `${subjectPronoun} <whispers encouragement as you continue.>`
+            `<moans with each thrust into ${possessivePronoun} ${bodyPartDesc}.>`,
+            `<matches your rhythm, ${possessivePronoun} ${bodyPartDesc} gripping you tightly.>`,
+            `<${reaction} as you move within ${objectPronoun}.>`,
+            `<grinds back against you, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.>`,
+            `<whispers encouragement as you continue.>`
         ]
     };
     
@@ -1998,15 +2007,15 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
 /**
  * Build response for impact actions
  */
-function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction) {
+function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction) {
     const verb = act.verb || "touch";
     
     const templates = [
-        `${subjectPronoun} <yelps at the sudden contact.>`,
-        `${subjectPronoun} <gasps at the firm ${verb}.>`,
-        `${subjectPronoun} <reacts to the ${verb} with a soft cry.>`,
-        `${subjectPronoun} <${reaction} at the impact.>`,
-        `${subjectPronoun} <tenses then relaxes into the sensation.>`
+        `<yelps at the sudden contact.>`,
+        `<gasps at the firm ${verb}.>`,
+        `<reacts to the ${verb} with a soft cry.>`,
+        `<${reaction} at the impact.>`,
+        `<tenses then relaxes into the sensation.>`
     ];
     
     return pickRandom(templates);
@@ -2015,11 +2024,11 @@ function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possess
 /**
  * Build generic response
  */
-function buildGenericResponse(npc, subjectPronoun, possessivePronoun, arousalLevel, reaction) {
+function buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, reaction) {
     const templates = [
-        `${subjectPronoun} <${reaction}.>`,
-        `${subjectPronoun} <${reaction} with pleasure.>`,
-        `${subjectPronoun} <${reaction} enthusiastically.>`
+        `<${reaction}.>`,
+        `<${reaction} with pleasure.>`,
+        `<${reaction} enthusiastically.>`
     ];
     
     return pickRandom(templates);
