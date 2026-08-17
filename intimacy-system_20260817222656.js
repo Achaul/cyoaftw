@@ -318,6 +318,9 @@ function endIntimacyEncounter(npc) {
         const detailEl = document.getElementById("npcDetailEl");
         if (placeholderEl) placeholderEl.style.display = "";
         if (detailEl) detailEl.classList.remove("active");
+        // Remove position container
+        const positionContainer = document.getElementById("intimacyPositionContainer");
+        if (positionContainer) positionContainer.remove();
     }
     
     console.log(`[Intimacy] Ended encounter with ${npc.name || 'NPC'}`);
