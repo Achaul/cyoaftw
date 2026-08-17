@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-008";
-    console.log("[Intimacy System] Loaded v2026-08-16-008 - UI restoration on endIntimacyEncounter");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-010";
+    console.log("[Intimacy System] Loaded v2026-08-16-010 - Lube mechanics + context-aware climax + CoT-style narrative");
 }
 
 // ============================================================================
@@ -66,6 +66,56 @@ const CLIMAX_CONFIG = {
 };
 
 // ============================================================================
+// PRONOUN HELPERS
+// ============================================================================
+
+/**
+ * Get possessive pronoun for an NPC based on gender
+ * Returns: her, his, their
+ */
+function getPossessivePronoun(npc) {
+    if (!npc) return "their";
+    
+    const gender = (npc.gender || "").toLowerCase();
+    if (gender === "female" || gender === "f" || gender.includes("woman") || gender.includes("girl")) {
+        return "her";
+    }
+    if (gender === "male" || gender === "m" || gender.includes("man") || gender.includes("boy")) {
+        return "his";
+    }
+    return "their";
+}
+
+/**
+ * Get subject pronoun for an NPC based on gender
+ * Returns: She, He, They
+ */
+function getSubjectPronoun(npc) {
+    if (!npc) return "They";
+    
+    const gender = (npc.gender || "").toLowerCase();
+    if (gender === "female" || gender === "f" || gender.includes("woman") || gender.includes("girl")) {
+        return "She";
+    }
+    if (gender === "male" || gender === "m" || gender.includes("man") || gender.includes("boy")) {
+        return "He";
+    }
+    return "They";
+}
+
+/**
+ * Get object pronoun for an NPC based on gender
+ * Returns: her, him, them
+ */
+function getObjectPronoun(npc) {
+    if (!npc) return "them";
+    const gender = (npc.gender || "female").toLowerCase();
+    if (gender === "female" || gender.includes("woman") || gender.includes("girl")) return "her";
+    if (gender === "male" || gender.includes("man") || gender.includes("boy")) return "him";
+    return "them";
+}
+
+// ============================================================================
 // INTIMACY STATE MANAGEMENT
 // ============================================================================
 
@@ -94,7 +144,14 @@ function initializeIntimacyState(npc) {
             player: 0,
             npc: 0
         },
-        // Lube state
+        // Lube state - tracked per body part
+        lube: {
+            vagina: { hasLube: false, level: 0 },
+            anus: { hasLube: false, level: 0 },
+            mouth: { hasLube: false, level: 0 },
+            general: { hasLube: false, level: 0 }
+        },
+        // Legacy global lube for backwards compatibility
         hasLube: false,
         lubeLevel: 0,
         // Virginity tracking
@@ -111,7 +168,8 @@ function initializeIntimacyState(npc) {
             active: false,
             tool: null,
             target: null,
-            depth: 0
+            depth: 0,
+            playerIsBottom: false
         },
         // Encounter state
         encounter: {
@@ -163,12 +221,18 @@ function resetIntimacyState(npc) {
         clothing: { ...DEFAULT_CLOTHING_STATE },
         position: { player: DEFAULT_POSITION, npc: DEFAULT_POSITION },
         arousal: { player: 0, npc: 0 },
+        lube: {
+            vagina: { hasLube: false, level: 0 },
+            anus: { hasLube: false, level: 0 },
+            mouth: { hasLube: false, level: 0 },
+            general: { hasLube: false, level: 0 }
+        },
         hasLube: false,
         lubeLevel: 0,
         virginity: { vaginal: true, anal: true },
         lastAction: null,
         actionHistory: [],
-        penetration: { active: false, tool: null, target: null, depth: 0 },
+        penetration: { active: false, tool: null, target: null, depth: 0, playerIsBottom: false },
         encounter: { active: false, startedAt: null, lastActivityAt: null },
         climax: {
             playerOrgasms: 0,
@@ -338,6 +402,14 @@ function generateValidActions(npc, player, positionId = null) {
 }
 
 /**
+ * Check if action is valid (simple boolean version)
+ */
+function isActionValid(actId, npc, player, positionId, clothingState) {
+    const result = checkActionValidity(actId, npc, player, positionId, clothingState);
+    return result.valid;
+}
+
+/**
  * Check if action is valid and return reason if not
  * Returns { valid: boolean, reason?: string } for an action
  */
@@ -467,6 +539,91 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         const hasLube = intimacy && intimacy.hasLube;
         if (!hasLube) {
             return { valid: false, reason: "no lube" };
+        }
+    }
+    
+    // Check climax context: climax actions should only be available when appropriate
+    if (act.triggersClimax) {
+        const intimacy = npc && npc.intimacy;
+        if (!intimacy) return { valid: true }; // Can't validate, allow
+        
+        const currentPenetration = intimacy.penetration || {};
+        const playerGender = (player && player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+        const npcGender = (npc.gender || "female").toLowerCase();
+        
+        // For internal ejaculation (inside vagina/anus/mouth), player must be:
+        // 1. Male
+        // 2. Currently penetrating that specific body part with their penis
+        if (actId === "ejaculate_in_vagina") {
+            if (playerGender !== "male") {
+                return { valid: false, reason: "wrong gender" };
+            }
+            // Must be penetrating vagina with penis (player -> NPC)
+            if (!currentPenetration.active || currentPenetration.target !== "vagina" || currentPenetration.tool !== "penis") {
+                return { valid: false, reason: "no access" };
+            }
+        }
+        
+        if (actId === "ejaculate_in_anus") {
+            if (playerGender !== "male") {
+                return { valid: false, reason: "wrong gender" };
+            }
+            // Must be penetrating anus with penis (player -> NPC)
+            if (!currentPenetration.active || currentPenetration.target !== "anus" || currentPenetration.tool !== "penis") {
+                return { valid: false, reason: "no access" };
+            }
+        }
+        
+        if (actId === "ejaculate_in_mouth") {
+            if (playerGender !== "male") {
+                return { valid: false, reason: "wrong gender" };
+            }
+            // Must be penetrating mouth with penis (player -> NPC mouth)
+            // Or NPC is penetrating player's mouth with their mouth (receiving oral)
+            const validMouthPenetration = currentPenetration.active && 
+                ((currentPenetration.target === "mouth" && currentPenetration.tool === "penis") ||
+                 (currentPenetration.target === "penis" && currentPenetration.tool === "mouth"));
+            if (!validMouthPenetration) {
+                return { valid: false, reason: "no access" };
+            }
+        }
+        
+        // For female ejaculation (squirting), player must be:
+        // 1. Female
+        // 2. Receiving vaginal penetration or penetrating with vagina
+        if (actId === "female_ejaculate") {
+            if (playerGender !== "female") {
+                return { valid: false, reason: "wrong gender" };
+            }
+            // Player can squirt if:
+            // - Player's vagina is being penetrated (playerIsBottom, target=vagina)
+            // - Player is penetrating with vagina (tool=vagina)
+            if (!currentPenetration.active) {
+                return { valid: false, reason: "no access" };
+            }
+            const validVaginalContext = 
+                (currentPenetration.target === "vagina" && currentPenetration.playerIsBottom) ||
+                (currentPenetration.tool === "vagina");
+            if (!validVaginalContext) {
+                return { valid: false, reason: "no access" };
+            }
+        }
+        
+        // For external ejaculation (on body parts), player must be male
+        if (actId.startsWith("ejaculate_on_")) {
+            if (playerGender !== "male") {
+                return { valid: false, reason: "wrong gender" };
+            }
+            // These are always available for males, regardless of penetration state
+            // The position will determine where the ejaculation lands
+        }
+        
+        // Mutual climax can happen in any penetration context
+        if (actId === "mutual_climax") {
+            // Both must be in a state where climax is possible
+            if (!currentPenetration.active) {
+                return { valid: false, reason: "no access" };
+            }
         }
     }
     
@@ -781,14 +938,17 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     }
     
     // Handle penetration actions
-    if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
-        handlePenetrationAction(npc, player, act, intimacy);
+    if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE || act.type === ACT_TYPES.END) {
+        handlePenetrationAction(npc, player, act, intimacy, actId);
     }
     
     // Handle virginity loss
     if (act.takesVirginity) {
         handleVirginityLoss(npc, act.takesVirginity);
     }
+    
+    // Handle lube mechanics: certain actions add lube to specific body parts
+    handleLubeFromAction(npc, act);
     
     // Update arousal
     const arousalResult = updateArousal(npc, player, act.arousal);
@@ -851,20 +1011,40 @@ function handleClothingAction(npc, player, act, clothingState) {
 /**
  * Handle penetration state changes
  */
-function handlePenetrationAction(npc, player, act, intimacy) {
+function handlePenetrationAction(npc, player, act, intimacy, actId) {
     if (act.type === ACT_TYPES.PENETRATE) {
         // Start penetration
+        // playerIsBottom indicates if player is receiving penetration
+        const playerIsBottom = act.playerIsBottom || false;
+        
         intimacy.penetration = {
             active: true,
             tool: act.tool,
             target: act.target,
             depth: 1,
-            startedAt: Date.now()
+            startedAt: Date.now(),
+            playerIsBottom: playerIsBottom
         };
     } else if (act.type === ACT_TYPES.CONTINUE) {
         // Continue penetration
         if (intimacy.penetration.active) {
             intimacy.penetration.depth = Math.min(intimacy.penetration.depth + 1, 5);
+        }
+    }
+    
+    // End penetration when appropriate end actions are taken
+    if (act.type === ACT_TYPES.END) {
+        if (actId === "pull_out" || actId === "pull_off" || actId === "pull_out_of_mouth" || 
+            act.id === "pull_out" || act.id === "pull_off" || act.id === "pull_out_of_mouth") {
+            // Reset penetration state when pulling out
+            intimacy.penetration = {
+                active: false,
+                tool: null,
+                target: null,
+                depth: 0,
+                startedAt: null,
+                playerIsBottom: false
+            };
         }
     }
 }
@@ -884,6 +1064,68 @@ function handleVirginityLoss(npc, virginityTypes) {
     }
     
     console.log(`[Intimacy] ${npc.name || 'NPC'} lost virginity: ${virginityTypes.join(', ')}`);
+}
+
+/**
+ * Handle lube addition from specific actions
+ * Licking/rimming and ejaculating on body parts adds lubrication
+ */
+function handleLubeFromAction(npc, act) {
+    if (!npc || !act) return;
+    
+    // Actions that add lube to vagina
+    const vaginaLubeActions = [
+        "lick_pussy", "eat_pussy", "tongue_pussy", "suck_clit",
+        "lick_player_pussy", "eat_player_pussy"
+    ];
+    
+    // Actions that add lube to anus
+    const anusLubeActions = [
+        "lick_anus", "suck_anus", "rim_anus", "tongue_anus",
+        "lick_player_anus", "rim_player_anus"
+    ];
+    
+    // Actions that add lube to mouth
+    const mouthLubeActions = [
+        "lick_penis", "suck_penis", "deepthroat_penis",
+        "lick_balls", "suck_balls", "accept_penis_mouth"
+    ];
+    
+    // Ejaculation actions - add lube to the target body part
+    const ejaculationActions = {
+        "ejaculate_on_face": "general",
+        "ejaculate_on_chest": "general",
+        "ejaculate_on_stomach": "general",
+        "ejaculate_on_butt": "anus",
+        "ejaculate_on_back": "general",
+        "ejaculate_on_legs": "general",
+        "ejaculate_on_feet": "general",
+        "ejaculate_in_vagina": "vagina",
+        "ejaculate_in_anus": "anus",
+        "ejaculate_in_mouth": "mouth",
+        "fuck_mouth": "mouth"
+    };
+    
+    // Check for vagina lube actions
+    if (vaginaLubeActions.includes(act.id)) {
+        addLube(npc, "vagina", 50);
+    }
+    
+    // Check for anus lube actions
+    if (anusLubeActions.includes(act.id)) {
+        addLube(npc, "anus", 50);
+    }
+    
+    // Check for mouth lube actions
+    if (mouthLubeActions.includes(act.id)) {
+        addLube(npc, "mouth", 50);
+    }
+    
+    // Check for ejaculation actions
+    if (ejaculationActions[act.id]) {
+        const targetPart = ejaculationActions[act.id];
+        addLube(npc, targetPart, 80);
+    }
 }
 
 /**
@@ -1141,18 +1383,24 @@ function updateArousal(npc, player, arousalChange) {
 }
 
 /**
- * Generate AI response for an action
+ * Generate response for an action
+ * Uses CoT-style template system for rich, context-aware responses
  */
 async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // Build context for AI
     const context = buildActionContext(npc, player, act, intimacy, positionId);
     
-    // Generate the prompt
-    const prompt = buildIntimacyPrompt(context);
+    // First, try to build a rich response using our template system
+    // This gives consistent, anatomy-aware, context-aware responses
+    const templateResponse = buildIntimacyResponse(npc, player, act, intimacy);
     
-    // Use the AI system (ai function from your codebase)
+    // If we have the AI system available, use it for additional variety
+    // but blend with our template system
     if (typeof ai === 'function') {
         try {
+            // Generate the prompt
+            const prompt = buildIntimacyPrompt(context);
+            
             const result = await ai({
                 instruction: prompt,
                 startWith: "",
@@ -1162,27 +1410,41 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
             
             const responseText = result && (result.text || result);
             
-            return {
-                action: act.id,
-                type: act.type,
-                responseText: responseText || buildFallbackResponse(npc, player, act),
-                context: context
-            };
+            // If AI gives us a good response, use it. Otherwise fall back to template
+            // Also, we can blend: use template for structure, AI for flavor
+            if (responseText && responseText.trim() && responseText.includes("<")) {
+                // AI provided a formatted response with angle brackets
+                return {
+                    action: act.id,
+                    type: act.type,
+                    responseText: responseText,
+                    context: context
+                };
+            } else {
+                // AI response wasn't good, use our template
+                return {
+                    action: act.id,
+                    type: act.type,
+                    responseText: templateResponse,
+                    context: context
+                };
+            }
         } catch (error) {
             console.error(`[Intimacy] AI generation failed: ${error}`);
+            // Fall back to template system
             return {
                 action: act.id,
                 type: act.type,
-                responseText: buildFallbackResponse(npc, player, act),
+                responseText: templateResponse,
                 context: context
             };
         }
     } else {
-        // Fallback if ai function not available
+        // No AI available, use our template system
         return {
             action: act.id,
             type: act.type,
-            responseText: buildFallbackResponse(npc, player, act),
+            responseText: templateResponse,
             context: context
         };
     }
@@ -1385,51 +1647,425 @@ function describeArousalLevel(level) {
 
 /**
  * Build fallback response if AI fails
+ * Now uses the CoT-style template system for rich responses
  */
-function buildFallbackResponse(npc, player, act) {
+function buildFallbackResponse(npc, player, act, intimacy) {
+    // If we have intimacy state, use the full template system
+    if (intimacy) {
+        return buildIntimacyResponse(npc, player, act, intimacy);
+    }
+    
+    // Simple fallback without intimacy context
     const npcName = npc.name || "They";
+    const subjectPronoun = getSubjectPronoun(npc) || "They";
+    
     const responses = {
         tease: [
-            `${npcName} <lets out a soft moan.>`,
-            `${npcName} <sighs with pleasure.>`,
-            `${npcName} <responds enthusiastically.>`,
-            `${npcName} <enjoys the attention.>`
+            `${subjectPronoun} <lets out a soft moan.>`,
+            `${subjectPronoun} <sighs with pleasure.>`,
+            `${subjectPronoun} <responds enthusiastically.>`,
+            `${subjectPronoun} <enjoys the attention.>`
         ],
         penetrate: [
-            `${npcName} <gasps as you enter them.>`,
-            `${npcName} <moans loudly with pleasure.>`,
-            `${npcName} <welcomes you inside.>`,
-            `${npcName} <arches their back in response.>`
+            `${subjectPronoun} <gasps as you enter them.>`,
+            `${subjectPronoun} <moans loudly with pleasure.>`,
+            `${subjectPronoun} <welcomes you inside.>`,
+            `${subjectPronoun} <arches their back in response.>`
         ],
         continue: [
-            `${npcName} <moans with each thrust.>`,
-            `${npcName} <grips you tightly.>`,
-            `${npcName} <matches your rhythm.>`,
-            `${npcName} <encourages you to continue.>`
+            `${subjectPronoun} <moans with each thrust.>`,
+            `${subjectPronoun} <grips you tightly.>`,
+            `${subjectPronoun} <matches your rhythm.>`,
+            `${subjectPronoun} <encourages you to continue.>`
         ],
         impact: [
-            `${npcName} <yelps in surprise and pleasure.>`,
-            `${npcName} <gasps at the sensation.>`,
-            `${npcName} <reacts to the sudden contact.>`,
-            `${npcName} <enjoys the firm touch.>`
+            `${subjectPronoun} <yelps in surprise and pleasure.>`,
+            `${subjectPronoun} <gasps at the sensation.>`,
+            `${subjectPronoun} <reacts to the sudden contact.>`,
+            `${subjectPronoun} <enjoys the firm touch.>`
         ],
         clothing: [
-            `${npcName} <watches as you undress.>`,
-            `${npcName} <helps you with your clothing.>`,
-            `${npcName} <smiles as the clothing comes off.>`,
-            `${npcName} <anticipates what comes next.>`
+            `${subjectPronoun} <watches as you undress.>`,
+            `${subjectPronoun} <helps you with your clothing.>`,
+            `${subjectPronoun} <smiles as the clothing comes off.>`,
+            `${subjectPronoun} <anticipates what comes next.>`
         ],
         end: [
-            `${npcName} <nods in acknowledgment.>`,
-            `${npcName} <takes a deep breath.>`,
-            `${npcName} <smiles contentedly.>`,
-            `${npcName} <looks at you expectantly.>`
+            `${subjectPronoun} <nods in acknowledgment.>`,
+            `${subjectPronoun} <takes a deep breath.>`,
+            `${subjectPronoun} <smiles contentedly.>`,
+            `${subjectPronoun} <looks at you expectantly.>`
         ]
     };
     
     const category = act.type || "tease";
     const options = responses[category] || responses.tease;
     return options[Math.floor(Math.random() * options.length)];
+}
+
+// ============================================================================
+// COT-STYLE NARRATIVE RESPONSE SYSTEM
+// ============================================================================
+
+/**
+ * Arousal level descriptors for context-aware responses
+ */
+const INTIMACY_AROUSAL_DESCRIPTORS = {
+    low: { desc: "slightly aroused", threshold: 0, max: 20 },
+    mild: { desc: "warming up", threshold: 21, max: 40 },
+    moderate: { desc: "aroused", threshold: 41, max: 60 },
+    high: { desc: "very aroused", threshold: 61, max: 80 },
+    extreme: { desc: "extremely aroused", threshold: 81, max: 100 },
+    climax: { desc: "at the edge of climax", threshold: 95, max: 100 }
+};
+
+/**
+ * Get arousal descriptor based on level
+ */
+function getArousalDescriptor(level) {
+    if (!level) return INTIMACY_AROUSAL_DESCRIPTORS.low.desc;
+    
+    for (const key in INTIMACY_AROUSAL_DESCRIPTORS) {
+        const desc = INTIMACY_AROUSAL_DESCRIPTORS[key];
+        if (level >= desc.threshold && level <= desc.max) {
+            return desc.desc;
+        }
+    }
+    return INTIMACY_AROUSAL_DESCRIPTORS.extreme.desc;
+}
+
+/**
+ * Get body part reaction intensity based on arousal
+ */
+function getReactionIntensity(arousalLevel) {
+    if (arousalLevel < 20) return "softly";
+    if (arousalLevel < 40) return "with interest";
+    if (arousalLevel < 60) return "with pleasure";
+    if (arousalLevel < 80) return "enthusiastically";
+    return "passionately";
+}
+
+/**
+ * Get random reaction from a set, weighted by arousal
+ */
+function getWeightedReaction(reactions, arousalLevel) {
+    if (!reactions || reactions.length === 0) {
+        return "responds";
+    }
+    
+    // For high arousal, prefer more intense reactions
+    if (arousalLevel > 80 && reactions.intense) {
+        return pickRandom(reactions.intense);
+    } else if (arousalLevel > 60 && reactions.high) {
+        return pickRandom(reactions.high || reactions.intense || reactions.moderate || reactions);
+    } else if (arousalLevel > 40 && reactions.moderate) {
+        return pickRandom(reactions.moderate || reactions);
+    } else if (arousalLevel > 20 && reactions.mild) {
+        return pickRandom(reactions.mild || reactions);
+    }
+    
+    // Default to random from all
+    return pickRandom(reactions);
+}
+
+/**
+ * Pick a random element from array
+ */
+function pickRandom(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) return "";
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/**
+ * Body part-specific reaction templates
+ * Organized by target body part for context-aware responses
+ */
+const BODY_PART_REACTIONS = {
+    // Hair
+    hair: {
+        mild: ["tilts their head", "closes their eyes briefly", "smiles softly", "sighs contentedly"],
+        moderate: ["lets out a soft moan", "nuzzles into your touch", "murmurs with pleasure", "arches slightly into your hand"],
+        high: ["gasps softly", "presses their head against your hand", "whispers your name", "shivers at your touch"],
+        intense: ["moans with delight", "grinds their head against you", "begs for more", "trembles with pleasure"]
+    },
+    
+    // Breasts/Nipples
+    breasts: {
+        mild: ["breathes a little faster", "lets out a soft sigh", "glances at you shyly", "bit their lip"],
+        moderate: ["lets out a soft moan", "arches their back slightly", "presses into your touch", "gasps softly"],
+        high: ["moans with pleasure", "grinds against your hand", "whispers encouragement", "shivers at your touch"],
+        intense: ["gasps and moans loudly", "pushes their chest into your face", "begs you not to stop", "trembles with arousal"]
+    },
+    nipples: {
+        mild: ["lets out a tiny gasp", "shivers slightly", "bit their lip", "tenses slightly"],
+        moderate: ["lets out a soft moan", "arches their back", "gasps at the sensation", "presses into your touch"],
+        high: ["moans loudly", "twitches with pleasure", "whispers your name", "grinds against you"],
+        intense: ["screams with pleasure", "begs for more", "trembles uncontrollably", "nails dig into you"]
+    },
+    
+    // Vagina/Pussy
+    vagina: {
+        mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "smiles warmly"],
+        moderate: ["lets out a soft moan", "spreads their legs slightly", "gasps with pleasure", "presses against your hand"],
+        high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers with arousal"],
+        intense: ["gasps and moans", "bucking their hips", "begs for more", "soaked with arousal"]
+    },
+    pussy: {
+        mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "smiles warmly"],
+        moderate: ["lets out a soft moan", "spreads their legs slightly", "gasps with pleasure", "presses against your hand"],
+        high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers with arousal"],
+        intense: ["gasps and moans", "bucking their hips", "begs for more", "soaked with arousal"]
+    },
+    clitoris: {
+        mild: ["lets out a tiny gasp", "shivers", "bit their lip", "tenses"],
+        moderate: ["lets out a soft moan", "presses against your fingers", "gasps sharply", "arches their back"],
+        high: ["moans loudly", "grinds against you", "whispers please don't stop", "trembles with pleasure"],
+        intense: ["screams with pleasure", "bucking wildly", "begs desperately", "nearly climaxing"]
+    },
+    
+    // Buttocks/Anus
+    buttocks: {
+        mild: ["lets out a soft sigh", "shifts their weight", "glances back at you", "smiles"],
+        moderate: ["lets out a soft moan", "presses back against you", "gasps with pleasure", "arches slightly"],
+        high: ["moans loudly", "grinds back against you", "whispers encouragement", "shivers with arousal"],
+        intense: ["gasps and moans", "pushing back hard", "begs for more", "trembling with need"]
+    },
+    anus: {
+        mild: ["tenses slightly", "lets out a soft sigh", "shifts nervously", "glances back"],
+        moderate: ["lets out a soft moan", "presses back against your touch", "gasps at the sensation", "relaxes slightly"],
+        high: ["moans with pleasure", "pushes back against you", "whispers yes", "shivers with arousal"],
+        intense: ["gasps and moans loudly", "pushing back eagerly", "begs to be filled", "trembling with need"]
+    },
+    
+    // Penis
+    penis: {
+        mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "tenses"],
+        moderate: ["lets out a soft moan", "hardens further", "gasps with pleasure", "presses into your touch"],
+        high: ["moans loudly", "thrusts into your hand", "whispers your name", "shivers with arousal"],
+        intense: ["gasps and moans", "bucking their hips", "begs for more", "nearly climaxing"]
+    },
+    cock: {
+        mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "tenses"],
+        moderate: ["lets out a soft moan", "hardens further", "gasps with pleasure", "presses into your touch"],
+        high: ["moans loudly", "thrusts into your hand", "whispers your name", "shivers with arousal"],
+        intense: ["gasps and moans", "bucking their hips", "begs for more", "nearly climaxing"]
+    },
+    testicles: {
+        mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "tenses"],
+        moderate: ["lets out a soft moan", "gasps at your touch", "presses into your hand", "shivers slightly"],
+        high: ["moans with pleasure", "whispers your name", "shivers with arousal", "tenses with pleasure"],
+        intense: ["gasps loudly", "trembles with pleasure", "begs for more", "nearly climaxing"]
+    },
+    balls: {
+        mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "tenses"],
+        moderate: ["lets out a soft moan", "gasps at your touch", "presses into your hand", "shivers slightly"],
+        high: ["moans with pleasure", "whispers your name", "shivers with arousal", "tenses with pleasure"],
+        intense: ["gasps loudly", "trembles with pleasure", "begs for more", "nearly climaxing"]
+    },
+    
+    // General
+    general: {
+        mild: ["responds", "reacts", "acknowledges", "sighs softly"],
+        moderate: ["lets out a soft moan", "sighs with pleasure", "responds enthusiastically", "enjoys the attention"],
+        high: ["moans with pleasure", "responds passionately", "whispers encouragement", "shivers with arousal"],
+        intense: ["gasps and moans", "responds with desperate need", "begs for more", "trembles with pleasure"]
+    }
+};
+
+/**
+ * Build a CoT-style narrative response for an intimacy action
+ * Incorporates:
+ * - NPC anatomy and traits
+ * - Current arousal level
+ * - Action type and target
+ * - Personality context
+ */
+function buildIntimacyResponse(npc, player, act, intimacy) {
+    if (!npc || !act) {
+        return pickRandom(BODY_PART_REACTIONS.general.moderate);
+    }
+    
+    const npcName = npc.name || "They";
+    const isProperName = !/^(a |an |the )/i.test(npcName);
+    const subjectPronoun = getSubjectPronoun(npc) || "They";
+    const possessivePronoun = getPossessivePronoun(npc) || "their";
+    const objectPronoun = getObjectPronoun(npc) || "them";
+    
+    // Get context
+    const arousalLevel = intimacy ? intimacy.arousal.npc : 0;
+    const arousalDesc = getArousalDescriptor(arousalLevel);
+    const intensity = getReactionIntensity(arousalLevel);
+    const target = act.target || "general";
+    const tool = act.tool || "hand";
+    const verb = act.verb || "touch";
+    
+    // Get body part-specific reactions
+    const bodyReactions = BODY_PART_REACTIONS[target] || BODY_PART_REACTIONS.general;
+    const reaction = getWeightedReaction(bodyReactions, arousalLevel);
+    
+    // Get anatomy descriptions
+    let anatomyDesc = "";
+    let bodyPartDesc = target;
+    
+    // Try to get actual anatomy description
+    if (typeof getNPCTrait === "function") {
+        anatomyDesc = getNPCTrait(npc, target) || "";
+        if (anatomyDesc && anatomyDesc !== target) {
+            bodyPartDesc = anatomyDesc;
+        }
+    }
+    
+    // Build response based on action type
+    switch (act.type) {
+        case ACT_TYPES.TEASE:
+            return buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction);
+            
+        case ACT_TYPES.PENETRATE:
+            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction, "enter");
+            
+        case ACT_TYPES.CONTINUE:
+            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction, "continue");
+            
+        case ACT_TYPES.IMPACT:
+            return buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction);
+            
+        case ACT_TYPES.END:
+            return pickRandom([
+                `${subjectPronoun} <nods contentedly.>`,
+                `${subjectPronoun} <takes a deep breath and relaxes.>`,
+                `${subjectPronoun} <smiles warmly at you.>`,
+                `${subjectPronoun} <looks at you with warm eyes.>`
+            ]);
+            
+        default:
+            return buildGenericResponse(npc, subjectPronoun, possessivePronoun, arousalLevel, reaction);
+    }
+}
+
+/**
+ * Build response for tease actions
+ */
+function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction) {
+    const verb = act.verb || "touch";
+    const tool = act.tool || "hand";
+    const target = act.target || "body";
+    
+    // Get temperature descriptor based on arousal
+    const tempDesc = getTemperatureDescriptor(arousalLevel);
+    
+    // Select a response template
+    const templates = [
+        `${subjectPronoun} <${reaction} at your touch.>`,
+        `${subjectPronoun} <${reaction}, ${tempDesc}.>`,
+        `${subjectPronoun} <${reaction}, their ${bodyPartDesc} responding to your ${tool}.>`,
+        `${subjectPronoun} <lets out a ${getVocalization(arousalLevel)} as you ${verb} their ${bodyPartDesc}.>`,
+        `${subjectPronoun} <shivers ${intensity} as your ${tool} ${verb}s their ${bodyPartDesc}.>`,
+        `${subjectPronoun} <${reaction} with ${getPleasureIntensity(arousalLevel)}.>`
+    ];
+    
+    return pickRandom(templates);
+}
+
+/**
+ * Build response for penetration actions
+ */
+function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction, phase) {
+    const verb = act.verb || "enter";
+    const tool = act.tool || "penis";
+    const target = act.target || "vagina";
+    
+    const templates = {
+        enter: [
+            `${subjectPronoun} <gasps as you ${verb} ${possessivePronoun} ${bodyPartDesc}.>`,
+            `${subjectPronoun} <welcomes you inside with a ${getVocalization(arousalLevel)}.>`,
+            `${subjectPronoun} <moans as you slide into their ${bodyPartDesc}.>`,
+            `${subjectPronoun} <arches ${possessivePronoun} back as you ${verb} them.>`,
+            `${subjectPronoun} <${reaction} with ${getPleasureIntensity(arousalLevel)} as you fill them.>`
+        ],
+        continue: [
+            `${subjectPronoun} <moans with each thrust into their ${bodyPartDesc}.>`,
+            `${subjectPronoun} <matches your rhythm, ${possessivePronoun} ${bodyPartDesc} gripping you tightly.>`,
+            `${subjectPronoun} <${reaction} as you move within them.>`,
+            `${subjectPronoun} <grinds back against you, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.>`,
+            `${subjectPronoun} <whispers encouragement as you continue.>`
+        ]
+    };
+    
+    return pickRandom(templates[phase] || templates.enter);
+}
+
+/**
+ * Build response for impact actions
+ */
+function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, arousalLevel, bodyPartDesc, reaction) {
+    const verb = act.verb || "touch";
+    
+    const templates = [
+        `${subjectPronoun} <yelps at the sudden contact.>`,
+        `${subjectPronoun} <gasps at the firm ${verb}.>`,
+        `${subjectPronoun} <reacts to the ${verb} with a soft cry.>`,
+        `${subjectPronoun} <${reaction} at the impact.>`,
+        `${subjectPronoun} <tenses then relaxes into the sensation.>`
+    ];
+    
+    return pickRandom(templates);
+}
+
+/**
+ * Build generic response
+ */
+function buildGenericResponse(npc, subjectPronoun, possessivePronoun, arousalLevel, reaction) {
+    const templates = [
+        `${subjectPronoun} <${reaction}.>`,
+        `${subjectPronoun} <${reaction} with pleasure.>`,
+        `${subjectPronoun} <${reaction} enthusiastically.>`
+    ];
+    
+    return pickRandom(templates);
+}
+
+/**
+ * Get vocalization based on arousal level
+ */
+function getVocalization(arousalLevel) {
+    if (arousalLevel < 20) return pickRandom(["sigh", "soft sound", "murmur"]);
+    if (arousalLevel < 40) return pickRandom(["soft moan", "sigh of pleasure", "murmur"]);
+    if (arousalLevel < 60) return pickRandom(["moan", "gasps", "sighs with pleasure"]);
+    if (arousalLevel < 80) return pickRandom(["loud moan", "gasps of pleasure", "whimpers"]);
+    return pickRandom(["loud moans", "cries of pleasure", "passionate gasps", "desperate whimpers"]);
+}
+
+/**
+ * Get pleasure intensity descriptor
+ */
+function getPleasureIntensity(arousalLevel) {
+    if (arousalLevel < 20) return pickRandom(["mild interest", "slight pleasure", "contentment"]);
+    if (arousalLevel < 40) return pickRandom(["growing pleasure", "enjoyment", "warmth"]);
+    if (arousalLevel < 60) return pickRandom(["obvious pleasure", "growing arousal", "delight"]);
+    if (arousalLevel < 80) return pickRandom(["intense pleasure", "strong arousal", "passion"]);
+    return pickRandom(["extreme pleasure", "overwhelming arousal", "desperate need", "climax-building tension"]);
+}
+
+/**
+ * Get temperature descriptor
+ */
+function getTemperatureDescriptor(arousalLevel) {
+    if (arousalLevel < 20) return pickRandom(["warm", "slightly flushed"]);
+    if (arousalLevel < 40) return pickRandom(["warm and flushed", "heated", "slightly hot"]);
+    if (arousalLevel < 60) return pickRandom(["hot", "flushed with arousal", "heated with desire"]);
+    if (arousalLevel < 80) return pickRandom(["very hot", "burning with desire", "dripping with arousal"]);
+    return pickRandom(["scalding hot", "feverish with need", "on fire with passion"]);
+}
+
+/**
+ * Get pronoun for object
+ */
+function getObjectPronoun(npc) {
+    if (!npc) return "them";
+    const gender = (npc.gender || "female").toLowerCase();
+    if (gender === "female" || gender.includes("woman") || gender.includes("girl")) return "her";
+    if (gender === "male" || gender.includes("man") || gender.includes("boy")) return "him";
+    return "them";
 }
 
 /**
@@ -1708,39 +2344,99 @@ function getPhaseName(phase) {
 // ============================================================================
 
 /**
- * Add lube to intimacy state
+ * Add lube to a specific body part
+ * @param {Object} npc - The NPC
+ * @param {string} bodyPart - The body part (vagina, anus, mouth, general)
+ * @param {number} amount - Amount of lube to add (default: 100)
  */
-function addLube(npc, amount = 100) {
+function addLube(npc, bodyPart = "general", amount = 100) {
     if (!npc || !npc.intimacy) return false;
     
+    // Initialize lube tracking if not present
+    if (!npc.intimacy.lube) {
+        npc.intimacy.lube = {
+            vagina: { hasLube: false, level: 0 },
+            anus: { hasLube: false, level: 0 },
+            mouth: { hasLube: false, level: 0 },
+            general: { hasLube: false, level: 0 }
+        };
+    }
+    
+    const part = npc.intimacy.lube[bodyPart];
+    if (!part) return false;
+    
+    part.hasLube = true;
+    part.level = Math.min(100, part.level + amount);
+    
+    // Update legacy global lube for backwards compatibility
     npc.intimacy.hasLube = true;
     npc.intimacy.lubeLevel = Math.min(100, npc.intimacy.lubeLevel + amount);
     
-    console.log(`[Intimacy] Added lube. Level: ${npc.intimacy.lubeLevel}`);
+    console.log(`[Intimacy] Added lube to ${bodyPart}. Level: ${part.level}`);
     return true;
 }
 
 /**
- * Use lube (consume some)
+ * Use lube from a specific body part (consume some)
+ * @param {Object} npc - The NPC
+ * @param {string} bodyPart - The body part (vagina, anus, mouth, general)
+ * @param {number} amount - Amount of lube to use (default: 10)
  */
-function useLube(npc, amount = 10) {
-    if (!npc || !npc.intimacy || !npc.intimacy.hasLube) return false;
+function useLube(npc, bodyPart = "general", amount = 10) {
+    if (!npc || !npc.intimacy || !npc.intimacy.lube) return false;
     
+    const part = npc.intimacy.lube[bodyPart];
+    if (!part || !part.hasLube) return false;
+    
+    part.level = Math.max(0, part.level - amount);
+    
+    if (part.level <= 0) {
+        part.hasLube = false;
+    }
+    
+    // Update legacy global lube
     npc.intimacy.lubeLevel = Math.max(0, npc.intimacy.lubeLevel - amount);
-    
     if (npc.intimacy.lubeLevel <= 0) {
         npc.intimacy.hasLube = false;
     }
     
-    console.log(`[Intimacy] Used lube. Level: ${npc.intimacy.lubeLevel}`);
+    console.log(`[Intimacy] Used lube from ${bodyPart}. Level: ${part.level}`);
     return true;
 }
 
 /**
- * Check if lube is available
+ * Check if lube is available for a specific body part
+ * @param {Object} npc - The NPC
+ * @param {string} bodyPart - The body part (vagina, anus, mouth, general, or any)
  */
-function hasLube(npc) {
-    return npc && npc.intimacy && npc.intimacy.hasLube && npc.intimacy.lubeLevel > 0;
+function hasLube(npc, bodyPart = "any") {
+    if (!npc || !npc.intimacy) return false;
+    
+    // Check specific body part
+    if (bodyPart !== "any" && bodyPart !== "general") {
+        const part = npc.intimacy.lube && npc.intimacy.lube[bodyPart];
+        if (part) {
+            return part.hasLube && part.level > 0;
+        }
+        return false;
+    }
+    
+    // Legacy global check
+    if (npc.intimacy.hasLube && npc.intimacy.lubeLevel > 0) {
+        return true;
+    }
+    
+    // Check any part has lube
+    if (npc.intimacy.lube) {
+        for (const partName in npc.intimacy.lube) {
+            const part = npc.intimacy.lube[partName];
+            if (part.hasLube && part.level > 0) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
 }
 
 // ============================================================================
@@ -1871,10 +2567,17 @@ if (typeof module !== 'undefined' && module.exports) {
         addLube,
         useLube,
         hasLube,
+        handleLubeFromAction,
         
         // Position
         changePosition,
-        getSuggestedPositions
+        getSuggestedPositions,
+        
+        // Narrative
+        buildIntimacyResponse,
+        getPossessivePronoun,
+        getSubjectPronoun,
+        getObjectPronoun
     };
 }
 
@@ -1891,4 +2594,8 @@ if (typeof window !== 'undefined') {
     window.generateAllActionsWithStatus = generateAllActionsWithStatus;
     window.applyStageFilteringToSingleAction = applyStageFilteringToSingleAction;
     window.getDisabledHintText = getDisabledHintText;
+    window.buildIntimacyResponse = buildIntimacyResponse;
+    window.getPossessivePronoun = getPossessivePronoun;
+    window.getSubjectPronoun = getSubjectPronoun;
+    window.getObjectPronoun = getObjectPronoun;
 }
