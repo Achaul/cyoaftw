@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-16-010";
-    console.log("[Intimacy System] Loaded v2026-08-16-010 - Lube mechanics + context-aware climax + CoT-style narrative");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-17-012";
+    console.log("[Intimacy System] Loaded v2026-08-17-012 - Object-perspective dialogue tags + possessive pronouns + grammar fixes + CoT-style responses");
 }
 
 // ============================================================================
@@ -1938,6 +1938,7 @@ var BODY_PART_REACTIONS = {
  * - NPC anatomy and traits
  * - Current arousal level
  * - Action type and target
+ * - Dialogue tags from action definition
  * - Personality context
  */
 function buildIntimacyResponse(npc, player, act, intimacy) {
@@ -1975,19 +1976,23 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
         }
     }
     
+    // Get dialogue tags from action (CoT-style)
+    // Priority: objectDialogueTags (object perspective) > dialogueTags > tags
+    const dialogueTags = act.objectDialogueTags || act.dialogueTags || act.tags || [];
+    
     // Build response based on action type
     switch (act.type) {
         case ACT_TYPES.TEASE:
-            return buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction);
+            return buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, dialogueTags);
             
         case ACT_TYPES.PENETRATE:
-            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, "enter");
+            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, "enter", dialogueTags);
             
         case ACT_TYPES.CONTINUE:
-            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, "continue");
+            return buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, "continue", dialogueTags);
             
         case ACT_TYPES.IMPACT:
-            return buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction);
+            return buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, dialogueTags);
             
         case ACT_TYPES.END:
             return pickRandom([
@@ -1998,7 +2003,7 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
             ]);
             
         default:
-            return buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, reaction);
+            return buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, reaction, dialogueTags);
     }
 }
 
@@ -2006,8 +2011,9 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
  * Build response for tease actions
  * Note: Don't include subject pronoun - it's added by formatIntimacyNPCResponse
  * Note: Don't repeat the action - just describe the NPC's reaction
+ * Now uses CoT-style dialogue tags for verbal responses
  */
-function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction) {
+function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, dialogueTags = []) {
     const verb = act.verb || "touch";
     const tool = act.tool || "hand";
     const target = act.target || "body";
@@ -2018,29 +2024,52 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
     const vocalization = getVocalization(arousalLevel);
     const pleasureIntensity = getPleasureIntensity(arousalLevel);
     
+    // Get dialogue from tags (CoT-style) - 35% chance of verbal response
+    let dialogueLine = null;
+    if (Math.random() < 0.35 && dialogueTags && dialogueTags.length > 0) {
+        dialogueLine = getDialogueFromTags(dialogueTags, arousalLevel, npc);
+    }
+    
     // Select a response template - just the reaction, no action repetition
     // These will be processed by formatIntimacyNPCResponse which adds subject pronoun
+    // Fixed: Removed duplicate combinations like "trembles with pleasure with pleasure"
     const templates = [
         `${reaction} at your touch.`,
         `${reaction}, ${tempDesc}.`,
         `${reaction} at the sensation.`,
         `lets out a ${vocalization}.`,
+        `lets out a ${vocalization} of pleasure.`,
         `shivers ${intensity}.`,
-        `${reaction} ${pleasureIntensity}.`,
+        `${reaction} with ${pleasureIntensity}.`,
         `${reaction} softly.`,
-        `${reaction} with pleasure.`,
-        `${reaction}.`,
+        `${reaction} with obvious pleasure.`,
+        `${reaction}, ${tempDesc}.`,
         `${reaction}, breathing ${intensity}.`,
-        `${reaction}, ${pleasureIntensity}.`
+        `${reaction}, ${pleasureIntensity}.`,
+        `${reaction} and bites ${possessivePronoun} lip.`,
+        `${reaction} and arches ${possessivePronoun} back.`
     ];
     
-    return pickRandom(templates);
+    let response = pickRandom(templates);
+    
+    // Add verbal dialog from tags (CoT-style)
+    if (dialogueLine) {
+        // 60% chance to replace with dialogue, 40% to append
+        if (Math.random() < 0.6) {
+            response = `says "${dialogueLine}"`;
+        } else {
+            response = `${response} "${dialogueLine}"`;
+        }
+    }
+    
+    return response;
 }
 
 /**
  * Build response for penetration actions
+ * Now uses CoT-style dialogue tags for verbal responses
  */
-function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, phase) {
+function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, phase, dialogueTags = []) {
     const verb = act.verb || "enter";
     const tool = act.tool || "penis";
     const target = act.target || "vagina";
@@ -2048,6 +2077,12 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     // Get more descriptive vocabulary based on arousal
     const vocalization = getVocalization(arousalLevel);
     const pleasureIntensity = getPleasureIntensity(arousalLevel);
+    
+    // Get dialogue from tags (CoT-style) - 50% chance for penetration
+    let dialogueLine = null;
+    if (Math.random() < 0.50 && dialogueTags && dialogueTags.length > 0) {
+        dialogueLine = getDialogueFromTags(dialogueTags, arousalLevel, npc);
+    }
     
     const templates = {
         enter: [
@@ -2069,48 +2104,160 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
         ]
     };
     
-    return pickRandom(templates[phase] || templates.enter);
+    let response = pickRandom(templates[phase] || templates.enter);
+    
+    // Add verbal dialog from tags (CoT-style)
+    if (dialogueLine) {
+        // Only add if not already a verbal response
+        if (!response.includes('"')) {
+            if (Math.random() < 0.5) {
+                response = `${response} "${dialogueLine}"`;
+            }
+        }
+    }
+    
+    return response;
 }
 
 /**
  * Build response for impact actions
+ * Now uses CoT-style dialogue tags for verbal responses
  */
-function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction) {
+function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, dialogueTags = []) {
     const verb = act.verb || "touch";
+    const vocalization = getVocalization(arousalLevel);
+    
+    // Get dialogue from tags (CoT-style) - 25% chance for impact
+    let dialogueLine = null;
+    if (Math.random() < 0.25 && dialogueTags && dialogueTags.length > 0) {
+        dialogueLine = getDialogueFromTags(dialogueTags, arousalLevel, npc);
+    }
     
     const templates = [
         `yelps at the sudden contact.`,
-        `gasps.`,
+        `gasps in surprise.`,
         `reacts with a soft cry.`,
         `${reaction} at the impact.`,
-        `tenses then relaxes into the sensation.`
+        `tenses then relaxes into the sensation.`,
+        `lets out a sharp ${vocalization}.`,
+        `jumps slightly at the contact.`
     ];
     
-    return pickRandom(templates);
+    let response = pickRandom(templates);
+    
+    // Add verbal dialog from tags (CoT-style)
+    if (dialogueLine && !response.includes('"')) {
+        if (Math.random() < 0.5) {
+            response = `${response} "${dialogueLine}"`;
+        }
+    }
+    
+    return response;
 }
 
 /**
  * Build generic response
+ * Now uses CoT-style dialogue tags for verbal responses
  */
-function buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, reaction) {
+function buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, reaction, dialogueTags = []) {
+    const vocalization = getVocalization(arousalLevel);
+    const tempDesc = getTemperatureDescriptor(arousalLevel);
+    
+    // Get dialogue from tags (CoT-style) - 20% chance
+    let dialogueLine = null;
+    if (Math.random() < 0.20 && dialogueTags && dialogueTags.length > 0) {
+        dialogueLine = getDialogueFromTags(dialogueTags, arousalLevel, npc);
+    }
+    
     const templates = [
         `${reaction}.`,
         `${reaction} with pleasure.`,
-        `${reaction} enthusiastically.`
+        `${reaction} enthusiastically.`,
+        `${reaction}, ${tempDesc}.`,
+        `lets out a ${vocalization}.`
     ];
     
-    return pickRandom(templates);
+    let response = pickRandom(templates);
+    
+    // Add verbal dialog from tags (CoT-style)
+    if (dialogueLine) {
+        if (Math.random() < 0.5) {
+            response = `says "${dialogueLine}"`;
+        } else {
+            response = `${response} "${dialogueLine}"`;
+        }
+    }
+    
+    return response;
+}
+
+/**
+ * Verbal dialog lines for CoT-style responses
+ * These are occasional spoken interjections based on arousal and personality
+ */
+var VERBAL_DIALOG = {
+    low: [
+        "That feels nice",
+        "Mmm, that's good",
+        "You're gentle",
+        "Keep going",
+        "Don't stop"
+    ],
+    mild: [
+        "Yes, just like that",
+        "That feels amazing",
+        "You're so good at this",
+        "More, please",
+        "I love that",
+        "Right there"
+    ],
+    moderate: [
+        "Oh yes, that's perfect",
+        "I need more",
+        "Please don't stop",
+        "You're making me feel so good",
+        "Harder, yes",
+        "Just like that"
+    ],
+    high: [
+        "Yes! Yes! Just like that!",
+        "I'm so close",
+        "Please, I need more",
+        "You're incredible",
+        "Fuck, that's good",
+        "I can't take much more"
+    ],
+    intense: [
+        "YES! FUCK YES!",
+        "I'm going to cum!",
+        "Please, make me cum",
+        "Fuck me harder!",
+        "Don't you dare stop!",
+        "I'm yours, all yours"
+    ]
+};
+
+/**
+ * Get verbal dialog based on arousal level
+ */
+function getVerbalDialog(arousalLevel) {
+    if (arousalLevel < 20) return pickRandom(VERBAL_DIALOG.low);
+    if (arousalLevel < 40) return pickRandom(VERBAL_DIALOG.mild);
+    if (arousalLevel < 60) return pickRandom(VERBAL_DIALOG.moderate);
+    if (arousalLevel < 80) return pickRandom(VERBAL_DIALOG.high);
+    return pickRandom(VERBAL_DIALOG.intense);
 }
 
 /**
  * Get vocalization based on arousal level
+ * Fixed grammar issues (e.g., "a loud moans" -> "a loud moan")
  */
 function getVocalization(arousalLevel) {
     if (arousalLevel < 20) return pickRandom(["sigh", "soft sound", "murmur"]);
     if (arousalLevel < 40) return pickRandom(["soft moan", "sigh of pleasure", "murmur"]);
-    if (arousalLevel < 60) return pickRandom(["moan", "gasps", "sighs with pleasure"]);
+    if (arousalLevel < 60) return pickRandom(["moan", "gasps", "sigh of pleasure"]);
     if (arousalLevel < 80) return pickRandom(["loud moan", "gasps of pleasure", "whimpers"]);
-    return pickRandom(["loud moans", "cries of pleasure", "passionate gasps", "desperate whimpers"]);
+    return pickRandom(["loud moan", "cries of pleasure", "passionate gasps", "desperate whimpers"]);
 }
 
 /**
@@ -2133,6 +2280,155 @@ function getTemperatureDescriptor(arousalLevel) {
     if (arousalLevel < 60) return pickRandom(["hot", "flushed with arousal", "heated with desire"]);
     if (arousalLevel < 80) return pickRandom(["very hot", "burning with desire", "dripping with arousal"]);
     return pickRandom(["scalding hot", "feverish with need", "on fire with passion"]);
+}
+
+// ============================================================================
+// COT-STYLE DIALOGUE TAG SYSTEM
+// ============================================================================
+
+/**
+ * Dialogue database organized by OBJECT-PERSPECTIVE tags (like CoT)
+ * These are what the NPC (receiver/object) would say
+ * Each tag has dialogue lines at different arousal levels
+ * Structure: { tag: { low: [...], mild: [...], moderate: [...], high: [...], intense: [...] } }
+ */
+var DIALOGUE_DATABASE = {
+    // ==== KISSING (NPC being kissed) ====
+    "being kissed": {
+        low: ["That feels nice", "Mmm", "Nice"],
+        mild: ["That's nice", "I like that", "Kiss me more"],
+        moderate: ["Yes, just like that", "Kiss me deeper", "Don't stop"],
+        high: ["Fuck, that's good", "I need more of that", "Please don't stop"],
+        intense: ["YES! More!", "I need you so much", "Please, kiss me harder"]
+    },
+    
+    // ==== FACE/HAIR (NPC being touched) ====
+    "being caressed": {
+        low: ["That feels nice", "Mmm", "Gentle"],
+        mild: ["That's nice", "I like that", "Touch me more"],
+        moderate: ["Yes, just like that", "Caress me", "Don't stop"],
+        high: ["Fuck, that's good", "I need more", "Please, continue"],
+        intense: ["YES! More!", "I need that", "Don't stop"]
+    },
+    "hair stroked": {
+        low: ["That feels nice", "Mmm", "Nice"],
+        mild: ["That's relaxing", "I like that", "More, please"],
+        moderate: ["Yes, just like that", "Stroke my hair", "Don't stop"],
+        high: ["Fuck, that's good", "I need more", "Yes, please"],
+        intense: ["YES! More!", "That feels amazing", "Don't stop"]
+    },
+    
+    // ==== BREASTS (NPC's breasts being touched) ====
+    "breasts groped": {
+        low: ["That feels good", "Mmm", "Gentle"],
+        mild: ["Yes, like that", "Squeeze them", "More pressure"],
+        moderate: ["Harder, please", "I love that", "Don't stop touching me there"],
+        high: ["Fuck yes!", "Pinch them harder", "I need more"],
+        intense: ["YES! Play with them!", "Harder! Please!", "I'm so close"]
+    },
+    "breasts touched": {
+        low: ["That feels nice", "Mmm", "Gentle touch"],
+        mild: ["Yes, that's good", "I like that", "More, please"],
+        moderate: ["Oh yes, just like that", "Squeeze them harder", "Don't stop"],
+        high: ["Fuck, that's incredible", "I need more", "Yes, yes, yes!"],
+        intense: ["YES! More! Fuck yes!", "I'm going to cum if you keep doing that", "Don't you dare stop"]
+    },
+    
+    // ==== PUSSY/VAGINA (NPC's pussy being stimulated) ====
+    "pussy kissed": {
+        low: ["That feels nice", "Mmm", "Gentle"],
+        mild: ["That's the spot", "Yes, right there", "More, please"],
+        moderate: ["Oh yes, just like that", "Touch me there", "Don't stop"],
+        high: ["Fuck, that's good", "I need more", "Please, keep going"],
+        intense: ["YES! Right there!", "I'm going to cum", "Fuck me, please!"]
+    },
+    "pussy licked": {
+        low: ["That feels nice", "Mmm", "Gentle"],
+        mild: ["That's amazing", "Yes, right there", "More, please"],
+        moderate: ["Oh yes, lick me there", "Don't stop", "That's perfect"],
+        high: ["Fuck, that's incredible", "I need more", "Yes, just like that"],
+        intense: ["YES! LICK ME HARDER!", "I'm going to cum", "Don't stop, please!"]
+    },
+    "pussy fingered": {
+        low: ["That feels nice", "Mmm", "Gentle"],
+        mild: ["Yes, just like that", "Deeper, please", "More fingers"],
+        moderate: ["Oh yes, fuck me with your fingers", "Harder", "Don't stop"],
+        high: ["Fuck yes! Deeper!", "I need more", "Fuck me with your hand"],
+        intense: ["YES! FUCK ME!", "I'm cumming!", "Don't stop, I'm so close"]
+    },
+    "pussy rubbed": {
+        low: ["That feels nice", "Mmm", "Gentle"],
+        mild: ["Yes, right there", "Grind harder", "More pressure"],
+        moderate: ["Oh yes, just like that", "Rub me there", "Don't stop"],
+        high: ["Fuck, that's good", "I need more", "Yes, please"],
+        intense: ["YES! RIGHT THERE!", "I'm going to cum", "Harder, please!"]
+    },
+    "pussy penetrated": {
+        low: ["You're inside me", "Mmm", "Yes"],
+        mild: ["That feels amazing", "Yes, just like that", "More, please"],
+        moderate: ["Oh yes! Fuck me", "Deeper, please", "Harder"],
+        high: ["FUCK YES! Fuck me harder", "I need more", "Don't stop"],
+        intense: ["YES! FUCK ME HARDER!", "I'm cumming! FUCK YES!", "Please, fuck me, don't stop"]
+    },
+    
+    // ==== COCK/PENIS (NPC's cock being stimulated) ====
+    "cock in pussy": {
+        low: ["That feels nice", "Mmm", "Gentle"],
+        mild: ["Yes, just like that", "Hump me", "More, please"],
+        moderate: ["Oh yes, right there", "Take my cock", "Don't stop"],
+        high: ["Fuck yes! Take it all", "I need more", "Yes, just like that"],
+        intense: ["YES! FUCK ME!", "I'm going to cum", "Don't stop, please!"]
+    },
+    
+    // ==== MOUTH (NPC's mouth being used) ====
+    "cock in mouth": {
+        low: ["Mmm", "That's nice", "Yes"],
+        mild: ["That feels good", "Yes, just like that", "More, please"],
+        moderate: ["Oh yes, fuck my mouth", "Deeper, please", "Don't stop"],
+        high: ["FUCK YES! Fuck my mouth harder", "I need more", "Take my throat"],
+        intense: ["YES! FUCK MY MOUTH!", "I'm cumming! FUCK YES!", "Don't stop, please"]
+    },
+    
+    // ==== GENERIC ====
+    "general": {
+        low: ["That feels nice", "Mmm", "Good"],
+        mild: ["Yes, just like that", "I like that", "More, please"],
+        moderate: ["Oh yes, that's perfect", "Don't stop", "Right there"],
+        high: ["Fuck, that's good", "I need more", "Please, continue"],
+        intense: ["YES! More!", "Don't stop", "I'm so close"]
+    }
+};
+
+/**
+ * Get dialogue line based on tags and arousal level
+ * Mimics CoT's system: action has dialogue tags -> lookup in database -> select based on arousal
+ */
+function getDialogueFromTags(tags, arousalLevel, npc) {
+    if (!tags || tags.length === 0) return null;
+    
+    // Try each tag in order, pick first one that exists in database
+    for (const tag of tags) {
+        const tagDialogue = DIALOGUE_DATABASE[tag];
+        if (tagDialogue) {
+            // Get arousal-based lines
+            if (arousalLevel < 20 && tagDialogue.low) {
+                return pickRandom(tagDialogue.low);
+            } else if (arousalLevel < 40 && tagDialogue.mild) {
+                return pickRandom(tagDialogue.mild);
+            } else if (arousalLevel < 60 && tagDialogue.moderate) {
+                return pickRandom(tagDialogue.moderate);
+            } else if (arousalLevel < 80 && tagDialogue.high) {
+                return pickRandom(tagDialogue.high);
+            } else if (tagDialogue.intense) {
+                return pickRandom(tagDialogue.intense);
+            }
+            // Fallback to any available
+            return pickRandom(Object.values(tagDialogue).flat());
+        }
+    }
+    
+    // Fallback to general dialogue
+    return getDialogueFromTags(["general"], arousalLevel, npc);
 }
 
 /**
