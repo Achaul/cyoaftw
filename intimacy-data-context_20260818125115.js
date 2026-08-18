@@ -369,9 +369,11 @@ function getNaturalLabel(actId, npc, player) {
             const actForNatural = getAct(actId);
             if (actForNatural && actForNatural.target) {
                 // Create a temporary act with the natural label and the act's target
+                // Include playerIsBottom so receive actions are handled correctly
                 const tempAct = {
                     label: naturalLabel,
-                    target: actForNatural.target
+                    target: actForNatural.target,
+                    playerIsBottom: actForNatural.playerIsBottom
                 };
                 const genderedNatural = getGenderedLabel(tempAct, npc, player);
                 if (genderedNatural && genderedNatural !== naturalLabel) {

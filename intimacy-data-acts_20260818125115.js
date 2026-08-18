@@ -76,9 +76,14 @@ var PRONOUNS = {
 
 function getPronouns(gender) {
     const normalizedGender = String(gender || "").toLowerCase();
-    if (normalizedGender.includes("male") || normalizedGender.includes("man") || normalizedGender.includes("boy")) {
+    // Check male first with exact or prefix match to avoid "female" matching "male"
+    if (normalizedGender === "male" || normalizedGender === "m" || 
+        normalizedGender.includes(" man") || normalizedGender.includes(" boy") ||
+        normalizedGender.includes("male ") || normalizedGender.startsWith("male")) {
         return PRONOUNS.male;
-    } else if (normalizedGender.includes("female") || normalizedGender.includes("woman") || normalizedGender.includes("girl")) {
+    } else if (normalizedGender === "female" || normalizedGender === "f" || 
+               normalizedGender.includes(" woman") || normalizedGender.includes(" girl") ||
+               normalizedGender.includes("female ") || normalizedGender.startsWith("female")) {
         return PRONOUNS.female;
     }
     return PRONOUNS.other;
@@ -129,30 +134,60 @@ function getGenderedLabel(act, npc, player) {
     label = label.replace(/\{playerBalls\}/gi, playerPronouns.testicles);
     label = label.replace(/\{playerChest\}/gi, playerPronouns.chest);
     
+    // Replace body part placeholders (without npc/player prefix)
+    // These appear in NATURAL_LABELS like "Touch their {pussy}" or "Let them suck your {nipples}"
+    label = label.replace(/\{pussy\}/gi, npcPronouns.vaginal);
+    label = label.replace(/\{vagina\}/gi, npcPronouns.vaginal);
+    label = label.replace(/\{cock\}/gi, npcPronouns.penis);
+    label = label.replace(/\{penis\}/gi, npcPronouns.penis);
+    label = label.replace(/\{dick\}/gi, npcPronouns.penis);
+    label = label.replace(/\{balls\}/gi, npcPronouns.testicles);
+    label = label.replace(/\{testicles\}/gi, npcPronouns.testicles);
+    label = label.replace(/\{clit\}/gi, "clitoris");
+    label = label.replace(/\{clitoris\}/gi, "clitoris");
+    label = label.replace(/\{nipples\}/gi, "nipples");
+    label = label.replace(/\{anus\}/gi, "anus");
+    label = label.replace(/\{buttocks\}/gi, "buttocks");
+    label = label.replace(/\{butt\}/gi, "buttocks");
+    label = label.replace(/\{ass\}/gi, "ass");
+    label = label.replace(/\{chest\}/gi, npcPronouns.chest);
+    label = label.replace(/\{breasts\}/gi, "breasts");
+    label = label.replace(/\{groin\}/gi, "groin");
+    label = label.replace(/\{thighs\}/gi, "thighs");
+    label = label.replace(/\{thigh\}/gi, "thigh");
+    label = label.replace(/\{stomach\}/gi, "stomach");
+    label = label.replace(/\{hips\}/gi, "hips");
+    label = label.replace(/\{waist\}/gi, "waist");
+    
     // Auto-add possessive pronoun to body parts if not already present
     // Pattern: Verb + body part (e.g., "Kiss lips", "Caress face")
     // This handles cases where labels are just verb+noun without possessive
-    if (act.target) {
+    // SKIP for receive actions (playerIsBottom = true) which use "your" perspective
+    // Also skip if label already contains possessive pronouns or "your"
+    if (act.target && !act.playerIsBottom) {
         const targetLower = act.target.toLowerCase();
         if (BODY_PARTS_REQUIRING_POSSESSIVE.includes(targetLower)) {
             // Check if label is just verb + target (e.g., "Kiss lips")
             const labelLower = label.toLowerCase();
             const targetWord = targetLower;
             
-            // Pattern: label ends with the target word
-            // and doesn't already have a possessive pronoun before it
-            const targetRegex = new RegExp(`(^|\\s)${targetWord}$`);
-            if (targetRegex.test(labelLower) && 
-                !labelLower.includes("her ") && 
-                !labelLower.includes("his ") && 
-                !labelLower.includes("their ") &&
-                !labelLower.includes("'s ")) {
-                
-                // Add possessive pronoun before the target
-                label = label.replace(
-                    new RegExp(`(${targetWord})$`, 'i'),
-                    `${npcPronouns.possessive} $1`
-                );
+            // Skip if label already has any possessive form (including "your" for receive actions)
+            const hasPossessive = labelLower.includes("her ") || 
+                                 labelLower.includes("his ") || 
+                                 labelLower.includes("their ") ||
+                                 labelLower.includes("your ") ||
+                                 labelLower.includes("'s ");
+            
+            if (!hasPossessive) {
+                // Pattern: label ends with the target word
+                const targetRegex = new RegExp(`(^|\\s)${targetWord}$`);
+                if (targetRegex.test(labelLower)) {
+                    // Add possessive pronoun before the target
+                    label = label.replace(
+                        new RegExp(`(${targetWord})$`, 'i'),
+                        `${npcPronouns.possessive} $1`
+                    );
+                }
             }
         }
     }

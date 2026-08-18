@@ -77,10 +77,15 @@ function getPossessivePronoun(npc) {
     if (!npc) return "their";
     
     const gender = (npc.gender || "").toLowerCase();
-    if (gender === "female" || gender === "f" || gender.includes("woman") || gender.includes("girl")) {
+    // Check female first with exact or prefix match to avoid "male" matching "female"
+    if (gender === "female" || gender === "f" || 
+        gender.includes(" woman") || gender.includes(" girl") ||
+        gender.includes("female ") || gender.startsWith("female")) {
         return "her";
     }
-    if (gender === "male" || gender === "m" || gender.includes("man") || gender.includes("boy")) {
+    if (gender === "male" || gender === "m" || 
+        gender.includes(" man") || gender.includes(" boy") ||
+        gender.includes("male ") || gender.startsWith("male")) {
         return "his";
     }
     return "their";
@@ -94,10 +99,15 @@ function getSubjectPronoun(npc) {
     if (!npc) return "They";
     
     const gender = (npc.gender || "").toLowerCase();
-    if (gender === "female" || gender === "f" || gender.includes("woman") || gender.includes("girl")) {
+    // Check female first with exact or prefix match to avoid "male" matching "female"
+    if (gender === "female" || gender === "f" || 
+        gender.includes(" woman") || gender.includes(" girl") ||
+        gender.includes("female ") || gender.startsWith("female")) {
         return "She";
     }
-    if (gender === "male" || gender === "m" || gender.includes("man") || gender.includes("boy")) {
+    if (gender === "male" || gender === "m" || 
+        gender.includes(" man") || gender.includes(" boy") ||
+        gender.includes("male ") || gender.startsWith("male")) {
         return "He";
     }
     return "They";
