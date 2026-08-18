@@ -213,12 +213,12 @@ function canPenetrate(room, targetNpc, npc) {
 
 var NATURAL_LABELS = {
     // Stage 1: Social/Clothed
-    kiss_lips: "Kiss their lips",
-    kiss_cheek: "Kiss their cheek",
-    kiss_neck: "Kiss their neck",
-    caress_face: "Caress their face",
-    stroke_hair: "Stroke their hair",
-    hold_hand: "Hold their hand",
+    kiss_lips: "Kiss lips",
+    kiss_cheek: "Kiss cheek",
+    kiss_neck: "Kiss neck",
+    caress_face: "Caress face",
+    stroke_hair: "Stroke hair",
+    hold_hand: "Hold hand",
     hug: "Hug their body",
     embrace: "Embrace their body",
     
@@ -353,11 +353,29 @@ function getNaturalLabel(actId, npc, player) {
     if (NATURAL_LABELS[actId]) {
         // If gendered label function exists and we have npc/player info, try to apply gender
         if (typeof getGenderedLabel === 'function' && npc && player) {
+            // Create a mock act object with the NATURAL_LABEL as the label
+            // This allows getGenderedLabel to properly add possessive pronouns
+            const naturalLabel = NATURAL_LABELS[actId];
             const act = getAct(actId);
-            if (act && act.label) {
+            if (act) {
+                // Try to get gendered version using the act's target info
                 const gendered = getGenderedLabel(act, npc, player);
                 if (gendered && gendered !== act.label) {
                     return gendered;
+                }
+            }
+            // If act-based gendering didn't work or act not found,
+            // try to gender the natural label directly by finding the target
+            const actForNatural = getAct(actId);
+            if (actForNatural && actForNatural.target) {
+                // Create a temporary act with the natural label and the act's target
+                const tempAct = {
+                    label: naturalLabel,
+                    target: actForNatural.target
+                };
+                const genderedNatural = getGenderedLabel(tempAct, npc, player);
+                if (genderedNatural && genderedNatural !== naturalLabel) {
+                    return genderedNatural;
                 }
             }
         }
