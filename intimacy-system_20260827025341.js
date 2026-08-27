@@ -3353,12 +3353,13 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
         : "";
     
     // Build descriptions with more sensual, anatomical language
+    // Avoid "of her body" which sounds awkward in action narratives
     return pickRandom([
         `${posPronoun} ${sizeAdj} ${anusTerms}`,
         `the ${sphincterDesc} ${anusTerms}`,
         `${posPronoun} ${pigmentDesc}${sizeAdj} ${anusTerms}`,
         `the ${sphincterDesc} ${pigmentDesc}${anusTerms}`,
-        `${pigmentDesc}the ${sizeAdj} ${anusTerms} of ${posPronoun} body`,
+        `${posPronoun} ${pigmentDesc}${sizeAdj} ${anusTerms}`,
         `${posPronoun} ${engorgement || state || sizeAdj} ${anusTerms}`
     ]).replace(/  /g, ' '); // Remove double spaces
 }
@@ -3753,43 +3754,43 @@ function buildActionNarratives(npc, actionId, act, context) {
         case "pussy":
         case "clitoris":
         case "clit":
-            narratives.push(...buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            narratives.push(...buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
             break;
             
         case "penis":
         case "cock":
         case "dick":
-            narratives.push(...buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            narratives.push(...buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
             break;
             
         case "testicles":
         case "balls":
-            narratives.push(...buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            narratives.push(...buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
             break;
             
         case "breasts":
         case "nipples":
-            narratives.push(...buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            narratives.push(...buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
             break;
             
         case "anus":
-            narratives.push(...buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            narratives.push(...buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
             break;
             
         case "butt":
         case "buttocks":
         case "ass":
-            narratives.push(...buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            narratives.push(...buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
             break;
             
         case "mouth":
         case "lips":
-            narratives.push(...buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            narratives.push(...buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
             break;
             
         case "thighs":
         case "thigh":
-            narratives.push(...buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            narratives.push(...buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
             break;
             
         default:
@@ -3809,30 +3810,32 @@ function buildActionNarratives(npc, actionId, act, context) {
  */
 function verbConjugation(verb, form) {
     const irregulars = {
-        touch: { present: "touch", ing: "touching" },
-        kiss: { present: "kiss", ing: "kissing" },
-        lick: { present: "lick", ing: "licking" },
-        suck: { present: "suck", ing: "sucking" },
-        stroke: { present: "stroke", ing: "stroking" },
-        rub: { present: "rub", ing: "rubbing" },
-        squeeze: { present: "squeeze", ing: "squeezing" },
-        tease: { present: "tease", ing: "teasing" },
-        grope: { present: "grope", ing: "groping" },
-        finger: { present: "finger", ing: "fingering" },
-        fuck: { present: "fuck", ing: "fucking" },
-        thrust: { present: "thrust", ing: "thrusting" },
-        enter: { present: "enter", ing: "entering" },
-        penetrate: { present: "penetrate", ing: "penetrating" },
-        caress: { present: "caress", ing: "caressing" },
-        massage: { present: "massage", ing: "massaging" },
-        pinch: { present: "pinch", ing: "pinching" },
-        spread: { present: "spread", ing: "spreading" },
-        press: { present: "press", ing: "pressing" },
-        grind: { present: "grind", ing: "grinding" },
-        bite: { present: "bite", ing: "biting" },
-        nibble: { present: "nibble", ing: "nibbling" },
-        flick: { present: "flick", ing: "flicking" },
-        slap: { present: "slap", ing: "slapping" }
+        touch: { present: "touch", ing: "touching", third: "touches" },
+        kiss: { present: "kiss", ing: "kissing", third: "kisses" },
+        lick: { present: "lick", ing: "licking", third: "licks" },
+        suck: { present: "suck", ing: "sucking", third: "sucks" },
+        stroke: { present: "stroke", ing: "stroking", third: "strokes" },
+        rub: { present: "rub", ing: "rubbing", third: "rubs" },
+        squeeze: { present: "squeeze", ing: "squeezing", third: "squeezes" },
+        tease: { present: "tease", ing: "teasing", third: "teases" },
+        grope: { present: "grope", ing: "groping", third: "gropes" },
+        finger: { present: "finger", ing: "fingering", third: "fingers" },
+        fuck: { present: "fuck", ing: "fucking", third: "fucks" },
+        thrust: { present: "thrust", ing: "thrusting", third: "thrusts" },
+        enter: { present: "enter", ing: "entering", third: "enters" },
+        penetrate: { present: "penetrate", ing: "penetrating", third: "penetrates" },
+        caress: { present: "caress", ing: "caressing", third: "caresses" },
+        massage: { present: "massage", ing: "massaging", third: "massages" },
+        pinch: { present: "pinch", ing: "pinching", third: "pinches" },
+        spread: { present: "spread", ing: "spreading", third: "spreads" },
+        press: { present: "press", ing: "pressing", third: "presses" },
+        grind: { present: "grind", ing: "grinding", third: "grinds" },
+        bite: { present: "bite", ing: "biting", third: "bites" },
+        nibble: { present: "nibble", ing: "nibbling", third: "nibbles" },
+        flick: { present: "flick", ing: "flicking", third: "flicks" },
+        slap: { present: "slap", ing: "slapping", third: "slaps" },
+        rim: { present: "rim", ing: "rimming", third: "rims" },
+        circle: { present: "circle", ing: "circling", third: "circles" }
     };
     
     const conjugated = irregulars[verb.toLowerCase()];
@@ -3847,48 +3850,146 @@ function verbConjugation(verb, form) {
         if (verb.match(/[^aeiou]e$/)) return verb + 'ing';
         return verb + 'ing';
     }
+    if (form === 'third') {
+        // Third person singular: add 's' or 'es' as appropriate
+        if (verb.endsWith('s') || verb.endsWith('sh') || verb.endsWith('ch') || verb.endsWith('x') || verb.endsWith('z') || verb.endsWith('o')) {
+            return verb + 'es';
+        }
+        if (verb.endsWith('y') && !['a', 'e', 'i', 'o', 'u'].includes(verb.charAt(verb.length - 2))) {
+            return verb.slice(0, -1) + 'ies';
+        }
+        return verb + 's';
+    }
     return verb;
 }
 
 /**
  * Build vagina/pussy action narratives
  */
-function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
-    const { arousalLevel = 0 } = context;
+function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
+    const { arousalLevel = 0, player = null } = context;
+    const { tool = null } = act;
     const highArousal = arousalLevel > 70;
     const mediumArousal = arousalLevel > 40;
     
-    return [
-        // Gentle touching
-        `You ${verbPresent} ${anatomyDesc}.`,
-        `Your fingers ${verbPresent} ${anatomyDesc}.`,
+    // Get player gender for tool-specific narratives
+    const playerGender = player ? (player.gender || "").toLowerCase() : "male";
+    const playerHasPenis = player && player.anatomy && (player.anatomy.penis || player.anatomy.cock);
+    const playerHasVagina = player && player.anatomy && (player.anatomy.vagina || player.anatomy.pussy);
+    
+    // Helper to extract just the vagina part (without pubic hair prefix)
+    // This handles various formats from describeVagina:
+    // - "through a wild tangle of jet black pubic hair to her glistening plump vagina" → "her glistening plump vagina"
+    // - "a wild tangle of jet black pubic hair, parting to reveal her glistening plump vagina" → "her glistening plump vagina"
+    // - "her glistening plump vagina, framed by a wild tangle of jet black pubic hair" → "her glistening plump vagina"
+    // - "the plump labia of her vagina" → "the plump labia of her vagina"
+    const getVaginaOnlyDesc = () => {
+        // Try to extract what comes after "reveal" (for "X, parting to reveal Y" format)
+        // Check this first because "to reveal" could match the /to/ pattern
+        const revealMatch = anatomyDesc.match(/reveal\s+([^,.]+)/i);
+        if (revealMatch) return revealMatch[1];
         
-        // Spreading/parting
-        `You part ${posPronoun} ${getPubicDescription(npc)} and ${verbPresent} ${anatomyDesc.replace(/^through[^,]+,?/, '')}.`,
-        `Spreading ${posPronoun} legs, you ${verbPresent} ${anatomyDesc}.`,
+        // Try to extract what comes before "framed by" (for "X, framed by Y" format)
+        const framedMatch = anatomyDesc.match(/^([^,]+),\s*framed by/i);
+        if (framedMatch) return framedMatch[1];
         
-        // Licking specific
-        verbBase === 'lick' ? `Your tongue ${verbIng} ${anatomyDesc}, tasting ${posPronoun} ${highArousal ? 'sweet nectar' : 'warm essence'}.` : null,
-        verbBase === 'lick' ? `You trace your tongue along ${anatomyDesc}, savoring every ${highArousal ? 'dripping' : 'moist'} inch.` : null,
+        // Try to extract what comes after "to" (for "through X to Y" format)
+        // Only match if "to" is not followed by "reveal"
+        const toMatch = anatomyDesc.match(/to\s+([^,]+)/i);
+        if (toMatch && !anatomyDesc.includes('reveal')) return toMatch[1];
         
-        // Finger penetration
-        verbBase === 'finger' || verbBase === 'penetrate' ? `You ${verbPresent} ${posPronoun} ${anatomyDesc}, sliding deep into ${posPronoun} ${highArousal ? 'slick, welcoming' : 'warm, tight'} channel.` : null,
+        // If it starts with possessive pronoun, use as is
+        if (anatomyDesc.startsWith(posPronoun)) return anatomyDesc;
         
-        // Teasing
-        verbBase === 'tease' ? `You ${verbPresent} ${anatomyDesc}, drawing ${highArousal ? 'soft moans' : 'gentle gasps'} from ${posPronoun} lips.` : null,
-        
-        // Rubbing
-        verbBase === 'rub' ? `You ${verbPresent} ${anatomyDesc}, creating delicious friction against ${posPronoun} ${highArousal ? 'soaked' : 'dampening'} folds.` : null,
-        
-        // Generic but vivid
-        `You ${verbPresent} at ${anatomyDesc}, each ${verbBase} drawing a ${highArousal ? 'needful' : 'pleasured'} response.`
-    ].filter(Boolean);
+        // Otherwise use the full description
+        return anatomyDesc;
+    };
+    
+    // Get clean anatomy description (removes pubic hair prefix for general use)
+    const cleanAnatomyDesc = getVaginaOnlyDesc();
+    
+    const narratives = [];
+    const pubicDesc = getPubicDescription(npc);
+    
+    // Gentle touching
+    narratives.push(
+        `You ${verbPresent} ${cleanAnatomyDesc}.`,
+        `Your fingers ${verbPresent} ${cleanAnatomyDesc}.`
+    );
+    
+    // Spreading/parting - improved to avoid awkward phrasing
+    narratives.push(
+        `You part ${posPronoun} ${pubicDesc} and ${verbPresent} ${cleanAnatomyDesc}.`,
+        `You part ${posPronoun} ${pubicDesc}, ${verbPresent} ${cleanAnatomyDesc}.`
+    );
+    
+    // Licking specific
+    if (verbBase === 'lick') {
+        narratives.push(
+            `Your tongue ${verbIng} ${cleanAnatomyDesc}, tasting ${posPronoun} ${highArousal ? 'sweet nectar' : 'warm essence'}.`,
+            `You trace your tongue along ${cleanAnatomyDesc}, savoring every ${highArousal ? 'dripping' : 'moist'} inch.`
+        );
+    }
+    
+    // Finger penetration
+    if (verbBase === 'finger' || verbBase === 'penetrate') {
+        narratives.push(
+            `You ${verbPresent} ${posPronoun} ${cleanAnatomyDesc}, sliding deep into ${posPronoun} ${highArousal ? 'slick, welcoming' : 'warm, tight'} channel.`
+        );
+    }
+    
+    // Teasing
+    if (verbBase === 'tease') {
+        narratives.push(
+            `You ${verbPresent} ${cleanAnatomyDesc}, drawing ${highArousal ? 'soft moans' : 'gentle gasps'} from ${posPronoun} lips.`
+        );
+    }
+    
+    // Rubbing
+    if (verbBase === 'rub') {
+        narratives.push(
+            `You ${verbPresent} ${cleanAnatomyDesc}, creating delicious friction against ${posPronoun} ${highArousal ? 'soaked' : 'dampening'} folds.`
+        );
+    }
+    
+    // Press verb - gender and tool aware
+    if (verbBase === 'press') {
+        if (tool === 'penis' || tool === 'cock') {
+            // Player pressing their penis/cock against the NPC's vagina
+            const cockPart = pickRandom(['cockhead', 'cock', 'shaft', 'tip']);
+            narratives.push(
+                `You press your ${cockPart} against ${cleanAnatomyDesc}.`,
+                `You press your ${cockPart} to ${cleanAnatomyDesc}, feeling the ${highArousal ? 'hot, wet' : 'warm, welcoming'} flesh.`,
+                `Positioning yourself, you press your ${cockPart} against ${cleanAnatomyDesc}.`,
+                `You guide your ${cockPart} to ${cleanAnatomyDesc}, both of you ${highArousal ? 'aching with need' : 'eager for more'}.`
+            );
+        } else {
+            // Hand/fingers pressing
+            const handPart = pickRandom(['fingers', 'hand', 'palm', 'touch']);
+            if (handPart === 'touch') {
+                narratives.push(`You press your ${handPart} to ${cleanAnatomyDesc}.`);
+            } else {
+                narratives.push(
+                    `You press your ${handPart} against ${cleanAnatomyDesc}.`,
+                    `You press your ${handPart} to ${cleanAnatomyDesc}, feeling the ${highArousal ? 'dripping wet' : 'warm'} heat.`,
+                    `You apply gentle pressure with your ${handPart} to ${cleanAnatomyDesc}.`
+                );
+            }
+        }
+    }
+    
+    // Generic but vivid
+    narratives.push(
+        `You ${verbPresent} at ${cleanAnatomyDesc}, each ${verbBase} drawing a ${highArousal ? 'needful' : 'pleasured'} response.`
+    );
+    
+    return narratives.filter(Boolean);
 }
 
 /**
  * Build penis/cock action narratives
  */
-function buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+function buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
     const { arousalLevel = 0 } = context;
     const highArousal = arousalLevel > 70;
     
@@ -3905,7 +4006,7 @@ function buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
 /**
  * Build testicles action narratives
  */
-function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
     const { arousalLevel = 0 } = context;
     const highArousal = arousalLevel > 70;
     
@@ -3922,7 +4023,7 @@ function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDe
 /**
  * Build breast/nipple action narratives
  */
-function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
     const { arousalLevel = 0 } = context;
     const highArousal = arousalLevel > 70;
     
@@ -3940,17 +4041,18 @@ function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
 /**
  * Build anus action narratives
  */
-function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
     const { arousalLevel = 0 } = context;
     const highArousal = arousalLevel > 70;
+    const verbThird = verbConjugation(verbBase, 'third');
     
     return [
         `You ${verbPresent} ${anatomyDesc}.`,
-        `Your ${pickRandom(['finger', 'fingers', 'thumb', 'tongue'])} ${verbPresent} ${anatomyDesc}.`,
+        `Your ${pickRandom(['finger', 'fingers', 'thumb', 'tongue'])} ${verbThird} ${anatomyDesc}.`,
         verbBase === 'penetrate' || verbBase === 'finger' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'easily sliding into the relaxed opening' : 'gently pressing against the tight resistance'}.` : null,
         verbBase === 'tease' || verbBase === 'circle' ? `You ${verbPresent} ${anatomyDesc}, tracing the ${highArousal ? 'yielding' : 'tight'} rim.` : null,
         verbBase === 'spread' ? `You ${verbPresent} ${anatomyDesc}, exposing the ${highArousal ? 'glistening' : 'tight'} entrance.` : null,
-        verbBase === 'lick' ? `Your tongue ${verbIng} ${anatomyDesc}, ${highArousal ? 'preparing the way' : 'exploring the sensitive flesh'}.` : null,
+        verbBase === 'lick' ? `Your tongue ${verbThird} ${anatomyDesc}, ${highArousal ? 'preparing the way' : 'exploring the sensitive flesh'}.` : null,
         `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'pushing back against your touch' : 'tensing slightly'}.`
     ].filter(Boolean);
 }
@@ -3959,7 +4061,7 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
  * Build buttocks action narratives
  * For actions like spread, squeeze, grope, slap targeting buttocks/cheeks/ass
  */
-function buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+function buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
     const { arousalLevel = 0 } = context;
     const highArousal = arousalLevel > 70;
     
@@ -3995,7 +4097,7 @@ function buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc
 /**
  * Build mouth/lips action narratives
  */
-function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
     const { arousalLevel = 0 } = context;
     const highArousal = arousalLevel > 70;
     
@@ -4013,7 +4115,7 @@ function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
 /**
  * Build thighs action narratives
  */
-function buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+function buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
     const { arousalLevel = 0 } = context;
     const highArousal = arousalLevel > 70;
     
