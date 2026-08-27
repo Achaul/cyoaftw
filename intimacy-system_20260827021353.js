@@ -2966,7 +2966,12 @@ function describeAnatomy(npc, target, options = {}) {
     if (!npc || !target) return target;
     
     const { action, arousalLevel = 0, isAroused = false, isWet = false, isErect = false, possessivePronoun = null } = options;
-    const anatomy = npc.anatomy || {};
+    
+    // Get the anatomy object - check nsfwTraits first (sexual anatomy), then fallback to regular anatomy
+    const nsfwAnatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || {};
+    const regularAnatomy = npc.anatomy || {};
+    const anatomy = { ...regularAnatomy, ...nsfwAnatomy };
+    
     const gender = (npc.gender || "").toLowerCase();
     const isFemale = gender === "female" || gender.includes("female");
     const isMale = gender === "male" || gender.includes("male");
@@ -3337,7 +3342,10 @@ function enhanceActionLabel(npc, label, context = {}) {
     if (!npc || !label) return label;
     
     const { arousalLevel = 0, actionType, actId } = context;
-    const anatomy = npc.anatomy || {};
+    // Check nsfwTraits first (sexual anatomy), then fallback to regular anatomy
+    const nsfwAnatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || {};
+    const regularAnatomy = npc.anatomy || {};
+    const anatomy = { ...regularAnatomy, ...nsfwAnatomy };
     const gender = (npc.gender || "").toLowerCase();
     const isFemale = gender === "female" || gender.includes("female");
     
@@ -3531,7 +3539,8 @@ if (typeof module !== 'undefined' && module.exports) {
         buildAnusNarratives,
         buildMouthNarratives,
         buildThighNarratives,
-        getPubicDescription
+        getPubicDescription,
+        getMergedAnatomy
     };
 }
 
@@ -3860,7 +3869,10 @@ function buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
  * Get pubic hair description
  */
 function getPubicDescription(npc) {
-    const anatomy = npc.anatomy || {};
+    // Check nsfwTraits first (sexual anatomy), then fallback to regular anatomy
+    const nsfwAnatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || {};
+    const regularAnatomy = npc.anatomy || {};
+    const anatomy = { ...regularAnatomy, ...nsfwAnatomy };
     const pubicHair = anatomy.pubicHair || {};
     const hairColor = pubicHair.color || "dark";
     const hairStyle = pubicHair.style || "natural";
@@ -3890,6 +3902,16 @@ function getPubicDescription(npc) {
     const styleDesc = styleDescriptions[hairStyle] || hairStyle;
     
     return `${hairAdj} ${styleDesc}`;
+}
+
+/**
+ * Helper to get merged anatomy (regular + NSFW traits) for debugging/testing
+ */
+function getMergedAnatomy(npc) {
+    if (!npc) return {};
+    const nsfwAnatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || {};
+    const regularAnatomy = npc.anatomy || {};
+    return { ...regularAnatomy, ...nsfwAnatomy };
 }
 
 // ============================================================================
