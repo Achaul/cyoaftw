@@ -144,24 +144,24 @@ function getObjectPronoun(npc) {
 function getClothingStateForCharacter(character) {
     if (!character) return { top: true, bottom: true, undergarments: true };
     
-    // Default to clothed if we can't determine
+    // Default to clothed - most characters wear clothes by default
     const defaultState = { top: true, bottom: true, undergarments: true };
     
-    // If character has equipped items, check them
-    if (!character.equipped) return defaultState;
+    // If character has equipped items, use them to determine clothing state
+    if (character.equipped) {
+        // Map equipment slots to intimacy clothing
+        const hasTop = !!character.equipped.upper || !!character.equipped.head || !!character.equipped.chest;
+        const hasBottom = !!character.equipped.lower || !!character.equipped.feet || !!character.equipped.legs;
+        
+        return {
+            top: hasTop,
+            bottom: hasBottom,
+            undergarments: true  // Assume underwear is worn by default
+        };
+    }
     
-    // Map equipment slots to intimacy clothing
-    const hasTop = !!character.equipped.upper || !!character.equipped.head;
-    const hasBottom = !!character.equipped.lower || !!character.equipped.feet;
-    const hasUnderwear = false; // Underwear not tracked in equipment system
-    
-    // If we can't determine from equipment, assume clothed
-    // This handles cases where equipment system differs from intimacy system
-    return {
-        top: hasTop,
-        bottom: hasBottom,
-        undergarments: true  // Assume underwear is worn by default
-    };
+    // If no equipped property, assume fully clothed
+    return defaultState;
 }
 
 function initializeIntimacyState(npc) {
@@ -175,6 +175,26 @@ function initializeIntimacyState(npc) {
     const player = typeof G !== 'undefined' ? G.player : null;
     const playerClothing = getClothingStateForCharacter(player);
     const npcClothing = getClothingStateForCharacter(npc);
+    
+    // If intimacy state already exists, only update clothing if it's missing or invalid
+    if (npc.intimacy) {
+        // Check if clothing state exists and is valid
+        if (!npc.intimacy.clothing || 
+            !npc.intimacy.clothing.npc || 
+            !npc.intimacy.clothing.player) {
+            console.log(`[Intimacy] Fixing missing clothing state`);
+            npc.intimacy.clothing = {
+                player: playerClothing,
+                npc: npcClothing
+            };
+        } else {
+            // Clothing state exists, but log it for debugging
+            console.log(`[Intimacy] Clothing state already exists - NPC: ${JSON.stringify(npc.intimacy.clothing.npc)}, Player: ${JSON.stringify(npc.intimacy.clothing.player)}`);
+        }
+        return npc.intimacy;
+    }
+    
+    console.log(`[Intimacy] Initializing clothing state - NPC: ${JSON.stringify(npcClothing)}, Player: ${JSON.stringify(playerClothing)}`);
     
     npc.intimacy = {
         // Clothing state
