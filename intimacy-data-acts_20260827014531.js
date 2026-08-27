@@ -76,15 +76,15 @@ var PRONOUNS = {
 
 function getPronouns(gender) {
     const normalizedGender = String(gender || "").toLowerCase();
-    // Check male first with exact or prefix match to avoid "female" matching "male"
-    if (normalizedGender === "male" || normalizedGender === "m" || 
-        normalizedGender.includes(" man") || normalizedGender.includes(" boy") ||
-        normalizedGender.includes("male ") || normalizedGender.startsWith("male")) {
-        return PRONOUNS.male;
-    } else if (normalizedGender === "female" || normalizedGender === "f" || 
-               normalizedGender.includes(" woman") || normalizedGender.includes(" girl") ||
-               normalizedGender.includes("female ") || normalizedGender.startsWith("female")) {
+    // Check female first with exact or prefix match to avoid "male" matching before "female"
+    if (normalizedGender === "female" || normalizedGender === "f" || 
+        normalizedGender.includes(" woman") || normalizedGender.includes(" girl") ||
+        normalizedGender.includes("female ") || normalizedGender.startsWith("female")) {
         return PRONOUNS.female;
+    } else if (normalizedGender === "male" || normalizedGender === "m" || 
+               normalizedGender.includes(" man") || normalizedGender.includes(" boy") ||
+               normalizedGender.includes("male ") || normalizedGender.startsWith("male")) {
+        return PRONOUNS.male;
     }
     return PRONOUNS.other;
 }

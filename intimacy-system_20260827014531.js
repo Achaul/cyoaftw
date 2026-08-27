@@ -120,8 +120,13 @@ function getSubjectPronoun(npc) {
 function getObjectPronoun(npc) {
     if (!npc) return "them";
     const gender = (npc.gender || "female").toLowerCase();
-    if (gender === "female" || gender.includes("woman") || gender.includes("girl")) return "her";
-    if (gender === "male" || gender.includes("man") || gender.includes("boy")) return "him";
+    // Check female first, then male, with prefix matching for race+gender combinations
+    if (gender === "female" || gender === "f" || 
+        gender.includes(" woman") || gender.includes(" girl") ||
+        gender.includes("female ") || gender.startsWith("female")) return "her";
+    if (gender === "male" || gender === "m" || 
+        gender.includes(" man") || gender.includes(" boy") ||
+        gender.includes("male ") || gender.startsWith("male")) return "him";
     return "them";
 }
 
@@ -2447,8 +2452,13 @@ function getDialogueFromTags(tags, arousalLevel, npc) {
 function getObjectPronoun(npc) {
     if (!npc) return "them";
     const gender = (npc.gender || "female").toLowerCase();
-    if (gender === "female" || gender.includes("woman") || gender.includes("girl")) return "her";
-    if (gender === "male" || gender.includes("man") || gender.includes("boy")) return "him";
+    // Check female first, then male, with prefix matching for race+gender combinations
+    if (gender === "female" || gender === "f" || 
+        gender.includes(" woman") || gender.includes(" girl") ||
+        gender.includes("female ") || gender.startsWith("female")) return "her";
+    if (gender === "male" || gender === "m" || 
+        gender.includes(" man") || gender.includes(" boy") ||
+        gender.includes("male ") || gender.startsWith("male")) return "him";
     return "them";
 }
 

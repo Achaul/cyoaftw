@@ -290,7 +290,21 @@ function getToolsForGender(gender) {
         both: ["hand", "fingers", "mouth", "tongue", "anus"]
     };
     
-    const genderTools = genderSpecificTools[gender] || [];
+    // Normalize gender to handle prefixes like "female Halfling" or "male Elf"
+    const normalizedGender = String(gender || "").toLowerCase();
+    let effectiveGender = gender;
+    
+    if (normalizedGender.startsWith("female") || normalizedGender.includes("female ")) {
+        effectiveGender = "female";
+    } else if (normalizedGender.startsWith("male") || normalizedGender.includes("male ")) {
+        effectiveGender = "male";
+    } else if (normalizedGender.includes("woman") || normalizedGender.includes("girl")) {
+        effectiveGender = "female";
+    } else if (normalizedGender.includes("man") || normalizedGender.includes("boy")) {
+        effectiveGender = "male";
+    }
+    
+    const genderTools = genderSpecificTools[effectiveGender] || [];
     const commonTools = genderSpecificTools.both || [];
     
     return [...new Set([...commonTools, ...genderTools])];

@@ -267,10 +267,18 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
     if (!npc) return "";
     const config = options && typeof options === "object" ? options : {};
 
-    const gender = npc.gender || "unknown";
+    const gender = (npc.gender || "unknown").toLowerCase();
     let pronoun = "they";
-    if (gender === "female") pronoun = "she";
-    else if (gender === "male") pronoun = "he";
+    // Check female first, then male, with prefix matching for race+gender combinations
+    if (gender === "female" || gender === "f" || 
+        gender.includes(" woman") || gender.includes(" girl") ||
+        gender.includes("female ") || gender.startsWith("female")) {
+        pronoun = "she";
+    } else if (gender === "male" || gender === "m" || 
+               gender.includes(" man") || gender.includes(" boy") ||
+               gender.includes("male ") || gender.startsWith("male")) {
+        pronoun = "he";
+    }
 
     const profile = npc.personalityProfile || {};
     const temperament = profile.temperament || npc.temperament || "neutral";
