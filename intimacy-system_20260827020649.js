@@ -2832,11 +2832,22 @@ function hasLube(npc, bodyPart = "any") {
 /**
  * Change position
  */
-function changePosition(npc, player, newPositionId) {
-    if (!npc || !npc.intimacy) return false;
-    if (!hasPosition(newPositionId)) return false;
+function changePosition(npc, player, newPositionId, options = {}) {
+    if (!npc || !npc.intimacy) return { success: false, error: "No intimacy state" };
+    if (!hasPosition(newPositionId)) return { success: false, error: "Invalid position" };
     
     const oldPosition = npc.intimacy.position.player;
+    const oldPositionObj = getPosition(oldPosition);
+    const newPositionObj = getPosition(newPositionId);
+    
+    // Store old position for narration
+    const positionChangeInfo = {
+        oldPosition: oldPosition,
+        oldPositionLabel: oldPositionObj ? oldPositionObj.label || oldPosition : oldPosition,
+        newPosition: newPositionId,
+        newPositionLabel: newPositionObj ? newPositionObj.label || newPositionId : newPositionId
+    };
+    
     npc.intimacy.position.player = newPositionId;
     npc.intimacy.position.npc = newPositionId;
     
@@ -2853,11 +2864,539 @@ function changePosition(npc, player, newPositionId) {
             if (!position.validTools.includes(act.tool)) {
                 npc.intimacy.penetration.active = false;
                 console.log(`[Intimacy] Penetration ended due to position change`);
+                positionChangeInfo.penetrationEnded = true;
             }
         }
     }
     
-    return true;
+    return { success: true, ...positionChangeInfo };
+}
+
+/**
+ * Build position change narration for player
+ */
+function buildPositionChangeNarration(npc, positionChangeInfo) {
+    if (!positionChangeInfo) return null;
+    
+    const { oldPositionLabel, newPositionLabel } = positionChangeInfo;
+    
+    // Generate player action narration
+    const playerNarrative = `You reposition from ${oldPositionLabel} to ${newPositionLabel}.`;
+    
+    return playerNarrative;
+}
+
+/**
+ * Build NPC response for position change (CoT-style)
+ */
+function buildPositionChangeNPCResponse(npc, positionChangeInfo) {
+    if (!npc || !positionChangeInfo) return null;
+    
+    const { newPosition, newPositionLabel, penetrationEnded } = positionChangeInfo;
+    const subjectPronoun = typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "They";
+    const possessivePronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
+    
+    const position = getPosition(newPosition);
+    const positionDesc = position ? position.description || newPositionLabel : newPositionLabel;
+    
+    // Determine reaction based on position and NPC personality
+    const arousalLevel = npc.intimacy ? (npc.intimacy.arousal || 0) : 0;
+    const arousalAdjective = arousalLevel > 70 ? pickRandom(["eagerly", "hungrily", "with anticipation"]) :
+                            arousalLevel > 40 ? pickRandom(["willingly", "with interest"]) :
+                            pickRandom(["patiently", "calmly", "with a nod"]);
+    
+    // Build appropriate reaction based on position type
+    const positionType = position ? position.playerRole || newPosition : newPosition;
+    
+    let reaction;
+    if (penetrationEnded) {
+        reaction = pickRandom([
+            `${subjectPronoun} lets out a soft sound as you shift positions.`,
+            `${subjectPronoun} adjusts ${possessivePronoun} stance, following your lead.`,
+            `${subjectPronoun} watches you with interest as the position changes.`
+        ]);
+    } else if (positionType.includes("standing") || positionType.includes("against") || positionType.includes("pinned")) {
+        reaction = pickRandom([
+            `${subjectPronoun} stands ${arousalAdjective}, ready for the new angle.`,
+            `${subjectPronoun} positions ${possessivePronoun}self ${arousalAdjective} against you.`,
+            `${subjectPronoun} shifts to match your stance, ${arousalAdjective}.`
+        ]);
+    } else if (positionType.includes("lap") || positionType.includes("seated") || positionType.includes("astride")) {
+        reaction = pickRandom([
+            `${subjectPronoun} settles onto your lap ${arousalAdjective}.`,
+            `${subjectPronoun} straddles you ${arousalAdjective}, finding a comfortable position.`,
+            `${subjectPronoun} perches on your lap, ${arousalAdjective}.`
+        ]);
+    } else if (positionType.includes("missionary") || positionType.includes("lying") || positionType.includes("reclining")) {
+        reaction = pickRandom([
+            `${subjectPronoun} lies back ${arousalAdjective}, welcoming you.`,
+            `${subjectPronoun} reclines ${arousalAdjective}, ready for you.`,
+            `${subjectPronoun} stretches out beneath you ${arousalAdjective}.`
+        ]);
+    } else if (positionType.includes("behind") || positionType.includes("doggy") || positionType.includes("bent")) {
+        reaction = pickRandom([
+            `${subjectPronoun} presents ${possessivePronoun}self to you ${arousalAdjective}.`,
+            `${subjectPronoun} turns away from you ${arousalAdjective}, ready for access.`,
+            `${subjectPronoun} gets into position ${arousalAdjective}.`
+        ]);
+    } else {
+        reaction = pickRandom([
+            `${subjectPronoun} adjusts to the new position ${arousalAdjective}.`,
+            `${subjectPronoun} shifts comfortably ${arousalAdjective}.`,
+            `${subjectPronoun} follows your lead ${arousalAdjective}.`
+        ]);
+    }
+    
+    return reaction;
+}
+
+// ============================================================================
+// ANATOMY DESCRIBER HELPER
+// Rich, varied descriptions for intimate body parts using NPC traits
+// ============================================================================
+
+/**
+ * Master anatomy describer - generates rich, varied descriptions for body parts
+ * @param {Object} npc - The NPC being described
+ * @param {string} target - The body part to describe (vagina, penis, breasts, etc.)
+ * @param {Object} options - Additional context (action, arousalLevel, isAroused, etc.)
+ * @returns {string} - A rich description of the anatomy
+ */
+function describeAnatomy(npc, target, options = {}) {
+    if (!npc || !target) return target;
+    
+    const { action, arousalLevel = 0, isAroused = false, isWet = false, isErect = false, possessivePronoun = null } = options;
+    const anatomy = npc.anatomy || {};
+    const gender = (npc.gender || "").toLowerCase();
+    const isFemale = gender === "female" || gender.includes("female");
+    const isMale = gender === "male" || gender.includes("male");
+    
+    const posPronoun = possessivePronoun || (typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their");
+    
+    // Get arousal descriptors
+    const arousalDescriptors = getArousalDescriptors(arousalLevel, isAroused, isWet, isErect);
+    
+    switch (target.toLowerCase()) {
+        case "vagina":
+        case "pussy":
+            return describeVagina(npc, anatomy, posPronoun, arousalDescriptors);
+        
+        case "penis":
+        case "cock":
+        case "dick":
+            return describePenis(npc, anatomy, posPronoun, arousalDescriptors);
+        
+        case "testicles":
+        case "balls":
+            return describeTesticles(npc, anatomy, posPronoun, arousalDescriptors);
+        
+        case "breasts":
+        case "boobs":
+        case "tits":
+            return describeBreasts(npc, anatomy, posPronoun, arousalDescriptors);
+        
+        case "nipples":
+        case "nipple":
+            return describeNipples(npc, anatomy, posPronoun, arousalDescriptors);
+        
+        case "anus":
+        case "ass":
+        case "butt":
+        case "buttocks":
+            return describeAnus(npc, anatomy, posPronoun, arousalDescriptors);
+        
+        case "mouth":
+        case "lips":
+            return describeMouth(npc, anatomy, posPronoun, arousalDescriptors);
+        
+        case "thighs":
+        case "thigh":
+            return describeThighs(npc, anatomy, posPronoun, arousalDescriptors);
+        
+        default:
+            return target;
+    }
+}
+
+/**
+ * Get arousal state descriptors
+ */
+function getArousalDescriptors(arousalLevel, isAroused, isWet, isErect) {
+    const highArousal = arousalLevel > 70;
+    const mediumArousal = arousalLevel > 40;
+    
+    return {
+        wetness: isWet ? pickRandom(["slick", "dripping", "glistening", "soaked", "sodden"]) : 
+                 highArousal ? pickRandom(["damp", "moist", "dewy", "slightly wet"]) : null,
+        
+        engorgement: isErect ? pickRandom(["fully engorged", "throbbing", "rigid", "stiff", "hard"]) :
+                      highArousal ? pickRandom(["semi-engorged", "swollen", "plump", "firm"]) :
+                      mediumArousal ? pickRandom(["slightly swollen", "turgid", "full"]) : null,
+        
+        state: isAroused || highArousal ? pickRandom(["aroused", "needy", "pulsing", "aching", "throbbing"]) :
+               mediumArousal ? pickRandom(["stirred", "warm", "tingling"]) : null,
+        
+        coloration: isAroused || highArousal ? pickRandom(["deepened in color", "flushed dark", "rosy and swollen", "darkened with desire"]) :
+                    mediumArousal ? pickRandom(["slightly pink", "warm-toned", "faintly flushed"]) : null
+    };
+}
+
+/**
+ * Describe vagina/pussy with rich detail
+ */
+function describeVagina(npc, anatomy, posPronoun, arousalDescriptors) {
+    const pubicHair = anatomy.pubicHair || {};
+    const genitals = anatomy.genitals || {};
+    const genitalSize = anatomy.genitalSize || {};
+    const size = genitalSize.sizeCategory || "medium";
+    const hairColor = pubicHair.color || "dark";
+    const hairStyle = pubicHair.style || "natural";
+    const genitalDesc = genitals.description || "vagina";
+    const pigmentation = genitals.pigmentation || "natural";
+    
+    const descriptions = [];
+    
+    // Pubic hair description
+    if (hairStyle !== "smooth" && hairStyle !== "none") {
+        const hairAdjectives = {
+            dark: ["dark", "ebony", "raven", "jet black", "deep brown"],
+            brown: ["chestnut", "auburn", "caramel", "cinnamon"],
+            black: ["inky", "obsidian", "coal-black", "midnight"],
+            blonde: ["golden", "honey", "sun-kissed", "pale"],
+            auburn: ["fiery", "copper", "russet", "burnished"],
+            grey: ["silver", "steel", "pepper-and-salt", "frosted"]
+        };
+        const hairAdj = hairAdjectives[hairColor] ? pickRandom(hairAdjectives[hairColor]) : hairColor;
+        
+        const styleDescriptions = {
+            "neatly trimmed": ["neatly trimmed", "closely cropped", "manicured"],
+            "natural": ["a natural bush of", "a thick patch of", "a wild tangle of"],
+            "thick": ["a thick thatch of", "a dense forest of", "a lush growth of"],
+            "a messy natural": ["a wild growth of", "an unkempt thicket of", "a tangled bush of"],
+            "a unkept and thick": ["a wild, unkempt thicket of", "a dense, untamed growth of"],
+            "smooth": ["smooth and bare", "shaven clean", "hairless"],
+            "long thick and wild": ["a wild mane of", "an untamed thicket of", "a luxuriant growth of"]
+        };
+        const styleDesc = styleDescriptions[hairStyle] ? pickRandom(styleDescriptions[hairStyle]) : hairStyle;
+        
+        descriptions.push(`${styleDesc} ${hairAdj} pubic hair`);
+    } else {
+        descriptions.push(pickRandom(["smooth and bare skin", "shaven clean flesh", "hairless mound"]));
+    }
+    
+    // Labia/vulva description
+    const labiaDescriptors = {
+        small: ["tight", "delicate", "petite", "dainty"],
+        medium: ["plump", "well-formed", "generous", "soft"],
+        large: ["meaty", "full", "generous", "ample", "thick"]
+    };
+    const labiaAdj = labiaDescriptors[size] ? pickRandom(labiaDescriptors[size]) : pickRandom(["soft", "warm"]);
+    
+    const vulvaTerms = pickRandom(["labia", "lips", "folds", "petals", "velvet folds"]);
+    
+    // Add arousal state
+    const wetDesc = arousalDescriptors.wetness ? `${arousalDescriptors.wetness} ` : "";
+    const engorgedDesc = arousalDescriptors.engorgement ? `${arousalDescriptors.engorgement} ` : "";
+    
+    // Build the description
+    const baseDesc = pickRandom([
+        `${posPronoun} ${wetDesc}${engorgedDesc}${genitalDesc}`,
+        `${posPronoun} ${engorgedDesc}${wetDesc}${genitalDesc}`,
+        `${posPronoun} ${labiaAdj} ${vulvaTerms}`,
+        `${posPronoun} ${wetDesc}${labiaAdj} ${genitalDesc}`
+    ]);
+    
+    return pickRandom([
+        `${descriptions[0]}, parting to reveal ${baseDesc}`,
+        `through ${descriptions[0]} to ${baseDesc}`,
+        `${baseDesc}, framed by ${descriptions[0]}`,
+        `the ${labiaAdj} ${vulvaTerms} of ${posPronoun} ${genitalDesc}`
+    ]);
+}
+
+/**
+ * Describe penis/cock with rich detail
+ */
+function describePenis(npc, anatomy, posPronoun, arousalDescriptors) {
+    const genitals = anatomy.genitals || {};
+    const genitalSize = anatomy.genitalSize || {};
+    const size = genitalSize.sizeCategory || "medium";
+    const genitalDesc = genitals.description || "cock";
+    const pigmentation = genitals.pigmentation || "natural";
+    
+    const sizeDescriptors = {
+        small: ["modest", "petite", "compact", "trim"],
+        medium: ["respectable", "well-proportioned", "solid", "sturdy"],
+        large: ["impressive", "thick", "girthy", "heavy", "substantial"]
+    };
+    const sizeAdj = sizeDescriptors[size] ? pickRandom(sizeDescriptors[size]) : "";
+    
+    const stateDesc = arousalDescriptors.engorgement ? arousalDescriptors.engorgement : 
+                     arousalDescriptors.state ? arousalDescriptors.state : "";
+    
+    const descriptions = [
+        `${posPronoun} ${sizeAdj} ${genitalDesc}`,
+        `the ${sizeAdj} ${genitalDesc}`,
+        `${posPronoun} ${stateDesc} ${sizeAdj} ${genitalDesc}`
+    ];
+    
+    return pickRandom(descriptions);
+}
+
+/**
+ * Describe testicles/balls with rich detail
+ */
+function describeTesticles(npc, anatomy, posPronoun, arousalDescriptors) {
+    const genitalSize = anatomy.genitalSize || {};
+    const size = genitalSize.sizeCategory || "medium";
+    
+    const sizeDescriptors = {
+        small: ["tight", "compact", "neat"],
+        medium: ["full", "heavy", "well-hung"],
+        large: ["weighty", "swinging", "substantial", "pendulous"]
+    };
+    const sizeAdj = sizeDescriptors[size] ? pickRandom(sizeDescriptors[size]) : "";
+    
+    const stateDesc = arousalDescriptors.engorgement ? arousalDescriptors.engorgement : 
+                     arousalDescriptors.state ? arousalDescriptors.state : "";
+    
+    return pickRandom([
+        `${posPronoun} ${sizeAdj} balls`,
+        `${posPronoun} ${stateDesc} ${sizeAdj} testicles`,
+        `the ${sizeAdj} ${pickRandom(["sack", "scrotum"])}`,
+        `${posPronoun} ${pickRandom(["heavy", "full"])} ${sizeAdj} balls`
+    ]);
+}
+
+/**
+ * Describe breasts with rich detail
+ */
+function describeBreasts(npc, anatomy, posPronoun, arousalDescriptors) {
+    const breasts = anatomy.breasts || {};
+    const size = breasts.sizeCategory || (npc.gender === "female" ? "medium" : "flat");
+    const breastDesc = breasts.description || "chest";
+    const nipples = breasts.nipples || {};
+    const areolas = breasts.areolas || {};
+    
+    const sizeDescriptors = {
+        flat: ["small", "modest", "petite", "boyish"],
+        medium: ["perky", "round", "firm", "shapely"],
+        large: ["full", "ample", "generous", "heavy", "voluptuous"]
+    };
+    const sizeAdj = sizeDescriptors[size] ? pickRandom(sizeDescriptors[size]) : "";
+    
+    const nippleDescriptors = {
+        small: ["delicate", "tiny", "dainty", "pert"],
+        average: ["perky", "prominent", "defined"],
+        prominent: ["thick", "puffy", "distended", "protruding"]
+    };
+    const nippleAdj = nippleDescriptors[nipples.size] ? pickRandom(nippleDescriptors[nipples.size]) : "";
+    const nippleTexture = nipples.texture || "smooth";
+    
+    const areolaSize = areolas.size || "average";
+    const areolaPigment = areolas.pigmentation || "softly tinted";
+    
+    const stateDesc = arousalDescriptors.engorgement ? arousalDescriptors.engorgement : 
+                     arousalDescriptors.state ? arousalDescriptors.state : "";
+    
+    const baseDescs = [
+        `${posPronoun} ${sizeAdj} ${breastDesc}`,
+        `the ${sizeAdj} swell of ${posPronoun} ${breastDesc}`,
+        `${posPronoun} ${stateDesc} ${sizeAdj} breasts`
+    ];
+    
+    const detailedDescs = [
+        `${posPronoun} ${sizeAdj} ${breastDesc}, topped with ${nippleAdj} ${nippleTexture} ${pickRandom(["nipples", "teats", "buds"])}`,
+        `the ${sizeAdj} mounds of ${posPronoun} ${breastDesc}, crowned with ${areolaPigment} ${areolaSize} areolas`,
+        `${posPronoun} ${stateDesc} ${sizeAdj} breasts, the ${nippleAdj} nipples standing proudly`
+    ];
+    
+    return pickRandom([...baseDescs, ...detailedDescs]);
+}
+
+/**
+ * Describe nipples with rich detail
+ */
+function describeNipples(npc, anatomy, posPronoun, arousalDescriptors) {
+    const breasts = anatomy.breasts || {};
+    const nipples = breasts.nipples || {};
+    const areolas = breasts.areolas || {};
+    
+    const nippleDescriptors = {
+        small: ["delicate", "tiny", "dainty", "pert"],
+        average: ["perky", "prominent", "defined", "firm"],
+        prominent: ["thick", "puffy", "distended", "protruding", "erect"]
+    };
+    const nippleAdj = nippleDescriptors[nipples.size] ? pickRandom(nippleDescriptors[nipples.size]) : "";
+    const nippleTexture = nipples.texture || "smooth";
+    const areolaPigment = areolas.pigmentation || "softly tinted";
+    const areolaSize = areolas.size || "average";
+    
+    const stateDesc = arousalDescriptors.engorgement ? arousalDescriptors.engorgement : 
+                     arousalDescriptors.state ? arousalDescriptors.state : "";
+    
+    return pickRandom([
+        `${posPronoun} ${nippleAdj} ${pickRandom(["nipples", "teats", "buds", "peaks"])}`,
+        `the ${nippleAdj} ${nippleTexture} ${pickRandom(["nipples", "nubs"])}`,
+        `${posPronoun} ${stateDesc} ${nippleAdj} nipples, surrounded by ${areolaPigment} ${areolaSize} areolas`,
+        `the ${nippleAdj} points of ${posPronoun} breasts`
+    ]);
+}
+
+/**
+ * Describe anus with rich detail
+ */
+function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
+    const anus = anatomy.anus || {};
+    const size = anus.size || "snug";
+    const sphincter = anus.sphincter || "tight";
+    const desc = anus.description || "anus";
+    const pigmentation = anus.pigmentation || "natural";
+    
+    const sizeDescriptors = {
+        tight: ["tight", "clenching", "constricted", "narrow"],
+        snug: ["snug", "firm", "well-defined", "neat"],
+        firm: ["firm", "resilient", "muscular"],
+        supple: ["supple", "yielding", "soft"],
+        loose: ["loose", "relaxed", "open"],
+        gaping: ["gaping", "stretched", "wide"],
+        stretchy: ["stretchy", "accommodating", "flexible"]
+    };
+    const sizeAdj = sizeDescriptors[size] ? pickRandom(sizeDescriptors[size]) : size;
+    
+    const sphincterDescriptors = {
+        tight: ["tightly clenched", "firmly closed", "resistantly squeezed"],
+        snug: ["snugly puckered", "neatly folded", "firmly held"],
+        firm: ["firmly ringed", "muscularly controlled", "strongly clenched"],
+        supple: ["softly yielding", "gently pulsing", "warmly receptive"],
+        loose: ["loosely open", "relaxedly parted", "easily accessible"]
+    };
+    const sphincterDesc = sphincterDescriptors[sphincter] ? pickRandom(sphincterDescriptors[sphincter]) : sphincter;
+    
+    return pickRandom([
+        `${posPronoun} ${sizeAdj} ${desc}`,
+        `the ${sphincterDesc} ${desc}`,
+        `${posPronoun} ${sphincterDesc} ${sizeAdj} entrance`,
+        `the ${pigmentation} ${desc}, ${sizeAdj} and ${sphincter}`
+    ]);
+}
+
+/**
+ * Describe mouth/lips with rich detail
+ */
+function describeMouth(npc, anatomy, posPronoun, arousalDescriptors) {
+    const body = anatomy.body || {};
+    const surfaceType = body.surfaceType || "skin";
+    
+    return pickRandom([
+        `${posPronoun} ${pickRandom(["soft", "warm", "inviting", "parted", "pouty"])} lips`,
+        `the ${pickRandom(["sweet", "warm", "soft", "moist"])} mouth`,
+        `${posPronoun} ${pickRandom(["full", "plump", "sensual", "kissable"])} lips`,
+        `between ${posPronoun} ${surfaceType}-soft lips`
+    ]);
+}
+
+/**
+ * Describe thighs with rich detail
+ */
+function describeThighs(npc, anatomy, posPronoun, arousalDescriptors) {
+    const buttocks = anatomy.buttocks || {};
+    const size = buttocks.sizeCategory || "medium";
+    
+    const descriptors = {
+        small: ["slender", "lean", "delicate"],
+        medium: ["shapely", "firm", "well-formed"],
+        large: ["thick", "ample", "generous", "full"]
+    };
+    const sizeAdj = descriptors[size] ? pickRandom(descriptors[size]) : "soft";
+    
+    return pickRandom([
+        `${posPronoun} ${sizeAdj} thighs`,
+        `the ${sizeAdj} inner thighs`,
+        `${posPronoun} ${pickRandom(["smooth", "soft", "warm"])} ${sizeAdj} thighs`,
+        `between ${posPronoun} ${sizeAdj} thighs`
+    ]);
+}
+
+/**
+ * Get possessive pronoun helper for the describer
+ */
+function getPossessiveForDescriber(npc) {
+    return typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
+}
+
+/**
+ * Enhance action label with rich anatomy descriptions
+ * Replaces generic body part references with detailed, sensual descriptions
+ * @param {Object} npc - The NPC
+ * @param {string} label - The action label (e.g., "Lick vagina", "Touch breasts")
+ * @param {Object} context - Additional context (arousalLevel, action type, etc.)
+ * @returns {string} - Enhanced label with rich anatomy descriptions
+ */
+function enhanceActionLabel(npc, label, context = {}) {
+    if (!npc || !label) return label;
+    
+    const { arousalLevel = 0, actionType, actId } = context;
+    const anatomy = npc.anatomy || {};
+    const gender = (npc.gender || "").toLowerCase();
+    const isFemale = gender === "female" || gender.includes("female");
+    
+    // Body parts that can be enhanced
+    const bodyPartPatterns = [
+        // Vagina/pussy
+        { patterns: [/\bpussy\b/i, /\bvagina\b/i, /\bclitoris\b/i, /\bclit\b/i, /\blabia\b/i], target: "vagina" },
+        // Penis
+        { patterns: [/\bpenis\b/i, /\bcock\b/i, /\bdick\b/i, /\bshaft\b/i], target: "penis" },
+        // Testicles
+        { patterns: [/\bballs\b/i, /\btesticles\b/i, /\btestes\b/i, /\bsac\b/i], target: "testicles" },
+        // Breasts
+        { patterns: [/\bbreasts\b/i, /\bboobs\b/i, /\btits\b/i, /\bbust\b/i, /\bchest\b/i], target: "breasts" },
+        // Nipples
+        { patterns: [/\bnipples\b/i, /\bnipple\b/i, /\bteats\b/i, /\bpeaks\b/i], target: "nipples" },
+        // Anus/Butt
+        { patterns: [/\banus\b/i, /\bass\b/i, /\bbuttocks\b/i, /\bbutt\b/i, /\brear\b/i], target: "anus" },
+        // Mouth/Lips
+        { patterns: [/\blips\b/i, /\bmouth\b/i], target: "mouth" },
+        // Thighs
+        { patterns: [/\bthighs\b/i, /\bthigh\b/i], target: "thighs" }
+    ];
+    
+    let enhancedLabel = label;
+    const posPronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
+    
+    // Check if this is a "receive" action (player is bottom)
+    const act = typeof getAct === 'function' ? getAct(actId || label) : null;
+    const isPlayerBottom = act && act.playerIsBottom === true;
+    
+    // Determine arousal state based on context
+    const isAroused = arousalLevel > 50;
+    const isWet = arousalLevel > 60 || (isFemale && arousalLevel > 40);
+    const isErect = (isFemale && arousalLevel > 50) || (!isFemale && arousalLevel > 30);
+    
+    for (const { patterns, target } of bodyPartPatterns) {
+        for (const pattern of patterns) {
+            if (pattern.test(enhancedLabel)) {
+                // Only enhance if the body part is not already described in a rich way
+                // Skip if it's part of a longer descriptive phrase
+                const match = enhancedLabel.match(pattern);
+                if (match) {
+                    const described = describeAnatomy(npc, target, {
+                        arousalLevel,
+                        isAroused,
+                        isWet,
+                        isErect,
+                        possessivePronoun: posPronoun
+                    });
+                    
+                    // Replace the match with the rich description
+                    // But only if it's a standalone reference, not part of a larger word
+                    enhancedLabel = enhancedLabel.replace(pattern, described);
+                }
+            }
+        }
+    }
+    
+    return enhancedLabel;
 }
 
 /**
@@ -2959,12 +3498,40 @@ if (typeof module !== 'undefined' && module.exports) {
         // Position
         changePosition,
         getSuggestedPositions,
+        buildPositionChangeNarration,
+        buildPositionChangeNPCResponse,
         
         // Narrative
         buildIntimacyResponse,
         getPossessivePronoun,
         getSubjectPronoun,
-        getObjectPronoun
+        getObjectPronoun,
+        
+        // Anatomy Describer
+        describeAnatomy,
+        getArousalDescriptors,
+        enhanceActionLabel,
+        describeVagina,
+        describePenis,
+        describeTesticles,
+        describeBreasts,
+        describeNipples,
+        describeAnus,
+        describeMouth,
+        describeThighs,
+        
+        // Narrative Generator
+        generateIntimacyNarrative,
+        buildActionNarratives,
+        verbConjugation,
+        buildVaginaNarratives,
+        buildPenisNarratives,
+        buildTesticlesNarratives,
+        buildBreastNarratives,
+        buildAnusNarratives,
+        buildMouthNarratives,
+        buildThighNarratives,
+        getPubicDescription
     };
 }
 
@@ -2985,4 +3552,386 @@ if (typeof window !== 'undefined') {
     window.getPossessivePronoun = getPossessivePronoun;
     window.getSubjectPronoun = getSubjectPronoun;
     window.getObjectPronoun = getObjectPronoun;
+    window.changePosition = changePosition;
+    window.buildPositionChangeNarration = buildPositionChangeNarration;
+    window.buildPositionChangeNPCResponse = buildPositionChangeNPCResponse;
+    window.describeAnatomy = describeAnatomy;
+    window.getArousalDescriptors = getArousalDescriptors;
+    window.enhanceActionLabel = enhanceActionLabel;
+    window.generateIntimacyNarrative = generateIntimacyNarrative;
 }
+
+// ============================================================================
+// NARRATIVE GENERATOR
+// Creates flowing, sensual action narratives with rich anatomy descriptions
+// ============================================================================
+
+/**
+ * Generate a rich narrative for an intimacy action
+ * Creates flowing sentences like: "You part her brown pubs and expose her meaty vagina, sliding your tongue between her engorged labia..."
+ * @param {Object} npc - The NPC
+ * @param {string} actionId - The action ID (e.g., "lick_pussy", "touch_breasts")
+ * @param {Object} context - Additional context (arousalLevel, player, etc.)
+ * @returns {string} - A rich narrative sentence
+ */
+function generateIntimacyNarrative(npc, actionId, context = {}) {
+    if (!npc || !actionId) return null;
+    
+    const { player, arousalLevel = 0, isAroused = false, isWet = false, isErect = false } = context;
+    const act = typeof getAct === 'function' ? getAct(actionId) : null;
+    if (!act) return null;
+    
+    const { verb, target, tool, label } = act;
+    const posPronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
+    const subjectPronoun = typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "They";
+    
+    // Determine action category and generate appropriate narrative
+    const narratives = buildActionNarratives(npc, actionId, act, context);
+    
+    // Pick a narrative based on context
+    return pickRandom(narratives);
+}
+
+/**
+ * Build multiple narrative options for an action
+ */
+function buildActionNarratives(npc, actionId, act, context) {
+    const { verb, target, tool, playerIsBottom } = act;
+    const { arousalLevel = 0, isAroused = false, isWet = false, isErect = false } = context;
+    const anatomy = npc.anatomy || {};
+    const gender = (npc.gender || "").toLowerCase();
+    const isFemale = gender === "female" || gender.includes("female");
+    
+    const posPronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
+    const subjectPronoun = typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "They";
+    
+    const narratives = [];
+    
+    // Get rich anatomy description
+    const anatomyDesc = describeAnatomy(npc, target, { arousalLevel, isAroused, isWet, isErect, possessivePronoun: posPronoun });
+    
+    // Verb tense adjustments
+    const verbBase = verb || actionId.split('_')[0] || "touch";
+    const verbPresent = verbConjugation(verbBase, 'present');
+    const verbIng = verbConjugation(verbBase, 'ing');
+    
+    // Generate narratives based on action type and target
+    switch (target.toLowerCase()) {
+        case "vagina":
+        case "pussy":
+        case "clitoris":
+        case "clit":
+            narratives.push(...buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            break;
+            
+        case "penis":
+        case "cock":
+        case "dick":
+            narratives.push(...buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            break;
+            
+        case "testicles":
+        case "balls":
+            narratives.push(...buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            break;
+            
+        case "breasts":
+        case "nipples":
+            narratives.push(...buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            break;
+            
+        case "anus":
+        case "butt":
+        case "buttocks":
+        case "ass":
+            narratives.push(...buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            break;
+            
+        case "mouth":
+        case "lips":
+            narratives.push(...buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            break;
+            
+        case "thighs":
+        case "thigh":
+            narratives.push(...buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            break;
+            
+        default:
+            // Generic narrative for other targets
+            narratives.push(
+                `You ${verbPresent} ${anatomyDesc}.`,
+                `Your ${tool || "hand"} ${verbPresent} ${anatomyDesc}.`,
+                `You reach out and ${verbPresent} ${anatomyDesc}.`
+            );
+    }
+    
+    return narratives;
+}
+
+/**
+ * Conjugate verbs for narrative
+ */
+function verbConjugation(verb, form) {
+    const irregulars = {
+        touch: { present: "touch", ing: "touching" },
+        kiss: { present: "kiss", ing: "kissing" },
+        lick: { present: "lick", ing: "licking" },
+        suck: { present: "suck", ing: "sucking" },
+        stroke: { present: "stroke", ing: "stroking" },
+        rub: { present: "rub", ing: "rubbing" },
+        squeeze: { present: "squeeze", ing: "squeezing" },
+        tease: { present: "tease", ing: "teasing" },
+        grope: { present: "grope", ing: "groping" },
+        finger: { present: "finger", ing: "fingering" },
+        fuck: { present: "fuck", ing: "fucking" },
+        thrust: { present: "thrust", ing: "thrusting" },
+        enter: { present: "enter", ing: "entering" },
+        penetrate: { present: "penetrate", ing: "penetrating" },
+        caress: { present: "caress", ing: "caressing" },
+        massage: { present: "massage", ing: "massaging" },
+        pinch: { present: "pinch", ing: "pinching" },
+        spread: { present: "spread", ing: "spreading" },
+        press: { present: "press", ing: "pressing" },
+        grind: { present: "grind", ing: "grinding" },
+        bite: { present: "bite", ing: "biting" },
+        nibble: { present: "nibble", ing: "nibbling" },
+        flick: { present: "flick", ing: "flicking" },
+        slap: { present: "slap", ing: "slapping" }
+    };
+    
+    const conjugated = irregulars[verb.toLowerCase()];
+    if (conjugated && conjugated[form]) {
+        return conjugated[form];
+    }
+    
+    // Default conjugation
+    if (form === 'ing') {
+        if (verb.endsWith('e')) return verb.slice(0, -1) + 'ing';
+        if (verb.endsWith('ie')) return verb.slice(0, -2) + 'ying';
+        if (verb.match(/[^aeiou]e$/)) return verb + 'ing';
+        return verb + 'ing';
+    }
+    return verb;
+}
+
+/**
+ * Build vagina/pussy action narratives
+ */
+function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+    const { arousalLevel = 0 } = context;
+    const highArousal = arousalLevel > 70;
+    const mediumArousal = arousalLevel > 40;
+    
+    return [
+        // Gentle touching
+        `You ${verbPresent} ${anatomyDesc}.`,
+        `Your fingers ${verbPresent} ${anatomyDesc}.`,
+        
+        // Spreading/parting
+        `You part ${posPronoun} ${getPubicDescription(npc)} and ${verbPresent} ${anatomyDesc.replace(/^through[^,]+,?/, '')}.`,
+        `Spreading ${posPronoun} legs, you ${verbPresent} ${anatomyDesc}.`,
+        
+        // Licking specific
+        verbBase === 'lick' ? `Your tongue ${verbIng} ${anatomyDesc}, tasting ${posPronoun} ${highArousal ? 'sweet nectar' : 'warm essence'}.` : null,
+        verbBase === 'lick' ? `You trace your tongue along ${anatomyDesc}, savoring every ${highArousal ? 'dripping' : 'moist'} inch.` : null,
+        
+        // Finger penetration
+        verbBase === 'finger' || verbBase === 'penetrate' ? `You ${verbPresent} ${posPronoun} ${anatomyDesc}, sliding deep into ${posPronoun} ${highArousal ? 'slick, welcoming' : 'warm, tight'} channel.` : null,
+        
+        // Teasing
+        verbBase === 'tease' ? `You ${verbPresent} ${anatomyDesc}, drawing ${highArousal ? 'soft moans' : 'gentle gasps'} from ${posPronoun} lips.` : null,
+        
+        // Rubbing
+        verbBase === 'rub' ? `You ${verbPresent} ${anatomyDesc}, creating delicious friction against ${posPronoun} ${highArousal ? 'soaked' : 'dampening'} folds.` : null,
+        
+        // Generic but vivid
+        `You ${verbPresent} at ${anatomyDesc}, each ${verbBase} drawing a ${highArousal ? 'needful' : 'pleasured'} response.`
+    ].filter(Boolean);
+}
+
+/**
+ * Build penis/cock action narratives
+ */
+function buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+    const { arousalLevel = 0 } = context;
+    const highArousal = arousalLevel > 70;
+    
+    return [
+        `You ${verbPresent} ${anatomyDesc}.`,
+        `Your ${pickRandom(['hand', 'fingers', 'palm'])} ${verbPresent} ${anatomyDesc}.`,
+        verbBase === 'stroke' ? `You ${verbPresent} the length of ${anatomyDesc}, feeling the ${highArousal ? 'pulsing heat' : 'warm weight'} in your palm.` : null,
+        verbBase === 'suck' || verbBase === 'lick' ? `Your ${verbBase === 'suck' ? 'mouth' : 'tongue'} ${verbIng} ${anatomyDesc}, ${highArousal ? 'taking the full length' : 'exploring the shaft'}.` : null,
+        verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, massaging the ${highArousal ? 'throbbing' : 'firm'} shaft.` : null,
+        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'groans with pleasure' : 'lets out a content sigh'}.`
+    ].filter(Boolean);
+}
+
+/**
+ * Build testicles action narratives
+ */
+function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+    const { arousalLevel = 0 } = context;
+    const highArousal = arousalLevel > 70;
+    
+    return [
+        `You ${verbPresent} ${anatomyDesc}.`,
+        `Your fingers ${verbPresent} ${anatomyDesc}.`,
+        verbBase === 'squeeze' ? `You gently ${verbPresent} ${anatomyDesc}, feeling their ${highArousal ? 'tight draw' : 'warm weight'}.` : null,
+        verbBase === 'cupp' || verbBase === 'cup' ? `You cup ${anatomyDesc} in your palm, massaging the heavy orbs.` : null,
+        verbBase === 'fondle' ? `You fondle ${anatomyDesc}, rolling them gently in your ${pickRandom(['hand', 'palm', 'fingers'])}.` : null,
+        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'shudders with pleasure' : 'enjoys the attention'}.`
+    ].filter(Boolean);
+}
+
+/**
+ * Build breast/nipple action narratives
+ */
+function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+    const { arousalLevel = 0 } = context;
+    const highArousal = arousalLevel > 70;
+    
+    return [
+        `You ${verbPresent} ${anatomyDesc}.`,
+        `Your ${pickRandom(['hands', 'palms', 'fingers'])} ${verbPresent} ${anatomyDesc}.`,
+        verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, feeling the ${highArousal ? 'firm, needy' : 'soft, warm'} flesh yield under your touch.` : null,
+        verbBase === 'kiss' || verbBase === 'lick' ? `Your ${verbBase === 'kiss' ? 'lips' : 'tongue'} ${verbIng} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'arching into your touch' : 'sighing softly'}.` : null,
+        verbBase === 'pinch' || verbBase === 'flick' ? `You ${verbPresent} ${anatomyDesc}, drawing a ${highArousal ? 'sharp gasp' : 'soft moan'} from ${subjectPronoun}.` : null,
+        verbBase === 'tease' ? `You ${verbPresent} ${anatomyDesc}, circling but never quite touching the ${highArousal ? 'hard, aching' : 'perky'} tips.` : null,
+        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'breath coming faster' : 'enjoying the sensation'}.`
+    ].filter(Boolean);
+}
+
+/**
+ * Build anus action narratives
+ */
+function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+    const { arousalLevel = 0 } = context;
+    const highArousal = arousalLevel > 70;
+    
+    return [
+        `You ${verbPresent} ${anatomyDesc}.`,
+        `Your ${pickRandom(['finger', 'fingers', 'thumb', 'tongue'])} ${verbPresent} ${anatomyDesc}.`,
+        verbBase === 'penetrate' || verbBase === 'finger' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'easily sliding into the relaxed opening' : 'gently pressing against the tight resistance'}.` : null,
+        verbBase === 'tease' || verbBase === 'circle' ? `You ${verbPresent} ${anatomyDesc}, tracing the ${highArousal ? 'yielding' : 'tight'} rim.` : null,
+        verbBase === 'spread' ? `You ${verbPresent} ${anatomyDesc}, exposing the ${highArousal ? 'glistening' : 'tight'} entrance.` : null,
+        verbBase === 'lick' ? `Your tongue ${verbIng} ${anatomyDesc}, ${highArousal ? 'preparing the way' : 'exploring the sensitive flesh'}.` : null,
+        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'pushing back against your touch' : 'tensing slightly'}.`
+    ].filter(Boolean);
+}
+
+/**
+ * Build mouth/lips action narratives
+ */
+function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+    const { arousalLevel = 0 } = context;
+    const highArousal = arousalLevel > 70;
+    
+    return [
+        `You ${verbPresent} ${anatomyDesc}.`,
+        `Your ${pickRandom(['lips', 'mouth'])} ${verbPresent} ${anatomyDesc}.`,
+        verbBase === 'kiss' ? `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'responding hungrily' : 'returning the gesture softly'}.` : null,
+        verbBase === 'suck' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'drawing deeply' : 'gently pulling'}.` : null,
+        verbBase === 'bite' || verbBase === 'nibble' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'with eager pressure' : 'playfully'}.` : null,
+        verbBase === 'lick' ? `Your tongue ${verbIng} ${anatomyDesc}, ${highArousal ? 'hungrily' : 'exploratively'}.` : null,
+        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'moaning into the contact' : 'sighing softly'}.`
+    ].filter(Boolean);
+}
+
+/**
+ * Build thighs action narratives
+ */
+function buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+    const { arousalLevel = 0 } = context;
+    const highArousal = arousalLevel > 70;
+    
+    return [
+        `You ${verbPresent} ${anatomyDesc}.`,
+        `Your ${pickRandom(['hands', 'palms'])} ${verbPresent} ${anatomyDesc}.`,
+        verbBase === 'stroke' || verbBase === 'caress' ? `You ${verbPresent} ${anatomyDesc}, feeling the ${highArousal ? 'damp heat' : 'soft skin'} beneath your touch.` : null,
+        verbBase === 'spread' || verbBase === 'part' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'exposing the slick center' : 'revealing what lies between'}.` : null,
+        verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'whimpering at the pressure' : 'shifting slightly'}.` : null,
+        verbBase === 'kiss' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'breathing in the musk of arousal' : 'enjoying the warm skin'}.` : null,
+        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'trembling with need' : 'relaxing into your touch'}.`
+    ].filter(Boolean);
+}
+
+/**
+ * Get pubic hair description
+ */
+function getPubicDescription(npc) {
+    const anatomy = npc.anatomy || {};
+    const pubicHair = anatomy.pubicHair || {};
+    const hairColor = pubicHair.color || "dark";
+    const hairStyle = pubicHair.style || "natural";
+    
+    const hairAdjectives = {
+        dark: ["brown", "dark"],
+        brown: ["chestnut", "auburn"],
+        black: ["black", "dark"],
+        blonde: ["golden", "blonde"],
+        auburn: ["copper", "auburn"],
+        grey: ["silver", "grey"]
+    };
+    const hairAdj = hairAdjectives[hairColor] ? pickRandom(hairAdjectives[hairColor]) : hairColor;
+    
+    if (hairStyle === "smooth" || hairStyle === "none") {
+        return pickRandom(["smooth mound", "bare skin", "shaven flesh"]);
+    }
+    
+    const styleDescriptions = {
+        "neatly trimmed": "trimmed",
+        "natural": "bush",
+        "thick": "thatch",
+        "a messy natural": "wild growth",
+        "a unkept and thick": "thick growth",
+        "long thick and wild": "wild thicket"
+    };
+    const styleDesc = styleDescriptions[hairStyle] || hairStyle;
+    
+    return `${hairAdj} ${styleDesc}`;
+}
+
+// ============================================================================
+// EXAMPLE USAGE / INTEGRATION
+// ============================================================================
+// 
+// To use the anatomy describer and narrative generator:
+//
+// 1. Generate full action narratives:
+//    const narrative = generateIntimacyNarrative(femaleNPC, "lick_pussy", {
+//        arousalLevel: 85,
+//        isWet: true
+//    });
+//    // Example output: "You trace your tongue along through a wild growth of auburn pubic hair to her slick meaty vagina, savoring every dripping inch."
+//
+// 2. Get a rich description of a body part:
+//    const vaginaDesc = describeAnatomy(femaleNPC, "vagina", { 
+//        arousalLevel: 85,
+//        isAroused: true,
+//        isWet: true 
+//    });
+//    // Example output: "through a wild growth of fiery pubic hair to her slick meaty vagina"
+//
+// 3. Enhance an action label:
+//    const enhanced = enhanceActionLabel(femaleNPC, "Lick pussy", {
+//        arousalLevel: 85,
+//        actId: "lick_pussy"
+//    });
+//    // Example output: "Lick through a natural bush of dark pubic hair to her plump labia"
+//
+// 4. Build custom flowing narrative:
+//    const posPronoun = getPossessivePronoun(npc);
+//    const pubicDesc = getPubicDescription(npc);  // e.g., "brown pubs"
+//    const vaginaDesc = describeAnatomy(npc, "vagina", { arousalLevel: 85, isWet: true });
+//    const narrative = `You part ${posPronoun} ${pubicDesc} and expose ${vaginaDesc}. You slide your tongue between the engorged folds, parting them as you...`;
+//    // Output: "You part her brown pubs and expose through a thick patch of chestnut pubic hair to her glistening meaty vagina. You slide your tongue between the engorged folds, parting them as you..."
+//
+// 5. For position change narration:
+//    const posChange = changePosition(npc, player, "Doggy");
+//    const narration = buildPositionChangeNarration(npc, posChange);
+//    const npcResponse = buildPositionChangeNPCResponse(npc, posChange);
+//
+// ============================================================================
+
+
