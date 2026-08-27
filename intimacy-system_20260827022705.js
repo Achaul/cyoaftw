@@ -137,17 +137,50 @@ function getObjectPronoun(npc) {
 /**
  * Initialize intimacy state for an NPC
  */
+/**
+ * Convert character equipment to intimacy clothing state format
+ * Maps equipment slots to intimacy clothing categories (top, bottom, undergarments)
+ */
+function getClothingStateForCharacter(character) {
+    if (!character) return { top: true, bottom: true, undergarments: true };
+    
+    // Default to clothed if we can't determine
+    const defaultState = { top: true, bottom: true, undergarments: true };
+    
+    // If character has equipped items, check them
+    if (!character.equipped) return defaultState;
+    
+    // Map equipment slots to intimacy clothing
+    const hasTop = !!character.equipped.upper || !!character.equipped.head;
+    const hasBottom = !!character.equipped.lower || !!character.equipped.feet;
+    const hasUnderwear = false; // Underwear not tracked in equipment system
+    
+    // If we can't determine from equipment, assume clothed
+    // This handles cases where equipment system differs from intimacy system
+    return {
+        top: hasTop,
+        bottom: hasBottom,
+        undergarments: true  // Assume underwear is worn by default
+    };
+}
+
 function initializeIntimacyState(npc) {
     if (!npc) return;
     
     // Determine gender for tracking
     const npcGender = (npc.gender || "female").toLowerCase();
     
+    // Initialize clothing state based on actual equipped items if available
+    // Use global G if available, otherwise default to clothed
+    const player = typeof G !== 'undefined' ? G.player : null;
+    const playerClothing = getClothingStateForCharacter(player);
+    const npcClothing = getClothingStateForCharacter(npc);
+    
     npc.intimacy = {
         // Clothing state
         clothing: {
-            player: { top: true, bottom: true, undergarments: true },
-            npc: { top: true, bottom: true, undergarments: true }
+            player: playerClothing,
+            npc: npcClothing
         },
         // Current positions
         position: {
@@ -976,7 +1009,12 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     
     // Handle clothing actions
     if (act.type === ACT_TYPES.CLOTHING) {
-        return handleClothingAction(npc, player, act, clothingState);
+        const result = handleClothingAction(npc, player, act, clothingState);
+        // Save the updated clothing state back to the NPC
+        if (result && result.clothingState) {
+            intimacy.clothing = result.clothingState;
+        }
+        return result;
     }
     
     // Handle end actions
@@ -3508,6 +3546,7 @@ if (typeof module !== 'undefined' && module.exports) {
         getSuggestedPositions,
         buildPositionChangeNarration,
         buildPositionChangeNPCResponse,
+        getClothingStateForCharacter,
         
         // Narrative
         buildIntimacyResponse,
