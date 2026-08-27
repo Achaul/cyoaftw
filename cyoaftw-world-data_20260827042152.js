@@ -46,6 +46,7 @@ const SPECIES_TEMPLATES = [
         species: "Human",
         isHumanoid: true,
         size: "medium",
+        isCivilized: true,
         speechStyle: "common",
         lore: "Humans are adaptable people whose customs change quickly from town to frontier. They tend to judge strangers by conduct before bloodline.",
         anatomyProfile: {
@@ -69,6 +70,7 @@ const SPECIES_TEMPLATES = [
         species: "Elf",
         isHumanoid: true,
         size: "medium",
+        isCivilized: true,
         speechStyle: "formal",
         lore: "Elves carry long memory in their manners. Even a casual remark may be weighed against old promises, beauty, and restraint.",
         anatomyProfile: {
@@ -92,6 +94,7 @@ const SPECIES_TEMPLATES = [
         species: "Dwarf",
         isHumanoid: true,
         size: "small",
+        isCivilized: true,
         speechStyle: "gruff",
         lore: "Dwarves are shaped by clan, craft, and memory. They notice workmanship quickly and remember debts even faster.",
         anatomyProfile: {
@@ -115,6 +118,7 @@ const SPECIES_TEMPLATES = [
         species: "Halfling",
         isHumanoid: true,
         size: "small",
+        isCivilized: true,
         speechStyle: "folksy",
         lore: "Halflings survive by community, caution, and cheerful misdirection. They often know more local news than they admit.",
         anatomyProfile: {
@@ -137,6 +141,7 @@ const SPECIES_TEMPLATES = [
     {
         species: "Goblin",
         isHumanoid: true,
+        isCivilized: false,
         size: "small",
         speechStyle: "clipped",
         lore: "Goblin bands prize cunning, salvage, and status earned by surviving bad odds. They often test strangers before trusting them.",
@@ -160,6 +165,7 @@ const SPECIES_TEMPLATES = [
     {
         species: "Orc",
         isHumanoid: true,
+        isCivilized: false,
         size: "large",
         speechStyle: "direct",
         lore: "Orcs respect strength, directness, and loyalty proven under pressure. Insults are remembered, but so is courage.",
@@ -183,6 +189,7 @@ const SPECIES_TEMPLATES = [
     {
         species: "Skeleton",
         isHumanoid: false,
+        isCivilized: false,
         size: "medium",
         speechStyle: "broken",
         lore: "Animated skeletons retain fragments of purpose rather than full lives. They respond to command, trespass, and ritual disturbance.",
@@ -204,6 +211,7 @@ const SPECIES_TEMPLATES = [
     {
         species: "Rat",
         isHumanoid: false,
+        isCivilized: false,
         size: "tiny",
         speechStyle: "broken",
         lore: "Rats follow food, warmth, and danger-scent. A lone rat is usually a sign that a larger hidden ecology is nearby.",
@@ -225,6 +233,7 @@ const SPECIES_TEMPLATES = [
     {
         species: "Ghost",
         isHumanoid: false,
+        isCivilized: false,
         size: "medium",
         speechStyle: "whisper",
         lore: "Ghosts are memory given shape. They notice names, unfinished business, and places where the living have repeated old mistakes.",

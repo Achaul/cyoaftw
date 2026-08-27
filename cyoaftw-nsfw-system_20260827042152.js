@@ -307,9 +307,100 @@ if (typeof window !== "undefined") {
       }
       anatomy.genitalSize = { sizeCategory: genitalSizeCategory, description: "natural proportions", status: [], health: 100 };
 
-      let pubicHairStyle = pickFrom(isCivilized ? ["smooth", "neatly trimmed", "natural", "thick"] : ["a messy natural", "a unkept and thick", "a long thick and wild"]);
+      // Pubic hair - civilized species have 40% chance of trimmed hair and no perianal hair
+      // Non-civilized always have unkept/messy hair
+      let pubicHairStyle, pubicHairDescription, hasPerianalHair;
+      
+      if (isCivilized) {
+        // 40% chance of trimmed/groomed, 60% chance of natural/thick
+        const isTrimmed = Math.random() < 0.4;
+        if (isTrimmed) {
+          pubicHairStyle = pickFrom(["smooth", "neatly trimmed", "closely cropped"]);
+          hasPerianalHair = false;
+        } else {
+          pubicHairStyle = pickFrom(["natural", "thick", "full"]);
+          hasPerianalHair = true;
+        }
+      } else {
+        // Non-civilized: always unkept/messy
+        pubicHairStyle = pickFrom(["a messy natural", "a unkept and thick", "a long thick and wild", "a tangled thicket of", "an untamed growth of"]);
+        hasPerianalHair = true;
+      }
+      
       let pubicHairColor = pickFrom(["dark", "brown", "black", "blonde", "auburn", "grey"]);
-      anatomy.pubicHair = { style: pubicHairStyle, color: pubicHairColor, description: pubicHairStyle === "smooth" ? "smooth and bare" : pubicHairStyle + " " + pubicHairColor + " hair", status: [], health: 100 };
+      pubicHairDescription = pubicHairStyle === "smooth" ? "smooth and bare" : pubicHairStyle + " " + pubicHairColor + " hair";
+      
+      anatomy.pubicHair = { 
+        style: pubicHairStyle, 
+        color: pubicHairColor, 
+        description: pubicHairDescription,
+        hasPerianalHair: hasPerianalHair,
+        status: [], 
+        health: 100 
+      };
+      
+      // Add natural scents based on civilization and species
+      // Civilized: subtle, clean scents; Non-civilized: strong, pungent, animalistic
+      let scentDescription;
+      if (isCivilized) {
+        scentDescription = pickFrom([
+          "a clean, fresh musk",
+          "a subtle floral note",
+          "a warm, soapy scent",
+          "a light natural aroma",
+          "a soft, intimate fragrance",
+          "a faint hint of oil or perfume",
+          "a barely-there musk",
+          "a gentle, warm scent"
+        ]);
+      } else {
+        // Non-civilized creatures have stronger, more primal scents
+        if (type.toLowerCase().includes("goblin") || type.toLowerCase().includes("orc")) {
+          scentDescription = pickFrom([
+            "a pungent, animalistic musk",
+            "a strong, earthy scent",
+            "a sharp, feral aroma",
+            "a deep, musky smell",
+            "a robust, primal fragrance",
+            "a potent, natural musk",
+            "a wild, unwashed scent",
+            "an intense, animal odor"
+          ]);
+        } else if (type.toLowerCase().includes("skeleton")) {
+          scentDescription = pickFrom([
+            "a musty, ancient odor",
+            "a dry, bone-dust scent",
+            "a faint, crypt-like aroma",
+            "a cold, stone-like smell",
+            "a trace of old incense and dust"
+          ]);
+        } else if (type.toLowerCase().includes("ghost")) {
+          scentDescription = pickFrom([
+            "a faint, ethereal aroma",
+            "a cool, mist-like scent",
+            "a trace of old perfumes",
+            "a barely-perceptible chill",
+            "the scent of memory and decay"
+          ]);
+        } else if (type.toLowerCase().includes("rat")) {
+          scentDescription = pickFrom([
+            "a sharp, animal musk",
+            "a pungent, rodent scent",
+            "a strong, earthy smell",
+            "a nest-like aroma",
+            "a fur-and-dirt fragrance"
+          ]);
+        } else {
+          scentDescription = pickFrom([
+            "a pungent, natural musk",
+            "a strong, earthy scent",
+            "a deep, animalistic aroma",
+            "a robust, unwashed smell",
+            "a primal, untamed fragrance"
+          ]);
+        }
+      }
+      anatomy.scent = { description: scentDescription, intensity: isCivilized ? "subtle" : "strong" };
 
       // Use proper genital names with descriptive size terms
       let genitalDescription = "featureless";
