@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-27-005";
-    console.log("[Intimacy System] Loaded v2026-08-27-005 - Fixed ejaculation narratives, sentence structure, and duplicate descriptors");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-27-008";
+    console.log("[Intimacy System] Loaded v2026-08-27-008 - Open/closed state, semen pools at feet/on ground, always sloshing sounds");
 }
 
 // ============================================================================
@@ -3681,6 +3681,36 @@ function buildPositionChangeNPCResponse(npc, positionChangeInfo) {
     const position = getPosition(newPosition);
     const positionDesc = position ? position.description || newPositionLabel : newPositionLabel;
     
+    // Check for internal ejaculation that would cause messy drips when standing
+    const intimacy = npc.intimacy || {};
+    const hasInternalEjaculation = intimacy.climax && intimacy.climax.hasInternalEjaculation;
+    const lastEjaculationTarget = intimacy.climax ? intimacy.climax.lastInternalEjaculation : null;
+    
+    // Check if moving to a standing position after internal ejaculation
+    const isStandingPosition = newPositionLabel && /standing/i.test(newPositionLabel);
+    const hasSemenToDrip = hasInternalEjaculation && lastEjaculationTarget && (lastEjaculationTarget === "anus" || lastEjaculationTarget === "vagina");
+    
+    // Generate semen drip narrative if applicable
+    let semenDripNarrative = "";
+    if (hasSemenToDrip && isStandingPosition) {
+        const target = lastEjaculationTarget;
+        if (target === "anus") {
+            semenDripNarrative = pickRandom([
+                `, your semen immediately beginning to drip from ${possessivePronoun} well-used ${target}, running down ${possessivePronoun} thighs in thick streaks`,
+                `, the change in position causing your cum to sluice out of ${possessivePronoun} stretched ${target}, making a messy trail down ${possessivePronoun} legs`,
+                `, your release gushing out of ${possessivePronoun} gaping ${target} as gravity takes hold, the warm fluid pooling at ${possessivePronoun} feet`,
+                `, a thick glob of semen sliding out from ${possessivePronoun} relaxed ${target}, splattering against ${possessivePronoun} inner thighs`
+            ]);
+        } else if (target === "vagina") {
+            semenDripNarrative = pickRandom([
+                `, your cum immediately beginning to leak from ${possessivePronoun} soaked ${target}, trickling down ${possessivePronoun} thighs`,
+                `, the change in angle causing your seed to drip from ${possessivePronoun} well-fucked ${target}, warm fluid running down ${possessivePronoun} legs`,
+                `, a thick drizzle of semen escaping ${possessivePronoun} ${target}, pooling between ${possessivePronoun} thighs as ${subjectPronoun} stands`,
+                `, your release seeping out of ${possessivePronoun} used ${target}, the slick trail evidence of your coupling`
+            ]);
+        }
+    }
+    
     // Determine reaction based on position and NPC personality
     const arousalLevel = npc.intimacy ? (npc.intimacy.arousal || 0) : 0;
     const arousalAdjective = arousalLevel > 70 ? pickRandom(["eagerly", "hungrily", "with anticipation"]) :
@@ -3727,6 +3757,11 @@ function buildPositionChangeNPCResponse(npc, positionChangeInfo) {
             `${subjectPronoun} shifts comfortably ${arousalAdjective}.`,
             `${subjectPronoun} follows your lead ${arousalAdjective}.`
         ]);
+    }
+    
+    // Append semen drip narrative if applicable
+    if (semenDripNarrative) {
+        reaction = reaction + semenDripNarrative;
     }
     
     return reaction;
@@ -4796,13 +4831,29 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         const lastEjaculationTarget = intimacy.climax ? intimacy.climax.lastInternalEjaculation : null;
         const isMultipleEjaculation = lastEjaculationTarget === "vagina";
         
+        // For multiple ejaculations, always include sloshing/sound descriptors
+        const sloshingSound = isMultipleEjaculation ? pickRandom([
+            'with wet squelching sounds',
+            'the slick sloshing filling the air',
+            'lewd noises escaping with each movement',
+            'the messy, wet sounds of your release'
+        ]) : '';
+        
+        // Check vagina state - if it's been well-used, describe it as such
+        const vaginaAnatomy = (npc.anatomy && npc.anatomy.vagina) || {};
+        const vaginaSize = vaginaAnatomy.size || "snug";
+        const isVaginaOpen = vaginaSize === "loose" || vaginaSize === "gaping" || vaginaSize === "stretchy";
+        
+        // Adjust channel description based on state
+        const channelDesc = isVaginaOpen ? pickRandom(['well-used channel', 'stretched passage', 'yielding sheath', 'soaked depths']) : pickRandom(['tight channel', 'clenching sheath', 'snug passage', 'gripping depths']);
+        
         narratives.push(
-            `You ejaculate into ${cleanAnatomyDesc}, filling ${posPronoun} vagina with ${isMultipleEjaculation ? 'another thick deposit' : 'your hot cum'}.`,
-            `You release deep inside ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'adding more to what is already there' : 'pumping your seed into '}${posPronoun} warm depths.`,
-            `You climax inside ${cleanAnatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'mixing with the previous load' : 'filling '}${posPronoun} channel.`,
-            `Your penis ejaculates into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'more semen joining the existing pool' : 'thick spurts of cum coating '}${posPronoun} inner walls.`,
-            `You fill ${cleanAnatomyDesc} with your seed, the slick folds greedily accepting your ${isMultipleEjaculation ? 'additional' : 'hot'} release.`,
-            `Your cock pulses into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'another load of cum adding to the mess' : 'hot jets of semen flooding '}${posPronoun} tight sheath.`
+            `You ejaculate into ${cleanAnatomyDesc}, filling ${posPronoun} ${channelDesc} with ${isMultipleEjaculation ? 'another thick deposit, mixing with the slick pool already there' : 'your hot cum, the warm fluid spreading deep within'} ${isMultipleEjaculation ? sloshingSound : ''}.`,
+            `You release deep inside ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'adding more to the growing pool of semen' : 'pumping your seed into '}${posPronoun} warm, welcoming ${channelDesc} with a wet sound.`,
+            `You climax inside ${cleanAnatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous load with a lewd squelch, her depths struggling to contain it all' : 'filling '}${posPronoun} ${channelDesc}, the slick walls clenching around your release.`,
+            `Your penis ejaculates into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'more semen joining the existing pool, dripping out around your shaft with each pulse' : 'thick spurts of cum coating '}${posPronoun} inner walls as they clench greedily.`,
+            `You fill ${cleanAnatomyDesc} with your seed, ${isVaginaOpen ? 'the relaxed folds accepting' : 'the slick folds greedily drawing in'} your ${isMultipleEjaculation ? 'additional' : 'hot'} release, the warmth spreading through her core.`,
+            `Your cock pulses into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'another load of cum adding to the mess, some squirting out with each thrust' : 'hot jets of semen flooding '}${posPronoun} ${channelDesc}.`
         );
     }
     
@@ -4897,13 +4948,29 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
         const lastEjaculationTarget = intimacy.climax ? intimacy.climax.lastInternalEjaculation : null;
         const isMultipleEjaculation = lastEjaculationTarget === "anus";
         
+        // Check anus state - if it's been stretched open, it's no longer "closed"
+        const anusAnatomy = (npc.anatomy && npc.anatomy.anus) || {};
+        const anusSize = anusAnatomy.size || "snug";
+        const isAnusOpen = anusSize === "loose" || anusSize === "gaping" || anusSize === "stretchy";
+        
+        // For multiple ejaculations, always include sloshing/sound descriptors
+        const sloshingSound = isMultipleEjaculation ? pickRandom([
+            'with obscene squelching sounds',
+            'the cavity sloshing wetly with each movement',
+            'lewd sloshing noises escaping from within',
+            'the slick, wet sounds filling the air'
+        ]) : '';
+        
+        // Adjust cavity description based on whether it's been opened
+        const cavityDesc = isAnusOpen ? pickRandom(['well-used passage', 'stretched channel', 'yielding cavity', 'open bowels']) : pickRandom(['tight channel', 'clenching cavity', 'resistant passage', 'tight bowels']);
+        
         return [
-            `You ejaculate into ${anatomyDesc}, filling ${posPronoun} bowels with ${isMultipleEjaculation ? 'another hot load, the cavity already distended with semen' : 'your hot seed'}.`,
-            `You release into ${anatomyDesc}, ${isMultipleEjaculation ? 'adding to the semen already filling ' : 'pumping your thick cum into '}${posPronoun} tight channel.`,
-            `You climax inside ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous deposits, slightly distending ' : 'filling '}${posPronoun} bowels.`,
-            `Your penis ejaculates into ${anatomyDesc}, ${isMultipleEjaculation ? 'more semen joining what is already there, the pressure building in ' : 'releasing deep into '}${posPronoun} hot cavity.`,
-            `You fill ${anatomyDesc} with your seed, the tight ring milking your ${isMultipleEjaculation ? 'remaining' : 'thick'} cum into ${posPronoun} depths.`,
-            `Your cock pumps into ${anatomyDesc}, ${isMultipleEjaculation ? 'another load of semen adding to the slick mess inside ' : 'hot spurt after spurt coating '}${posPronoun} inner walls.`
+            `You ejaculate into ${anatomyDesc}, filling ${posPronoun} ${cavityDesc} with ${isMultipleEjaculation ? 'another thick deposit, the cavity already swollen and heavy with semen' : 'your hot seed, the viscous fluid filling the unseen depths'} ${isMultipleEjaculation ? sloshingSound : ''}.`,
+            `You release into ${anatomyDesc}, ${isMultipleEjaculation ? 'adding to the growing pool of semen already sloshing in ' : 'pumping your thick cum into '}${posPronoun} ${cavityDesc} with a wet squelch.`,
+            `You climax inside ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous deposits with a lewd gurgle, her bowels struggling to contain the growing volume' : 'filling '}${posPronoun} ${cavityDesc}, the slick sounds of release echoing from within.`,
+            `Your penis ejaculates into ${anatomyDesc}, ${isMultipleEjaculation ? 'more semen forcing its way into the already-full cavity, a wet squelch escaping with each pulse' : 'releasing deep into '}${posPronoun} hot, clenching ${cavityDesc}.`,
+            `You fill ${anatomyDesc} with your seed, ${isAnusOpen ? 'the relaxed ring accepting' : 'the tight ring milking'} your ${isMultipleEjaculation ? 'remaining' : 'thick'} cum into ${posPronoun} depths as the cavity makes wet, obscene sounds.`,
+            `Your cock pumps into ${anatomyDesc}, ${isMultipleEjaculation ? 'another load of semen adding to the slick, sloshing mess inside, her bowels gurgling with the overflow' : 'hot spurt after spurt coating '}${posPronoun} ${cavityDesc} with glistening warmth.`
         ];
     }
     
@@ -4997,12 +5064,12 @@ function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
         const isMultipleEjaculation = lastEjaculationTarget === "mouth";
         
         return [
-            `You ejaculate into ${anatomyDesc}, filling ${posPronoun} mouth with ${isMultipleEjaculation ? 'another thick load' : 'your hot cum'}.`,
-            `You release into ${anatomyDesc}, ${isMultipleEjaculation ? 'adding more to what ' : 'pumping your seed into '}${posPronoun} waiting mouth.`,
-            `You climax in ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining what is already there' : 'coating '}${posPronoun} tongue and throat.`,
-            `Your penis ejaculates into ${anatomyDesc}, ${isMultipleEjaculation ? 'more semen mixing with the existing pool' : 'thick spurts of cum filling '}${posPronoun} oral cavity.`,
-            `You fill ${anatomyDesc} with your seed, ${posPronoun} ${isMultipleEjaculation ? 'struggling to contain the growing volume' : 'gulping down your release'}.`,
-            `Your cock pulses into ${anatomyDesc}, ${isMultipleEjaculation ? 'another hot load for ' : 'hot jets of semen shooting into '}${posPronoun} ${isMultipleEjaculation ? 'already-filled mouth' : 'eager mouth'}.`
+            `You ejaculate into ${anatomyDesc}, filling ${posPronoun} mouth with ${isMultipleEjaculation ? 'another thick load, the warm fluid overflowing past her lips' : 'your hot cum, the salty fluid coating her tongue'}.`,
+            `You release into ${anatomyDesc}, ${isMultipleEjaculation ? 'adding more to what is already there, some dripping from the corners of her mouth' : 'pumping your seed into '}${posPronoun} waiting mouth with wet, sloppy sounds.`,
+            `You climax in ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining what is already there, the thick mixture pooling on her tongue' : 'coating '}${posPronoun} tongue and throat, the taste of your release filling her mouth.`,
+            `Your penis ejaculates into ${anatomyDesc}, ${isMultipleEjaculation ? 'more semen mixing with the existing pool, her throat working to swallow it all down' : 'thick spurts of cum filling '}${posPronoun} oral cavity, the warm fluid slick on her palate.`,
+            `You fill ${anatomyDesc} with your seed, ${posPronoun} ${isMultipleEjaculation ? 'struggling to contain the growing volume, some spilling past her lips' : 'gulping down your release, her throat bobbing with each swallow'}.`,
+            `Your cock pulses into ${anatomyDesc}, ${isMultipleEjaculation ? 'another hot load for her already-filled mouth, the excess dripping down her chin' : 'hot jets of semen shooting into '}${posPronoun} ${isMultipleEjaculation ? 'already-filled mouth' : 'eager mouth'}.`
         ];
     }
     
