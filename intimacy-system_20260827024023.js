@@ -3063,10 +3063,12 @@ function describeAnatomy(npc, target, options = {}) {
             return describeNipples(npc, anatomy, posPronoun, arousalDescriptors);
         
         case "anus":
+            return describeAnus(npc, anatomy, posPronoun, arousalDescriptors);
+        
         case "ass":
         case "butt":
         case "buttocks":
-            return describeAnus(npc, anatomy, posPronoun, arousalDescriptors);
+            return describeButtocks(npc, anatomy, posPronoun, arousalDescriptors);
         
         case "mouth":
         case "lips":
@@ -3308,39 +3310,99 @@ function describeNipples(npc, anatomy, posPronoun, arousalDescriptors) {
 
 /**
  * Describe anus with rich detail
+ * Uses anatomical terms: star, rosebud, pucker, ring, etc.
  */
 function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     const anus = anatomy.anus || {};
     const size = anus.size || "snug";
     const sphincter = anus.sphincter || "tight";
     const desc = anus.description || "anus";
-    const pigmentation = anus.pigmentation || "natural";
+    const pigmentation = anus.pigmentation || null;
+    
+    const { state, engorgement } = arousalDescriptors;
+    
+    // More anatomical and sensual terms for anus
+    const anusTerms = pickRandom([
+        "rosebud", "star", "pucker", "ring", "orifice", "opening", 
+        "entry", "entrance", "hole", "pucker"
+    ]);
     
     const sizeDescriptors = {
-        tight: ["tight", "clenching", "constricted", "narrow"],
-        snug: ["snug", "firm", "well-defined", "neat"],
-        firm: ["firm", "resilient", "muscular"],
-        supple: ["supple", "yielding", "soft"],
-        loose: ["loose", "relaxed", "open"],
-        gaping: ["gaping", "stretched", "wide"],
-        stretchy: ["stretchy", "accommodating", "flexible"]
+        tight: ["tight", "clenching", "constricted", "narrow", "virgin"],
+        snug: ["snug", "firm", "well-defined", "neat", "tight-lipped"],
+        firm: ["firm", "resilient", "muscular", "controlled"],
+        supple: ["supple", "yielding", "soft", "pliant"],
+        loose: ["loose", "relaxed", "open", "experienced"],
+        gaping: ["gaping", "stretched", "wide", "welcoming"],
+        stretchy: ["stretchy", "accommodating", "flexible", "elastic"]
     };
     const sizeAdj = sizeDescriptors[size] ? pickRandom(sizeDescriptors[size]) : size;
     
     const sphincterDescriptors = {
-        tight: ["tightly clenched", "firmly closed", "resistantly squeezed"],
-        snug: ["snugly puckered", "neatly folded", "firmly held"],
-        firm: ["firmly ringed", "muscularly controlled", "strongly clenched"],
-        supple: ["softly yielding", "gently pulsing", "warmly receptive"],
-        loose: ["loosely open", "relaxedly parted", "easily accessible"]
+        tight: ["tightly clenched", "firmly closed", "resistantly squeezed", "shyly guarded"],
+        snug: ["snugly puckered", "neatly folded", "firmly held", "delicately wrinkled"],
+        firm: ["firmly ringed", "muscularly controlled", "strongly clenched", "well-toned"],
+        supple: ["softly yielding", "gently pulsing", "warmly receptive", "eagerly yielding"],
+        loose: ["loosely open", "relaxedly parted", "easily accessible", "invitingly slack"]
     };
     const sphincterDesc = sphincterDescriptors[sphincter] ? pickRandom(sphincterDescriptors[sphincter]) : sphincter;
     
+    // Add pigmentation if available and not generic
+    const pigmentDesc = pigmentation && pigmentation !== "natural" && pigmentation !== "natural toned" 
+        ? `${pigmentation} ` 
+        : "";
+    
+    // Build descriptions with more sensual, anatomical language
     return pickRandom([
-        `${posPronoun} ${sizeAdj} ${desc}`,
-        `the ${sphincterDesc} ${desc}`,
-        `${posPronoun} ${sphincterDesc} ${sizeAdj} entrance`,
-        `the ${pigmentation} ${desc}, ${sizeAdj} and ${sphincter}`
+        `${posPronoun} ${sizeAdj} ${anusTerms}`,
+        `the ${sphincterDesc} ${anusTerms}`,
+        `${posPronoun} ${pigmentDesc}${sizeAdj} ${anusTerms}`,
+        `the ${sphincterDesc} ${pigmentDesc}${anusTerms}`,
+        `${pigmentDesc}the ${sizeAdj} ${anusTerms} of ${posPronoun} body`,
+        `${posPronoun} ${engorgement || state || sizeAdj} ${anusTerms}`
+    ]).replace(/  /g, ' '); // Remove double spaces
+}
+
+/**
+ * Describe buttocks with rich detail
+ * Uses terms like: cheeks, globes, mounds, rounded, firm, plump, etc.
+ */
+function describeButtocks(npc, anatomy, posPronoun, arousalDescriptors) {
+    const buttocks = anatomy.buttocks || {};
+    const size = buttocks.sizeCategory || "medium";
+    const desc = buttocks.description || "buttocks";
+    const hips = anatomy.hips || {};
+    const hipSize = hips.sizeCategory || "average";
+    
+    const sizeDescriptors = {
+        small: ["small", "petite", "compact", "tight"],
+        medium: ["rounded", "shapely", "firm", "well-formed"],
+        large: ["full", "ample", "generous", "plump", "voluptuous"]
+    };
+    const sizeAdj = sizeDescriptors[size] ? pickRandom(sizeDescriptors[size]) : "shapely";
+    
+    const hipDescriptors = {
+        narrow: ["narrow", "slender"],
+        average: ["curved", "graceful"],
+        wide: ["wide", "generous"]
+    };
+    const hipAdj = hipDescriptors[hipSize] ? pickRandom(hipDescriptors[hipSize]) : "curved";
+    
+    // Add arousal-based descriptors
+    const { wetness, engorgement, state } = arousalDescriptors;
+    const arousedDesc = state ? pickRandom(["flushed", "warm", "tingling", "needy"]) : "";
+    
+    // Various ways to describe buttocks
+    const cheekTerms = pickRandom(["cheeks", "globes", "mounds", "orbs", "spheres"]);
+    const buttTerms = pickRandom(["butt", "rear", "backside", "posterior"]);
+    
+    return pickRandom([
+        `${posPronoun} ${sizeAdj} ${cheekTerms}`,
+        `${posPronoun} ${sizeAdj} ${buttTerms}`,
+        `the ${sizeAdj} ${cheekTerms} of ${posPronoun} ${hipAdj} hips`,
+        `${posPronoun} ${arousedDesc} ${sizeAdj} buttocks`,
+        `the ${sizeAdj} ${buttTerms}`,
+        `${posPronoun} ${sizeAdj} backside`
     ]);
 }
 
@@ -3584,6 +3646,7 @@ if (typeof module !== 'undefined' && module.exports) {
         describeBreasts,
         describeNipples,
         describeAnus,
+        describeButtocks,
         describeMouth,
         describeThighs,
         
@@ -3596,6 +3659,7 @@ if (typeof module !== 'undefined' && module.exports) {
         buildTesticlesNarratives,
         buildBreastNarratives,
         buildAnusNarratives,
+        buildButtockNarratives,
         buildMouthNarratives,
         buildThighNarratives,
         getPubicDescription,
@@ -3709,10 +3773,13 @@ function buildActionNarratives(npc, actionId, act, context) {
             break;
             
         case "anus":
+            narratives.push(...buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            break;
+            
         case "butt":
         case "buttocks":
         case "ass":
-            narratives.push(...buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
+            narratives.push(...buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context));
             break;
             
         case "mouth":
@@ -3885,6 +3952,43 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
         verbBase === 'spread' ? `You ${verbPresent} ${anatomyDesc}, exposing the ${highArousal ? 'glistening' : 'tight'} entrance.` : null,
         verbBase === 'lick' ? `Your tongue ${verbIng} ${anatomyDesc}, ${highArousal ? 'preparing the way' : 'exploring the sensitive flesh'}.` : null,
         `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'pushing back against your touch' : 'tensing slightly'}.`
+    ].filter(Boolean);
+}
+
+/**
+ * Build buttocks action narratives
+ * For actions like spread, squeeze, grope, slap targeting buttocks/cheeks/ass
+ */
+function buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context) {
+    const { arousalLevel = 0 } = context;
+    const highArousal = arousalLevel > 70;
+    
+    return [
+        // Generic
+        `You ${verbPresent} ${anatomyDesc}.`,
+        `Your ${pickRandom(['hand', 'hands', 'palm', 'palms', 'fingers'])} ${verbPresent} ${anatomyDesc}.`,
+        
+        // Spread
+        verbBase === 'spread' ? `You ${verbPresent} ${anatomyDesc}, revealing the ${highArousal ? 'glistening' : 'tight'} cleft between.` : null,
+        verbBase === 'spread' ? `You part ${anatomyDesc}, exposing the ${highArousal ? 'moist' : 'hidden'} valley.` : null,
+        
+        // Squeeze
+        verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, feeling the ${highArousal ? 'warm, yielding' : 'firm, resistant'} flesh.` : null,
+        verbBase === 'squeeze' ? `You grip ${anatomyDesc}, massaging the ${highArousal ? 'pliant' : 'resilient'} globes.` : null,
+        
+        // Grope
+        verbBase === 'grope' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'kneading the soft flesh' : 'exploring the curves'}.` : null,
+        verbBase === 'grope' ? `Your hands ${verbIng} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'arching into your touch' : 'shifting slightly'}.` : null,
+        
+        // Slap
+        verbBase === 'slap' ? `You ${verbPresent} ${anatomyDesc}, the ${highArousal ? 'flesh jiggling' : 'impact echoing'}.` : null,
+        verbBase === 'slap' ? `Your ${pickRandom(['hand', 'palm'])} connects with ${anatomyDesc}, leaving a ${highArousal ? 'rosy handprint' : 'tingling mark'}.` : null,
+        
+        // Kiss
+        verbBase === 'kiss' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'trailing your lips across the soft skin' : 'pressing a gentle kiss'}.` : null,
+        
+        // Generic with NPC reaction
+        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'responding eagerly' : 'enjoying the attention'}.`
     ].filter(Boolean);
 }
 
