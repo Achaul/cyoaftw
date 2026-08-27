@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-26-022";
-    console.log("[Intimacy System] Loaded v2026-08-26-022 - Fixed tool-based narratives to use actual act tool instead of hardcoded values");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-27-001";
+    console.log("[Intimacy System] Loaded v2026-08-27-001 - Fixed LLM enhancement cache initialization for legacy saves");
 }
 
 // ============================================================================
@@ -116,15 +116,25 @@ function isSexualAct(act) {
  * @param {Object} intimacy - The intimacy state object
  */
 function initializeLLMEnhancement(intimacy) {
+    if (!intimacy) return;
+    
     if (!intimacy.llmEnhancement) {
         intimacy.llmEnhancement = {
-            // Cache: actionType+position -> enhanced narrative
             cache: new Map(),
-            // Queue: pending LLM call promise (null when idle)
             pendingPromise: null,
-            // Track if enhancement is active for this encounter
             active: false
         };
+    } else {
+        // Ensure cache exists and is a Map
+        if (!intimacy.llmEnhancement.cache || !(intimacy.llmEnhancement.cache instanceof Map)) {
+            intimacy.llmEnhancement.cache = new Map();
+        }
+        if (intimacy.llmEnhancement.pendingPromise === undefined) {
+            intimacy.llmEnhancement.pendingPromise = null;
+        }
+        if (intimacy.llmEnhancement.active === undefined) {
+            intimacy.llmEnhancement.active = false;
+        }
     }
 }
 
@@ -134,8 +144,11 @@ function initializeLLMEnhancement(intimacy) {
  */
 function clearLLMEnhancementCache(intimacy) {
     if (intimacy && intimacy.llmEnhancement) {
-        intimacy.llmEnhancement.cache.clear();
+        if (intimacy.llmEnhancement.cache && intimacy.llmEnhancement.cache instanceof Map) {
+            intimacy.llmEnhancement.cache.clear();
+        }
         intimacy.llmEnhancement.active = false;
+        intimacy.llmEnhancement.pendingPromise = null;
     }
 }
 
@@ -191,6 +204,11 @@ function buildLLMEnhancementContext(npc, act, intimacy, baseNarrative) {
 function getCachedLLMEnhancement(intimacy, actionType, position) {
     if (!intimacy?.llmEnhancement) return null;
     
+    // Ensure cache is initialized
+    if (!intimacy.llmEnhancement.cache || !(intimacy.llmEnhancement.cache instanceof Map)) {
+        intimacy.llmEnhancement.cache = new Map();
+    }
+    
     const cacheKey = `${actionType}||${position}`;
     return intimacy.llmEnhancement.cache.get(cacheKey) || null;
 }
@@ -204,6 +222,11 @@ function getCachedLLMEnhancement(intimacy, actionType, position) {
  */
 function cacheLLMEnhancement(intimacy, actionType, position, enhancedNarrative) {
     if (!intimacy?.llmEnhancement) return;
+    
+    // Ensure cache is initialized
+    if (!intimacy.llmEnhancement.cache || !(intimacy.llmEnhancement.cache instanceof Map)) {
+        intimacy.llmEnhancement.cache = new Map();
+    }
     
     const cacheKey = `${actionType}||${position}`;
     
@@ -1891,6 +1914,9 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     const currentPosition = (intimacy && intimacy.position && intimacy.position.player) || positionId || "Unknown";
     
     if (isSexualAct(act) && intimacy) {
+        // Ensure LLM enhancement is initialized (handles legacy saved games)
+        initializeLLMEnhancement(intimacy);
+        
         // Try to get cached enhancement
         const cachedEnhancement = getCachedLLMEnhancement(intimacy, act.id, currentPosition);
         if (cachedEnhancement) {
