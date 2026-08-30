@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-27-008";
-    console.log("[Intimacy System] Loaded v2026-08-27-008 - Open/closed state, semen pools at feet/on ground, always sloshing sounds");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-30-011";
+    console.log("[Intimacy System] Loaded v2026-08-30-011 - Fixed possessive pronouns, removed NPC reactions from player narratives, improved anatomy descriptors");
 }
 
 // ============================================================================
@@ -3931,9 +3931,9 @@ function describeVagina(npc, anatomy, posPronoun, arousalDescriptors) {
     ]);
     
     return pickRandom([
-        `${descriptions[0]}, parting to reveal ${baseDesc}`,
-        `through ${descriptions[0]} to ${baseDesc}`,
-        `${baseDesc}, framed by ${descriptions[0]}`,
+        `${posPronoun} ${descriptions[0]}, parting to reveal ${baseDesc}`,
+        `through ${posPronoun} ${descriptions[0]} to ${baseDesc}`,
+        `${baseDesc}, framed by ${posPronoun} ${descriptions[0]}`,
         `${posPronoun} ${labiaAdj} ${vulvaTerms}`
     ]);
 }
@@ -3960,7 +3960,7 @@ function describePenis(npc, anatomy, posPronoun, arousalDescriptors) {
     
     const descriptions = [
         `${posPronoun} ${sizeAdj} ${genitalDesc}`,
-        `the ${sizeAdj} ${genitalDesc}`,
+        `${posPronoun} ${sizeAdj} ${genitalDesc}`,
         `${posPronoun} ${stateDesc} ${sizeAdj} ${genitalDesc}`
     ];
     
@@ -3987,7 +3987,7 @@ function describeTesticles(npc, anatomy, posPronoun, arousalDescriptors) {
     return pickRandom([
         `${posPronoun} ${sizeAdj} balls`,
         `${posPronoun} ${stateDesc} ${sizeAdj} testicles`,
-        `the ${sizeAdj} ${pickRandom(["sack", "scrotum"])}`,
+        `${posPronoun} ${sizeAdj} ${pickRandom(["sack", "scrotum"])}`,
         `${posPronoun} ${pickRandom(["heavy", "full"])} ${sizeAdj} balls`
     ]);
 }
@@ -4061,9 +4061,9 @@ function describeNipples(npc, anatomy, posPronoun, arousalDescriptors) {
     
     return pickRandom([
         `${posPronoun} ${nippleAdj} ${pickRandom(["nipples", "teats", "buds", "peaks"])}`,
-        `the ${nippleAdj} ${nippleTexture} ${pickRandom(["nipples", "nubs"])}`,
+        `${posPronoun} ${nippleAdj} ${nippleTexture} ${pickRandom(["nipples", "nubs"])}`,
         `${posPronoun} ${stateDesc} ${nippleAdj} nipples, surrounded by ${areolaPigment} ${areolaSize} areolas`,
-        `the ${nippleAdj} points of ${posPronoun} breasts`
+        `${posPronoun} ${nippleAdj} points of ${posPronoun} breasts`
     ]);
 }
 
@@ -4160,9 +4160,9 @@ function describeButtocks(npc, anatomy, posPronoun, arousalDescriptors) {
     return pickRandom([
         `${posPronoun} ${sizeAdj} ${cheekTerms}`,
         `${posPronoun} ${sizeAdj} ${buttTerms}`,
-        `the ${sizeAdj} ${cheekTerms} of ${posPronoun} ${hipAdj} hips`,
+        `${posPronoun} ${sizeAdj} ${cheekTerms} of ${posPronoun} ${hipAdj} hips`,
         `${posPronoun} ${arousedDesc} ${sizeAdj} buttocks`,
-        `the ${sizeAdj} ${buttTerms}`,
+        `${posPronoun} ${sizeAdj} ${buttTerms}`,
         `${posPronoun} ${sizeAdj} backside`
     ]);
 }
@@ -4198,7 +4198,7 @@ function describeThighs(npc, anatomy, posPronoun, arousalDescriptors) {
     
     return pickRandom([
         `${posPronoun} ${sizeAdj} thighs`,
-        `the ${sizeAdj} inner thighs`,
+        `${posPronoun} ${sizeAdj} inner thighs`,
         `${posPronoun} ${pickRandom(["smooth", "soft", "warm"])} ${sizeAdj} thighs`,
         `between ${posPronoun} ${sizeAdj} thighs`
     ]);
@@ -4571,20 +4571,37 @@ function buildActionNarratives(npc, actionId, act, context) {
             const genericTool = tool || "hand";
             const genericToolVerb = getVerbForTool(verbBase, genericTool);
             
+            // Helper function to ensure possessive pronoun is added to anatomy description
+            const ensurePossessive = (desc) => {
+                const trimmedDesc = desc.trim();
+                const trimmedPronoun = posPronoun.trim();
+                // Check if description already starts with possessive pronoun
+                if (trimmedDesc.startsWith(trimmedPronoun + ' ') || trimmedDesc === trimmedPronoun) {
+                    return trimmedDesc;
+                }
+                // Remove leading articles if present
+                const withoutArticle = trimmedDesc.replace(/^(a |an |the )/i, '').trim();
+                return `${trimmedPronoun} ${withoutArticle}`;
+            };
+            
             // Handle ejaculation on body parts
             if (verbBase === 'ejaculate' || verbBase === 'ejaculate on') {
                 // For external ejaculation, use "on" preposition
+                // Ensure possessive pronoun is included in anatomy description
+                const fullTarget = ensurePossessive(anatomyDesc);
                 narratives.push(
-                    `You ejaculate on ${anatomyDesc}, coating ${posPronoun} ${target} with your hot cum.`,
-                    `You release on ${anatomyDesc}, your thick seed splattering across ${posPronoun} ${target}.`,
-                    `Your penis ejaculates on ${anatomyDesc}, jets of cum landing on ${posPronoun} ${target}.`,
-                    `You climax on ${anatomyDesc}, your cum painting ${posPronoun} ${target} with sticky warmth.`
+                    `You ejaculate on ${fullTarget}, coating it with your hot cum.`,
+                    `You release on ${fullTarget}, your thick seed splattering across the surface.`,
+                    `Your penis ejaculates on ${fullTarget}, jets of cum landing on the warm skin.`,
+                    `You climax on ${fullTarget}, your cum painting it with sticky warmth.`
                 );
             } else {
+                // For generic body parts (face, neck, cheek, etc.), ensure possessive pronoun is included
+                const fullAnatomyDesc = ensurePossessive(anatomyDesc);
                 narratives.push(
-                    `You ${verbPresent} ${anatomyDesc}.`,
-                    `Your ${genericTool} ${genericToolVerb} ${anatomyDesc}.`,
-                    `You reach out and ${verbPresent} ${anatomyDesc}.`
+                    `You ${verbPresent} ${fullAnatomyDesc}.`,
+                    `Your ${genericTool} ${genericToolVerb} ${fullAnatomyDesc}.`,
+                    `You reach out and ${verbPresent} ${fullAnatomyDesc}.`
                 );
             }
     }
@@ -4875,7 +4892,7 @@ function buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
         verbBase === 'stroke' ? `You ${verbPresent} the length of ${anatomyDesc}, feeling the ${highArousal ? 'pulsing heat' : 'warm weight'} in your palm.` : null,
         verbBase === 'suck' || verbBase === 'lick' ? `Your ${actualTool === 'mouth' ? 'mouth' : 'tongue'} ${verbIng} ${anatomyDesc}, ${highArousal ? 'taking the full length' : 'exploring the shaft'}.` : null,
         verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, massaging the ${highArousal ? 'throbbing' : 'firm'} shaft.` : null,
-        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'groans with pleasure' : 'lets out a content sigh'}.`
+        `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling the throbbing heat' : 'savoring the firm weight'}.`
     ].filter(Boolean);
 }
 
@@ -4891,10 +4908,10 @@ function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDe
     return [
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
-        verbBase === 'squeeze' ? `You gently ${verbPresent} ${anatomyDesc}, feeling their ${highArousal ? 'tight draw' : 'warm weight'}.` : null,
+        verbBase === 'squeeze' ? `You gently ${verbPresent} ${anatomyDesc}, feeling ${posPronoun} ${highArousal ? 'tight draw' : 'warm weight'}.` : null,
         verbBase === 'cupp' || verbBase === 'cup' ? `You cup ${anatomyDesc} in your palm, massaging the heavy orbs.` : null,
         verbBase === 'fondle' ? `You fondle ${anatomyDesc}, rolling them gently in your ${pickRandom(['hand', 'palm', 'fingers'])}.` : null,
-        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'shudders with pleasure' : 'enjoys the attention'}.`
+        `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling them shift in your hand' : 'enjoying the texture'}.`
     ].filter(Boolean);
 }
 
@@ -4911,10 +4928,10 @@ function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
         verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, feeling the ${highArousal ? 'firm, needy' : 'soft, warm'} flesh yield under your touch.` : null,
-        verbBase === 'kiss' || verbBase === 'lick' ? `Your ${actualTool === 'lips' ? 'lips' : 'tongue'} ${verbIng} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'arching into your touch' : 'sighing softly'}.` : null,
-        verbBase === 'pinch' || verbBase === 'flick' ? `You ${verbPresent} ${anatomyDesc}, drawing a ${highArousal ? 'sharp gasp' : 'soft moan'} from ${subjectPronoun}.` : null,
+        verbBase === 'kiss' || verbBase === 'lick' ? `Your ${actualTool === 'lips' ? 'lips' : 'tongue'} ${verbIng} ${anatomyDesc}, ${highArousal ? 'tracing the soft curves' : 'exploring the warm surface'}` : null,
+        verbBase === 'pinch' || verbBase === 'flick' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'teasing the sensitive peaks' : 'playing with the firm nubs'}` : null,
         verbBase === 'tease' ? `You ${verbPresent} ${anatomyDesc}, circling but never quite touching the ${highArousal ? 'hard, aching' : 'perky'} tips.` : null,
-        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'breath coming faster' : 'enjoying the sensation'}.`
+        `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling the warm, yielding flesh' : 'enjoying the soft texture'}.`
     ].filter(Boolean);
 }
 
@@ -4986,7 +5003,7 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             `You ${verbPresent} ${anatomyDesc}, exposing the ${highArousal ? 'glistening' : 'tightly closed'} entrance.` : null,
         verbBase === 'lick' ? 
             `Your tongue ${verbPresent} ${anatomyDesc}, ${highArousal ? 'preparing the resistant way' : 'exploring the sensitive, wrinkled flesh'}.` : null,
-        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'pushes back against your touch' : 'tenses at the contact'}.`
+        `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing against the yielding resistance' : 'feeling the tight, wrinled flesh'}.`
     ].filter(Boolean);
 }
 
@@ -5013,29 +5030,29 @@ function buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
         
         // Spread - enhanced with anus and hair visibility
-        verbBase === 'spread' ? `You ${verbPresent} ${posPronoun} ${anatomyDesc}, revealing the ${highArousal ? 'glistening' : 'tight'} cleft between.` : null,
-        verbBase === 'spread' ? `You part ${posPronoun} ${anatomyDesc}, exposing the ${highArousal ? 'moist' : 'hidden'} valley.` : null,
+        verbBase === 'spread' ? `You ${verbPresent} ${anatomyDesc}, revealing the ${highArousal ? 'glistening' : 'tight'} cleft between.` : null,
+        verbBase === 'spread' ? `You part ${anatomyDesc}, exposing the ${highArousal ? 'moist' : 'hidden'} valley.` : null,
         // Enhanced spread with anus visibility
         verbBase === 'spread' ? `You spread ${posPronoun} ${pubicDesc} cheeks apart, revealing ${includeSkin ? skinDesc + ' ' : ''}${anusDesc} with its ${analInterior} interior.` : null,
         verbBase === 'spread' ? `Parting ${posPronoun} buttocks, you expose the ${analInterior} pucker nestled between.` : null,
         
         // Squeeze
-        verbBase === 'squeeze' ? `You ${verbPresent} ${posPronoun} ${anatomyDesc}, feeling the ${highArousal ? 'warm, yielding' : 'firm, resistant'} flesh.` : null,
-        verbBase === 'squeeze' ? `You grip ${posPronoun} ${anatomyDesc}, massaging the ${highArousal ? 'pliant' : 'resilient'} globes.` : null,
+        verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, feeling the ${highArousal ? 'warm, yielding' : 'firm, resistant'} flesh.` : null,
+        verbBase === 'squeeze' ? `You grip ${anatomyDesc}, massaging the ${highArousal ? 'pliant' : 'resilient'} globes.` : null,
         
         // Grope
-        verbBase === 'grope' ? `You ${verbPresent} ${posPronoun} ${anatomyDesc}, ${highArousal ? 'kneading the soft flesh' : 'exploring the curves'}.` : null,
-        verbBase === 'grope' ? `Your ${actualTool} ${verbIng} ${posPronoun} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'arching into your touch' : 'shifting slightly'}.` : null,
+        verbBase === 'grope' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'kneading the soft flesh' : 'exploring the curves'}.` : null,
+        verbBase === 'grope' ? `Your ${actualTool} ${verbIng} ${anatomyDesc}, ${highArousal ? 'gripping the yielding flesh' : 'exploring the firm curves'}` : null,
         
         // Slap
-        verbBase === 'slap' ? `You ${verbPresent} ${posPronoun} ${anatomyDesc}, the ${highArousal ? 'flesh jiggling' : 'impact echoing'}.` : null,
-        verbBase === 'slap' ? `Your ${actualTool === 'hand' ? 'hand' : actualTool === 'palm' ? 'palm' : 'hand'} ${toolVerb} ${posPronoun} ${anatomyDesc}, leaving a ${highArousal ? 'rosy handprint' : 'tingling mark'}.` : null,
+        verbBase === 'slap' ? `You ${verbPresent} ${anatomyDesc}, the ${highArousal ? 'flesh jiggling' : 'impact echoing'}.` : null,
+        verbBase === 'slap' ? `Your ${actualTool === 'hand' ? 'hand' : actualTool === 'palm' ? 'palm' : 'hand'} ${toolVerb} ${anatomyDesc}, leaving a ${highArousal ? 'rosy handprint' : 'tingling mark'}.` : null,
         
         // Kiss
         verbBase === 'kiss' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'trailing your lips across the soft skin' : 'pressing a gentle kiss'}.` : null,
         
-        // Generic with NPC reaction
-        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'responding eagerly' : 'enjoying the attention'}.`
+        // Generic
+        `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling the warm flesh' : 'enjoying the firm texture'}.`
     ].filter(Boolean);
 }
 
@@ -5076,11 +5093,11 @@ function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
     return [
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
-        verbBase === 'kiss' ? `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'responding hungrily' : 'returning the gesture softly'}.` : null,
+        verbBase === 'kiss' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing firmly against the warm lips' : 'gently touching the soft surface'}` : null,
         verbBase === 'suck' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'drawing deeply' : 'gently pulling'}.` : null,
         verbBase === 'bite' || verbBase === 'nibble' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'with eager pressure' : 'playfully'}.` : null,
         verbBase === 'lick' ? `Your ${actualTool === 'tongue' ? actualTool : 'tongue'} ${verbIng} ${anatomyDesc}, ${highArousal ? 'hungrily' : 'exploratively'}.` : null,
-        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'moaning into the contact' : 'sighing softly'}.`
+        `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'savoring the intimate contact' : 'enjoying the soft warmth'}.`
     ].filter(Boolean);
 }
 
@@ -5096,11 +5113,11 @@ function buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
     return [
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
-        verbBase === 'stroke' || verbBase === 'caress' ? `You ${verbPresent} ${posPronoun} ${anatomyDesc}, feeling the ${highArousal ? 'damp heat' : 'soft skin'} beneath your touch.` : null,
+        verbBase === 'stroke' || verbBase === 'caress' ? `You ${verbPresent} ${anatomyDesc}, feeling the ${highArousal ? 'damp heat' : 'soft skin'} beneath your touch.` : null,
         verbBase === 'spread' || verbBase === 'part' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'exposing the slick center' : 'revealing what lies between'}.` : null,
-        verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'whimpering at the pressure' : 'shifting slightly'}.` : null,
+        verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'gripping the soft flesh' : 'feeling the firm resistance'}` : null,
         verbBase === 'kiss' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'breathing in the musk of arousal' : 'enjoying the warm skin'}.` : null,
-        `You ${verbPresent} ${anatomyDesc}, ${subjectPronoun} ${highArousal ? 'trembling with need' : 'relaxing into your touch'}.`
+        `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling the warm skin' : 'enjoying the smooth texture'}.`
     ].filter(Boolean);
 }
 
