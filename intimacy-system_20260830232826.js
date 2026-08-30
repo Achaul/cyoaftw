@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-30-011";
-    console.log("[Intimacy System] Loaded v2026-08-30-011 - Fixed possessive pronouns, removed NPC reactions from player narratives, improved anatomy descriptors");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-30-016";
+    console.log("[Intimacy System] Loaded v2026-08-30-016 - Fixed possessive pronouns, removed NPC reactions, improved anatomy descriptors, fixed anus terminology, fixed verb-specific narratives, removed duplicate descriptors, fixed contradictory terms, simplified sphincter descriptors");
 }
 
 // ============================================================================
@@ -4088,7 +4088,7 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     
     const sizeDescriptors = {
         tight: ["tight", "clenching", "constricted", "narrow", "virgin", "resistant"],
-        snug: ["snug", "firm", "well-defined", "tight-lipped", "resilient"],
+        snug: ["snug", "firm", "well-defined", "tightly clenched", "resilient"],
         firm: ["firm", "resilient", "muscular", "controlled", "toned"],
         supple: ["supple", "yielding", "soft", "pliant", "flexible"],
         loose: ["loose", "relaxed", "experienced", "used", "accommodating"],
@@ -4099,11 +4099,11 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     
     // Sphincters are wrinkly/puckered by nature - never "neat" in the tidy sense
     const sphincterDescriptors = {
-        tight: ["tightly clenched", "firmly closed", "resistantly squeezed", "shyly guarded", "tense and shut"],
-        snug: ["snugly puckered", "delicately wrinkled", "firmly held", "tightly furled"],
-        firm: ["firmly ringed", "muscularly controlled", "strongly clenched", "well-toned", "resiliently puckered"],
-        supple: ["softly yielding", "gently pulsing", "warmly receptive", "eagerly yielding", "pliantly wrinkled"],
-        loose: ["loosely open", "relaxedly parted", "experienced and yielding", "previously stretched"]
+        tight: ["clenched", "firmly closed", "resistant", "shyly guarded", "tense"],
+        snug: ["puckered", "wrinkled", "firm", "tight"],
+        firm: ["ringed", "controlled", "clenched", "toned", "puckered"],
+        supple: ["yielding", "pulsing", "receptive", "soft", "wrinkled"],
+        loose: ["open", "parted", "experienced", "stretched"]
     };
     const sphincterDesc = sphincterDescriptors[sphincter] ? pickRandom(sphincterDescriptors[sphincter]) : sphincter;
     
@@ -4996,14 +4996,15 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
         // Penetration/fingering - sphincters are normally tight and resistant
         verbBase === 'penetrate' || verbBase === 'finger' ? 
-            `You ${verbPresent} ${anatomyDesc}, ${analEasy ? 'sliding into the yielding opening' : highArousal ? 'pressing against the reluctantly yielding resistance' : 'gently pressing against the tight, resistant entrance'}.` : null,
+            `You ${verbPresent} ${anatomyDesc}, ${analEasy ? 'sliding into the yielding opening' : highArousal ? 'pressing against the reluctant entrance' : 'gently pressing against the tight entrance'}.` : null,
         verbBase === 'tease' || verbBase === 'circle' ? 
             `You ${verbPresent} ${anatomyDesc}, tracing the ${highArousal ? 'slightly yielding' : 'tight, wrinkled'} rim.` : null,
         verbBase === 'spread' ? 
             `You ${verbPresent} ${anatomyDesc}, exposing the ${highArousal ? 'glistening' : 'tightly closed'} entrance.` : null,
         verbBase === 'lick' ? 
-            `Your tongue ${verbPresent} ${anatomyDesc}, ${highArousal ? 'preparing the resistant way' : 'exploring the sensitive, wrinkled flesh'}.` : null,
-        `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing against the yielding resistance' : 'feeling the tight, wrinled flesh'}.`
+            `Your tongue ${verbPresent} ${anatomyDesc}, ${highArousal ? 'preparing the way' : 'exploring the sensitive, wrinkled flesh'}.` : null,
+        (verbBase !== 'penetrate' && verbBase !== 'finger' && verbBase !== 'tease' && verbBase !== 'circle' && verbBase !== 'spread' && verbBase !== 'lick') ?
+            `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing against the warm entrance' : 'feeling the tight, wrinkled flesh'}.` : null
     ].filter(Boolean);
 }
 
