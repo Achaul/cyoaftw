@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-30-024";
-    console.log("[Intimacy System] Loaded v2026-08-30-024 - Added garbled speech for oral sex (Mmph! I-I'M C-CUMM-PH-PHIN'!), fixed syntax error, enhanced cock in mouth dialogue, clarified NPC arousal from performing, fixed possessive pronouns, improved penetration tool selection");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-31-025";
+    console.log("[Intimacy System] Loaded v2026-08-31-025 - Fixed capitalization in narratives, added 'into' and tool specs for penetration (fuck with your cock), removed 'generous' vagina descriptor, improved sentence flow");
 }
 
 // ============================================================================
@@ -2680,35 +2680,35 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     // Type-specific penetration templates
     const vaginalTemplates = {
         enter: [
-            isNearClimax ? `gasps as you enter ${possessivePronoun} vagina, ${subjectPronoun} teetering on the edge of climax.` : 
+            isNearClimax ? `gasps as you enter ${possessivePronoun} vagina, ${subjectPronoun.toLowerCase()} teetering on the edge of climax.` : 
             (shouldSemenDrip ? `gasps as you enter ${possessivePronoun} vagina, your previous load squirting out around your ${tool}.` : 
             `gasps as you fill ${possessivePronoun} vagina.`),
-            isNearClimax ? `welcomes you inside with a ${vocalization}, ${possessivePronoun} body trembling with impending release as ${possessivePronoun} warm, wet depths clench around your ${tool}.` : 
-            (shouldSemenDrip ? `welcomes you inside with a ${vocalization}, ${possessivePronoun} warm, wet depths clenching around your ${tool} as your semen drips out.` : 
-            `welcomes you inside with a ${vocalization}, ${possessivePronoun} warm, wet depths clenching around your ${tool}.`),
-            isNearClimax ? `moans softly as you sink into ${possessivePronoun} tight heat, ${subjectPronoun} is so close to the peak ${subjectPronoun} can barely contain it.` : 
+            isNearClimax ? `${subjectPronoun} body trembles with impending release as you sink into ${possessivePronoun} warm, wet depths, clenching around your ${tool}.` : 
+            (shouldSemenDrip ? `${subjectPronoun} warm, wet depths clench around your ${tool} as you enter, your semen dripping out.` : 
+            `sighs as you slide into ${possessivePronoun} warmth, ${possessivePronoun} depths clenching around your ${tool}.`),
+            isNearClimax ? `moans softly as you sink into ${possessivePronoun} tight heat, ${subjectPronoun.toLowerCase()} so close to the peak ${subjectPronoun.toLowerCase()} can barely contain it.` : 
             (shouldSemenDrip ? `moans softly as you sink into ${possessivePronoun} tight heat, your earlier release leaking out with each movement.` : 
             `moans softly as you sink into ${possessivePronoun} tight heat.`),
-            isNearClimax ? `arches ${possessivePronoun} back, ${possessivePronoun} body enveloping you in liquid warmth, ${subjectPronoun} nearly there.` : 
+            isNearClimax ? `arches ${possessivePronoun} back, ${possessivePronoun} body enveloping you in liquid warmth, ${subjectPronoun.toLowerCase()} nearly there.` : 
             `arches ${possessivePronoun} back, ${possessivePronoun} body enveloping you in liquid warmth.`,
-            isNearClimax ? `takes you in deeply, ${possessivePronoun} slick folds greedy for more, ${subjectPronoun} is right on the brink.` : 
+            isNearClimax ? `takes you in deeply, ${possessivePronoun} slick folds greedy for more, ${subjectPronoun.toLowerCase()} right on the brink.` : 
             (shouldSemenDrip ? `takes you in deeply, your semen seeping out as ${possessivePronoun} slick folds greedy for more.` : 
             `takes you in deeply, ${possessivePronoun} slick folds greedy for more.`),
-            `whispers your name as you ${verb} ${objectPronoun}, ${possessivePronoun} hips rising to meet you.`,
+            `${subjectPronoun} gasps as you ${verb} into ${objectPronoun}, ${possessivePronoun} hips rising to meet you.`,
             `clutches at you as you enter ${possessivePronoun}, ${possessivePronoun} inner walls pulsing around your ${tool}.`
         ],
         continue: [
-            isNearClimax ? `moans with each thrust, ${possessivePronoun} vagina gripping you in wet heat, ${subjectPronoun} is so close to climax ${subjectPronoun} can't last much longer.` : 
-            (shouldSemenDrip ? `moans with each thrust, ${possessivePronoun} vagina gripping you in wet heat, your semen dripping out with every movement.` : 
-            `moans with each thrust, ${possessivePronoun} vagina gripping you in wet heat.`),
-            isNearClimax ? `matches your rhythm, ${possessivePronoun} slick channel clenching desperately around your ${tool}, ${subjectPronoun} is right on the edge.` : 
+            isNearClimax ? `moans with each thrust into ${possessivePronoun}, ${possessivePronoun} vagina gripping you in wet heat, ${subjectPronoun.toLowerCase()} so close to climax ${subjectPronoun.toLowerCase()} can't last much longer.` : 
+            (shouldSemenDrip ? `moans with each thrust into ${possessivePronoun}, ${possessivePronoun} vagina gripping you in wet heat, your semen dripping out with every movement.` : 
+            `moans with each thrust into ${possessivePronoun}, ${possessivePronoun} vagina gripping you in wet heat.`),
+            isNearClimax ? `matches your rhythm, ${possessivePronoun} slick channel clenching desperately around your ${tool}, ${subjectPronoun.toLowerCase()} right on the edge.` : 
             (shouldSemenDrip ? `matches your rhythm, ${possessivePronoun} slick channel clenching around your ${tool}, your earlier ejaculation leaking out.` : 
             `matches your rhythm, ${possessivePronoun} slick channel clenching and releasing around your ${tool}.`),
-            isNearClimax ? `grinds back against you, ${possessivePronoun} wet warmth taking you deeper, ${subjectPronoun} body trembling with the need to climax.` : 
+            isNearClimax ? `grinds back against you, ${possessivePronoun} wet warmth taking you deeper, ${subjectPronoun.toLowerCase()} body trembling with the need to climax.` : 
             `grinds back against you, ${possessivePronoun} wet warmth taking you deeper.`,
-            isNearClimax ? `whispers encouragement mixed with desperation as you continue, ${subjectPronoun} at the peak of arousal.` : 
+            isNearClimax ? `whispers encouragement mixed with desperation as you continue, ${subjectPronoun.toLowerCase()} at the peak of arousal.` : 
             `whispers encouragement as you continue, ${possessivePronoun} desire evident in every movement.`,
-            isNearClimax ? `${possessivePronoun} inner walls pulse and ripple frantically around your shaft with each thrust, ${subjectPronoun} is so close to release.` : 
+            isNearClimax ? `${possessivePronoun} inner walls pulse and ripple frantically around your shaft with each thrust, ${subjectPronoun.toLowerCase()} so close to release.` : 
             (shouldSemenDrip ? `${possessivePronoun} inner walls pulse and ripple around your shaft with each thrust, pushing out traces of your semen.` : 
             `${possessivePronoun} inner walls pulse and ripple around your shaft with each thrust.`),
             `raises ${possessivePronoun} hips to meet your thrusts, drawing you in deeper.`
@@ -2718,34 +2718,34 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     const analTemplates = {
         enter: [
             hasPendingPee ? `tenses suddenly as you press against ${possessivePronoun} ${bodyPartDesc}, a warm trickle escaping as ${subjectPronoun} loses control of ${possessivePronoun} bladder.` :
-            (isNearClimax ? `tenses as you press against ${possessivePronoun} ${bodyPartDesc}, ${subjectPronoun} is so close to climax the resistance is almost too much.` : 
+            (isNearClimax ? `tenses as you press against ${possessivePronoun} ${bodyPartDesc}, ${subjectPronoun.toLowerCase()} so close to climax the resistance is almost too much.` : 
             (!hasLube || lubeLevel < 50 ? (shouldSemenDrip ? `tenses as you press against ${possessivePronoun} ${bodyPartDesc}, the resistance considerable, your earlier release squirting out.` : `tenses as you press against ${possessivePronoun} ${bodyPartDesc}, the resistance considerable without proper preparation.`) : 
             (shouldSemenDrip ? `gasps as you enter ${possessivePronoun} ${bodyPartDesc}, your semen leaking out as the well-lubricated passage accepts you.` : `gasps as you enter ${possessivePronoun} ${bodyPartDesc}, the well-lubricated passage accepting you more easily.`))),
             hasPendingPee ? `winces slightly as you press against ${possessivePronoun} ${bodyPartDesc}, a warm trickle escaping as ${subjectPronoun} loses control of ${possessivePronoun} bladder.` :
-            (isNearClimax ? `winces slightly as ${possessivePronoun} ${bodyPartDesc} resists your entry, ${subjectPronoun} is trembling on the brink of release.` : 
+            (isNearClimax ? `winces slightly as ${possessivePronoun} ${bodyPartDesc} resists your entry, ${subjectPronoun.toLowerCase()} trembling on the brink of release.` : 
             (!hasLube || lubeLevel < 50 ? (shouldSemenDrip ? `winces slightly as ${possessivePronoun} ${bodyPartDesc} resists your entry, your semen seeping out with the effort.` : `winces slightly as ${possessivePronoun} ${bodyPartDesc} resists your entry, the tight ring reluctant to yield.`) : 
             (shouldSemenDrip ? `moans as you slide into ${possessivePronoun} ${bodyPartDesc}, your earlier load leaking out mixed with the lube.` : `moans as you slide into ${possessivePronoun} ${bodyPartDesc}, the lube making the way slick and smooth.`))),
             hasPendingPee ? `accepts you into ${possessivePronoun} ${bodyPartDesc}, a warm trickle escaping as ${subjectPronoun} loses control of ${possessivePronoun} bladder.` :
-            (isNearClimax ? `accepts you into ${possessivePronoun} ${bodyPartDesc}, ${subjectPronoun} so aroused ${subjectPronoun} can barely contain ${possessivePronoun} impending climax.` : 
+            (isNearClimax ? `accepts you into ${possessivePronoun} ${bodyPartDesc}, ${subjectPronoun.toLowerCase()} so aroused ${subjectPronoun.toLowerCase()} can barely contain ${possessivePronoun} impending climax.` : 
             (anusSize === "loose" || anusSize === "gaping" || anusSize === "stretchy" ? (shouldSemenDrip ? `accepts you readily into ${possessivePronoun} well-used ${bodyPartDesc}, your semen dripping out as the passage yields.` : `accepts you readily into ${possessivePronoun} well-used ${bodyPartDesc}, the passage yielding easily.`) : 
             (shouldSemenDrip ? `feels the hot cavity clenching as you breach ${possessivePronoun} ${bodyPartDesc}, your semen squeezing out around your shaft.` : `feels the hot cavity clenching as you breach ${possessivePronoun} ${bodyPartDesc}, the muscular ring gripping your shaft.`))),
             hasPendingPee ? `struggles slightly as you press against ${possessivePronoun} ${bodyPartDesc}, a warm trickle escaping as ${subjectPronoun} loses control of ${possessivePronoun} bladder.` :
-            (isNearClimax ? `struggles slightly as you push into ${possessivePronoun} ${bodyPartDesc}, ${subjectPronoun} is right on the edge of release.` : 
+            (isNearClimax ? `struggles slightly as you push into ${possessivePronoun} ${bodyPartDesc}, ${subjectPronoun.toLowerCase()} right on the edge of release.` : 
             (!hasLube || lubeLevel < 50 ? (shouldSemenDrip ? `struggles slightly as you push into ${possessivePronoun} ${bodyPartDesc}, your semen leaking out with the intense friction.` : `struggles slightly as you push into ${possessivePronoun} ${bodyPartDesc}, the friction intense without lubrication.`) : 
             (shouldSemenDrip ? `sighs in relief as you enter ${possessivePronoun} ${bodyPartDesc}, your semen seeping out, the lube easing the way.` : `sighs in relief as you enter ${possessivePronoun} ${bodyPartDesc}, the lube easing the way.`))),
             hasPendingPee ? `takes you in, a warm trickle escaping as ${subjectPronoun} loses control of ${possessivePronoun} bladder, ${possessivePronoun} ${bodyPartDesc} gripping you tightly.` :
-            (isNearClimax ? `takes you in, ${possessivePronoun} ${bodyPartDesc} gripping you tightly as ${subjectPronoun} hovers at the peak of arousal.` : 
+            (isNearClimax ? `takes you in, ${possessivePronoun} ${bodyPartDesc} gripping you tightly as ${subjectPronoun.toLowerCase()} hovers at the peak of arousal.` : 
             (anusSize === "loose" || anusSize === "gaping" || anusSize === "stretchy" ? (shouldSemenDrip ? `takes you in smoothly, your semen dripping out as ${possessivePronoun} relaxed ${bodyPartDesc} accommodates you.` : `takes you in smoothly, ${possessivePronoun} relaxed ${bodyPartDesc} accommodating you with little resistance.`) : 
             (shouldSemenDrip ? `grits ${possessivePronoun} teeth briefly as ${possessivePronoun} ${bodyPartDesc} stretches around your shaft, semen squirting out around your ${tool} in the hot vice.` : `grits ${possessivePronoun} teeth briefly as ${possessivePronoun} ${bodyPartDesc} stretches around your shaft, the hot vice pressure intense.`)))
         ],
         continue: [
             hasPendingPee ? `lets out a warm trickle as ${subjectPronoun} loses control of ${possessivePronoun} bladder, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.` :
             (shouldPullAway ? `pulls away slightly, ${possessivePronoun} ${bodyPartDesc} too much to take, before ${subjectPronoun} pushes back against you.` : 
-            (isNearClimax ? `grunts with each thrust, ${subjectPronoun} is so close to climax ${subjectPronoun} can't hold back much longer, your ${tool} in ${possessivePronoun} hot cavity.` : 
+            (isNearClimax ? `grunts with each thrust, ${subjectPronoun.toLowerCase()} so close to climax ${subjectPronoun.toLowerCase()} can't hold back much longer, your ${tool} in ${possessivePronoun} hot cavity.` : 
             (shouldSemenDrip ? `grunts with each thrust, your semen dripping out of ${possessivePronoun} hot cavity as you move.` : (!hasLube || lubeLevel < 30 ? `grunts with each thrust, the friction against your ${tool} in ${possessivePronoun} hot cavity building.` : `moans as you move within ${possessivePronoun}, the lube allowing smooth, gliding movements.`)))),
             hasPendingPee ? `clenches desperately around your shaft as a warm trickle escapes, ${subjectPronoun} losing control of ${possessivePronoun} bladder, ${possessivePronoun} ${bodyPartDesc} gripping your ${tool}.` :
             (shouldPullAway ? `winces and pulls back for a moment, ${possessivePronoun} snug channel needing a brief respite before continuing.` : 
-            (isNearClimax ? `clenches desperately around your shaft, ${subjectPronoun} is right on the edge of release, ${possessivePronoun} ${bodyPartDesc} gripping your ${tool}.` : 
+            (isNearClimax ? `clenches desperately around your shaft, ${subjectPronoun.toLowerCase()} right on the edge of release, ${possessivePronoun} ${bodyPartDesc} gripping your ${tool}.` : 
             (shouldSemenDrip ? `clenches around your shaft, your earlier ejaculation squeezing out as ${possessivePronoun} ${bodyPartDesc} grips your ${tool}.` : (anusSize === "loose" || anusSize === "gaping" || anusSize === "stretchy" ? `moves with you easily, ${possessivePronoun} ${bodyPartDesc} loose and accommodating around your ${tool}.` : `clenches around your shaft with each movement, ${possessivePronoun} ${bodyPartDesc} gripping your ${tool} fiercely.`)))),
             hasPendingPee ? `adjusts to your rhythm as a warm trickle escapes, ${subjectPronoun} losing control of ${possessivePronoun} bladder, ${possessivePronoun} hot vice snug around your shaft.` :
             (shouldFart ? `lets out a soft squelch of trapped air from ${possessivePronoun} ${bodyPartDesc} as you continue, the sound embarrassing but inevitable.` : 
@@ -2753,11 +2753,11 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             (shouldSemenDrip ? `adjusts to your rhythm, your semen leaking out as ${possessivePronoun} hot vice snug around your shaft.` : `adjusts to your rhythm, ${possessivePronoun} hot vice snug around your shaft.`))),
             hasPendingPee ? `breathes heavily as you continue, a warm trickle escaping as ${subjectPronoun} loses control of ${possessivePronoun} bladder, the tight hot cavity of ${possessivePronoun} ${bodyPartDesc} gripping your shaft.` :
             (shouldFart ? `lets out a wet fart from ${possessivePronoun} ${bodyPartDesc} as you pound into ${objectPronoun}, the trapped air finally released.` : 
-            (isNearClimax ? `breathes heavily as you continue, ${subjectPronoun} is on the brink, the tight hot cavity of ${possessivePronoun} ${bodyPartDesc} gripping your shaft almost too much.` : 
+            (isNearClimax ? `breathes heavily as you continue, ${subjectPronoun.toLowerCase()} on the brink, the tight hot cavity of ${possessivePronoun} ${bodyPartDesc} gripping your shaft almost too much.` : 
             (shouldSemenDrip ? `breathes heavily as you continue, your semen seeping from ${possessivePronoun} hot cavity with each thrust.` : (!hasLube || lubeLevel < 30 ? `breathes heavily as you continue, the tight, hot cavity of ${possessivePronoun} ${bodyPartDesc} gripping your shaft almost overwhelming.` : `matches your pace, the lubrication making each thrust into ${possessivePronoun} ${bodyPartDesc} smooth and pleasurable.`)))),
             hasPendingPee ? `clenches and releases around your shaft, a warm trickle escaping as ${subjectPronoun} loses control of ${possessivePronoun} bladder, each movement drawing a response from ${possessivePronoun} hot cavity.` :
             (shouldPullAway ? `pulls back with a gasp, ${possessivePronoun} tight passage overwhelmed for a moment, then ${subjectPronoun} relaxes and takes you again.` : 
-            (isNearClimax ? `clenches and releases around your shaft, ${subjectPronoun} is so close to release, each movement drawing a desperate response from ${possessivePronoun} hot cavity.` : 
+            (isNearClimax ? `clenches and releases around your shaft, ${subjectPronoun.toLowerCase()} so close to release, each movement drawing a desperate response from ${possessivePronoun} hot cavity.` : 
             (shouldSemenDrip ? `clenches and releases around your shaft, each movement drawing out more of your semen from ${possessivePronoun} hot cavity.` : `clenches and releases around your shaft, each movement drawing a response from ${possessivePronoun} hot cavity.`)))
         ]
     };
@@ -2777,7 +2777,7 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             isNearClimax ? `takes your cock between ${possessivePronoun} lips, ${possessivePronoun} warm mouth working frantically as ${subjectPronoun} works to bring you to the peak, ${possessivePronoun} cheeks flushed with the effort.` : 
             (hasGagReflex ? `chokes as you enter ${possessivePronoun} throat, ${possessivePronoun} reflexes kicking in, ${subjectPronoun} breathing heavily through ${possessivePronoun} nose.` : 
             `takes you between ${possessivePronoun} lips, ${possessivePronoun} warm mouth enveloping your cockhead, saliva beginning to drip.`),
-            isNearClimax ? `takes your cock with eager enthusiasm, the vibration of ${possessivePronoun} mumbled sounds adding to the stimulation as ${subjectPronoun} hovers at the peak, barely able to contain ${possessivePronoun} excitement.` : 
+            isNearClimax ? `takes your cock with eager enthusiasm, the vibration of ${possessivePronoun} mumbled sounds adding to the stimulation as ${subjectPronoun.toLowerCase()} hovers at the peak, barely able to contain ${possessivePronoun} excitement.` : 
             (hasGagReflex ? `gags as you hit the back of ${possessivePronoun} throat, but ${subjectPronoun} quickly adjusts, a thin line of drool escaping, and continues taking you in.` : 
             `parts ${possessivePronoun} lips and accepts your cock, ${possessivePronoun} mouth hot and wet around your shaft, saliva already pooling.`),
             isNearClimax ? `takes you in deeply, ${possessivePronoun} tongue pressing urgently against the underside of your cock, ${subjectPronoun} right on the edge, drool dripping down ${possessivePronoun} chin.` : 
@@ -2816,7 +2816,7 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
         templates = {
             enter: [
                 `gasps as ${possessivePronoun} ${bodyPartDesc} accepts you.`,
-                `welcomes you inside with a ${vocalization}, ${possessivePronoun} ${bodyPartDesc} clenching around your ${tool}.`,
+                `${subjectPronoun} gasps as you enter ${possessivePronoun} ${bodyPartDesc}, ${possessivePronoun} depths clenching around your ${tool}.`,
                 `moans softly as you fill ${possessivePronoun} ${bodyPartDesc}.`
             ],
             continue: [
@@ -4023,8 +4023,8 @@ function describeVagina(npc, anatomy, posPronoun, arousalDescriptors) {
     // Labia/vulva description
     const labiaDescriptors = {
         small: ["tight", "delicate", "petite", "dainty"],
-        medium: ["plump", "well-formed", "generous", "soft"],
-        large: ["meaty", "full", "generous", "ample", "thick"]
+        medium: ["plump", "well-formed", "soft", "firm"],
+        large: ["meaty", "full", "ample", "thick", "voluptuous"]
     };
     const labiaAdj = labiaDescriptors[size] ? pickRandom(labiaDescriptors[size]) : pickRandom(["soft", "warm"]);
     
@@ -4875,9 +4875,16 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
     // Use actual tool from act, or default to fingers for backward compatibility
     const actualTool = tool || 'fingers';
     const toolVerb = getVerbForTool(verbBase, actualTool);
+    
+    // For penetration verbs, use "into" preposition and specify tool
+    const penetrationVerbs = ['fuck', 'thrust', 'pound', 'penetrate', 'enter', 'bury', 'slide', 'grind', 'pump', 'bottom out'];
+    const isPenetrationVerb = penetrationVerbs.includes(verbBase);
+    
     narratives.push(
-        `You ${verbPresent} ${cleanAnatomyDesc}.`,
-        `Your ${actualTool} ${toolVerb} ${cleanAnatomyDesc}.`
+        // For penetration, use "with your [tool]" pattern for clarity
+        isPenetrationVerb && actualTool ? `You ${verbPresent} ${cleanAnatomyDesc} with your ${actualTool}.` : `You ${verbPresent} ${cleanAnatomyDesc}.`,
+        // Also include the "Your [tool] [verb] into..." variant
+        isPenetrationVerb && actualTool ? `Your ${actualTool} ${toolVerb} into ${cleanAnatomyDesc}.` : `Your ${actualTool} ${toolVerb} ${cleanAnatomyDesc}.`
     );
     
     // Spreading/parting - improved to avoid awkward phrasing
