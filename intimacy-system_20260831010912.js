@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-30-016";
-    console.log("[Intimacy System] Loaded v2026-08-30-016 - Fixed possessive pronouns, removed NPC reactions, improved anatomy descriptors, fixed anus terminology, fixed verb-specific narratives, removed duplicate descriptors, fixed contradictory terms, simplified sphincter descriptors");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-30-021";
+    console.log("[Intimacy System] Loaded v2026-08-30-021 - Fixed possessive pronouns, removed NPC reactions, improved anatomy descriptors, fixed anus terminology, fixed verb-specific narratives, removed duplicate descriptors, fixed contradictory terms, simplified sphincter descriptors, improved intercourse narratives, fixed double her bug, limited descriptor chaining, fixed grammar");
 }
 
 // ============================================================================
@@ -2699,8 +2699,8 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             `matches your rhythm, ${possessivePronoun} slick channel clenching and releasing around your ${tool}.`),
             isNearClimax ? `grinds back against you, ${possessivePronoun} wet warmth taking you deeper, ${subjectPronoun} body trembling with the need to climax.` : 
             `grinds back against you, ${possessivePronoun} wet warmth taking you deeper.`,
-            isNearClimax ? `whispers encouragement mixed with desperation as you continue, ${subjectPronoun} arousal at its peak.` : 
-            `whispers encouragement as you continue, ${possessivePronoun} arousal evident in every movement.`,
+            isNearClimax ? `whispers encouragement mixed with desperation as you continue, ${subjectPronoun} at the peak of arousal.` : 
+            `whispers encouragement as you continue, ${possessivePronoun} desire evident in every movement.`,
             isNearClimax ? `${possessivePronoun} inner walls pulse and ripple frantically around you with each thrust, ${subjectPronoun} is so close to release.` : 
             (shouldSemenDrip ? `${possessivePronoun} inner walls pulse and ripple around you with each thrust, pushing out traces of your semen.` : 
             `${possessivePronoun} inner walls pulse and ripple around you with each thrust.`),
@@ -3918,16 +3918,16 @@ function describeVagina(npc, anatomy, posPronoun, arousalDescriptors) {
     
     const vulvaTerms = pickRandom(["labia", "lips", "folds", "petals", "velvet folds"]);
     
-    // Add arousal state
+    // Add arousal state - use at most one wetness/engorgement descriptor to avoid overloading
     const wetDesc = arousalDescriptors.wetness ? `${arousalDescriptors.wetness} ` : "";
     const engorgedDesc = arousalDescriptors.engorgement ? `${arousalDescriptors.engorgement} ` : "";
+    const arousalDesc = wetDesc || engorgedDesc; // Use at most one
     
     // Build the description
     const baseDesc = pickRandom([
-        `${posPronoun} ${wetDesc}${engorgedDesc}${genitalDesc}`,
-        `${posPronoun} ${engorgedDesc}${wetDesc}${genitalDesc}`,
+        `${posPronoun} ${arousalDesc}${genitalDesc}`,
         `${posPronoun} ${labiaAdj} ${vulvaTerms}`,
-        `${posPronoun} ${wetDesc}${labiaAdj} ${genitalDesc}`
+        `${posPronoun} ${arousalDesc}${labiaAdj} ${genitalDesc}`
     ]);
     
     return pickRandom([
@@ -4088,7 +4088,7 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     
     const sizeDescriptors = {
         tight: ["tight", "clenching", "constricted", "narrow", "virgin", "resistant"],
-        snug: ["snug", "firm", "well-defined", "tightly clenched", "resilient"],
+        snug: ["snug", "firm", "shapely", "tightly clenched", "resilient"],
         firm: ["firm", "resilient", "muscular", "controlled", "toned"],
         supple: ["supple", "yielding", "soft", "pliant", "flexible"],
         loose: ["loose", "relaxed", "experienced", "used", "accommodating"],
@@ -4748,9 +4748,7 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
     const toolVerb = getVerbForTool(verbBase, actualTool);
     narratives.push(
         `You ${verbPresent} ${cleanAnatomyDesc}.`,
-        `Your ${actualTool} ${toolVerb} ${cleanAnatomyDesc}.`,
-        includeSkin ? `Your ${actualTool} ${toolVerb} ${posPronoun} ${skinDesc} ${cleanAnatomyDesc}.` : null,
-        includeSkin ? `You ${verbPresent} ${posPronoun} ${skinDesc} ${cleanAnatomyDesc}.` : null
+        `Your ${actualTool} ${toolVerb} ${cleanAnatomyDesc}.`
     );
     
     // Spreading/parting - improved to avoid awkward phrasing
@@ -4802,6 +4800,13 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         );
     }
     
+    // Intercourse actions - already inside, describe the feeling
+    if (verbBase === 'fuck' || verbBase === 'thrust' || verbBase === 'pound' || verbBase === 'grind' || verbBase === 'slide') {
+        narratives.push(
+            `You ${verbPresent} ${cleanAnatomyDesc}, ${posPronoun} slick channel ${highArousal ? 'clenching your shaft desperately' : 'gripping your shaft tightly'}.`
+        );
+    }
+    
     // Press verb - gender and tool aware
     if (verbBase === 'press') {
         if (tool === 'penis' || tool === 'cock') {
@@ -4827,11 +4832,6 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
             }
         }
     }
-    
-    // Generic but vivid
-    narratives.push(
-        `You ${verbPresent} at ${cleanAnatomyDesc}, each ${verbBase} drawing a ${highArousal ? 'needful' : 'pleasured'} response.`
-    );
     
     // Check if this is ejaculation - needs special handling with prepositions
     const isEjaculation = verbBase === 'ejaculate' || verbBase === 'ejaculate on';
@@ -5003,7 +5003,13 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             `You ${verbPresent} ${anatomyDesc}, exposing the ${highArousal ? 'glistening' : 'tightly closed'} entrance.` : null,
         verbBase === 'lick' ? 
             `Your tongue ${verbPresent} ${anatomyDesc}, ${highArousal ? 'preparing the way' : 'exploring the sensitive, wrinkled flesh'}.` : null,
-        (verbBase !== 'penetrate' && verbBase !== 'finger' && verbBase !== 'tease' && verbBase !== 'circle' && verbBase !== 'spread' && verbBase !== 'lick') ?
+        // Intercourse actions - already inside, describe the feeling
+        verbBase === 'fuck' || verbBase === 'thrust' || verbBase === 'pound' || verbBase === 'grind' || verbBase === 'slide' ?
+            `You ${verbPresent} ${anatomyDesc}, ${posPronoun} hot cavity ${highArousal ? 'clenching your shaft like a vice' : 'gripping your shaft tightly'}.` : null,
+        verbBase === 'ejaculate' || verbBase === 'ejaculate on' ?
+            `You ${verbPresent} into ${anatomyDesc}, ${posPronoun} bowels ${highArousal ? 'milking your release with desperate pulses' : 'accepting your seed deeply'}.` : null,
+        // Generic fallback for other verbs
+        (verbBase !== 'penetrate' && verbBase !== 'finger' && verbBase !== 'tease' && verbBase !== 'circle' && verbBase !== 'spread' && verbBase !== 'lick' && verbBase !== 'fuck' && verbBase !== 'thrust' && verbBase !== 'pound' && verbBase !== 'grind' && verbBase !== 'slide' && verbBase !== 'ejaculate' && verbBase !== 'ejaculate on') ?
             `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing against the warm entrance' : 'feeling the tight, wrinkled flesh'}.` : null
     ].filter(Boolean);
 }
