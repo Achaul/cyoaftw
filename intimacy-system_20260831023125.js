@@ -2549,11 +2549,19 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
     
     // Add verbal dialog from tags (CoT-style)
     if (dialogueLine) {
-        // 60% chance to replace with dialogue, 40% to append
-        if (Math.random() < 0.6) {
-            response = `says "${dialogueLine}"`;
-        } else {
-            response = `${response} "${dialogueLine}"`;
+        if (dialogueLine.isNonVerbal) {
+            // For non-verbal NPCs, add the sound without quotes as part of the physical reaction
+            if (Math.random() < 0.5) {
+                response = `${response} ${dialogueLine.text}`;
+            }
+        } else if (dialogueLine.isVerbal) {
+            // For verbal NPCs, add quoted speech
+            // 60% chance to replace with dialogue, 40% to append
+            if (Math.random() < 0.6) {
+                response = `says "${dialogueLine.text}"`;
+            } else {
+                response = `${response} "${dialogueLine.text}"`;
+            }
         }
     }
     
@@ -2715,7 +2723,7 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             (!hasLube || lubeLevel < 50 ? (shouldSemenDrip ? `tenses as you press against ${possessivePronoun} ${bodyPartDesc}, the resistance considerable, your earlier release squirting out.` : `tenses as you press against ${possessivePronoun} ${bodyPartDesc}, the resistance considerable without proper preparation.`) : 
             (shouldSemenDrip ? `gasps as you enter ${possessivePronoun} ${bodyPartDesc}, your semen leaking out as the well-lubricated passage accepts you.` : `gasps as you enter ${possessivePronoun} ${bodyPartDesc}, the well-lubricated passage accepting you more easily.`))),
             hasPendingPee ? `winces slightly as you press against ${possessivePronoun} ${bodyPartDesc}, a warm trickle escaping as ${subjectPronoun} loses control of ${possessivePronoun} bladder.` :
-            (isNearClimax ? `winces slightly as ${possessivePronoun} ${bodyPartDesc} resists your entry, ${subjectPronoun} body trembling on the brink of release.` : 
+            (isNearClimax ? `winces slightly as ${possessivePronoun} ${bodyPartDesc} resists your entry, ${subjectPronoun} is trembling on the brink of release.` : 
             (!hasLube || lubeLevel < 50 ? (shouldSemenDrip ? `winces slightly as ${possessivePronoun} ${bodyPartDesc} resists your entry, your semen seeping out with the effort.` : `winces slightly as ${possessivePronoun} ${bodyPartDesc} resists your entry, the tight ring reluctant to yield.`) : 
             (shouldSemenDrip ? `moans as you slide into ${possessivePronoun} ${bodyPartDesc}, your earlier load leaking out mixed with the lube.` : `moans as you slide into ${possessivePronoun} ${bodyPartDesc}, the lube making the way slick and smooth.`))),
             hasPendingPee ? `accepts you into ${possessivePronoun} ${bodyPartDesc}, a warm trickle escaping as ${subjectPronoun} loses control of ${possessivePronoun} bladder.` :
@@ -2824,8 +2832,16 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     if (dialogueLine) {
         // Only add if not already a verbal response
         if (!response.includes('"')) {
-            if (Math.random() < 0.5) {
-                response = `${response} "${dialogueLine}"`;
+            if (dialogueLine.isNonVerbal) {
+                // For non-verbal NPCs, add the sound without quotes
+                if (Math.random() < 0.5) {
+                    response = `${response} ${dialogueLine.text}`;
+                }
+            } else if (dialogueLine.isVerbal) {
+                // For verbal NPCs, add quoted speech
+                if (Math.random() < 0.5) {
+                    response = `${response} "${dialogueLine.text}"`;
+                }
             }
         }
     }
@@ -2918,8 +2934,16 @@ function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possess
     
     // Add verbal dialog from tags (CoT-style)
     if (dialogueLine && !response.includes('"')) {
-        if (Math.random() < 0.5) {
-            response = `${response} "${dialogueLine}"`;
+        if (dialogueLine.isNonVerbal) {
+            // For non-verbal NPCs, add the sound without quotes
+            if (Math.random() < 0.5) {
+                response = `${response} ${dialogueLine.text}`;
+            }
+        } else if (dialogueLine.isVerbal) {
+            // For verbal NPCs, add quoted speech
+            if (Math.random() < 0.5) {
+                response = `${response} "${dialogueLine.text}"`;
+            }
         }
     }
     
@@ -2952,10 +2976,18 @@ function buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPron
     
     // Add verbal dialog from tags (CoT-style)
     if (dialogueLine) {
-        if (Math.random() < 0.5) {
-            response = `says "${dialogueLine}"`;
-        } else {
-            response = `${response} "${dialogueLine}"`;
+        if (dialogueLine.isNonVerbal) {
+            // For non-verbal NPCs, add the sound without quotes as part of the physical reaction
+            if (Math.random() < 0.5) {
+                response = `${response} ${dialogueLine.text}`;
+            }
+        } else if (dialogueLine.isVerbal) {
+            // For verbal NPCs, add quoted speech
+            if (Math.random() < 0.5) {
+                response = `says "${dialogueLine.text}"`;
+            } else {
+                response = `${response} "${dialogueLine.text}"`;
+            }
         }
     }
     
@@ -3063,6 +3095,24 @@ function getTemperatureDescriptor(arousalLevel) {
  * Each tag has dialogue lines at different arousal levels
  * Structure: { tag: { low: [...], mild: [...], moderate: [...], high: [...], intense: [...] } }
  */
+// Simplified dialogue for uncivilized species (limited vocabulary)
+var UNCIVILIZED_DIALOGUE = {
+    low: ["Good", "Nice", "Mmm", "Yes"],
+    mild: ["More", "Yes, good", "Like that", "Keep going"],
+    moderate: ["Yes! More!", "That good", "Don't stop", "Harder"],
+    high: ["YES! MORE!", "Need more", "Good, good!", "Please, continue"],
+    intense: ["YES! YES! YES!", "MORE! HARDER!", "DON'T STOP!", "ALMOST THERE!"]
+};
+
+// Non-verbal sounds only (grunts, moans, etc.)
+var NONVERBAL_REACTIONS = {
+    low: ["Mmm", "Hmm", "Unh", "Ahh"],
+    mild: ["Mmmph", "Nnngh", "Uhn", "Ahhh"],
+    moderate: ["Mmmm!", "Uhn!", "Ahh!", "Nnngh!"],
+    high: ["UNH! UNH!", "MMMPH! MMMPH!", "AH! AH!", "NNNGH! NNNGH!"],
+    intense: ["UNHHH! UNHHH!", "FUCK! FUCK!", "MMMPHHH!", "AAAAH! AAAAH!"]
+};
+
 var DIALOGUE_DATABASE = {
     // ==== KISSING (NPC being kissed) ====
     "being kissed": {
@@ -3173,33 +3223,73 @@ var DIALOGUE_DATABASE = {
 /**
  * Get dialogue line based on tags and arousal level
  * Mimics CoT's system: action has dialogue tags -> lookup in database -> select based on arousal
+ * Respects NPC speech capabilities (non-verbal, uncivilized, civilized)
+ * Returns an object with: { text: string, isVerbal: boolean, isNonVerbal: boolean }
  */
 function getDialogueFromTags(tags, arousalLevel, npc) {
     if (!tags || tags.length === 0) return null;
     
+    // Get NPC dialogue style
+    const dialogueStyle = getNPCDialogueStyle(npc);
+    
+    // Non-verbal NPCs can only make sounds - return special marker
+    if (dialogueStyle === 'nonverbal') {
+        const sound = getArousalBasedReaction(NONVERBAL_REACTIONS, arousalLevel);
+        return { text: sound, isVerbal: false, isNonVerbal: true };
+    }
+    
+    // Uncivilized NPCs have limited vocabulary - return as verbal but simplified
+    if (dialogueStyle === 'uncivilized') {
+        const text = getArousalBasedReaction(UNCIVILIZED_DIALOGUE, arousalLevel);
+        return { text: text, isVerbal: true, isNonVerbal: false };
+    }
+    
+    // Civilized NPCs use full dialogue database
     // Try each tag in order, pick first one that exists in database
     for (const tag of tags) {
         const tagDialogue = DIALOGUE_DATABASE[tag];
         if (tagDialogue) {
             // Get arousal-based lines
+            let text;
             if (arousalLevel < 20 && tagDialogue.low) {
-                return pickRandom(tagDialogue.low);
+                text = pickRandom(tagDialogue.low);
             } else if (arousalLevel < 40 && tagDialogue.mild) {
-                return pickRandom(tagDialogue.mild);
+                text = pickRandom(tagDialogue.mild);
             } else if (arousalLevel < 60 && tagDialogue.moderate) {
-                return pickRandom(tagDialogue.moderate);
+                text = pickRandom(tagDialogue.moderate);
             } else if (arousalLevel < 80 && tagDialogue.high) {
-                return pickRandom(tagDialogue.high);
+                text = pickRandom(tagDialogue.high);
             } else if (tagDialogue.intense) {
-                return pickRandom(tagDialogue.intense);
+                text = pickRandom(tagDialogue.intense);
+            } else {
+                // Fallback to any available
+                text = pickRandom(Object.values(tagDialogue).flat());
             }
-            // Fallback to any available
-            return pickRandom(Object.values(tagDialogue).flat());
+            return { text: text, isVerbal: true, isNonVerbal: false };
         }
     }
     
     // Fallback to general dialogue
     return getDialogueFromTags(["general"], arousalLevel, npc);
+}
+
+/**
+ * Get a reaction based on arousal level from a simple reactions object
+ */
+function getArousalBasedReaction(reactions, arousalLevel) {
+    if (arousalLevel < 20 && reactions.low) {
+        return pickRandom(reactions.low);
+    } else if (arousalLevel < 40 && reactions.mild) {
+        return pickRandom(reactions.mild);
+    } else if (arousalLevel < 60 && reactions.moderate) {
+        return pickRandom(reactions.moderate);
+    } else if (arousalLevel < 80 && reactions.high) {
+        return pickRandom(reactions.high);
+    } else if (reactions.intense) {
+        return pickRandom(reactions.intense);
+    }
+    // Fallback to any available
+    return pickRandom(Object.values(reactions).flat());
 }
 
 /**
@@ -4082,8 +4172,8 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     
     // More anatomical and sensual terms for anus
     const anusTerms = pickRandom([
-        "rosebud", "star", "pucker", "ring", "orifice", "opening", 
-        "entry", "entrance", "hole", "pucker"
+        "rosebud", "star", "pucker", "sphincter", "orifice", "opening", 
+        "entry", "entrance", "hole"
     ]);
     
     const sizeDescriptors = {
@@ -4114,14 +4204,9 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     
     // Build descriptions with more sensual, anatomical language
     // Always use possessive pronoun for consistency in action narratives
-    return pickRandom([
-        `${posPronoun} ${sizeAdj} ${anusTerms}`,
-        `${posPronoun} ${sphincterDesc} ${anusTerms}`,
-        `${posPronoun} ${pigmentDesc}${sizeAdj} ${anusTerms}`,
-        `${posPronoun} ${sphincterDesc} ${pigmentDesc}${anusTerms}`,
-        `${posPronoun} ${pigmentDesc}${sizeAdj} ${anusTerms}`,
-        `${posPronoun} ${engorgement || state || sizeAdj} ${anusTerms}`
-    ]).replace(/  /g, ' '); // Remove double spaces
+    // Use at most one size descriptor to avoid chaining (e.g., "tight-lipped")
+    const singleDesc = pickRandom([sizeAdj, sphincterDesc, pigmentDesc.replace(/ $/, ''), engorgement, state].filter(Boolean)) || sizeAdj;
+    return `${posPronoun} ${singleDesc} ${anusTerms}`.replace(/  /g, ' ').trim();
 }
 
 /**
@@ -4160,9 +4245,8 @@ function describeButtocks(npc, anatomy, posPronoun, arousalDescriptors) {
     return pickRandom([
         `${posPronoun} ${sizeAdj} ${cheekTerms}`,
         `${posPronoun} ${sizeAdj} ${buttTerms}`,
-        `${posPronoun} ${sizeAdj} ${cheekTerms} of ${posPronoun} ${hipAdj} hips`,
+        `${posPronoun} ${sizeAdj} ${cheekTerms}, ${hipAdj} hips`,
         `${posPronoun} ${arousedDesc} ${sizeAdj} buttocks`,
-        `${posPronoun} ${sizeAdj} ${buttTerms}`,
         `${posPronoun} ${sizeAdj} backside`
     ]);
 }
@@ -4176,9 +4260,9 @@ function describeMouth(npc, anatomy, posPronoun, arousalDescriptors) {
     
     return pickRandom([
         `${posPronoun} ${pickRandom(["soft", "warm", "inviting", "parted", "pouty"])} lips`,
-        `the ${pickRandom(["sweet", "warm", "soft", "moist"])} mouth`,
+        `${posPronoun} ${pickRandom(["sweet", "warm", "soft", "moist"])} mouth`,
         `${posPronoun} ${pickRandom(["full", "plump", "sensual", "kissable"])} lips`,
-        `between ${posPronoun} ${surfaceType}-soft lips`
+        `${posPronoun} ${surfaceType}-soft lips`
     ]);
 }
 
@@ -4200,7 +4284,7 @@ function describeThighs(npc, anatomy, posPronoun, arousalDescriptors) {
         `${posPronoun} ${sizeAdj} thighs`,
         `${posPronoun} ${sizeAdj} inner thighs`,
         `${posPronoun} ${pickRandom(["smooth", "soft", "warm"])} ${sizeAdj} thighs`,
-        `between ${posPronoun} ${sizeAdj} thighs`
+        `${posPronoun} ${sizeAdj} thighs`
     ]);
 }
 
@@ -4429,6 +4513,8 @@ if (typeof module !== 'undefined' && module.exports) {
         getAnalInteriorColor,
         isAnalEntryEasy,
         isCivilizedSpecies,
+        canNPCSpeak,
+        getNPCDialogueStyle,
         getMergedAnatomy
     };
 }
@@ -4462,6 +4548,10 @@ if (typeof window !== 'undefined') {
     window.getAnalInteriorColor = getAnalInteriorColor;
     window.isAnalEntryEasy = isAnalEntryEasy;
     window.isCivilizedSpecies = isCivilizedSpecies;
+    window.canNPCSpeak = canNPCSpeak;
+    window.getNPCDialogueStyle = getNPCDialogueStyle;
+    window.UNCIVILIZED_DIALOGUE = UNCIVILIZED_DIALOGUE;
+    window.NONVERBAL_REACTIONS = NONVERBAL_REACTIONS;
     window.LLM_ENHANCEMENT_CONFIG = LLM_ENHANCEMENT_CONFIG;
     window.isSexualAct = isSexualAct;
     window.clearLLMEnhancementCache = clearLLMEnhancementCache;
@@ -4800,6 +4890,13 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         );
     }
     
+    // Penetration/enter - explicit initial insertion descriptions
+    if (verbBase === 'enter' || verbBase === 'penetrate') {
+        narratives.push(
+            `You ${verbPresent} ${cleanAnatomyDesc}, your cock sinking into ${posPronoun} ${highArousal ? 'slick, clenching channel as the warm folds envelop your shaft' : 'tight passage, the resistance giving way to your persistence'}.`
+        );
+    }
+    
     // Intercourse actions - already inside, describe the feeling
     if (verbBase === 'fuck' || verbBase === 'thrust' || verbBase === 'pound' || verbBase === 'grind' || verbBase === 'slide') {
         narratives.push(
@@ -4995,14 +5092,14 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
         // Penetration/fingering - sphincters are normally tight and resistant
-        verbBase === 'penetrate' || verbBase === 'finger' ? 
-            `You ${verbPresent} ${anatomyDesc}, ${analEasy ? 'sliding into the yielding opening' : highArousal ? 'pressing against the reluctant entrance' : 'gently pressing against the tight entrance'}.` : null,
+        verbBase === 'penetrate' || verbBase === 'finger' || verbBase === 'enter' ? 
+            `You ${verbPresent} ${anatomyDesc}, ${analEasy ? 'sliding your length into the well-lubricated passage' : highArousal ? 'your cock breaching the reluctant sphincter as it stretches around your shaft' : 'gently pressing past the tight entrance, the resistance giving way to your persistence'}.` : null,
         verbBase === 'tease' || verbBase === 'circle' ? 
             `You ${verbPresent} ${anatomyDesc}, tracing the ${highArousal ? 'slightly yielding' : 'tight, wrinkled'} rim.` : null,
         verbBase === 'spread' ? 
             `You ${verbPresent} ${anatomyDesc}, exposing the ${highArousal ? 'glistening' : 'tightly closed'} entrance.` : null,
         verbBase === 'lick' ? 
-            `Your tongue ${verbPresent} ${anatomyDesc}, ${highArousal ? 'preparing the way' : 'exploring the sensitive, wrinkled flesh'}.` : null,
+            `Your tongue ${verbPresent} ${anatomyDesc}, ${highArousal ? 'preparing the way' : 'tracing the sensitive, wrinkled flesh'}.` : null,
         // Intercourse actions - already inside, describe the feeling
         verbBase === 'fuck' || verbBase === 'thrust' || verbBase === 'pound' || verbBase === 'grind' || verbBase === 'slide' ?
             `You ${verbPresent} ${anatomyDesc}, ${posPronoun} hot cavity ${highArousal ? 'clenching your shaft like a vice' : 'gripping your shaft tightly'}.` : null,
@@ -5010,7 +5107,7 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             `You ${verbPresent} into ${anatomyDesc}, ${posPronoun} bowels ${highArousal ? 'milking your release with desperate pulses' : 'accepting your seed deeply'}.` : null,
         // Generic fallback for other verbs
         (verbBase !== 'penetrate' && verbBase !== 'finger' && verbBase !== 'tease' && verbBase !== 'circle' && verbBase !== 'spread' && verbBase !== 'lick' && verbBase !== 'fuck' && verbBase !== 'thrust' && verbBase !== 'pound' && verbBase !== 'grind' && verbBase !== 'slide' && verbBase !== 'ejaculate' && verbBase !== 'ejaculate on') ?
-            `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing against the warm entrance' : 'feeling the tight, wrinkled flesh'}.` : null
+            `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling the hot, yielding flesh' : 'feeling the tight, wrinkled flesh'}.` : null
     ].filter(Boolean);
 }
 
@@ -5222,6 +5319,39 @@ function isCivilizedSpecies(species) {
     if (!species) return false;
     const civilizedSpecies = ["human", "elf", "dwarf", "halfling"];
     return civilizedSpecies.includes(species.toLowerCase());
+}
+
+/**
+ * Check if an NPC can speak
+ * Non-verbal NPCs will only make sounds, not speak
+ */
+function canNPCSpeak(npc) {
+    if (!npc) return true;
+    // Check for explicit non-verbal flag
+    if (npc.nonVerbal === true || npc.verbal === false) return false;
+    // Some species might be naturally non-verbal
+    const nonVerbalSpecies = ["animal", "beast", "monster", "creature"];
+    const species = (npc.species || "").toLowerCase();
+    if (nonVerbalSpecies.some(s => species.includes(s))) return false;
+    return true;
+}
+
+/**
+ * Get dialogue style for an NPC
+ * Returns: 'civilized', 'uncivilized', or 'nonverbal'
+ */
+function getNPCDialogueStyle(npc) {
+    if (!npc) return 'civilized';
+    
+    // Non-verbal NPCs can't speak
+    if (!canNPCSpeak(npc)) return 'nonverbal';
+    
+    // Check if species is civilized
+    const species = npc.species || "";
+    if (isCivilizedSpecies(species)) return 'civilized';
+    
+    // Uncivilized species have limited vocabulary
+    return 'uncivilized';
 }
 
 /**
