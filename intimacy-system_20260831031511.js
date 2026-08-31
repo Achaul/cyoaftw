@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-30-023";
-    console.log("[Intimacy System] Loaded v2026-08-30-023 - Enhanced oral sex with garbled speech (e.g., Mmph! G-g-good), fixed cock in mouth dialogue, clarified NPC arousal from performing, fixed possessive pronouns, improved penetration tool selection");
+    window.INTIMACY_SYSTEM_VERSION = "2026-08-30-024";
+    console.log("[Intimacy System] Loaded v2026-08-30-024 - Added garbled speech for oral sex (Mmph! I-I'M C-CUMM-PH-PHIN'!), fixed syntax error, enhanced cock in mouth dialogue, clarified NPC arousal from performing, fixed possessive pronouns, improved penetration tool selection");
 }
 
 // ============================================================================
@@ -4625,7 +4625,7 @@ function buildActionNarratives(npc, actionId, act, context) {
     
     const posPronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
     const subjectPronoun = typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "They";
-n    // For penetration verbs, use penis as tool unless explicitly using fingers
+    // For penetration verbs, use penis as tool unless explicitly using fingers
     let actualTool = tool;
     const verbBase = verb || actionId.split("_")[0] || "touch";
     const isFingerAction = verbBase === 'finger' || actionId.toLowerCase().includes('finger');
@@ -4644,10 +4644,9 @@ n    // For penetration verbs, use penis as tool unless explicitly using fingers
     // Get rich anatomy description
     const anatomyDesc = describeAnatomy(npc, target, { arousalLevel, isAroused, isWet, isErect, possessivePronoun: posPronoun });
     
-n    // Create modified act with corrected tool for penetration actions
+    // Create modified act with corrected tool for penetration actions
     const modifiedAct = isPenetrationVerb && !isFingerAction && actualTool !== tool ? { ...act, tool: actualTool } : act;
     // Verb tense adjustments
-    const verbBase = verb || actionId.split('_')[0] || "touch";
     const verbPresent = verbConjugation(verbBase, 'present');
     const verbIng = verbConjugation(verbBase, 'ing');
     
@@ -4668,12 +4667,12 @@ n    // Create modified act with corrected tool for penetration actions
             
         case "testicles":
         case "balls":
-            narratives.push(...buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
+            narratives.push(...buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         case "breasts":
         case "nipples":
-            narratives.push(...buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act));
+            narratives.push(...buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         case "anus":
