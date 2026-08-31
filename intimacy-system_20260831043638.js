@@ -2865,12 +2865,15 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     let response = pickRandom(templates[phase] || templates.enter);
     
     // Add scent descriptor if available (always for anal, 50% chance for others)
-    if (scentDesc) {
-        if (isAnalPenetration || Math.random() < 0.5) {
-            // Capitalize first letter and add period at end
-            const formattedScent = scentDesc.charAt(0).toUpperCase() + scentDesc.slice(1) + ".";
-            response = `${formattedScent} ${response}`;
+    if (scentDesc && (isAnalPenetration || Math.random() < 0.5)) {
+        // Append scent to the end of the sentence with proper punctuation
+        if (!response.endsWith('.')) {
+            response = response + ".";
         }
+        // Capitalize first letter of scent descriptor (now starts with "and")
+        // Replace "and " with "And "
+        const capitalizedScent = "And " + scentDesc.slice(4);
+        response = response + " " + capitalizedScent + ".";
     }
     
     // Add verbal dialog from tags (CoT-style)
@@ -4654,7 +4657,7 @@ if (typeof window !== 'undefined') {
 function generateIntimacyNarrative(npc, actionId, context = {}) {
     if (!npc || !actionId) return null;
     
-    const { player, arousalLevel = 0, isAroused = false, isWet = false, isErect = false, isOnCooldown = false } = context;
+    const { player, arousalLevel = 0, isAroused = false, isWet = false, isErect = false, isOnCooldown = false, isContinueAction = false } = context;
     const act = typeof getAct === 'function' ? getAct(actionId) : null;
     if (!act) return null;
     
@@ -4663,7 +4666,7 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     const subjectPronoun = typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "They";
     
     // Determine action category and generate appropriate narrative
-    const narratives = buildActionNarratives(npc, actionId, act, context);
+    const narratives = buildActionNarratives(npc, actionId, act, { ...context, isContinueAction });
     
     // Pick a narrative based on context
     return pickRandom(narratives);
@@ -4674,7 +4677,7 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
  */
 function buildActionNarratives(npc, actionId, act, context) {
     const { verb, target, tool, playerIsBottom } = act;
-    const { arousalLevel = 0, isAroused = false, isWet = false, isErect = false, isOnCooldown = false, intimacy = null, player = null } = context;
+    const { arousalLevel = 0, isAroused = false, isWet = false, isErect = false, isOnCooldown = false, intimacy = null, player = null, isContinueAction = false } = context;
     const anatomy = npc.anatomy || {};
     const gender = (npc.gender || "").toLowerCase();
     const isFemale = gender === "female" || gender.includes("female");
@@ -4706,49 +4709,52 @@ function buildActionNarratives(npc, actionId, act, context) {
     const verbPresent = verbConjugation(verbBase, 'present');
     const verbIng = verbConjugation(verbBase, 'ing');
     
+    // For continue actions, modify the verb to indicate continuity
+    const continueVerbPresent = isContinueAction ? `continue to ${verbPresent}` : verbPresent;
+    
     // Generate narratives based on action type and target
     switch (target.toLowerCase()) {
         case "vagina":
         case "pussy":
         case "clitoris":
         case "clit":
-            narratives.push(...buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
+            narratives.push(...buildVaginaNarratives(npc, verbBase, continueVerbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         case "penis":
         case "cock":
         case "dick":
-            narratives.push(...buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
+            narratives.push(...buildPenisNarratives(npc, verbBase, continueVerbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         case "testicles":
         case "balls":
-            narratives.push(...buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
+            narratives.push(...buildTesticlesNarratives(npc, verbBase, continueVerbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         case "breasts":
         case "nipples":
-            narratives.push(...buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
+            narratives.push(...buildBreastNarratives(npc, verbBase, continueVerbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         case "anus":
-            narratives.push(...buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
+            narratives.push(...buildAnusNarratives(npc, verbBase, continueVerbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         case "butt":
         case "buttocks":
         case "ass":
-            narratives.push(...buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
+            narratives.push(...buildButtockNarratives(npc, verbBase, continueVerbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         case "mouth":
         case "lips":
-            narratives.push(...buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
+            narratives.push(...buildMouthNarratives(npc, verbBase, continueVerbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         case "thighs":
         case "thigh":
-            narratives.push(...buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
+            narratives.push(...buildThighNarratives(npc, verbBase, continueVerbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, modifiedAct));
             break;
             
         default:
@@ -4788,9 +4794,9 @@ function buildActionNarratives(npc, actionId, act, context) {
                 // For generic body parts (face, neck, cheek, etc.), ensure possessive pronoun is included
                 const fullAnatomyDesc = ensurePossessive(anatomyDesc);
                 narratives.push(
-                    `You ${verbPresent} ${fullAnatomyDesc}.`,
+                    `You ${continueVerbPresent} ${fullAnatomyDesc}.`,
                     `Your ${genericTool} ${genericToolVerb} ${fullAnatomyDesc}.`,
-                    `You reach out and ${verbPresent} ${fullAnatomyDesc}.`
+                    `You reach out and ${continueVerbPresent} ${fullAnatomyDesc}.`
                 );
             }
     }
@@ -4883,7 +4889,7 @@ function verbConjugation(verb, form) {
  * Build vagina/pussy action narratives
  */
 function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0, player = null, isOnCooldown = false } = context;
+    const { arousalLevel = 0, player = null, isOnCooldown = false, isContinueAction = false } = context;
     const { tool = null } = act;
     const highArousal = arousalLevel > 70;
     const mediumArousal = arousalLevel > 40;
@@ -4897,8 +4903,8 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
     const skinDesc = npc ? getSkinDescription(npc) : "";
     const includeSkin = skinDesc && Math.random() < 0.3; // 30% chance to mention skin
     
-    // Get scent descriptor (25% chance for vaginal acts)
-    const scentDesc = Math.random() < 0.25 ? getScentDescriptor(npc, 'vagina', false) : "";
+    // Get scent descriptor (handled by getScentDescriptor function)
+    const scentDesc = getScentDescriptor(npc, 'vagina', false);
     
     // Helper to extract just the vagina part (without pubic hair prefix)
     // This handles various formats from describeVagina:
@@ -5092,7 +5098,7 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
  * Build penis/cock action narratives
  */
 function buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0, intimacy = null } = context;
+    const { arousalLevel = 0, intimacy = null, isContinueAction = false } = context;
     const highArousal = arousalLevel > 70;
     const actualTool = act.tool || pickRandom(['hand', 'fingers', 'palm']);
     const toolVerb = getVerbForTool(verbBase, actualTool);
@@ -5115,7 +5121,7 @@ function buildPenisNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
  * Build testicles action narratives
  */
 function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0 } = context;
+    const { arousalLevel = 0, isContinueAction = false } = context;
     const highArousal = arousalLevel > 70;
     const actualTool = act.tool || 'fingers';
     const toolVerb = getVerbForTool(verbBase, actualTool);
@@ -5134,7 +5140,7 @@ function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDe
  * Build breast/nipple action narratives
  */
 function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0 } = context;
+    const { arousalLevel = 0, isContinueAction = false } = context;
     const highArousal = arousalLevel > 70;
     const actualTool = act.tool || pickRandom(['hands', 'palms', 'fingers']);
     const toolVerb = getVerbForTool(verbBase, actualTool);
@@ -5154,11 +5160,11 @@ function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
  * Build anus action narratives
  */
 function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0, player = null, isOnCooldown = false } = context;
+    const { arousalLevel = 0, player = null, isOnCooldown = false, isContinueAction = false } = context;
     const highArousal = arousalLevel > 70;
     const verbThird = verbConjugation(verbBase, 'third');
     
-    // Get scent descriptor for anal acts (always include)
+    // Get scent descriptor for anal acts (handled by getScentDescriptor function)
     const scentDesc = getScentDescriptor(npc, 'anus', true);
 
     // Check if anal entry should be easy (based on prior use or size advantage)
@@ -5248,7 +5254,7 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
  * For actions like spread, squeeze, grope, slap targeting buttocks/cheeks/ass
  */
 function buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0, isOnCooldown = false } = context;
+    const { arousalLevel = 0, isOnCooldown = false, isContinueAction = false } = context;
     const highArousal = arousalLevel > 70;
     
     // Get penis state descriptor based on cooldown
@@ -5299,7 +5305,7 @@ function buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc
  * Build mouth/lips action narratives
  */
 function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0, isOnCooldown = false } = context;
+    const { arousalLevel = 0, isOnCooldown = false, isContinueAction = false } = context;
     const highArousal = arousalLevel > 70;
     const actualTool = act.tool || pickRandom(['lips', 'mouth']);
     const toolVerb = getVerbForTool(verbBase, actualTool);
@@ -5308,8 +5314,8 @@ function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
     const penisState = isOnCooldown ? pickRandom(['limp', 'flaccid', 'soft', 'spent']) : pickRandom(['hard', 'rigid', 'throbbing', 'engorged']);
     const cockState = isOnCooldown ? pickRandom(['limp', 'flaccid', 'soft', 'spent']) : pickRandom(['hard', 'rigid', 'throbbing', 'engorged']);
     
-    // Get scent descriptor (25% chance for oral acts)
-    const scentDesc = Math.random() < 0.25 ? getScentDescriptor(npc, 'mouth', false) : "";
+    // Get scent descriptor (handled by getScentDescriptor function)
+    const scentDesc = getScentDescriptor(npc, 'mouth', false);
     
     // Check if this is ejaculation - needs special handling with prepositions
     const isEjaculation = verbBase === 'ejaculate' || verbBase === 'ejaculate on';
@@ -5351,7 +5357,7 @@ function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
  * Build thighs action narratives
  */
 function buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0 } = context;
+    const { arousalLevel = 0, isContinueAction = false } = context;
     const highArousal = arousalLevel > 70;
     const actualTool = act.tool || pickRandom(['hands', 'palms']);
     const toolVerb = getVerbForTool(verbBase, actualTool);
@@ -5612,46 +5618,46 @@ function getScentDescriptor(npc, target, isAnalAct = false) {
     const species = (npc.species || "").toLowerCase();
     const isUncivilized = species && !isCivilizedSpecies(species);
     
-    // For anal acts, always include pungent smell descriptors
-    if (isAnalAct) {
+    // For anal acts, 80% chance for pungent smell descriptors
+    if (isAnalAct && Math.random() < 0.8) {
         if (isUncivilized) {
             return pickRandom([
-                "the pungent, animalistic musk filling the air",
-                "a strong, primal scent rising between you",
-                "the unmistakable musk of arousal, earthy and raw",
-                "a heady, animal scent hanging heavy in the air",
-                "the thick, pungent aroma of sex",
-                "a musky, unrefined smell" 
+                "and the pungent, animalistic musk fills the air",
+                "and a strong, primal scent rises between you",
+                "and the unmistakable musk of arousal, earthy and raw, fills the space",
+                "and a heady, animal scent hangs heavy in the air",
+                "and the thick, pungent aroma of sex surrounds you",
+                "and a musky, unrefined smell fills your senses"
             ]);
         } else {
             return pickRandom([
-                "the musky scent of arousal in the air",
-                "a warm, intimate aroma rising",
-                "the heady smell of passion",
-                "a subtle, intoxicating scent",
-                "the earthy musk of intimacy",
-                "a faint, primal aroma"
+                "and the musky scent of arousal fills the air",
+                "and a warm, intimate aroma rises",
+                "and the heady smell of passion hangs between you",
+                "and a subtle, intoxicating scent fills the space",
+                "and the earthy musk of intimacy surrounds you",
+                "and a faint, primal aroma drifts by"
             ]);
         }
     }
     
-    // For other sex acts - occasional scent descriptors
-    if (Math.random() < 0.25) { // 25% chance for non-anal acts
+    // For other sex acts - 15% chance for occasional scent descriptors
+    if (!isAnalAct && Math.random() < 0.15) {
         if (isUncivilized) {
             return pickRandom([
-                "a strong, animal musk in the air",
-                "the primal scent of arousal",
-                "a raw, earthy aroma",
-                "the unrefined smell of desire",
-                "a thick, pungent musk"
+                "and a strong, animal musk fills the air",
+                "and the primal scent of arousal surrounds you",
+                "and a raw, earthy aroma rises",
+                "and the unrefined smell of desire fills the space",
+                "and a thick, pungent musk hangs heavy"
             ]);
         } else {
             return pickRandom([
-                "a warm, intoxicating scent",
-                "the musk of arousal",
-                "a subtle, intimate aroma",
-                "the heady smell of passion",
-                "a faint, pleasurable fragrance"
+                "and a warm, intoxicating scent fills the air",
+                "and the musk of arousal surrounds you",
+                "and a subtle, intimate aroma drifts by",
+                "and the heady smell of passion fills the space",
+                "and a faint, pleasurable fragrance lingers"
             ]);
         }
     }
