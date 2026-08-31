@@ -117,11 +117,11 @@ var INTIMACY_MATRIX = {
         chest: ["press", "rub", "ejaculate on", "poke"],
         shoulders: ["press", "rub", "poke", "ejaculate on"],
         stomach: ["press", "rub", "ejaculate on"],
+        breasts: ["press", "rub", "ejaculate on"],
         
         buttocks: ["rub", "poke", "ejaculate on", "slap", "press"],
         hips: ["press", "poke", "ejaculate on", "grind"],
-        
-        vagina: ["enter", "thrust", "poke", "piston", "ejaculate", "bury", "fuck"],
+        vagina: ["enter", "thrust", "poke", "piston", "ejaculate", "bury", "fuck", "ejaculate on"],
         anus: ["enter", "thrust", "poke", "piston", "ejaculate", "bury", "fuck"],
         
         legs: ["rub", "ejaculate on", "press"],
