@@ -2869,17 +2869,26 @@ function generateNPCClimaxReaction(npc, npcGender, intimacy) {
     const isDominant = personality.includes("dominant");
     
     // Gender-specific climax reactions
+    // Use anatomy-aware descriptions based on what the NPC actually has
+    const anatomy = (npc.anatomy || {});
+    const nsfwAnatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || {};
+    const mergedAnatomy = { ...anatomy, ...nsfwAnatomy };
+    const hasPenis = mergedAnatomy.penis || mergedAnatomy.cock || mergedAnatomy.dick;
+    const hasVagina = mergedAnatomy.vagina || mergedAnatomy.pussy;
+    
     const maleClimaxTemplates = [
         `${subjectPronoun} groans deeply, ${possessivePronoun} body tensing as ${subjectPronoun} reaches ${possessivePronoun} peak.`,
         `${subjectPronoun} lets out a guttural cry, ${possessivePronoun} hips bucking involuntarily with release.`,
-        `${subjectPronoun} shudders violently, ${possessivePronoun} cock pulsing as ${subjectPronoun} climaxes.`,
+        hasPenis ? `${subjectPronoun} shudders violently, ${possessivePronoun} ${hasPenis.description || 'cock'} pulsing as ${subjectPronoun} climaxes.` : 
+                   `${subjectPronoun} shudders violently, ${possessivePronoun} body convulsing as ${subjectPronoun} climaxes.`,
         `${subjectPronoun} throws ${possessivePronoun} head back with a groan, ${possessivePronoun} orgasm crashing over ${objectPronoun}.`,
         `${subjectPronoun} grunts rhythmically, ${possessivePronoun} body rigid with the intensity of ${possessivePronoun} release.`
     ];
     
     const femaleClimaxTemplates = [
         `${subjectPronoun} cries out, ${possessivePronoun} body arching as waves of pleasure crash over ${objectPronoun}.`,
-        `${subjectPronoun} whimpers and trembles, ${possessivePronoun} inner walls pulsing with ${possessivePronoun} orgasm.`,
+        hasVagina ? `${subjectPronoun} whimpers and trembles, ${possessivePronoun} inner walls pulsing with ${possessivePronoun} orgasm.` : 
+                   `${subjectPronoun} whimpers and trembles, ${possessivePronoun} body shaking with ${possessivePronoun} orgasm.`,
         `${subjectPronoun} gasps and clutches at you, ${possessivePronoun} climax overwhelming ${objectPronoun}.`,
         `${subjectPronoun} moans loudly, ${possessivePronoun} hips gyrating uncontrollably as ${subjectPronoun} comes.`,
         `${subjectPronoun} bites ${possessivePronoun} lip and shudders, ${possessivePronoun} body consumed by pleasure.`
@@ -2893,14 +2902,21 @@ function generateNPCClimaxReaction(npc, npcGender, intimacy) {
         `${subjectPronoun} clings to you desperately, ${possessivePronoun} climax crashing over ${objectPronoun}.`
     ];
     
-    // Select templates based on gender
+    // Select templates based on gender and anatomy
     let templates;
-    if (npcGender === "male" || npcGender.includes("male")) {
+    if ((npcGender === "male" || npcGender.includes("male")) && hasPenis) {
         templates = maleClimaxTemplates;
-    } else if (npcGender === "female" || npcGender.includes("female")) {
+    } else if ((npcGender === "female" || npcGender.includes("female")) && hasVagina) {
         templates = femaleClimaxTemplates;
     } else {
-        templates = neutralClimaxTemplates;
+        // Fallback to neutral or based on anatomy
+        if (hasPenis) {
+            templates = maleClimaxTemplates;
+        } else if (hasVagina) {
+            templates = femaleClimaxTemplates;
+        } else {
+            templates = neutralClimaxTemplates;
+        }
     }
     
     return pickRandom(templates);
@@ -4187,11 +4203,11 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     };
     const sizeAdj = sizeDescriptors[size] ? pickRandom(sizeDescriptors[size]) : size;
     
-    // Sphincters are wrinkly/puckered by nature - never "neat" in the tidy sense
+    // Sphincters are wrinkly/puckered by nature - never "neat" or "ringed" in the tidy sense
     const sphincterDescriptors = {
         tight: ["clenched", "firmly closed", "resistant", "shyly guarded", "tense"],
         snug: ["puckered", "wrinkled", "firm", "tight"],
-        firm: ["ringed", "controlled", "clenched", "toned", "puckered"],
+        firm: ["controlled", "clenched", "toned", "puckered", "muscular"],
         supple: ["yielding", "pulsing", "receptive", "soft", "wrinkled"],
         loose: ["open", "parted", "experienced", "stretched"]
     };
