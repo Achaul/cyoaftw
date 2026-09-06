@@ -933,22 +933,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             ]
         }
     },
-    {
-        id: "flirt",
-        priority: 150,
-        repeat: "session",
-        label: "Flirt lightly",
-        textVariants: [
-            "You let a little charm into the moment and see whether they lean into it.",
-            "You test the waters with a light touch of flirtation.",
-            "You nudge the conversation in a warmer direction and watch their reaction."
-        ],
-        intent: "flirt",
-        conditions: {
-            romanceEligible: true,
-            maxHostility: 70
-        }
-    },
+
     {
         id: "tease",
         priority: 160,
@@ -1004,93 +989,96 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "disengage",
         intent: "goodbye",
         relationshipImpact: { mood: 0, favor: 1, intent: "goodbye", markMet: true, actionTag: "goodbye" }
+    },
+    // ===== NSFW OPTIONS (injected directly into base catalogue) =====
+    {
+        id: "flirt",
+        label: "Flirt",
+        text: "You flirt with them, running your fingers near their {groin} to test their interest...",
+        priority: 10,
+        repeat: "session",
+        conditions: { romanceEligible: true, maxHostility: 70 },
+        relationshipImpact: { lust: +2, attraction: +1 },
+        resetTimer: { turns: 5 },
+        phase: 1,
+        nsfw: true
+    },
+    {
+        id: "seduce",
+        label: "Seduce",
+        text: "You suggest a romantic follow-up, like meeting for dinner or a private walk...",
+        priority: 20,
+        conditions: { minAttraction: 15 },
+        isInquiry: true,
+        relationshipImpact: { lust: +3, attraction: +5 },
+        onAccept: { lust: +5, attraction: +8 },
+        onReject: { hostility: +10, attraction: -5 },
+        resetTimer: { turns: 10 },
+        phase: 1,
+        nsfw: true
+    },
+    {
+        id: "proposition",
+        label: "Proposition",
+        text: "You make a direct physical advance, testing if they're up for something quick and immediate...",
+        priority: 25,
+        conditions: { minAttraction: 10, minLust: 15 },
+        isInquiry: true,
+        relationshipImpact: { lust: +8, attraction: +2 },
+        onAccept: { lust: +12, attraction: +3 },
+        onReject: { hostility: +15, lust: -3 },
+        resetTimer: { turns: 15 },
+        phase: 1,
+        nsfw: true
+    },
+    {
+        id: "touch_intimately",
+        label: "Touch them intimately",
+        text: "You reach out to touch their {groin} suggestively...",
+        priority: 30,
+        repeat: "encounter",
+        conditions: { 
+            minAttraction: 35,
+            locationCheck: "private",
+            aloneWithTarget: true,
+            custom: function(npc, ctx) {
+                const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
+                const isIntimacyActive = npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active;
+                return hasPendingFollow || !isIntimacyActive;
+            }
+        },
+        action: "intimacy",
+        startEncounter: true,
+        relationshipImpact: { lust: +10, attraction: +4 },
+        resetTimer: { turns: 15 },
+        phase: 2,
+        nsfw: true
+    },
+    {
+        id: "start_intimacy",
+        label: "Make a move",
+        text: "You make your intentions clear, reaching for their {groin} to initiate intimacy...",
+        priority: 35,
+        repeat: "encounter",
+        conditions: { 
+            minAttraction: 45,
+            minLust: 25,
+            locationCheck: "private",
+            aloneWithTarget: true,
+            custom: function(npc, ctx) {
+                const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
+                const isIntimacyActive = npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active;
+                return hasPendingFollow || !isIntimacyActive;
+            }
+        },
+        action: "intimacy",
+        startEncounter: true,
+        relationshipImpact: { lust: +15, attraction: +8 },
+        resetTimer: { turns: 15 },
+        phase: 2,
+        nsfw: true
     }
 ];
-
-// === Updated getNPCConversationContext() ===
-function getNPCConversationContext(npc, extraContext = {}) {
-  const ctx = {
-    npc: npc,
-    player: window.G.player,
-    relationship: npc.relationship || {},
-    // Include lust, attraction, orientation
-    lust: npc.relationship?.lust || 0,
-    attraction: npc.relationship?.attraction || 0,
-    orientation: npc.relationship?.orientation || "bi", // Default to bi for safety
-    everGreeted: !!(npc.memory && npc.memory.everGreeted),
-    story: window.G.story,
-    // ... (other existing fields)
-  };
-  return { ...ctx, ...extraContext };
-}
-
-// === Updated conversationConditionMatches() ===
-function conversationConditionMatches(conditions, ctx) {
-  if (!conditions) return true;
-
-  // Existing checks (species, role, favor, hostility, etc.)
-  if (conditions.species && ctx.npc.species !== conditions.species) return false;
-  if (conditions.role && ctx.npc.role !== conditions.role) return false;
-  if (conditions.minFavor !== undefined && ctx.npc.relationship.favor < conditions.minFavor) return false;
-  if (conditions.maxHostility !== undefined && ctx.npc.relationship.hostility > conditions.maxHostility) return false;
-
-  // New adult system checks
-  if (conditions.minLust !== undefined && ctx.npc.relationship.lust < conditions.minLust) return false;
-  if (conditions.minAttraction !== undefined && ctx.npc.relationship.attraction < conditions.minAttraction) return false;
-  if (conditions.orientation && ctx.npc.relationship.orientation !== conditions.orientation) return false;
-
-  // Phase 2 conditions: location and privacy checks
-  if (conditions.locationCheck === "private") {
-    // Check if current room is private
-    const room = ctx.room;
-    if (!room) return false;
-    
-    // Use intimacy context detection if available
-    if (typeof isPrivateLocation === "function") {
-      if (!isPrivateLocation(room)) return false;
-    } else {
-      // Fallback: check room type
-      const privateTypes = ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower"];
-      const roomType = room.type || room.displayName || "";
-      const roomRole = room.role || "";
-      const isPrivate = privateTypes.some(t => 
-        roomType.toLowerCase().includes(t.toLowerCase()) ||
-        roomRole.toLowerCase().includes(t.toLowerCase())
-      );
-      if (!isPrivate) return false;
-    }
-  }
-
-  if (conditions.aloneWithTarget === true) {
-    // Check if only player and this NPC are present
-    const room = ctx.room;
-    if (!room || !room.creatures) return false;
-    
-    // Use intimacy context detection if available
-    if (typeof isAloneWithTarget === "function") {
-      if (!isAloneWithTarget(room, ctx.npc)) return false;
-    } else {
-      // Fallback: count humanoids
-      let othersPresent = 0;
-      for (const creature of room.creatures) {
-        if (creature.isPlayer) continue;
-        if (creature === ctx.npc) continue;
-        if (creature.isHumanoid || creature.humanoid) {
-          othersPresent++;
-        }
-      }
-      if (othersPresent > 0) return false;
-    }
-  }
-
-  if (conditions.intimacyActive !== undefined) {
-    // Check if intimacy encounter is active
-    const isActive = ctx.npc.intimacy && ctx.npc.intimacy.encounter && ctx.npc.intimacy.encounter.active;
-    if (conditions.intimacyActive !== isActive) return false;
-  }
-
-  return true;
-}
 
 function getNPCConversationContext(npc, extraContext = {}) {
     if (!npc) return null;
@@ -1269,7 +1257,9 @@ function conversationConditionMatches(conditions, ctx) {
 
     if (conditions.aloneWithTarget === true) {
       const room = ctx.room;
-      if (!room || !room.creatures) return false;
+      if (!room) return false;
+      if (!room.creatures) return false;
+      
       if (typeof isAloneWithTarget === "function") {
         if (!isAloneWithTarget(room, ctx.npc)) return false;
       } else {

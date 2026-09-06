@@ -2,156 +2,10 @@
 (function() {
   'use strict';
 
-// Define NSFW conversation catalogue at the top level
-const NSFW_CONVERSATION_CATALOGUE = [
-        {
-            id: "flirt",
-            label: "Flirt",
-            text: "You flirt with them, running your fingers near their {groin} to test their interest...",
-            priority: 10,
-            repeat: "session",
-            conditions: { romanceEligible: true, maxHostility: 70 },
-            relationshipImpact: { lust: +2, attraction: +1 },
-            resetTimer: { turns: 5 },
-            phase: 1,
-            nsfw: true
-        },
-        {
-            id: "seduce",
-            label: "Seduce",
-            text: "You suggest a romantic follow-up, like meeting for dinner or a private walk...",
-            priority: 20,
-            conditions: { minAttraction: 15 },
-            isInquiry: true,
-            relationshipImpact: { lust: +3, attraction: +5 },
-            onAccept: { lust: +5, attraction: +8 },
-            onReject: { hostility: +10, attraction: -5 },
-            resetTimer: { turns: 10 },
-            phase: 1,
-            nsfw: true
-        },
-        {
-            id: "proposition",
-            label: "Proposition",
-            text: "You make a direct physical advance, testing if they're up for something quick and immediate...",
-            priority: 25,
-            conditions: { minAttraction: 10, minLust: 15 },
-            isInquiry: true,
-            relationshipImpact: { lust: +8, attraction: +2 },
-            onAccept: { lust: +12, attraction: +3 },
-            onReject: { hostility: +15, lust: -3 },
-            resetTimer: { turns: 15 },
-            phase: 1,
-            nsfw: true
-        },
-        {
-            id: "touch_intimately",
-            label: "Touch them intimately",
-            text: "You reach out to touch their {groin} suggestively...",
-            priority: 30,
-            repeat: "encounter",
-            conditions: { 
-                custom: function(npc, ctx) {
-                    const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
-                    const meetsThresholds = (npc.relationship && typeof npc.relationship.attraction === "number" && npc.relationship.attraction >= 35) || 
-                                           (npc.memory && typeof npc.memory.attraction === "number" && npc.memory.attraction >= 35);
-                    const isPrivate = ctx && ctx.room && ((typeof isPrivateLocation === "function" && isPrivateLocation(ctx.room)) ||
-                            (ctx.room.type && ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower", "Home"].some(t => ctx.room.type.includes(t))) ||
-                            (ctx.room.displayName && ctx.room.displayName.toLowerCase().includes("room")));
-                    const isAlone = ctx && ctx.room && ctx.room.creatures && (() => {
-                        let others = 0;
-                        for (const c of ctx.room.creatures) {
-                            if (c.isPlayer) continue;
-                            if (c === npc) continue;
-                            if (c.isHumanoid || c.humanoid) others++;
-                        }
-                        return others === 0;
-                    })();
-                    const isIntimacyActive = npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active;
-                    return hasPendingFollow || (meetsThresholds && isPrivate && isAlone && !isIntimacyActive);
-                }
-            },
-            action: "intimacy",
-            startEncounter: true,
-            relationshipImpact: { lust: +10, attraction: +4 },
-            resetTimer: { turns: 15 },
-            phase: 2,
-            nsfw: true
-        },
-        {
-            id: "start_intimacy",
-            label: "Make a move",
-            text: "You make your intentions clear, reaching for their {groin} to initiate intimacy...",
-            priority: 35,
-            repeat: "encounter",
-            conditions: { 
-                custom: function(npc, ctx) {
-                    const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
-                    const attraction = (npc.relationship && typeof npc.relationship.attraction === "number") ? npc.relationship.attraction : 
-                                       (npc.memory && typeof npc.memory.attraction === "number") ? npc.memory.attraction : 0;
-                    const lust = (npc.relationship && typeof npc.relationship.lust === "number") ? npc.relationship.lust : 
-                                (npc.memory && typeof npc.memory.lust === "number") ? npc.memory.lust : 0;
-                    const meetsThresholds = attraction >= 45 && lust >= 25;
-                    const isPrivate = ctx && ctx.room && ((typeof isPrivateLocation === "function" && isPrivateLocation(ctx.room)) ||
-                            (ctx.room.type && ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower", "Home"].some(t => ctx.room.type.includes(t))) ||
-                            (ctx.room.displayName && ctx.room.displayName.toLowerCase().includes("room")));
-                    const isAlone = ctx && ctx.room && ctx.room.creatures && (() => {
-                        let others = 0;
-                        for (const c of ctx.room.creatures) {
-                            if (c.isPlayer) continue;
-                            if (c === npc) continue;
-                            if (c.isHumanoid || c.humanoid) others++;
-                        }
-                        return others === 0;
-                    })();
-                    const isIntimacyActive = npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active;
-                    return hasPendingFollow || (meetsThresholds && isPrivate && isAlone && !isIntimacyActive);
-                }
-            },
-            action: "intimacy",
-            startEncounter: true,
-            relationshipImpact: { lust: +15, attraction: +8 },
-            resetTimer: { turns: 15 },
-            phase: 2,
-            nsfw: true
-        }
-    ];
-    
-    // Inject immediately
-    NSFW_CONVERSATION_CATALOGUE.forEach(option => {
-        const existingIndex = window.NPC_CONVERSATION_CATALOGUE.findIndex(o => o.id === option.id);
-        if (existingIndex >= 0) {
-            window.NPC_CONVERSATION_CATALOGUE[existingIndex] = option;
-        } else {
-            window.NPC_CONVERSATION_CATALOGUE.push(option);
-        }
-    });
-    
-];
+// NSFW conversation options are now defined in base catalogue (cyoaftw-npc-data.js)
 
-// IMMEDIATELY inject NSFW options into the catalogue
-// This ensures they're available before any other system tries to use them
-if (typeof window !== "undefined") {
-    if (!window.NPC_CONVERSATION_CATALOGUE) {
-        window.NPC_CONVERSATION_CATALOGUE = [];
-    }
-    // Inject NSFW options right now
-    NSFW_CONVERSATION_CATALOGUE.forEach(option => {
-        const existingIndex = window.NPC_CONVERSATION_CATALOGUE.findIndex(o => o.id === option.id);
-        if (existingIndex >= 0) {
-            window.NPC_CONVERSATION_CATALOGUE[existingIndex] = option;
-        } else {
-            window.NPC_CONVERSATION_CATALOGUE.push(option);
-        }
-    });
-    
-    console.log("[NSFW System] Injected", NSFW_CONVERSATION_CATALOGUE.length, "NSFW options immediately");
-    window.NSFW_SYSTEM_VERSION = "2026-09-06-001";
-    console.log("[NSFW System] Loaded v2026-09-06-001 - Immediate injection at script load");
-} else {
-    // Fallback for non-window environments
-    console.log("[NSFW System] Non-window environment, skipping immediate injection");
-}
+// NSFW options are defined in base catalogue - no injection needed
+console.log("[NSFW System] Loaded - NSFW options in base catalogue");
 
   const NSFW_SYSTEM_ENABLED = true;
 
@@ -1131,9 +985,10 @@ if (typeof window !== "undefined") {
           return filtered;
         }
         
-        // If in Phase 2 context (private location, alone with target), filter to only show Phase 2 NSFW options
+        // If in Phase 2 context (private location, alone with target), include NSFW options
         if (isPhase2Context) {
           const nsfwOptionIds = ["goodbye", "disengage", "step-away"];
+          const phase1NsfwIds = ["flirt", "seduce", "proposition"];
           const filtered = filteredOptions.filter(option => {
             // Include exit options
             if (nsfwOptionIds.includes(option.id)) return true;
@@ -1141,7 +996,10 @@ if (typeof window !== "undefined") {
             if (option.phase === 2) return true;
             // Include intimacy actions that start an encounter (transition actions only)
             if (option.action === "intimacy" && option.startEncounter === true) return true;
-            // Explicitly exclude Phase 1 options
+            // Include Phase 1 NSFW options (pre-intimacy conversation options)
+            if (option.phase === 1 && option.nsfw === true) return true;
+            if (phase1NsfwIds.includes(option.id)) return true;
+            // Exclude non-NSFW Phase 1 options
             if (option.phase === 1) return false;
             // Exclude options without phase (base catalogue social options)
             if (option.phase === undefined) return false;
@@ -1197,5 +1055,5 @@ if (typeof window !== "undefined") {
   }
 
   initNSFWSystem();
-
+}
 })();
