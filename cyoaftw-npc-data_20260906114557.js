@@ -1407,6 +1407,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     const windowCatalogue = window.NPC_CONVERSATION_CATALOGUE || [];
     console.log("[NPC Data] Window catalogue size:", windowCatalogue.length, "options:", windowCatalogue.map(o => o.id));
     const fullCatalogue = [...NPC_CONVERSATION_CATALOGUE];
+    console.log("[NPC Data] Base catalogue size:", NPC_CONVERSATION_CATALOGUE.length, "options:", NPC_CONVERSATION_CATALOGUE.map(o => o.id));
     
     // Add window catalogue options, overwriting duplicates
     for (const windowOption of windowCatalogue) {
