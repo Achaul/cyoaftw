@@ -435,6 +435,37 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
 
       // Handle routing for seduce/proposition
       if (option.id === "seduce" || option.id === "proposition") {
+        // Check if we're already in a suitable location for intimacy
+        const currentRoom = window.G && window.G.activeRoom;
+        const isAlreadySuitable = currentRoom && (
+          option.id === "proposition" ? isPrivateLocation(currentRoom) : 
+          ["Tavern", "Inn", "Inn Common"].some(t => currentRoom.type && currentRoom.type.includes(t))
+        );
+        
+        // Check if we're alone with the NPC (for proposition)
+        const isAloneWithNPC = currentRoom && currentRoom.creatures && (
+          currentRoom.creatures.filter(c => c.isPlayer || c === npc).length === 2
+        );
+        
+        // If already in suitable location, start intimacy encounter directly
+        if (option.startEncounter && isAlreadySuitable && (
+            option.id === "proposition" && isAloneWithNPC ||
+            option.id === "seduce"
+          )) {
+          // Clear pending state
+          delete npc._pendingSeductionDestination;
+          delete npc._pendingSeductionOption;
+          
+          // Start intimacy encounter immediately
+          setTimeout(() => {
+            startIntimacyEncounter(npc, window.G.player);
+            if (typeof renderIntimacyActionMenu === "function") {
+              renderIntimacyActionMenu(npc);
+            }
+          }, 100);
+          return responseText;
+        }
+        
         const isForward = npc.temperament === "forward" || npc.temperament === "bold";
         const startCoords = window.G.player.coords;
         const targetRoom = option.id === "seduce"
