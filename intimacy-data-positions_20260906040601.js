@@ -6,8 +6,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_POSITIONS_VERSION = "2026-08-16-007";
-    console.log("[Intimacy Positions] Loaded v2026-08-16-007 - Smart end-action validation based on lastAction");
+    window.INTIMACY_POSITIONS_VERSION = "2026-09-05-001";
+    console.log("[Intimacy Positions] Loaded v2026-09-05-001 - Added oral service positions (69, Oral Service, Prone Oral Service, Kneeling By Face, Squatting Before, Riding Face, Mounted On X-Cross)");
 }
 
 var INTIMACY_POSITIONS = {
@@ -147,7 +147,7 @@ var INTIMACY_POSITIONS = {
         furniture: ["flat surface", "bed"],
         accessibleTargets: {
             player: ["back", "hips", "buttocks", "groin", "vagina"],
-            npc: ["back", "hips", "buttocks", "groin", "vagina"]
+            npc: ["back", "hips", "buttocks", "groin", "vagina", "anus"]
         },
         validTools: ["hand", "fingers", "penis", "vagina"],
         analFriendly: true,
@@ -210,6 +210,105 @@ var INTIMACY_POSITIONS = {
         validTools: ["hand", "fingers", "vagina", "penis"],
         analFriendly: true,
         description: "Player on back, NPC on top facing away"
+    },
+
+    // ===== ORAL SERVICE POSITIONS =====
+    "Sixty-Nine": {
+        label: "69",
+        playerRole: "top",
+        npcRole: "bottom",
+        furniture: ["flat surface", "bed"],
+        accessibleTargets: {
+            player: ["face", "mouth", "lips", "groin", "vagina", "penis"],
+            npc: ["face", "mouth", "lips", "groin", "vagina", "penis"]
+        },
+        validTools: ["mouth", "hand", "fingers", "vagina", "penis"],
+        analFriendly: false,
+        description: "Oral service with reciprocal access"
+    },
+
+    "Oral Service": {
+        label: "oral service",
+        playerRole: "top",
+        npcRole: "bottom",
+        furniture: ["flat surface", "bed", "kneeling position"],
+        accessibleTargets: {
+            player: ["face", "mouth", "lips", "groin", "vagina", "penis"],
+            npc: ["face", "mouth", "lips", "neck", "chest", "groin"]
+        },
+        validTools: ["mouth", "hand", "fingers", "vagina", "penis"],
+        analFriendly: false,
+        description: "NPC performing oral on player"
+    },
+
+    "Prone Oral Service": {
+        label: "prone oral service",
+        playerRole: "bottom",
+        npcRole: "top",
+        furniture: ["flat surface", "bed"],
+        accessibleTargets: {
+            player: ["face", "mouth", "lips", "groin"],
+            npc: ["face", "mouth", "lips", "groin", "vagina", "penis"]
+        },
+        validTools: ["mouth", "hand", "fingers"],
+        analFriendly: false,
+        description: "NPC lying down performing oral"
+    },
+
+    "Kneeling By Face": {
+        label: "kneeling by face",
+        playerRole: "standing",
+        npcRole: "kneeling",
+        furniture: ["open space", "small standing room", "large standing room"],
+        accessibleTargets: {
+            player: ["groin", "vagina", "penis"],
+            npc: ["face", "mouth", "lips", "neck"]
+        },
+        validTools: ["penis", "vagina"],
+        analFriendly: false,
+        description: "Player standing, NPC kneeling at face level"
+    },
+
+    "Squatting Before": {
+        label: "squatting before",
+        playerRole: "standing",
+        npcRole: "squatting",
+        furniture: ["open space", "small standing room", "large standing room"],
+        accessibleTargets: {
+            player: ["groin", "vagina", "penis"],
+            npc: ["face", "mouth", "lips", "neck", "chest"]
+        },
+        validTools: ["penis", "vagina"],
+        analFriendly: false,
+        description: "Player standing, NPC squatting in front"
+    },
+
+    "Riding Face": {
+        label: "riding face",
+        playerRole: "bottom",
+        npcRole: "top",
+        furniture: ["flat surface", "bed"],
+        accessibleTargets: {
+            player: ["face", "mouth", "lips"],
+            npc: ["groin", "vagina", "penis"]
+        },
+        validTools: ["vagina", "penis"],
+        analFriendly: false,
+        description: "NPC sitting on player's face"
+    },
+
+    "Mounted On X-Cross Oral Service": {
+        label: "mounted on X-cross oral service",
+        playerRole: "top",
+        npcRole: "restrained",
+        furniture: ["x-cross", "bondage furniture"],
+        accessibleTargets: {
+            player: ["groin", "vagina", "penis"],
+            npc: ["face", "mouth", "lips"]
+        },
+        validTools: ["penis", "vagina"],
+        analFriendly: false,
+        description: "NPC restrained on X-cross performing oral"
     }
 };
 
