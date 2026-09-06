@@ -4,8 +4,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-09-05-002";
-    console.log("[NSFW System] Loaded v2026-09-05-002 - Fixed touch_intimately/start_intimacy conditions: added isAlone check, improved attraction/lust fallback, fixed private location detection, enhanced debug logging");
+    window.NSFW_SYSTEM_VERSION = "2026-09-05-003";
+    console.log("[NSFW System] Loaded v2026-09-05-003 - Fixed query catalogue wrapper timing, added isAlone check, improved attraction/lust fallback, fixed private location detection, enhanced debug logging");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -985,6 +985,7 @@ if (typeof window !== "undefined") {
       setTimeout(initNSFWSystem, 1000);
       return;
     }
+    console.log("[NSFW System] Initializing NSFW system...");
     window.ensureNPCRelationshipState = ensureNPCRelationshipState;
     window.generatePhysicalTraits = generatePhysicalTraits;
     window.applyInquiryResponse = applyInquiryResponse;
@@ -992,11 +993,13 @@ if (typeof window !== "undefined") {
     injectNSFWOptions();
     injectMeetupConversationOptions();
     extendChooseChatOption();
-    // Always replace to ensure our filtering logic is used
-    // Save original function if it exists (for greeting gate, etc.)
-    const originalQueryConversationCatalogue = window.queryConversationCatalogue;
     
-    window.queryConversationCatalogue = function(npc, context) {
+    // Setup query catalogue wrapper - try multiple times to ensure original function is captured
+    function setupQueryWrapper() {
+      if (typeof window.queryConversationCatalogue === "function" && 
+          typeof window.NPC_CONVERSATION_CATALOGUE !== "undefined") {
+        const originalQueryConversationCatalogue = window.queryConversationCatalogue;
+        window.queryConversationCatalogue = function(npc, context) {
         const allOptions = window.NPC_CONVERSATION_CATALOGUE || [];
         
         // First, apply original filtering (e.g., greeting gate) if it exists
@@ -1139,6 +1142,21 @@ if (typeof window !== "undefined") {
         
         return filteredOptions;
       };
+      // Setup completed successfully
+      console.log("[NSFW System] Query catalogue wrapper installed");
+      return true;
+    }
+    
+    // Try to setup the wrapper, retry if not ready
+    if (!setupQueryWrapper()) {
+      console.log("[NSFW System] Query catalogue not ready, will retry...");
+      const retrySetup = setInterval(() => {
+        if (setupQueryWrapper()) {
+          clearInterval(retrySetup);
+        }
+      }, 1000);
+    }
+    
     extendAdvanceStoryTurn();
     if (typeof window.createNPC === "function") {
       const orig = window.createNPC;
