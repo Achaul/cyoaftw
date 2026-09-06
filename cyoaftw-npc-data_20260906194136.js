@@ -1086,6 +1086,11 @@ const NPC_CONVERSATION_CATALOGUE = [
     }
 ];
 
+// Export catalogue to window immediately after definition for NSFW system access
+if (typeof window !== "undefined") {
+    window.NPC_CONVERSATION_CATALOGUE = NPC_CONVERSATION_CATALOGUE;
+}
+
 function getNPCConversationContext(npc, extraContext = {}) {
     if (!npc) return null;
     ensureNPCRelationshipState(npc);
@@ -1387,6 +1392,7 @@ function buildConversationOption(entry, npc, ctx) {
 }
 
 function queryConversationCatalogue(npc, extraContext = {}) {
+    console.log("[NPC Data] queryConversationCatalogue called with NPC:", npc ? npc.name || npc.id : "null");
     if (!npc) return [];
 
     const ctx = getNPCConversationContext(npc, extraContext);
@@ -1402,8 +1408,8 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     // Deduplicate by ID, giving priority to window catalogue (NSFW) options
     const windowCatalogue = window.NPC_CONVERSATION_CATALOGUE || [];
     console.log("[NPC Data] Window catalogue size:", windowCatalogue.length, "options:", windowCatalogue.map(o => o.id));
-    const fullCatalogue = [...NPC_CONVERSATION_CATALOGUE];
     console.log("[NPC Data] Base catalogue size:", NPC_CONVERSATION_CATALOGUE.length, "options:", NPC_CONVERSATION_CATALOGUE.map(o => o.id));
+    const fullCatalogue = [...NPC_CONVERSATION_CATALOGUE];
     
     // Add window catalogue options, overwriting duplicates
     for (const windowOption of windowCatalogue) {
@@ -1427,7 +1433,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
         });
     }
 
-    return filtered
+    const result = filtered
         .filter(entry => conversationRepeatAvailable(entry, ctx))
         .filter(entry => conversationConditionMatches(entry.conditions, ctx))
         .filter(entry => {
@@ -1444,6 +1450,9 @@ function queryConversationCatalogue(npc, extraContext = {}) {
         .sort((a, b) => (a.priority || 0) - (b.priority || 0))
         .map(entry => buildConversationOption(entry, npc, ctx))
         .filter(Boolean);
+    
+    console.log("[NPC Data] queryConversationCatalogue returning", result.length, "options:", result.map(o => o.id));
+    return result;
 }
 
 function normalizeSpeechStyle(style) {
@@ -2224,4 +2233,9 @@ function generatePostureOrAction(temperament) {
         || behaviorMatrix["neutral"];
 
     return _rand(actions);
+}
+
+// Export function to window for NSFW system access (catalogue already exported above)
+if (typeof window !== "undefined") {
+    window.queryConversationCatalogue = queryConversationCatalogue;
 }

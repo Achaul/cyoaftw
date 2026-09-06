@@ -661,6 +661,7 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
   }
 
   function injectMeetupConversationOptions() {
+    console.log("[NSFW System] Injecting meetup conversation options");
     const meetupOptions = [
       {
         id: "split-bill",
@@ -884,6 +885,7 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
   }
 
   function initNSFWSystem() {
+    console.log("[NSFW System] initNSFWSystem called");
     console.log("[NSFW System] Initializing NSFW system...");
     if (!window.G) {
       setTimeout(initNSFWSystem, 1000);
@@ -899,15 +901,20 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
     
     // Setup query catalogue wrapper - try multiple times to ensure original function is captured
     function setupQueryWrapper() {
+      console.log("[NSFW System] setupQueryWrapper: queryConversationCatalogue type =", typeof window.queryConversationCatalogue, ", NPC_CONVERSATION_CATALOGUE type =", typeof window.NPC_CONVERSATION_CATALOGUE);
       if (typeof window.queryConversationCatalogue === "function" && 
           typeof window.NPC_CONVERSATION_CATALOGUE !== "undefined") {
+        console.log("[NSFW System] Both catalogue and function available, setting up wrapper");
         const originalQueryConversationCatalogue = window.queryConversationCatalogue;
         window.queryConversationCatalogue = function(npc, context) {
+        console.log("[NSFW System] Wrapper function called with NPC:", npc ? npc.name || npc.id : "null");
         const allOptions = window.NPC_CONVERSATION_CATALOGUE || [];
+        console.log("[NSFW System] Wrapper: allOptions length:", allOptions.length);
         
         // First, apply original filtering (e.g., greeting gate) if it exists
         let filteredOptions = allOptions;
         if (typeof originalQueryConversationCatalogue === "function") {
+          console.log("[NSFW System] Wrapper: calling original query function");
           filteredOptions = originalQueryConversationCatalogue(npc, context) || allOptions;
         }
         
