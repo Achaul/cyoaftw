@@ -1405,6 +1405,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     // Merge local catalogue with window catalogue (for NSFW options)
     // Deduplicate by ID, giving priority to window catalogue (NSFW) options
     const windowCatalogue = window.NPC_CONVERSATION_CATALOGUE || [];
+    console.log("[NPC Data] Window catalogue size:", windowCatalogue.length, "options:", windowCatalogue.map(o => o.id));
     const fullCatalogue = [...NPC_CONVERSATION_CATALOGUE];
     
     // Add window catalogue options, overwriting duplicates

@@ -4,8 +4,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-09-05-003";
-    console.log("[NSFW System] Loaded v2026-09-05-003 - Fixed query catalogue wrapper timing, added isAlone check, improved attraction/lust fallback, fixed private location detection, enhanced debug logging");
+    window.NSFW_SYSTEM_VERSION = "2026-09-05-005";
+    console.log("[NSFW System] Loaded v2026-09-05-005 - Immediate injection attempt, CRITICAL: If you see this but no other NSFW logs, wrapper is not installed");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -167,6 +167,9 @@ if (typeof window !== "undefined") {
   function injectNSFWOptions() {
     if (!NSFW_SYSTEM_ENABLED) return;
     if (!window.NPC_CONVERSATION_CATALOGUE) window.NPC_CONVERSATION_CATALOGUE = [];
+    console.log("[NSFW System] Injecting NSFW options, current catalogue size:", window.NPC_CONVERSATION_CATALOGUE.length);
+    const nsfwIds = NSFW_CONVERSATION_CATALOGUE.map(o => o.id);
+    console.log("[NSFW System] NSFW options to inject:", nsfwIds);
     NSFW_CONVERSATION_CATALOGUE.forEach(option => {
       const existingIndex = window.NPC_CONVERSATION_CATALOGUE.findIndex(o => o.id === option.id);
       if (existingIndex >= 0) {
@@ -175,6 +178,7 @@ if (typeof window !== "undefined") {
         window.NPC_CONVERSATION_CATALOGUE.push(option);
       }
     });
+    console.log("[NSFW System] After injection, catalogue size:", window.NPC_CONVERSATION_CATALOGUE.length);
   }
 
   function ensureNPCRelationshipState(npc) {
@@ -981,16 +985,20 @@ if (typeof window !== "undefined") {
   }
 
   function initNSFWSystem() {
+    console.log("[NSFW System] Initializing NSFW system...");
     if (!window.G) {
       setTimeout(initNSFWSystem, 1000);
       return;
     }
-    console.log("[NSFW System] Initializing NSFW system...");
     window.ensureNPCRelationshipState = ensureNPCRelationshipState;
     window.generatePhysicalTraits = generatePhysicalTraits;
     window.applyInquiryResponse = applyInquiryResponse;
     window.teleportNPC = teleportNPC;
+    // Inject NSFW options multiple times to ensure they're available
     injectNSFWOptions();
+    setTimeout(injectNSFWOptions, 500);
+    setTimeout(injectNSFWOptions, 1000);
+    
     injectMeetupConversationOptions();
     extendChooseChatOption();
     
@@ -1148,13 +1156,17 @@ if (typeof window !== "undefined") {
     }
     
     // Try to setup the wrapper, retry if not ready
-    if (!setupQueryWrapper()) {
-      console.log("[NSFW System] Query catalogue not ready, will retry...");
+    const wrapperSuccess = setupQueryWrapper();
+    if (!wrapperSuccess) {
+      console.log("[NSFW System] Query catalogue not ready, will retry every second...");
       const retrySetup = setInterval(() => {
         if (setupQueryWrapper()) {
+          console.log("[NSFW System] Query catalogue wrapper successfully installed after retry");
           clearInterval(retrySetup);
         }
       }, 1000);
+    } else {
+      console.log("[NSFW System] Query catalogue wrapper installed immediately");
     }
     
     extendAdvanceStoryTurn();
@@ -1175,4 +1187,5 @@ if (typeof window !== "undefined") {
   }
 
   initNSFWSystem();
+
 })();
