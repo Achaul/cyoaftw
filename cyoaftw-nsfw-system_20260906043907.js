@@ -4,8 +4,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-08-16-0010";
-    console.log("[NSFW System] Loaded v2026-08-16-0010 - Anus description includes size (tight anus, loose anus, etc)");
+    window.NSFW_SYSTEM_VERSION = "2026-09-05-001";
+    console.log("[NSFW System] Loaded v2026-09-05-001 - Fixed touch_intimately/start_intimacy conditions: added isAlone check, improved attraction/lust fallback, fixed private location detection");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -58,7 +58,8 @@ if (typeof window !== "undefined") {
       conditions: { romanceEligible: true, maxHostility: 70 },
       relationshipImpact: { lust: +2, attraction: +1 },
       resetTimer: { turns: 5 },
-      phase: 1
+      phase: 1,
+      nsfw: true
     },
     {
       id: "seduce",
@@ -71,7 +72,8 @@ if (typeof window !== "undefined") {
       onAccept: { lust: +5, attraction: +8 },
       onReject: { hostility: +10, attraction: -5 },
       resetTimer: { turns: 10 },
-      phase: 1
+      phase: 1,
+      nsfw: true
     },
     {
       id: "proposition",
@@ -84,7 +86,8 @@ if (typeof window !== "undefined") {
       onAccept: { lust: +12, attraction: +3 },
       onReject: { hostility: +15, lust: -3 },
       resetTimer: { turns: 15 },
-      phase: 1
+      phase: 1,
+      nsfw: true
     },
     // ===== PHASE 2: PRIVATE (Private location, only player + target present) =====
     {
@@ -95,13 +98,13 @@ if (typeof window !== "undefined") {
       repeat: "encounter",
       conditions: { 
         custom: function(npc, ctx) {
-          // Allow if (attraction thresholds met AND alone AND private) OR if NPC followed player (bypass alone/private checks)
+          // Allow if (attraction thresholds met AND private) OR if NPC followed player (bypass private checks)
           const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
-          const meetsThresholds = (npc.relationship && npc.relationship.attraction >= 35);
-          const isPrivate = ctx && ctx.room && (typeof isPrivateLocation === "function" 
-              ? isPrivateLocation(ctx.room) 
-              : ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower"].some(t => 
-                  (ctx.room.type || ctx.room.displayName || "").toLowerCase().includes(t.toLowerCase())));
+          const meetsThresholds = (npc.relationship && typeof npc.relationship.attraction === "number" && npc.relationship.attraction >= 35) || 
+                                 (npc.memory && typeof npc.memory.attraction === "number" && npc.memory.attraction >= 35);
+          const isPrivate = ctx && ctx.room && ((typeof isPrivateLocation === "function" && isPrivateLocation(ctx.room)) ||
+                  (ctx.room.type && ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower", "Home"].some(t => ctx.room.type.includes(t))) ||
+                  (ctx.room.displayName && ctx.room.displayName.toLowerCase().includes("room")));
           const isAlone = ctx && ctx.room && ctx.room.creatures && (() => {
             let others = 0;
             for (const c of ctx.room.creatures) {
@@ -119,7 +122,8 @@ if (typeof window !== "undefined") {
       startEncounter: true,
       relationshipImpact: { lust: +10, attraction: +4 },
       resetTimer: { turns: 15 },
-      phase: 2
+      phase: 2,
+      nsfw: true
     },
     {
       id: "start_intimacy",
@@ -129,15 +133,16 @@ if (typeof window !== "undefined") {
       repeat: "encounter",
       conditions: { 
         custom: function(npc, ctx) {
-          // Allow if (attraction/lust thresholds met AND alone AND private) OR if NPC followed player (bypass alone/private checks)
+          // Allow if (attraction/lust thresholds met AND private) OR if NPC followed player (bypass private checks)
           const hasPendingFollow = npc && npc._pendingSeductionOption === "follow-player";
-          const attraction = (npc.relationship && typeof npc.relationship.attraction === "number") ? npc.relationship.attraction : 0;
-          const lust = (npc.relationship && typeof npc.relationship.lust === "number") ? npc.relationship.lust : 0;
+          const attraction = (npc.relationship && typeof npc.relationship.attraction === "number") ? npc.relationship.attraction : 
+                           (npc.memory && typeof npc.memory.attraction === "number") ? npc.memory.attraction : 0;
+          const lust = (npc.relationship && typeof npc.relationship.lust === "number") ? npc.relationship.lust : 
+                      (npc.memory && typeof npc.memory.lust === "number") ? npc.memory.lust : 0;
           const meetsThresholds = attraction >= 45 && lust >= 25;
-          const isPrivate = ctx && ctx.room && (typeof isPrivateLocation === "function" 
-              ? isPrivateLocation(ctx.room) 
-              : ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower"].some(t => 
-                  (ctx.room.type || ctx.room.displayName || "").toLowerCase().includes(t.toLowerCase())));
+          const isPrivate = ctx && ctx.room && ((typeof isPrivateLocation === "function" && isPrivateLocation(ctx.room)) ||
+                  (ctx.room.type && ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower", "Home"].some(t => ctx.room.type.includes(t))) ||
+                  (ctx.room.displayName && ctx.room.displayName.toLowerCase().includes("room")));
           const isAlone = ctx && ctx.room && ctx.room.creatures && (() => {
             let others = 0;
             for (const c of ctx.room.creatures) {
@@ -154,7 +159,8 @@ if (typeof window !== "undefined") {
       action: "intimacy",
       startEncounter: true,
       relationshipImpact: { lust: +15, attraction: +8 },
-      phase: 2
+      phase: 2,
+      nsfw: true
     }
   ];
 

@@ -14,8 +14,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-08-31-028";
-    console.log("[Intimacy System] Loaded v2026-08-31-028 - Fixed cooldown for oral sex (can continue during cooldown), fixed 'closed' descriptors, fixed missing verbs, fixed capitalization, added 'into' and tool specs");
+    window.INTIMACY_SYSTEM_VERSION = "2026-09-05-001";
+    console.log("[Intimacy System] Loaded v2026-09-05-001 - Fixed cooldown for oral sex (can continue during cooldown), fixed 'closed' descriptors, fixed missing verbs, fixed capitalization, added 'into' and tool specs");
 }
 
 // ============================================================================
