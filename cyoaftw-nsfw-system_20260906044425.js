@@ -4,8 +4,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NSFW_SYSTEM_VERSION = "2026-09-05-001";
-    console.log("[NSFW System] Loaded v2026-09-05-001 - Fixed touch_intimately/start_intimacy conditions: added isAlone check, improved attraction/lust fallback, fixed private location detection");
+    window.NSFW_SYSTEM_VERSION = "2026-09-05-002";
+    console.log("[NSFW System] Loaded v2026-09-05-002 - Fixed touch_intimately/start_intimacy conditions: added isAlone check, improved attraction/lust fallback, fixed private location detection, enhanced debug logging");
 }
 
   const NSFW_SYSTEM_ENABLED = true;
@@ -1018,16 +1018,23 @@ if (typeof window !== "undefined") {
         
         // Check if we're in a Phase 2 context (private location, alone with target, intimacy not active)
         const isPhase2Context = (() => {
-          if (!npc || !context || !context.room) return false;
-          if (isIntimacyActive) return false;
+          if (!npc || !context || !context.room) {
+            if (npc && npc.name) console.log(`[DEBUG] Phase 2 check: ${npc.name} - Missing context or room`);
+            return false;
+          }
+          if (isIntimacyActive) {
+            if (npc && npc.name) console.log(`[DEBUG] Phase 2 check: ${npc.name} - Intimacy already active`);
+            return false;
+          }
           
           // Check private location
           const room = context.room;
+          const roomType = room.type || room.displayName || "unknown";
           const isPrivate = (typeof isPrivateLocation === "function" && isPrivateLocation(room)) ||
                            (room.type && ["Guest Room", "Inn", "Inn Common", "Bedroom", "Cellar", "Dark Alleyway", "Vault", "Chamber", "Tower", "Home"].some(t => room.type.includes(t))) ||
                            (room.displayName && room.displayName.toLowerCase().includes("room"));
           if (!isPrivate) {
-            if (npc && npc.name) console.log(`[DEBUG] Phase 2 check: ${npc.name} - NOT private (room: ${room.type || room.displayName})`);
+            if (npc && npc.name) console.log(`[DEBUG] Phase 2 check: ${npc.name} - NOT private (room: ${roomType})`);
             return false;
           }
           
@@ -1036,19 +1043,25 @@ if (typeof window !== "undefined") {
             if (npc && npc.name) console.log(`[DEBUG] Phase 2 check: ${npc.name} - no creatures array`);
             return false;
           }
+          if (room.creatures.length === 0) {
+            if (npc && npc.name) console.log(`[DEBUG] Phase 2 check: ${npc.name} - empty creatures array`);
+            return true; // If no creatures, then we're alone
+          }
           let othersPresent = 0;
+          const creaturesList = [];
           for (const creature of room.creatures) {
-            if (creature.isPlayer) continue;
-            if (creature === npc) continue;
+            if (creature.isPlayer) { creaturesList.push("Player"); continue; }
+            if (creature === npc) { creaturesList.push("NPC"); continue; }
             if (creature.isHumanoid || creature.humanoid) {
               othersPresent++;
+              creaturesList.push(creature.name || creature.type || "Unknown");
             }
           }
           const result = othersPresent === 0;
           
           // Debug logging
           if (npc && npc.name) {
-            console.log(`[DEBUG] Phase 2 context for ${npc.name}: private=${isPrivate}, alone=${result} (othersPresent=${othersPresent}, room=${room.type || room.displayName})`);
+            console.log(`[DEBUG] Phase 2 context for ${npc.name}: private=${isPrivate}, alone=${result} (othersPresent=${othersPresent}, creatures=${creaturesList.join(", ")}, room=${roomType})`);
           }
           
           return result;
@@ -1059,6 +1072,10 @@ if (typeof window !== "undefined") {
         // Debug logging for context detection
         if (npc && npc.name) {
           console.log(`[DEBUG] NSFW Context for ${npc.name}: isIntimacyActive=${isIntimacyActive}, isPhase2Context=${isPhase2Context}, isDateContext=${isDateContext}`);
+          if (context && context.room) {
+            const roomType = context.room.type || context.room.displayName || "unknown";
+            console.log(`[DEBUG] Room info: type="${roomType}", creatures=${context.room.creatures ? context.room.creatures.length : 'none'}`);
+          }
           if (isAtMeetup) console.log(`[DEBUG] At meetup location: ${npc._meetupLocation}`);
           if (hasPendingSeduction) console.log(`[DEBUG] Has pending seduction: ${npc._pendingSeductionOption}`);
         }
@@ -1111,6 +1128,7 @@ if (typeof window !== "undefined") {
           });
           if (npc && npc.name) {
             console.log(`[DEBUG] Phase 2 filtering applied for ${npc.name}. Options:`, filtered.map(o => ({id: o.id, phase: o.phase, action: o.action})));
+            console.log(`[DEBUG] Phase 2 options available:`, filtered.filter(o => o.phase === 2).map(o => o.id));
           }
           return filtered;
         }
