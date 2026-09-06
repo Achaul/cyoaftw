@@ -3986,7 +3986,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                     lastAction.actId.toLowerCase().includes("suck_");
                 
                 if (isPenetrationAction || isPenetrationAct || wasPenetrating) {
-                    // Add Pull out button - use existing pull_out action
+                    // Add Pull Away button - use existing pull_out action
                     // Try to determine the best pull-out action based on context
                     let pullOutActionId = "pull_out";
                     
@@ -4011,7 +4011,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                     
                     menu.unshift({
                         type: "end",
-                        label: "Pull out",
+                        label: "Pull Away",
                         actionId: pullOutActionId,
                         description: "Withdraw from current penetration"
                     });

@@ -433,12 +433,12 @@ var SEX_ACTS = {
     pull_off_of_finger: { id: "pull_off_of_finger", type: ACT_TYPES.END, label: "Pull off finger", desc: "Pull your pussy off their fingers", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Doggy", "Bent Over", "Spooning", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerFemale: true },
     
     // NEW: End PIV/Penetration actions from COT
-    pull_out: { id: "pull_out", type: ACT_TYPES.END, label: "Pull out", desc: "Pull your penis out of their pussy", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Missionary", "Doggy", "Bent Over", "Against Wall", "Against Wall From Behind", "Cowgirl", "Reverse Cowgirl"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, maleOnly: true },
+    pull_out: { id: "pull_out", type: ACT_TYPES.END, label: "Pull Away", desc: "Pull your penis out of their pussy", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Missionary", "Doggy", "Bent Over", "Against Wall", "Against Wall From Behind", "Cowgirl", "Reverse Cowgirl"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, maleOnly: true },
     pull_off: { id: "pull_off", type: ACT_TYPES.END, label: "Pull off", desc: "Pull your pussy off their penis", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Missionary", "Doggy", "Bent Over", "Against Wall", "Against Wall From Behind", "Cowgirl", "Reverse Cowgirl"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, playerIsBottom: true, requiresPlayerFemale: true, requiresNpcMale: true },
     
     // NEW: End oral actions from COT
     release_cock: { id: "release_cock", type: ACT_TYPES.END, label: "Release cock", desc: "Release their penis from your hand", arousal: { p: 0, n: 0 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcMale: true },
-    pull_out_of_mouth: { id: "pull_out_of_mouth", type: ACT_TYPES.END, label: "Pull out of mouth", desc: "Pull your penis out of their mouth", arousal: { p: 0, n: 0 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Oral Service", "Prone Oral Service", "Kneeling By Face", "Squatting Before", "Riding Face"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true },
+    pull_out_of_mouth: { id: "pull_out_of_mouth", type: ACT_TYPES.END, label: "Pull Away from mouth", desc: "Pull your penis out of their mouth", arousal: { p: 0, n: 0 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Oral Service", "Prone Oral Service", "Kneeling By Face", "Squatting Before", "Riding Face"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true },
 
     // ===== NEW: Priority 2 - SPECIAL PAIRING ACTIONS =====
     // M2M: Frot (cock-to-cock rubbing)
