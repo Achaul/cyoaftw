@@ -1313,13 +1313,14 @@ function checkToolTargetAccessibility(tool, target, positionId, clothingState, i
     if (!position.validTools.includes(tool)) return false;
     
     // Check if target is accessible in this position
-    // The target belongs to the RECEIVER (person being acted upon), not the actor
+    // The target belongs to the RECEIVER (person being acted upon)
     const receiverKey = isPlayerAction ? "npc" : "player";
     const accessibleTargets = position.accessibleTargets[receiverKey] || [];
     if (!accessibleTargets.includes(target)) return false;
     
     // Check clothing - target must be exposed
     // The target belongs to the RECEIVER (person being acted upon), not the actor
+    const receiverKey = isPlayerAction ? "npc" : "player";
     const receiverClothing = clothingState[receiverKey];
     
     // If no clothing state for receiver, allow the action
