@@ -423,6 +423,9 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
 
       // Clear any existing meetup state before setting up new one
       if (option.id === "seduce" || option.id === "proposition") {
+        // Mark that this NPC has responded positively to a seduce/proposition,
+        // which unlocks the "Ask them to follow you" session-follower option.
+        npc._seductionAccepted = true;
         delete npc._meetupArrived;
         delete npc._meetupReturnTurn;
         delete npc._meetupLocation;
@@ -727,6 +730,71 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
     ];
     
     meetupOptions.forEach(option => {
+      const existingIndex = window.NPC_CONVERSATION_CATALOGUE.findIndex(o => o.id === option.id);
+      if (existingIndex >= 0) {
+        window.NPC_CONVERSATION_CATALOGUE[existingIndex] = option;
+      } else {
+        window.NPC_CONVERSATION_CATALOGUE.push(option);
+      }
+    });
+
+    // ── Session-follower options ──────────────────────────────────
+    // Become available after a successful seduce/proposition (gated by the
+    // npc._seductionAccepted flag set in applyInquiryResponse). "Ask them to
+    // follow you" makes the NPC trail the player for the current session only
+    // (G.sessionFollowers is in-memory; not persisted by saveGameState). The
+    // follow/unfollow pair is mutually exclusive via the sessionFollowers
+    // membership check. phase:1 + nsfw:false keeps these out of the date and
+    // phase-2 (intimacy) context filters so they only surface in normal talk.
+    // relationshipImpact must be a truthy object so the chooseChatOption
+    // wrapper reaches the option.action() call (see extendChooseChatOption);
+    // an empty object applies no lust/attraction change.
+    const followerOptions = [
+      {
+        id: "ask-to-follow",
+        label: function(npc) { return "Ask " + (npc && npc.name ? npc.name : "them") + " to follow you"; },
+        text: function(npc) { return "You ask " + (npc && npc.name ? npc.name : "them") + " to come along with you."; },
+        promptText: function(npc) { return "You ask " + (npc && npc.name ? npc.name : "them") + " to come along with you on your travels."; },
+        priority: 22,
+        phase: 1,
+        conditions: {
+          custom: function(npc, ctx) {
+            if (!npc || !npc._seductionAccepted) return false;
+            var followers = (window.G && window.G.sessionFollowers) || [];
+            return !followers.includes(npc);
+          }
+        },
+        relationshipImpact: {},
+        action: function(npc) {
+          if (typeof window.addSessionFollower === "function") {
+            window.addSessionFollower(npc);
+          }
+        }
+      },
+      {
+        id: "stop-following",
+        label: function(npc) { return "Ask " + (npc && npc.name ? npc.name : "them") + " to stop following"; },
+        text: function(npc) { return "You tell " + (npc && npc.name ? npc.name : "them") + " they needn't follow you anymore."; },
+        promptText: function(npc) { return "You tell " + (npc && npc.name ? npc.name : "them") + " they needn't follow you anymore."; },
+        priority: 22,
+        phase: 1,
+        conditions: {
+          custom: function(npc, ctx) {
+            if (!npc) return false;
+            var followers = (window.G && window.G.sessionFollowers) || [];
+            return followers.includes(npc);
+          }
+        },
+        relationshipImpact: {},
+        action: function(npc) {
+          if (typeof window.removeSessionFollower === "function") {
+            window.removeSessionFollower(npc);
+          }
+        }
+      }
+    ];
+
+    followerOptions.forEach(option => {
       const existingIndex = window.NPC_CONVERSATION_CATALOGUE.findIndex(o => o.id === option.id);
       if (existingIndex >= 0) {
         window.NPC_CONVERSATION_CATALOGUE[existingIndex] = option;
