@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-07-001
- * Fixes: receiverKey duplicate declaration, clothed narration guards
+ * Version: 2026-09-07-003
+ * Fixes: receiverKey, clothed narration guards, clothing narration with pronoun-correct item names
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-07-001";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-07-003";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -1447,8 +1447,13 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // Update last activity
     updateLastActivity(npc);
     
-    // Store last action for continuity
-    intimacy.lastAction = { actId, timestamp: Date.now() };
+    // Store last action for continuity (skip clothing actions — they're not
+    // continuable, and setting lastAction to a clothing item causes the
+    // Continue button to disappear since the action is no longer valid after
+    // the clothing state changes).
+    if (act.type !== ACT_TYPES.CLOTHING) {
+        intimacy.lastAction = { actId, timestamp: Date.now() };
+    }
     
     // Add to history (keep last 20 actions for prior action checking)
     intimacy.actionHistory.push({ actId, timestamp: Date.now() });
@@ -5280,10 +5285,63 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
 /**
  * Build initial contact narration for the first action in an encounter
  */
+/**
+ * Build pronoun-correct narration for clothing removal/adjustment actions.
+ * Uses act.target (player/npc), act.clothingItem (top/bottom/underwear),
+ * and act.clothingAction (move_aside/lift/pull_down) to produce:
+ *   "You remove her top." / "You remove your bottom." / "You undress her completely."
+ *   "You move her top aside." / "You pull down her bottom." / "You lift your skirt."
+ */
+function buildClothingNarration(act, npc, player) {
+    if (!act) return "You adjust their clothing.";
+
+    var target = act.target || "npc";
+    var clothingItem = act.clothingItem || "";
+    var clothingAction = act.clothingAction || "";
+
+    // Determine whose clothing and the correct possessive pronoun
+    var whose;
+    if (target === "player") {
+        whose = "your";
+    } else {
+        whose = (typeof getPossessivePronoun === 'function')
+            ? getPossessivePronoun(npc) : "their";
+    }
+
+    // Bulk undress (no specific clothingItem)
+    if (!clothingItem && !clothingAction) {
+        if (target === "player") {
+            return "You undress yourself completely.";
+        }
+        return "You undress " + whose + " completely.";
+    }
+
+    // Specific clothing actions: move_aside, lift, pull_down
+    if (clothingAction === "move_aside") {
+        return "You move " + whose + " " + clothingItem + " aside.";
+    }
+    if (clothingAction === "lift") {
+        return "You lift " + whose + " " + clothingItem + ".";
+    }
+    if (clothingAction === "pull_down") {
+        return "You pull down " + whose + " " + clothingItem + ".";
+    }
+
+    // Default: remove action
+    return "You remove " + whose + " " + clothingItem + ".";
+}
+
 function buildInitialContactNarration(npc, act, pronouns = {}, player = null) {
     const { posPronoun = "their" } = pronouns;
     const { target, tool, verb } = act;
-    
+
+    // Clothing actions: build a pronoun-correct sentence using the act's
+    // target (player/npc) and clothingItem (top/bottom/underwear).
+    // e.g. "You remove her top." / "You remove your top." / "You undress her completely."
+    if (act.type === "clothing" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.CLOTHING)) {
+        return buildClothingNarration(act, npc, player);
+    }
+
     // Normalize for comparison
     const normalize = (str) => (str || "").toLowerCase().trim();
     const targetNorm = normalize(target);
@@ -5364,7 +5422,12 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
     const { posPronoun = "their", objPronoun = "them" } = pronouns;
     const { target: lastTarget, tool: lastTool, verb: lastVerb } = lastAct;
     const { target, tool, verb } = currentAct;
-    
+
+    // Clothing actions: build a pronoun-correct sentence.
+    if (currentAct.type === "clothing" || (typeof ACT_TYPES !== "undefined" && currentAct.type === ACT_TYPES.CLOTHING)) {
+        return buildClothingNarration(currentAct, npc, player);
+    }
+
     // Normalize for comparison
     const normalize = (str) => (str || "").toLowerCase().trim();
     const lastTargetNorm = normalize(lastTarget);
@@ -5525,6 +5588,11 @@ function buildActionNarratives(npc, actionId, act, context) {
     }
     
     const narratives = [];
+
+    // Clothing actions: return a simple clothing narration.
+    if (act.type === "clothing" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.CLOTHING)) {
+        return [buildClothingNarration(act, npc, context.player)];
+    }
 
     // Get rich anatomy description
     let anatomyDesc = describeAnatomy(npc, target, { arousalLevel, isAroused, isWet, isErect, possessivePronoun: posPronoun, isOnCooldown }) || target || "";
