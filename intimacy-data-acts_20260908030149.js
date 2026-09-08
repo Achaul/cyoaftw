@@ -6,8 +6,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-08-17-009";
-    console.log("[Intimacy Acts] Loaded v2026-08-17-009 - Object-perspective dialogue tags + smart possessive pronouns");
+    window.INTIMACY_ACTS_VERSION = "2026-09-07-001";
+    console.log("[Intimacy Acts] Loaded v2026-09-07-001 - _clothed action filtering by specific clothing item");
 }
 
 // ============================================================================
@@ -649,16 +649,31 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
         }
     }
     
-    // Check if "over clothes" actions should be hidden when target is nude
+    // Check if "over clothes" actions should be hidden when the clothing
+    // covering the target body part has been removed.
     if (act.id && act.id.includes("_clothed")) {
         // Determine target from action
         const isPlayerTarget = act.target === "player" || act.playerIsBottom === false;
         const targetKey = isPlayerTarget ? "player" : "npc";
         const targetClothing = clothingState && clothingState[targetKey];
-        
-        // Check if target is nude (no top, bottom, or undergarments)
-        if (targetClothing && !targetClothing.top && !targetClothing.bottom && !targetClothing.undergarments) {
-            return false;
+
+        if (targetClothing) {
+            // Fully nude — hide all _clothed actions
+            if (!targetClothing.top && !targetClothing.bottom && !targetClothing.undergarments) {
+                return false;
+            }
+            // Target-specific: if the clothing covering the target body part
+            // is off, the _clothed action is redundant
+            var targetLower = String(act.target || "").toLowerCase();
+            if ((targetLower === "breasts" || targetLower === "chest") && !targetClothing.top) {
+                return false;
+            }
+            if ((targetLower === "butt" || targetLower === "buttocks" || targetLower === "ass") && !targetClothing.bottom) {
+                return false;
+            }
+            if ((targetLower === "groin" || targetLower === "vagina" || targetLower === "pussy" || targetLower === "penis" || targetLower === "cock") && !targetClothing.bottom) {
+                return false;
+            }
         }
     }
     
