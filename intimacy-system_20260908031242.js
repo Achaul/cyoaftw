@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-07-005
- * Fixes: receiverKey, clothed narration guards, clothing narration, lastAction skip, _clothed filtering, transition noun fix, nipple description fix
+ * Version: 2026-09-08-001
+ * Fixes: receiverKey, clothed guards, clothing narration, transition nouns, nipple/breast grammar, getTargetNoun scope fix
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-07-005";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-001";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2681,7 +2681,7 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
         `lets out a ${vocalization}.`,
         `lets out a ${vocalization} of pleasure.`,
         `shivers ${intensity}.`,
-        `${reaction} with obvious pleasure.`,
+        `${reaction}.`,
         `${reaction}, ${tempDesc}.`,
         `${reaction}, breathing ${intensity}.`,
         `${reaction} and bites ${possessivePronoun} lip.`,
@@ -4767,18 +4767,18 @@ function describeBreasts(npc, anatomy, posPronoun, arousalDescriptors) {
                      arousalDescriptors.state ? arousalDescriptors.state : "";
     
     const baseDescs = [
-        `${posPronoun} ${sizeAdj} ${breastDesc}`,
-        `the ${sizeAdj} swell of ${posPronoun} ${breastDesc}`,
-        `${posPronoun} ${stateDesc} ${sizeAdj} breasts`
+        `${posPronoun} ${sizeAdj ? sizeAdj + " " : ""}${breastDesc}`,
+        `the ${sizeAdj ? sizeAdj + " " : ""}swell of ${posPronoun} ${breastDesc}`,
+        `${posPronoun} ${stateDesc ? stateDesc + " " : ""}${sizeAdj ? sizeAdj + " " : ""}breasts`
     ];
-    
+
     const detailedDescs = [
-        `${posPronoun} ${sizeAdj} ${breastDesc}, topped with ${nippleAdj} ${nippleTexture} ${pickRandom(["nipples", "teats", "buds"])}`,
-        `the ${sizeAdj} mounds of ${posPronoun} ${breastDesc}, crowned with ${areolaPigment} ${areolaSize} areolas`,
-        `${posPronoun} ${stateDesc} ${sizeAdj} breasts, the ${nippleAdj} nipples standing proudly`
+        `${posPronoun} ${sizeAdj ? sizeAdj + " " : ""}${breastDesc}, topped with ${nippleAdj ? nippleAdj + " " : ""}${nippleTexture} ${pickRandom(["nipples", "teats", "buds"])}`,
+        `the ${sizeAdj ? sizeAdj + " " : ""}mounds of ${posPronoun} ${breastDesc}, crowned with ${areolaPigment} ${areolaSize} areolas`,
+        `${posPronoun} ${stateDesc ? stateDesc + " " : ""}${sizeAdj ? sizeAdj + " " : ""}breasts, the ${nippleAdj ? nippleAdj + " " : ""}nipples standing proudly`
     ];
-    
-    return pickRandom([...baseDescs, ...detailedDescs]);
+
+    return pickRandom([...baseDescs, ...detailedDescs].map(function(s) { return s.replace(/\s+/g, ' ').trim(); }));
 }
 
 /**
@@ -4803,11 +4803,11 @@ function describeNipples(npc, anatomy, posPronoun, arousalDescriptors) {
                      arousalDescriptors.state ? arousalDescriptors.state : "";
     
     return pickRandom([
-        `${posPronoun} ${nippleAdj} ${pickRandom(["nipples", "teats", "buds", "peaks"])}`,
-        `${posPronoun} ${nippleAdj} ${nippleTexture} ${pickRandom(["nipples", "nubs"])}`,
-        `${posPronoun} ${stateDesc} ${nippleAdj} nipples, surrounded by ${areolaPigment} ${areolaSize} areolas`,
+        `${posPronoun} ${nippleAdj ? nippleAdj + " " : ""}${pickRandom(["nipples", "teats", "buds", "peaks"])}`,
+        `${posPronoun} ${nippleAdj ? nippleAdj + " " : ""}${nippleTexture} ${pickRandom(["nipples", "nubs"])}`,
+        `${stateDesc ? posPronoun + " " + stateDesc + " " : ""}${nippleAdj ? nippleAdj + " " : ""}nipples, surrounded by ${areolaPigment} ${areolaSize} areolas`,
         `${posPronoun} ${nippleAdj ? nippleAdj + " " : ""}nipples`
-    ]);
+    ].map(function(s) { return s.replace(/\s+/g, ' ').trim(); }));
 }
 
 /**
@@ -5310,6 +5310,18 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
  *   "You remove her top." / "You remove your bottom." / "You undress her completely."
  *   "You move her top aside." / "You pull down her bottom." / "You lift your skirt."
  */
+/**
+ * Helper to get just the target body part with possessive pronoun (not the
+ * full verb label). e.g. "Suck her nipples" → "her nipples".
+ * This is what the transition/contact templates expect — a noun, not a
+ * verb phrase, so we don't get "You move to her Suck her nipples".
+ * Shared between buildInitialContactNarration and buildTransitionNarration.
+ */
+function getTargetNoun(actObj, posPronoun) {
+    var t = actObj && actObj.target ? actObj.target : "body";
+    return (posPronoun || "their") + " " + t;
+}
+
 function buildClothingNarration(act, npc, player) {
     if (!act) return "You adjust their clothing.";
 
@@ -5370,15 +5382,7 @@ function buildInitialContactNarration(npc, act, pronouns = {}, player = null) {
     const getLabel = (actId) => {
         return typeof getNaturalLabel === 'function' ? getNaturalLabel(actId, npc, player) : (act.label || actId);
     };
-    // Helper to get just the target body part with possessive pronoun (not the
-    // full verb label). e.g. "Suck her nipples" → "her nipples".
-    // This is what the transition/contact templates expect — a noun, not a
-    // verb phrase, so we don't get "You move to her Suck her nipples".
-    const getTargetNoun = (actObj) => {
-        const t = actObj && actObj.target ? actObj.target : "body";
-        return posPronoun + " " + t;
-    };
-    
+
     const isKissing = ['kiss', 'lick'].includes(verbNorm);
     const isTouching = ['touch', 'caress', 'stroke', 'rub', 'grope', 'squeeze', 'massage'].includes(verbNorm);
     const isPenetrating = ['fuck', 'thrust', 'pound', 'enter', 'penetrate', 'bury', 'slide', 'grind'].includes(verbNorm);
@@ -5403,42 +5407,42 @@ function buildInitialContactNarration(npc, act, pronouns = {}, player = null) {
     // Kissing
     if (isKissing) {
         if (targetNorm === 'lips' || targetNorm === 'mouth') {
-            return `You lean in, parting your lips as you press them to ${getTargetNoun(act)}`;
+            return `You lean in, parting your lips as you press them to ${getTargetNoun(act, posPronoun)}`;
         }
-        return `You lean in and bring your lips to ${getTargetNoun(act)}`;
+        return `You lean in and bring your lips to ${getTargetNoun(act, posPronoun)}`;
     }
 
     // Touching face/lips
     if (isTouching && (isOral(targetNorm) || targetNorm === 'face' || targetNorm === 'cheek')) {
-        return `You reach out, your ${toolNorm} gently ${verbNorm} ${getTargetNoun(act)}`;
+        return `You reach out, your ${toolNorm} gently ${verbNorm} ${getTargetNoun(act, posPronoun)}`;
     }
 
     // Touching genitals
     if (isTouching && (isGenital(targetNorm) || isAnal(targetNorm))) {
         if (targetNorm === 'vagina' || targetNorm === 'pussy') {
-            return `You reach down, your ${toolNorm} finding ${getTargetNoun(act)}`;
+            return `You reach down, your ${toolNorm} finding ${getTargetNoun(act, posPronoun)}`;
         }
         if (isAnal(targetNorm)) {
-            return `You reach around, your ${toolNorm} tracing ${getTargetNoun(act)}`;
+            return `You reach around, your ${toolNorm} tracing ${getTargetNoun(act, posPronoun)}`;
         }
-        return `You reach out, your ${toolNorm} making contact with ${getTargetNoun(act)}`;
+        return `You reach out, your ${toolNorm} making contact with ${getTargetNoun(act, posPronoun)}`;
     }
 
     // Penetration
     if (isPenetrating) {
         if (targetNorm === 'vagina' || targetNorm === 'pussy') {
-            return `You position yourself, guiding your ${toolNorm} to ${getTargetNoun(act)}`;
+            return `You position yourself, guiding your ${toolNorm} to ${getTargetNoun(act, posPronoun)}`;
         }
         if (isAnal(targetNorm)) {
-            return `You guide your ${toolNorm} into position at ${getTargetNoun(act)}`;
+            return `You guide your ${toolNorm} into position at ${getTargetNoun(act, posPronoun)}`;
         }
         if (isOral(targetNorm)) {
-            return `You bring your ${toolNorm} to ${getTargetNoun(act)}`;
+            return `You bring your ${toolNorm} to ${getTargetNoun(act, posPronoun)}`;
         }
     }
 
     // Default initial contact
-    return `You make contact, your ${toolNorm} ${verbNorm} ${getTargetNoun(act)}`;
+    return `You make contact, your ${toolNorm} ${verbNorm} ${getTargetNoun(act, posPronoun)}`;
 }
 
 /**
@@ -5493,34 +5497,34 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
     // Case 1: Transition to kissing from non-kissing
     if (isKissing(currentVerbNorm) && !isKissing(lastVerbNorm) && !isOral(lastTargetNorm)) {
         if (currentTargetNorm === 'lips' || currentTargetNorm === 'mouth') {
-            return `You lean in and press your lips to ${getTargetNoun(currentAct)}`;
+            return `You lean in and press your lips to ${getTargetNoun(currentAct, posPronoun)}`;
         }
-        return `You lean in and kiss ${getTargetNoun(currentAct)}`;
+        return `You lean in and kiss ${getTargetNoun(currentAct, posPronoun)}`;
     }
     
     // Case 2: Moving from kissing to something else
     if (isKissing(lastVerbNorm) && !isKissing(currentVerbNorm)) {
         if (isTouching(currentVerbNorm)) {
-            return `You pull back from the kiss and reach out, ${currentVerbNorm} ${getTargetNoun(currentAct)}`;
+            return `You pull back from the kiss and reach out, ${currentVerbNorm} ${getTargetNoun(currentAct, posPronoun)}`;
         }
         if (isPenetrating(currentVerbNorm) && currentTargetNorm === 'vagina') {
-            return `You break from the kiss and position yourself, pressing your ${currentToolNorm} against ${getTargetNoun(currentAct)}`;
+            return `You break from the kiss and position yourself, pressing your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
         }
         if (currentTargetNorm === 'anus' || currentTargetNorm === 'butt') {
-            return `You pull away from the kiss and guide ${objPronoun} into position, pressing against ${getTargetNoun(currentAct)}`;
+            return `You pull away from the kiss and guide ${objPronoun} into position, pressing against ${getTargetNoun(currentAct, posPronoun)}`;
         }
     }
     
     // Case 3: Moving from touching to penetration
     if (isTouching(lastVerbNorm) && isPenetrating(currentVerbNorm)) {
         if (currentTargetNorm === 'vagina' || currentTargetNorm === 'pussy') {
-            return `You move from teasing to penetration, pressing your ${currentToolNorm} against ${getTargetNoun(currentAct)}`;
+            return `You move from teasing to penetration, pressing your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
         }
         if (currentTargetNorm === 'anus' || currentTargetNorm === 'butt') {
-            return `You shift your approach, positioning your ${currentToolNorm} at ${getTargetNoun(currentAct)}`;
+            return `You shift your approach, positioning your ${currentToolNorm} at ${getTargetNoun(currentAct, posPronoun)}`;
         }
         if (isOral(currentTargetNorm)) {
-            return `You move your ${currentToolNorm} to ${getTargetNoun(currentAct)}`;
+            return `You move your ${currentToolNorm} to ${getTargetNoun(currentAct, posPronoun)}`;
         }
     }
     
@@ -5528,60 +5532,60 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
     if (lastTargetNorm !== currentTargetNorm && !isPenetrating(currentVerbNorm)) {
         // From face/breast to genital
         if ((isOral(lastTargetNorm) || isBreast(lastTargetNorm)) && (isGenital(currentTargetNorm) || isAnal(currentTargetNorm))) {
-            return `You move your attention downward, bringing your ${currentToolNorm} to ${getTargetNoun(currentAct)}`;
+            return `You move your attention downward, bringing your ${currentToolNorm} to ${getTargetNoun(currentAct, posPronoun)}`;
         }
         // From genital to face/breast
         if ((isGenital(lastTargetNorm) || isAnal(lastTargetNorm)) && (isOral(currentTargetNorm) || isBreast(currentTargetNorm))) {
-            return `You pull back and move upward, ${currentVerbNorm} ${getTargetNoun(currentAct)}`;
+            return `You pull back and move upward, ${currentVerbNorm} ${getTargetNoun(currentAct, posPronoun)}`;
         }
         // From breast to genital
         if (isBreast(lastTargetNorm) && (isGenital(currentTargetNorm) || isAnal(currentTargetNorm))) {
-            return `Your hands slide lower, your ${currentToolNorm} finding ${getTargetNoun(currentAct)}`;
+            return `Your hands slide lower, your ${currentToolNorm} finding ${getTargetNoun(currentAct, posPronoun)}`;
         }
         // From genital to breast
         if ((isGenital(lastTargetNorm) || isAnal(lastTargetNorm)) && isBreast(currentTargetNorm)) {
-            return `You move upward, your ${currentToolNorm} exploring ${getTargetNoun(currentAct)}`;
+            return `You move upward, your ${currentToolNorm} exploring ${getTargetNoun(currentAct, posPronoun)}`;
         }
     }
     
     // Case 5: Tool change (e.g., fingers to penis)
     if (lastToolNorm !== currentToolNorm && lastToolNorm && currentToolNorm) {
         if ((lastToolNorm === 'finger' || lastToolNorm === 'fingers') && (currentToolNorm === 'penis' || currentToolNorm === 'cock')) {
-            return `You withdraw your fingers and position your ${currentToolNorm}, pressing against ${getTargetNoun(currentAct)}`;
+            return `You withdraw your fingers and position your ${currentToolNorm}, pressing against ${getTargetNoun(currentAct, posPronoun)}`;
         }
         if ((currentToolNorm === 'finger' || currentToolNorm === 'fingers') && (lastToolNorm === 'penis' || lastToolNorm === 'cock')) {
-            return `You pull back and use your fingers instead, ${currentVerbNorm} ${getTargetNoun(currentAct)}`;
+            return `You pull back and use your fingers instead, ${currentVerbNorm} ${getTargetNoun(currentAct, posPronoun)}`;
         }
         if (isOral(currentTargetNorm) && (currentToolNorm === 'penis' || currentToolNorm === 'cock')) {
-            return `You guide your ${currentToolNorm} to ${getTargetNoun(currentAct)}`;
+            return `You guide your ${currentToolNorm} to ${getTargetNoun(currentAct, posPronoun)}`;
         }
     }
     
     // Case 6: Starting penetration
     if (isPenetrating(currentVerbNorm) && !isPenetrating(lastVerbNorm)) {
         if (currentTargetNorm === 'vagina' || currentTargetNorm === 'pussy') {
-            return `You position yourself and press your ${currentToolNorm} against ${getTargetNoun(currentAct)}`;
+            return `You position yourself and press your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
         }
         if (currentTargetNorm === 'anus' || currentTargetNorm === 'butt') {
-            return `You guide ${objPronoun} into position and press your ${currentToolNorm} against ${getTargetNoun(currentAct)}`;
+            return `You guide ${objPronoun} into position and press your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
         }
         if (isOral(currentTargetNorm)) {
-            return `You move your ${currentToolNorm} to ${getTargetNoun(currentAct)}`;
+            return `You move your ${currentToolNorm} to ${getTargetNoun(currentAct, posPronoun)}`;
         }
     }
     
     // Case 7: Moving to face/head with cock
     if ((currentTargetNorm === 'face' || currentTargetNorm === 'cheek' || currentTargetNorm === 'lips') && (currentToolNorm === 'penis' || currentToolNorm === 'cock')) {
-        return `You pull back and rub your ${currentToolNorm} against ${getTargetNoun(currentAct)}`;
+        return `You pull back and rub your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
     }
     
     // Default transition
     if (lastTargetNorm !== currentTargetNorm) {
-        return `You move to ${getTargetNoun(currentAct)}`;
+        return `You move to ${getTargetNoun(currentAct, posPronoun)}`;
     }
     
     if (lastToolNorm !== currentToolNorm) {
-        return `You switch to using your ${currentToolNorm} on ${getTargetNoun(currentAct)}`;
+        return `You switch to using your ${currentToolNorm} on ${getTargetNoun(currentAct, posPronoun)}`;
     }
     
     return "";
@@ -6125,8 +6129,10 @@ function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
         verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, feeling the ${highArousal ? 'firm, needy' : 'soft, warm'} flesh yield under your touch.` : null,
-        verbBase === 'kiss' || verbBase === 'lick' ? `Your ${actualTool === 'lips' ? 'lips' : 'tongue'} ${verbIng} ${anatomyDesc}, ${highArousal ? 'tracing the soft curves' : 'exploring the warm surface'}` : null,
-        verbBase === 'pinch' || verbBase === 'flick' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'teasing the sensitive peaks' : 'playing with the firm nubs'}` : null,
+        verbBase === 'kiss' ? `You press your lips to ${anatomyDesc}, ${highArousal ? 'tracing the soft curves with your tongue' : 'exploring the warm surface'}.` : null,
+        verbBase === 'lick' ? `Your tongue ${verbIng} ${anatomyDesc}, ${highArousal ? 'tracing the soft curves' : 'exploring the warm surface'}.` : null,
+        verbBase === 'suck' ? `Your mouth ${verbIng} ${anatomyDesc}, ${highArousal ? 'drawing them firmly between your lips' : 'wrapping your lips around them'}.` : null,
+        verbBase === 'pinch' || verbBase === 'flick' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'teasing the sensitive peaks' : 'playing with the firm nubs'}.` : null,
         verbBase === 'tease' ? `You ${verbPresent} ${anatomyDesc}, circling but never quite touching the ${highArousal ? 'hard, aching' : 'perky'} tips.` : null,
         `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling the warm flesh giving way' : 'enjoying the soft texture'}.`
     ].filter(Boolean);
