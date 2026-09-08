@@ -395,20 +395,32 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
   function applyInquiryResponse(npc, option, responseText, affirmativeFromCache) {
     if (!npc || !option || !option.isInquiry) return responseText;
 
+    // Ensure responseText is a string (waitForConversationReply can return
+    // the cached reply object in some code paths)
+    if (responseText && typeof responseText === "object" && responseText.text !== undefined) {
+      if (affirmativeFromCache === undefined && responseText.affirmative !== undefined) {
+        affirmativeFromCache = responseText.affirmative;
+      }
+      responseText = responseText.text || "";
+    }
+    responseText = String(responseText || "");
+
     console.log("[NSFW Inquiry] applyInquiryResponse called:", {
       optionId: option.id,
       affirmativeFromCache: affirmativeFromCache,
-      responseTextStart: responseText ? responseText.substring(0, 60) : "(empty)"
+      responseTextStart: responseText.substring(0, 60)
     });
-    
+
     // Use explicit affirmative field if provided (from cached reply object)
     let isAccepted = affirmativeFromCache === true;
     let isRejected = affirmativeFromCache === false;
-    
-    // Fallback: parse from text if not provided (for backwards compatibility)
-    if (isAccepted === undefined && isRejected === undefined) {
-        const acceptedMatch = responseText.match(/^\[ACCEPTED\]\s+(.*)/s);
-        const rejectedMatch = responseText.match(/^\[REJECTED\]\s+(.*)/s);
+
+    // Fallback: parse from text if affirmative was not explicitly provided.
+    // NOTE: when affirmativeFromCache is undefined, both isAccepted and
+    // isRejected are false (not undefined), so check for that case.
+    if (affirmativeFromCache === undefined) {
+        const acceptedMatch = responseText.match(/\[ACCEPTED\]\s+(.*)/s);
+        const rejectedMatch = responseText.match(/\[REJECTED\]\s+(.*)/s);
         if (acceptedMatch) {
             isAccepted = true;
             responseText = acceptedMatch[1];
