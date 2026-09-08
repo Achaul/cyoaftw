@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-008
- * Fixes: transition-only narration, vocalization dup, sensitivity caps, parting continue, tempDesc, anal access, watersports, anus description (no arousal descriptors, wrinkly/hair/raw scent)
+ * Version: 2026-09-08-009
+ * Fixes: anus description (no arousal, wrinkly/hair/raw), analingus verb/tongue fix, vocalization singular grammar
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-008";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-009";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -3357,9 +3357,9 @@ function getVerbalDialog(arousalLevel) {
 function getVocalization(arousalLevel) {
     if (arousalLevel < 20) return pickRandom(["sigh", "soft sound", "murmur"]);
     if (arousalLevel < 40) return pickRandom(["soft moan", "sigh of pleasure", "murmur"]);
-    if (arousalLevel < 60) return pickRandom(["moan", "gasps", "sigh of pleasure"]);
-    if (arousalLevel < 80) return pickRandom(["loud moan", "gasps of pleasure", "whimpers"]);
-    return pickRandom(["loud moan", "cries of pleasure", "passionate gasps", "desperate whimpers"]);
+    if (arousalLevel < 60) return pickRandom(["moan", "gasp", "sigh of pleasure"]);
+    if (arousalLevel < 80) return pickRandom(["loud moan", "gasp of pleasure", "whimper"]);
+    return pickRandom(["loud moan", "cry of pleasure", "passionate gasp", "desperate whimper"]);
 }
 
 /**
@@ -6420,19 +6420,23 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
 
     return [
         `You ${verbPresent}${prepositionText}${anatomyDesc}.`,
-        `Your ${actualTool} ${toolVerb}${prepositionText}${anatomyDesc}.`,
+        // For mouth/tongue tools, use "tongue" instead of "mouth" — mouths
+        // don't lick, tongues do. Also skip the "on" preposition for licking.
+        (actualTool === 'mouth' || actualTool === 'tongue') && (verbBase === 'lick' || verbBase === 'rim')
+            ? `Your tongue ${verbConjugation(verbBase, 'third')} ${anatomyDesc}${scentDesc ? ', ' + scentDesc : ''}.`
+            : `Your ${actualTool} ${toolVerb}${prepositionText}${anatomyDesc}.`,
         // Penetration/fingering - sphincters are normally tight and resistant
         // For penis/cock tool, explicitly mention the anatomy for clarity
-        verbBase === 'penetrate' || verbBase === 'finger' || verbBase === 'enter' ? 
+        verbBase === 'penetrate' || verbBase === 'finger' || verbBase === 'enter' ?
             actualTool === 'penis' || actualTool === 'cock' ?
                 `You press your cockhead against ${anatomyDesc}${scentDesc ? ', ' + scentDesc : ''}, ${analEasy ? 'sliding your length into the well-lubricated passage' + getAnalSound() : highArousal ? `your ${cockState} cock breaching the reluctant sphincter as it stretches around your ${shaftState} shaft` + getAnalSound() : 'gently pressing past the tight entrance, the resistance giving way to your persistence' + getAnalSound()}.` :
                 `You ${verbPresent} ${anatomyDesc}${scentDesc ? ', ' + scentDesc : ''}, ${analEasy ? 'sliding your length into the well-lubricated passage' + getAnalSound() : highArousal ? 'your finger breaching the reluctant sphincter as it stretches around your digit' + getAnalSound() : 'gently pressing past the tight entrance, the resistance giving way to your persistence' + getAnalSound()}.` : null,
-        verbBase === 'tease' || verbBase === 'circle' ? 
+        verbBase === 'tease' || verbBase === 'circle' ?
             `You ${verbPresent} ${anatomyDesc}, tracing the ${highArousal ? 'slightly yielding' : 'tight, wrinkled'} rim${scentDesc ? ', ' + scentDesc : ''}.` : null,
-        verbBase === 'spread' ? 
+        verbBase === 'spread' ?
             `You ${verbPresent} ${anatomyDesc}, exposing the ${highArousal ? 'glistening' : 'tightly closed'} entrance${scentDesc ? ', ' + scentDesc : ''}.` : null,
         verbBase === 'lick' || verbBase === 'rim' ?
-            `Your tongue ${verbIng} ${anatomyDesc}, ${highArousal ? 'wetting the wrinkled skin with slow, deliberate strokes' : 'tracing the sensitive, wrinkled flesh'}${scentDesc ? ', ' + scentDesc : ''}.` : null,
+            `Your tongue ${verbConjugation(verbBase, 'third')} ${anatomyDesc}, ${highArousal ? 'wetting the sensitive skin with slow, deliberate strokes' : 'tracing the textured flesh with firm laps'}${scentDesc ? ', ' + scentDesc : ''}.` : null,
         // Intercourse actions - already inside, describe the feeling
         verbBase === 'fuck' || verbBase === 'thrust' || verbBase === 'pound' || verbBase === 'grind' || verbBase === 'slide' ?
             `You ${verbPresent} into ${anatomyDesc}, ${posPronoun} passage ${highArousal ? 'clenching your shaft like a vice' : 'gripping your shaft tightly'}${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.` : null,
