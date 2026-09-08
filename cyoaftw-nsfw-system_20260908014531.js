@@ -446,9 +446,13 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
         );
         
         // Check if we're alone with the NPC (for proposition)
-        const isAloneWithNPC = currentRoom && currentRoom.creatures && (
-          currentRoom.creatures.filter(c => c.isPlayer || c === npc).length === 2
-        );
+        // The player is tracked in G.player, not room.creatures, and no
+        // creature carries an isPlayer flag, so a "player + npc == 2" count
+        // never succeeds. Instead: the npc is present and no OTHER humanoid
+        // creature is in the room (mirrors the phase-2 othersPresent check).
+        const isAloneWithNPC = currentRoom && Array.isArray(currentRoom.creatures) &&
+          currentRoom.creatures.some(c => c === npc) &&
+          currentRoom.creatures.filter(c => c !== npc && (c.isHumanoid || c.humanoid)).length === 0;
         
         // If already in suitable location, start intimacy encounter directly
         if (option.startEncounter && isAlreadySuitable && (
@@ -744,11 +748,13 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
     // follow you" makes the NPC trail the player for the current session only
     // (G.sessionFollowers is in-memory; not persisted by saveGameState). The
     // follow/unfollow pair is mutually exclusive via the sessionFollowers
-    // membership check. phase:1 + nsfw:false keeps these out of the date and
-    // phase-2 (intimacy) context filters so they only surface in normal talk.
-    // relationshipImpact must be a truthy object so the chooseChatOption
-    // wrapper reaches the option.action() call (see extendChooseChatOption);
-    // an empty object applies no lust/attraction change.
+    // membership check. nsfw:true + phase:1 lets these pass the NSFW query
+    // wrapper's date-context and phase-2 filters (same as flirt/seduce/
+    // proposition); the custom condition still gates them on
+    // _seductionAccepted and sessionFollowers membership. relationshipImpact
+    // must be a truthy object so the chooseChatOption wrapper reaches the
+    // option.action() call (see extendChooseChatOption); an empty object
+    // applies no lust/attraction change.
     const followerOptions = [
       {
         id: "ask-to-follow",
@@ -757,6 +763,7 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
         promptText: function(npc) { return "You ask " + (npc && npc.name ? npc.name : "them") + " to come along with you on your travels."; },
         priority: 22,
         phase: 1,
+        nsfw: true,
         conditions: {
           custom: function(npc, ctx) {
             if (!npc || !npc._seductionAccepted) return false;
@@ -778,6 +785,7 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
         promptText: function(npc) { return "You tell " + (npc && npc.name ? npc.name : "them") + " they needn't follow you anymore."; },
         priority: 22,
         phase: 1,
+        nsfw: true,
         conditions: {
           custom: function(npc, ctx) {
             if (!npc) return false;
