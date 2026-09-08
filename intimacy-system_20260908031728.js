@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-001
- * Fixes: receiverKey, clothed guards, clothing narration, transition nouns, nipple/breast grammar, getTargetNoun scope fix
+ * Version: 2026-09-08-002
+ * Fixes: receiverKey, clothed guards, clothing narration, transition nouns, nipple/breast grammar, getTargetNoun scope, transition sentence separation, clothing duplicate narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-001";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-002";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -1601,8 +1601,10 @@ function handleClothingAction(npc, player, act, clothingState) {
     return {
         action: act.id,
         type: "clothing",
-        clothingState: { ...clothingState },
-        text: `You ${act.desc.charAt(0).toLowerCase() + act.desc.slice(1)}.`
+        clothingState: { ...clothingState }
+        // No text field: the engine's generateIntimacyNarrative already builds
+        // the player narration (via buildClothingNarration). Returning text
+        // here causes duplicate narration when the engine combines them.
     };
 }
 
@@ -5272,7 +5274,10 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     
     // Prepend transition narrative if we have one
     if (transitionNarrative && finalNarrative) {
-        finalNarrative = transitionNarrative + " " + finalNarrative;
+        // Ensure transition ends with a period before appending the action narrative
+        var t = transitionNarrative.trim();
+        if (!t.match(/[.!?]$/)) t += ".";
+        finalNarrative = t + " " + finalNarrative;
     } else if (transitionNarrative) {
         finalNarrative = transitionNarrative;
     }
