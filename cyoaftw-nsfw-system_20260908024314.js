@@ -1,6 +1,6 @@
-// === cyoaftw-nsfw-system.js === - v2026-09-07-001
-// Session followers, isAloneWithNPC fix, typeof guards, clothed narration
-window.__NSFW_SYSTEM_VERSION = "2026-09-07-001";
+// === cyoaftw-nsfw-system.js === - v2026-09-07-002
+// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure
+window.__NSFW_SYSTEM_VERSION = "2026-09-07-002";
 (function() {
   'use strict';
 
@@ -10,7 +10,6 @@ window.__NSFW_SYSTEM_VERSION = "2026-09-07-001";
 console.log("[NSFW System] Loaded - NSFW options in base catalogue");
 
   const NSFW_SYSTEM_ENABLED = true;
-
   function getEnvironmentalModifier(room) {
     if (!room) return 1.0;
     const modifiers = {
@@ -707,6 +706,22 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
     const roomRole = (room.role || "").toLowerCase();
     return foodTypes.some(t => roomType.includes(t.toLowerCase()) || roomRole.includes(t.toLowerCase()));
   }
+
+  // ── EARLY WINDOW EXPOSURE ─────────────────────────────────────
+  // Expose critical functions to window immediately (not waiting for
+  // initNSFWSystem, which defers until window.G exists). The engine's
+  // npcRespond calls window.applyInquiryResponse for inquiry options
+  // (seduce/proposition), and it may run before initNSFWSystem completes.
+  window.applyInquiryResponse = applyInquiryResponse;
+  window.isPrivateLocation = (typeof isPrivateLocation === "function") ? isPrivateLocation : function(room) {
+    // Inline fallback so this works even if intimacy-data-context.js hasn't
+    // loaded yet (shouldn't happen, but keeps the function self-contained).
+    if (!room) return false;
+    var privateTypes = ["Guest Room", "Home", "Inn Common", "Inn", "Bedroom", "Private Chamber", "Tavern Room", "Cellar", "Vault", "Dark Alleyway", "Abandoned Armory", "Forgotten Shrine", "Crumbling Tower", "Great Cavern", "Stone Vault", "Underground Hallway", "Underground Gate", "Passage", "Corridor", "Tunnel", "Dungeon Chamber"];
+    var t = (room.type || "").toLowerCase();
+    var n = (room.displayName || room.name || "").toLowerCase();
+    return privateTypes.some(function(p) { return t.includes(p.toLowerCase()) || n.includes(p.toLowerCase()); });
+  };
 
   function injectMeetupConversationOptions() {
     console.log("[NSFW System] Injecting meetup conversation options");
