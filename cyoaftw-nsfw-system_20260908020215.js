@@ -394,6 +394,12 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
 
   function applyInquiryResponse(npc, option, responseText, affirmativeFromCache) {
     if (!npc || !option || !option.isInquiry) return responseText;
+
+    console.log("[NSFW Inquiry] applyInquiryResponse called:", {
+      optionId: option.id,
+      affirmativeFromCache: affirmativeFromCache,
+      responseTextStart: responseText ? responseText.substring(0, 60) : "(empty)"
+    });
     
     // Use explicit affirmative field if provided (from cached reply object)
     let isAccepted = affirmativeFromCache === true;
@@ -441,43 +447,61 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
         // Check if we're already in a suitable location for intimacy
         const currentRoom = window.G && window.G.activeRoom;
         const isAlreadySuitable = currentRoom && (
-          option.id === "proposition" ? isPrivateLocation(currentRoom) : 
-          ["Tavern", "Inn", "Inn Common"].some(t => currentRoom.type && currentRoom.type.includes(t))
+          option.id === "proposition"
+            ? (typeof isPrivateLocation === "function" ? isPrivateLocation(currentRoom) : false)
+            : ["Tavern", "Inn", "Inn Common"].some(t => currentRoom.type && currentRoom.type.includes(t))
         );
-        
+
         // Check if we're alone with the NPC (for proposition)
-        // The player is tracked in G.player, not room.creatures, and no
-        // creature carries an isPlayer flag, so a "player + npc == 2" count
-        // never succeeds. Instead: the npc is present and no OTHER humanoid
-        // creature is in the room (mirrors the phase-2 othersPresent check).
         const isAloneWithNPC = currentRoom && Array.isArray(currentRoom.creatures) &&
           currentRoom.creatures.some(c => c === npc) &&
           currentRoom.creatures.filter(c => c !== npc && (c.isHumanoid || c.humanoid)).length === 0;
-        
+
+        console.log("[NSFW Routing] option=" + option.id, {
+          roomType: currentRoom ? currentRoom.type : "none",
+          isAlreadySuitable: isAlreadySuitable,
+          isAloneWithNPC: isAloneWithNPC,
+          startEncounter: option.startEncounter,
+          creaturesCount: currentRoom && currentRoom.creatures ? currentRoom.creatures.length : 0,
+          otherHumanoids: currentRoom && currentRoom.creatures
+            ? currentRoom.creatures.filter(c => c !== npc && (c.isHumanoid || c.humanoid)).length : -1
+        });
+
         // If already in suitable location, start intimacy encounter directly
         if (option.startEncounter && isAlreadySuitable && (
             option.id === "proposition" && isAloneWithNPC ||
             option.id === "seduce"
           )) {
+          console.log("[NSFW Routing] → DIRECT INTIMACY (already in suitable location)");
           // Clear pending state
           delete npc._pendingSeductionDestination;
           delete npc._pendingSeductionOption;
-          
+
           // Start intimacy encounter immediately
           setTimeout(() => {
-            startIntimacyEncounter(npc, window.G.player);
-            if (typeof renderIntimacyActionMenu === "function") {
-              renderIntimacyActionMenu(npc);
+            if (typeof window.startIntimacyEncounter === "function") {
+              console.log("[NSFW Routing] startIntimacyEncounter found, calling it");
+              window.startIntimacyEncounter(npc, window.G.player);
+              if (typeof window.renderIntimacyActionMenu === "function") {
+                window.renderIntimacyActionMenu(npc);
+              }
+            } else {
+              console.error("[NSFW] startIntimacyEncounter not available — intimacy-system.js may have failed to load.");
             }
           }, 100);
           return responseText;
         }
-        
+
         const isForward = npc.temperament === "forward" || npc.temperament === "bold";
         const startCoords = window.G.player.coords;
         const targetRoom = option.id === "seduce"
             ? findNearestRoomOfTypes(startCoords, ["Tavern", "Inn", "Inn Common"])
             : findNearestPrivateRoom(startCoords);
+
+        console.log("[NSFW Routing] targetRoom search:", {
+          isForward: isForward,
+          foundRoom: targetRoom ? (targetRoom.type + " @ " + targetRoom.coords) : "NONE"
+        });
 
         if (targetRoom) {
           if (isForward && typeof window.teleportPlayerToCoords === "function") {
@@ -488,12 +512,14 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
             npc._meetupArrived = true;
             npc._meetupLocation = targetRoom.coords;
             npc._meetupRoomName = targetRoom.displayName || targetRoom.type;
+            console.log("[NSFW Routing] → FORWARD TELEPORT to", targetRoom.coords);
             return responseText + ` ${npc.name} takes your hand. "Follow me to the ${targetRoom.displayName || targetRoom.type}."`;
           } else {
             npc._pendingSeductionDestination = targetRoom.coords;
             npc._pendingSeductionOption = option.id;
 
             const homeRoomName = targetRoom.displayName || targetRoom.type;
+            console.log("[NSFW Routing] → FOLLOW SUGGESTION registered for", homeRoomName);
             const followOption = {
               id: "follow-seduction-suggestion",
               label: `Go with ${npc.name} to the ${homeRoomName}`,
@@ -521,6 +547,7 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
           }
         } else {
           // Fallback: No suitable room found, NPC states the issue
+          console.log("[NSFW Routing] → FALLBACK (no target room found)");
           // Clear any pending destination so player can choose
           delete npc._pendingSeductionDestination;
           delete npc._pendingSeductionOption;
