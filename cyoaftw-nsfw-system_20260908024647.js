@@ -1,6 +1,6 @@
-// === cyoaftw-nsfw-system.js === - v2026-09-07-002
-// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure
-window.__NSFW_SYSTEM_VERSION = "2026-09-07-002";
+// === cyoaftw-nsfw-system.js === - v2026-09-07-003
+// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, make-a-move
+window.__NSFW_SYSTEM_VERSION = "2026-09-07-003";
 (function() {
   'use strict';
 
@@ -420,6 +420,23 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
     // NOTE: when affirmativeFromCache is undefined, both isAccepted and
     // isRejected are false (not undefined), so check for that case.
     if (affirmativeFromCache === undefined) {
+        // Check if the AI reply with affirmative has arrived in the cache
+        // since the engine started processing (timing race — the engine's
+        // waitForConversationReply may have timed out before the AI responded,
+        // using a fallback text string, but the real reply may now be cached).
+        if (npc && npc.memory && npc.memory.cachedReplies && option.id) {
+            var cachedReply = npc.memory.cachedReplies[option.id];
+            if (cachedReply && typeof cachedReply === "object" && cachedReply.affirmative !== undefined) {
+                affirmativeFromCache = cachedReply.affirmative;
+                isAccepted = affirmativeFromCache === true;
+                isRejected = affirmativeFromCache === false;
+                console.log("[NSFW Inquiry] Recovered affirmative from cache:", affirmativeFromCache);
+            }
+        }
+    }
+
+    // If still undefined, try parsing from text markers
+    if (affirmativeFromCache === undefined) {
         const acceptedMatch = responseText.match(/\[ACCEPTED\]\s+(.*)/s);
         const rejectedMatch = responseText.match(/\[REJECTED\]\s+(.*)/s);
         if (acceptedMatch) {
@@ -428,6 +445,24 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
         } else if (rejectedMatch) {
             isRejected = true;
             responseText = rejectedMatch[1];
+        }
+    }
+
+    // If affirmative is still unknown and this is seduce/proposition, check
+    // the runtime cache directly as a last resort (the reply may have arrived
+    // between the engine's fallback and this function call).
+    if (affirmativeFromCache === undefined && !isAccepted && !isRejected &&
+        (option.id === "seduce" || option.id === "proposition")) {
+        if (typeof runtimeConversationState !== "undefined" && runtimeConversationState.replyCache) {
+            for (var key in runtimeConversationState.replyCache) {
+                var cached = runtimeConversationState.replyCache[key];
+                if (cached && typeof cached === "object" && cached.affirmative === true &&
+                    key.indexOf(option.id) !== -1) {
+                    isAccepted = true;
+                    console.log("[NSFW Inquiry] Recovered affirmative from runtime cache for", option.id);
+                    break;
+                }
+            }
         }
     }
     
@@ -866,6 +901,50 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
         window.NPC_CONVERSATION_CATALOGUE.push(option);
       }
     });
+
+    // ── "Make a move" shortcut ────────────────────────────────────
+    // A simple option that appears after a successful seduce/proposition
+    // (gated by npc._seductionAccepted). Clicking it starts the intimacy
+    // encounter directly via window.startIntimacyEncounter, bypassing the
+    // phase-2 location/alone/attraction gates that gate the existing
+    // "start_intimacy"/"touch_intimately" options. This is a pragmatic
+    // fallback while the async affirmative pipeline is being fixed.
+    var makeMoveOption = {
+      id: "make-a-move",
+      label: function(npc) { return "Make a move on " + (npc && npc.name ? npc.name : "them"); },
+      text: function(npc) { return "You make your move on " + (npc && npc.name ? npc.name : "them") + "."; },
+      promptText: function(npc) { return "You make your move on " + (npc && npc.name ? npc.name : "them") + "."; },
+      priority: 28,
+      phase: 1,
+      nsfw: true,
+      conditions: {
+        custom: function(npc, ctx) {
+          if (!npc || !npc._seductionAccepted) return false;
+          // Don't show if intimacy is already active
+          if (npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active) return false;
+          return true;
+        }
+      },
+      relationshipImpact: {},
+      action: function(npc) {
+        console.log("[NSFW] make-a-move action triggered for", npc && npc.name);
+        if (typeof window.startIntimacyEncounter === "function") {
+          window.startIntimacyEncounter(npc, window.G.player);
+          if (typeof window.renderIntimacyActionMenu === "function") {
+            window.renderIntimacyActionMenu(npc);
+          }
+        } else {
+          console.error("[NSFW] startIntimacyEncounter not available for make-a-move");
+        }
+      }
+    };
+
+    var makeMoveIndex = window.NPC_CONVERSATION_CATALOGUE.findIndex(function(o) { return o.id === makeMoveOption.id; });
+    if (makeMoveIndex >= 0) {
+      window.NPC_CONVERSATION_CATALOGUE[makeMoveIndex] = makeMoveOption;
+    } else {
+      window.NPC_CONVERSATION_CATALOGUE.push(makeMoveOption);
+    }
   }
 
   function extendChooseChatOption() {
