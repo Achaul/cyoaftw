@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-007
- * Fixes: transition-only narration, vocalization dup, sensitivity caps, parting continue, tempDesc, anal access, watersports system
+ * Version: 2026-09-08-008
+ * Fixes: transition-only narration, vocalization dup, sensitivity caps, parting continue, tempDesc, anal access, watersports, anus description (no arousal descriptors, wrinkly/hair/raw scent)
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-007";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-008";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -4952,47 +4952,65 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     const sphincter = anus.sphincter || "tight";
     const desc = anus.description || "anus";
     const pigmentation = anus.pigmentation || null;
-    
-    const { state, engorgement } = arousalDescriptors;
-    
-    // More anatomical and sensual terms for anus
+
+    // NOTE: The anus does not engorge, throb, or become "aroused" like genitals.
+    // Do NOT use engorgement/state/wetness from arousalDescriptors. Instead,
+    // use physical texture descriptors (wrinkled, puckered, hair-dusted) and
+    // raw/musky sensory descriptors that are appropriate for the anus.
+
+    // Anatomical terms — avoid overly romanticized words like "rosebud" which
+    // sound odd in raw context. Use more direct, physical terms.
     const anusTerms = pickRandom([
-        "rosebud", "star", "pucker", "sphincter", "orifice", "opening", 
-        "entry", "entrance", "hole"
+        "pucker", "hole", "opening", "entrance", "sphincter"
     ]);
-    
+
     const sizeDescriptors = {
         tight: ["tight", "clenching", "constricted", "narrow", "virgin", "resistant"],
-        snug: ["snug", "firm", "shapely", "tightly clenched", "resilient"],
-        firm: ["firm", "resilient", "muscular", "controlled", "toned"],
+        snug: ["snug", "firm", "tightly clenched", "resilient"],
+        firm: ["firm", "muscular", "controlled", "toned"],
         supple: ["supple", "yielding", "soft", "pliant", "flexible"],
         loose: ["loose", "relaxed", "experienced", "used", "accommodating"],
-        gaping: ["gaping", "stretched", "wide", "welcoming", "open"],
-        stretchy: ["stretchy", "accommodating", "flexible", "elastic", "pliable"]
+        gaping: ["gaping", "stretched", "wide", "open"],
+        stretchy: ["stretchy", "accommodating", "flexible", "pliable"]
     };
     const sizeAdj = sizeDescriptors[size] ? pickRandom(sizeDescriptors[size]) : size;
-    
-    // Sphincters are wrinkly/puckered by nature - never "neat" or "ringed" in the tidy sense
-    // Note: For penetration in progress, use descriptors from the penetration context, not these
+
+    // Texture descriptors — wrinkly/puckered skin is the anus's natural state
     const sphincterDescriptors = {
-        tight: ["clenched", "resistant", "shyly guarded", "tense and shut", "tightly squeezed"],
-        snug: ["puckered", "wrinkled", "firm", "tight", "squeezed"],
-        firm: ["controlled", "clenched", "toned", "puckered", "muscular"],
-        supple: ["yielding", "pulsing", "receptive", "soft", "wrinkled"],
-        loose: ["open", "parted", "experienced", "stretched", "gaping"]
+        tight: ["clenched", "resistant", "tense and shut", "tightly squeezed", "wrinkled tight"],
+        snug: ["puckered", "wrinkled", "firm", "tightly furled", "crinkled"],
+        firm: ["controlled", "clenched", "puckered", "muscular", "ridged"],
+        supple: ["yielding", "receptive", "soft", "wrinkled", "loose-skinned"],
+        loose: ["open", "parted", "experienced", "stretched", "relaxed"]
     };
     const sphincterDesc = sphincterDescriptors[sphincter] ? pickRandom(sphincterDescriptors[sphincter]) : sphincter;
-    
-    // Add pigmentation if available and not generic
-    const pigmentDesc = pigmentation && pigmentation !== "natural" && pigmentation !== "natural toned" 
-        ? `${pigmentation} ` 
+
+    // Hair descriptors — the anal area often has hair, add raw detail
+    const hasHair = anatomy.pubicHair && anatomy.pubicHair.description;
+    const hairDesc = hasHair && Math.random() < 0.4
+        ? pickRandom([
+              "hair-dusted", "downy-haired", "furred",
+              "ringed with coarse hair", "surrounded by soft hair"
+          ])
         : "";
-    
-    // Build descriptions with more sensual, anatomical language
-    // Always use possessive pronoun for consistency in action narratives
-    // Use at most one size descriptor to avoid chaining (e.g., "tight-lipped")
-    const singleDesc = pickRandom([sizeAdj, sphincterDesc, pigmentDesc.replace(/ $/, ''), engorgement, state].filter(Boolean)) || sizeAdj;
-    return `${posPronoun} ${singleDesc} ${anusTerms}`.replace(/  /g, ' ').trim();
+
+    // Pigmentation
+    const pigmentDesc = pigmentation && pigmentation !== "natural" && pigmentation !== "natural toned"
+        ? pigmentation
+        : "";
+
+    // Build description: pick one texture descriptor + the term, optionally
+    // with hair or pigmentation. Never use arousal descriptors (engorgement/
+    // state) since the anus doesn't engorge or become "aroused".
+    const candidates = [sizeAdj, sphincterDesc, hairDesc, pigmentDesc].filter(Boolean);
+    const singleDesc = pickRandom(candidates) || sizeAdj;
+
+    // Occasionally combine texture + hair for richer description
+    if (hairDesc && Math.random() < 0.3 && singleDesc !== hairDesc) {
+        return `${posPronoun} ${singleDesc}, ${hairDesc} ${anusTerms}`.replace(/\s+/g, ' ').trim();
+    }
+
+    return `${posPronoun} ${singleDesc} ${anusTerms}`.replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -6413,8 +6431,8 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             `You ${verbPresent} ${anatomyDesc}, tracing the ${highArousal ? 'slightly yielding' : 'tight, wrinkled'} rim${scentDesc ? ', ' + scentDesc : ''}.` : null,
         verbBase === 'spread' ? 
             `You ${verbPresent} ${anatomyDesc}, exposing the ${highArousal ? 'glistening' : 'tightly closed'} entrance${scentDesc ? ', ' + scentDesc : ''}.` : null,
-        verbBase === 'lick' ? 
-            `Your tongue ${verbPresent} ${anatomyDesc}, ${highArousal ? 'preparing the way' : 'tracing the sensitive, wrinkled flesh'}.` : null,
+        verbBase === 'lick' || verbBase === 'rim' ?
+            `Your tongue ${verbIng} ${anatomyDesc}, ${highArousal ? 'wetting the wrinkled skin with slow, deliberate strokes' : 'tracing the sensitive, wrinkled flesh'}${scentDesc ? ', ' + scentDesc : ''}.` : null,
         // Intercourse actions - already inside, describe the feeling
         verbBase === 'fuck' || verbBase === 'thrust' || verbBase === 'pound' || verbBase === 'grind' || verbBase === 'slide' ?
             `You ${verbPresent} into ${anatomyDesc}, ${posPronoun} passage ${highArousal ? 'clenching your shaft like a vice' : 'gripping your shaft tightly'}${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.` : null,
@@ -6822,16 +6840,18 @@ function getScentDescriptor(npc, target, isAnalAct = false) {
                 "and the unmistakable musk of arousal, earthy and raw, fills the space",
                 "and a heady, animal scent hangs heavy in the air",
                 "and the thick, pungent aroma of sex surrounds you",
-                "and a musky, unrefined smell fills your senses"
+                "and a musky, unrefined smell fills your senses",
+                "and the sharp, earthy tang of unwashed skin hits your nose"
             ]);
         } else {
             return pickRandom([
-                "and the musky scent of arousal fills the air",
-                "and a warm, intimate aroma rises",
-                "and the heady smell of passion hangs between you",
-                "and a subtle, intoxicating scent fills the space",
-                "and the earthy musk of intimacy surrounds you",
-                "and a faint, primal aroma drifts by"
+                "and the musky, earthy scent of the area fills the air",
+                "and a raw, intimate aroma rises between you",
+                "and the heady smell of sweat and skin hangs in the air",
+                "and a deep, musky scent fills the space",
+                "and the unmistakable, earthy musk of the area surrounds you",
+                "and a faint, raw aroma drifts by, unmistakably human",
+                "and the warm, slightly salty scent of the cleft lingers"
             ]);
         }
     }
