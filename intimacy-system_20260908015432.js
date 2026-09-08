@@ -179,15 +179,35 @@ function buildLLMEnhancementContext(npc, act, intimacy, baseNarrative) {
         };
         
         // Add anatomy traits for relevant body parts
-        // We include all sexual anatomy traits since they might be relevant
+        // For over-clothes actions (id ends with "_clothed"), suppress anatomy
+        // for the covered target body part(s) so the LLM does not reveal hidden
+        // physical characteristics (e.g. breast size, nipple details) through
+        // clothing in the enhanced narration.
         if (npc.anatomy) {
             context.npc.anatomy = {};
             const sexualParts = ["vagina", "anus", "penis", "breasts", "nipples", "pubicHair", "buttocks"];
+
+            // Determine which anatomy parts to suppress for clothed actions
+            var suppressedParts = [];
+            if (act.id && act.id.includes("_clothed")) {
+                var targetLower = String(act.target || "").toLowerCase();
+                if (targetLower === "breasts" || targetLower === "chest") {
+                    suppressedParts = ["breasts", "nipples"];
+                } else if (targetLower === "butt" || targetLower === "buttocks" || targetLower === "ass") {
+                    suppressedParts = ["buttocks"];
+                }
+            }
+
             sexualParts.forEach(part => {
-                if (npc.anatomy[part]) {
+                if (npc.anatomy[part] && suppressedParts.indexOf(part) === -1) {
                     context.npc.anatomy[part] = npc.anatomy[part];
                 }
             });
+
+            // Add a clothing note so the LLM knows not to describe bare anatomy
+            if (suppressedParts.length > 0) {
+                context.npc.clothingNote = "The target body part is covered by clothing. Do not describe or imply its bare appearance, size, shape, or other hidden physical characteristics.";
+            }
         }
     }
     
@@ -372,6 +392,9 @@ function buildLLMEnhancementPrompt(context, includeSpeech = false) {
         
         if (context.npc.anatomy) {
             promptParts.push(`- Anatomy traits: ${JSON.stringify(context.npc.anatomy)}`);
+        }
+        if (context.npc.clothingNote) {
+            promptParts.push(`- ${context.npc.clothingNote}`);
         }
         promptParts.push("");
     }
@@ -2204,7 +2227,15 @@ function buildIntimacyPrompt(context) {
     
     // Build penetration context
     const penetrationContext = isPenetrating ? `Currently penetrating: ${context.penetration.tool} in ${context.penetration.target}.` : "Not currently penetrating.";
-    
+
+    // Build clothing guard for over-clothes actions: instruct the AI not to
+    // reveal hidden physical characteristics (breast size, nipple details, etc.)
+    // that are covered by clothing. Detected via the action id "_clothed" suffix.
+    const isClothedAction = action.actId && action.actId.includes("_clothed");
+    const clothingGuard = isClothedAction
+        ? "- This action is performed OVER clothing. Do NOT describe or imply the bare appearance, size, shape, or other hidden physical characteristics of the covered body part. Describe only sensations felt through the fabric."
+        : "";
+
     // Construct the full prompt
     const prompt = `
 INSTRUCTIONS:
@@ -2216,7 +2247,7 @@ INSTRUCTIONS:
 - Be vivid, sensual, and in-character based on the personality traits below.
 - If this is a continuation of a previous action, maintain flow and build on it.
 - Do NOT include the player's action in your response - only the NPC's reaction.
-
+${clothingGuard ? clothingGuard + "\n" : ""}
 CONTEXT:
 - Action: ${actionDesc}
 - ${continuity}
@@ -4937,11 +4968,18 @@ function enhanceActionLabel(npc, label, context = {}) {
     
     let enhancedLabel = label;
     const posPronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
-    
+
     // Check if this is a "receive" action (player is bottom)
     const act = typeof getAct === 'function' ? getAct(actId || label) : null;
     const isPlayerBottom = act && act.playerIsBottom === true;
-    
+
+    // Over-clothes actions: do NOT enhance body part references with rich
+    // anatomy descriptions, since that would reveal hidden physical
+    // characteristics (breast size, nipple details) through clothing.
+    if (actId && actId.includes("_clothed")) {
+        return label;
+    }
+
     // Determine arousal state based on context
     const isAroused = arousalLevel > 50;
     const isWet = arousalLevel > 60 || (isFemale && arousalLevel > 40);
@@ -5262,7 +5300,20 @@ function buildInitialContactNarration(npc, act, pronouns = {}, player = null) {
     const isGenital = (t) => ['vagina', 'pussy', 'clitoris', 'clit'].includes(normalize(t));
     const isAnal = (t) => ['anus', 'butt', 'butthole', 'ass'].includes(normalize(t));
     const isBreast = (t) => ['breast', 'breasts', 'chest', 'nipple', 'nipples'].includes(normalize(t));
-    
+
+    // Over-clothes actions: build a clean initial-contact line that references
+    // the clothed surface instead of bare anatomy. Avoids revealing hidden
+    // physical characteristics and avoids the raw label (e.g. "Grope breasts
+    // (over clothes)") leaking into narration.
+    if (act.id && act.id.includes("_clothed")) {
+        let clothedTarget = posPronoun + " " + (target || "body");
+        if (isBreast(targetNorm)) clothedTarget = posPronoun + " chest";
+        else if (isAnal(targetNorm)) clothedTarget = posPronoun + " backside";
+        else if (isGenital(targetNorm)) clothedTarget = posPronoun + " groin";
+        const verbIngForm = typeof verbConjugation === 'function' ? verbConjugation(verbNorm, 'ing') : verbNorm + "ing";
+        return `You reach out, your ${toolNorm} ${verbIngForm} ${clothedTarget} over ${posPronoun} clothes.`;
+    }
+
     // Kissing
     if (isKissing) {
         if (targetNorm === 'lips' || targetNorm === 'mouth') {
@@ -5472,9 +5523,29 @@ function buildActionNarratives(npc, actionId, act, context) {
     }
     
     const narratives = [];
-    
+
     // Get rich anatomy description
     let anatomyDesc = describeAnatomy(npc, target, { arousalLevel, isAroused, isWet, isErect, possessivePronoun: posPronoun, isOnCooldown }) || target || "";
+
+    // For over-clothes actions (id ends with "_clothed"), replace the rich
+    // anatomy description with a clothing-appropriate generic term so hidden
+    // physical characteristics (breast size, nipple details, etc.) are not
+    // revealed through clothing. The narration should reference the clothed
+    // surface, not bare anatomy.
+    if (actionId && actionId.includes("_clothed")) {
+        const targetLower = String(target || "").toLowerCase();
+        let clothedTerm = "";
+        if (targetLower === "breasts" || targetLower === "chest") {
+            clothedTerm = posPronoun + " chest through " + posPronoun + " clothes";
+        } else if (targetLower === "butt" || targetLower === "buttocks" || targetLower === "ass") {
+            clothedTerm = posPronoun + " backside through " + posPronoun + " clothes";
+        } else if (targetLower === "groin" || targetLower === "vagina" || targetLower === "pussy" || targetLower === "penis" || targetLower === "cock") {
+            clothedTerm = posPronoun + " groin through " + posPronoun + " clothes";
+        } else {
+            clothedTerm = posPronoun + " " + (target || "body") + " through " + posPronoun + " clothes";
+        }
+        anatomyDesc = clothedTerm;
+    }
     
     // For continue actions with anal penetration, replace "closed" descriptors with more appropriate ones
     // Since the anus is already penetrated, it shouldn't be described as "closed" or "shut"
