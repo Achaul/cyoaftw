@@ -1,8 +1,9 @@
 /**
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
- * 
- * Version: 2026-08-16-003
+ *
+ * Version: 2026-09-07-001
+ * Fixes: receiverKey duplicate declaration, clothed narration guards
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -11,6 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-07-001";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {

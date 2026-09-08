@@ -1,4 +1,6 @@
-// === cyoaftw-nsfw-system.js === - v2026-08-16-0010
+// === cyoaftw-nsfw-system.js === - v2026-09-07-001
+// Session followers, isAloneWithNPC fix, typeof guards, clothed narration
+window.__NSFW_SYSTEM_VERSION = "2026-09-07-001";
 (function() {
   'use strict';
 
