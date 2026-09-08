@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-002
- * Fixes: receiverKey, clothed guards, clothing narration, transition nouns, nipple/breast grammar, getTargetNoun scope, transition sentence separation, clothing duplicate narration
+ * Version: 2026-09-08-007
+ * Fixes: transition-only narration, vocalization dup, sensitivity caps, parting continue, tempDesc, anal access, watersports system
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-002";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-007";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -63,7 +63,8 @@ var CLIMAX_CONFIG = {
         ORAL_SEMEN: "oral_semen", 
         EXTERNAL_SEMEN: "external_semen",
         FEMALE_EJACULATE: "female_ejaculate",
-        MUTUAL_CLIMAX: "mutual_climax"
+        MUTUAL_CLIMAX: "mutual_climax",
+        URINE: "urine"
     }
 };
 
@@ -807,10 +808,11 @@ function generateValidActions(npc, player, positionId = null) {
             // playerIsBottom means player is receiving, so NPC is actor
             const isPlayerActor = !act.playerIsBottom;
             
-            // For CLOTHING and END actions, skip tool/target accessibility check
-            // Clothing actions only need clothing state validation (handled by isActionValid)
-            // END actions don't need accessibility checks
-            if (act.type === ACT_TYPES.CLOTHING || act.type === ACT_TYPES.END) {
+            // For CLOTHING, END, and WATERSPORT actions, skip tool/target
+            // accessibility check. Clothing only needs clothing validation.
+            // END actions don't need accessibility. Watersports use penis/
+            // vagina as tools on body parts that need special validation.
+            if (act.type === ACT_TYPES.CLOTHING || act.type === ACT_TYPES.END || act.type === ACT_TYPES.WATERSPORT) {
                 validActions.push({ ...act, actId });
             }
             // For actions that work regardless of clothing (reqCloth: ANY), also skip accessibility check
@@ -1154,9 +1156,9 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         }
     }
     
-    // Check tool/target accessibility for non-clothing, non-ANY actions
+    // Check tool/target accessibility for non-clothing, non-END, non-ANY, non-WATERSPORT actions
     const isPlayerActor = !act.playerIsBottom;
-    if (act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.END && act.reqCloth !== CLOTHING_REQUIREMENTS.ANY) {
+    if (act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.END && act.type !== ACT_TYPES.WATERSPORT && act.reqCloth !== CLOTHING_REQUIREMENTS.ANY) {
         if (!checkToolTargetAccessibility(act.tool, act.target, positionId, clothingState, isPlayerActor)) {
             return { valid: false, reason: "no access" };
         }
@@ -1359,7 +1361,18 @@ function checkToolTargetAccessibility(tool, target, positionId, clothingState, i
     // The target belongs to the RECEIVER (person being acted upon)
     const receiverKey = isPlayerAction ? "npc" : "player";
     const accessibleTargets = position.accessibleTargets[receiverKey] || [];
-    if (!accessibleTargets.includes(target)) return false;
+
+    // Anal targets (anus/ass) use the position's analFriendly flag rather
+    // than the accessibleTargets list, since "anus" isn't listed there but
+    // positions marked analFriendly should allow anal access.
+    var targetLower = String(target || "").toLowerCase();
+    var isAnalTarget = targetLower === "anus" || targetLower === "ass" || targetLower === "butthole";
+    if (isAnalTarget) {
+        if (position.analFriendly === false) return false;
+        // analFriendly positions allow anal access
+    } else {
+        if (!accessibleTargets.includes(target)) return false;
+    }
     
     // Check clothing - target must be exposed
     // The target belongs to the RECEIVER (person being acted upon), not the actor
@@ -1465,11 +1478,10 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // Update last activity
     updateLastActivity(npc);
     
-    // Store last action for continuity (skip clothing actions — they're not
-    // continuable, and setting lastAction to a clothing item causes the
-    // Continue button to disappear since the action is no longer valid after
-    // the clothing state changes).
-    if (act.type !== ACT_TYPES.CLOTHING) {
+    // Store last action for continuity (skip clothing and watersport actions —
+    // they're not continuable, and setting lastAction to them causes the
+    // Continue button to reference an invalid action).
+    if (act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.WATERSPORT) {
         intimacy.lastAction = { actId, timestamp: Date.now() };
     }
     
@@ -1496,7 +1508,20 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         }
         return generateEndResponse(npc, player, act);
     }
-    
+
+    // Handle watersports actions
+    if (act.type === ACT_TYPES.WATERSPORT) {
+        // Update arousal (negative for NPC)
+        updateArousal(npc, player, act.arousal);
+        // Track fluid consequence
+        if (act.consequence) {
+            handleFluidConsequence(npc, player, act.consequence, intimacy);
+        }
+        // Generate NPC response (mostly negative)
+        const response = await generateActionResponse(npc, player, act, intimacy, currentPosition);
+        return response;
+    }
+
     // Handle penetration actions
     if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE || act.type === ACT_TYPES.END) {
         handlePenetrationAction(npc, player, act, intimacy, actId);
@@ -1889,6 +1914,9 @@ function handleFluidConsequence(npc, player, consequenceType, intimacy) {
             break;
         case CLIMAX_CONFIG.CONSEQUENCE_TYPES.FEMALE_EJACULATE:
             intimacy.fluids.femaleEjaculate = true;
+            break;
+        case CLIMAX_CONFIG.CONSEQUENCE_TYPES.URINE:
+            intimacy.fluids.urine = true;
             break;
     }
     
@@ -2444,22 +2472,28 @@ function getReactionIntensity(arousalLevel) {
 /**
  * Get random reaction from a set, weighted by arousal
  */
-function getWeightedReaction(reactions, arousalLevel) {
+function getWeightedReaction(reactions, arousalLevel, maxTier) {
     if (!reactions || reactions.length === 0) {
         return "responds";
     }
-    
-    // For high arousal, prefer more intense reactions
-    if (arousalLevel > 80 && reactions.intense) {
+
+    // Determine which tiers are available, capped by maxTier
+    // Tier order: mild < moderate < high < intense
+    var tierOrder = ["mild", "moderate", "high", "intense"];
+    var maxIndex = maxTier ? tierOrder.indexOf(maxTier) : 3;
+    if (maxIndex < 0) maxIndex = 3;
+
+    // For high arousal, prefer more intense reactions (capped by maxTier)
+    if (arousalLevel > 80 && maxIndex >= 3 && reactions.intense) {
         return pickRandom(reactions.intense);
-    } else if (arousalLevel > 60 && reactions.high) {
+    } else if (arousalLevel > 60 && maxIndex >= 2 && reactions.high) {
         return pickRandom(reactions.high || reactions.intense || reactions.moderate || reactions);
-    } else if (arousalLevel > 40 && reactions.moderate) {
+    } else if (arousalLevel > 40 && maxIndex >= 1 && reactions.moderate) {
         return pickRandom(reactions.moderate || reactions);
     } else if (arousalLevel > 20 && reactions.mild) {
         return pickRandom(reactions.mild || reactions);
     }
-    
+
     // Default to random from all
     return pickRandom(reactions);
 }
@@ -2603,7 +2637,30 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
     
     // Get body part-specific reactions
     const bodyReactions = BODY_PART_REACTIONS[target] || BODY_PART_REACTIONS.general;
-    const reaction = getWeightedReaction(bodyReactions, arousalLevel);
+
+    // Cap reaction intensity by body part sensitivity. Even at high arousal,
+    // non-erogenous or mildly erogenous zones shouldn't produce "screams with
+    // pleasure" — that's reserved for direct contact with primary erogenous
+    // zones (genitals, nipples, anus). Kissing a cheek at 85 arousal shouldn't
+    // elicit the same reaction as touching someone's clitoris.
+    var SENSITIVITY_TIERS = {
+        // Primary erogenous zones — can reach "intense"
+        nipples: "intense", clitoris: "intense", clit: "intense",
+        vagina: "intense", pussy: "intense",
+        anus: "intense", penis: "intense", cock: "intense",
+        testicles: "intense", balls: "intense",
+        // Secondary erogenous zones — cap at "high"
+        breasts: "high", buttocks: "high", ass: "high", butt: "high",
+        thighs: "high", "inner thighs": "high",
+        groin: "high", neck: "high", stomach: "high",
+        // Mildly erogenous / social — cap at "moderate"
+        hair: "moderate", face: "moderate", cheek: "moderate", cheeks: "moderate",
+        lips: "moderate", mouth: "moderate", back: "moderate",
+        shoulders: "moderate", arms: "moderate", hands: "moderate",
+        legs: "moderate", feet: "moderate"
+    };
+    var maxTier = SENSITIVITY_TIERS[target.toLowerCase()] || "high";
+    const reaction = getWeightedReaction(bodyReactions, arousalLevel, maxTier);
     
     // Get anatomy descriptions
     let anatomyDesc = "";
@@ -2634,6 +2691,9 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
             
         case ACT_TYPES.IMPACT:
             return buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, dialogueTags);
+
+        case ACT_TYPES.WATERSPORT:
+            return buildWatersportResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc);
             
         case ACT_TYPES.END:
             return pickRandom([
@@ -2681,10 +2741,9 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
         `${reaction}, ${tempDesc}.`,
         `${reaction} at the sensation.`,
         `lets out a ${vocalization}.`,
-        `lets out a ${vocalization} of pleasure.`,
+        `lets out a ${vocalization}.`,
         `shivers ${intensity}.`,
         `${reaction}.`,
-        `${reaction}, ${tempDesc}.`,
         `${reaction}, breathing ${intensity}.`,
         `${reaction} and bites ${possessivePronoun} lip.`,
         `${reaction} and arches ${possessivePronoun} back.`
@@ -3126,6 +3185,74 @@ function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possess
  * Build generic response
  * Now uses CoT-style dialogue tags for verbal responses
  */
+/**
+ * Build response for watersports actions
+ * NPC reactions are mostly negative (disgust, anger, shock).
+ * Rare positive reactions only for very forward/bold NPCs at very high
+ * arousal (80+), and even then only 25% chance — the other 75% are still
+ * negative. Uncivilized NPCs may be confused rather than disgusted.
+ */
+function buildWatersportResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc) {
+    const target = act.target || "body";
+    const temperament = String(npc.temperament || "").toLowerCase();
+    const isBold = temperament === "forward" || temperament === "bold";
+    const isUncivilized = npc.civilizationLevel === "uncivilized" || npc.civilizationLevel === "feral";
+    const isVeryAroused = arousalLevel >= 80;
+
+    // Very bold NPCs at very high arousal: 25% chance of a (reluctantly)
+    // positive reaction. Otherwise falls through to negative.
+    if (isBold && isVeryAroused && Math.random() < 0.25) {
+        return pickRandom([
+            `gasps, then lets out a breathless laugh. <You're disgusting... I love it.>`,
+            `shivers, ${possessivePronoun} eyes darkening with something beyond disgust. <Don't you dare stop.>`,
+            `moans despite ${objectPronoun}self, ${possessivePronoun} body reacting against ${possessivePronoun} better judgment. <Gods, why does that feel...>`
+        ]);
+    }
+
+    // Uncivilized NPCs: confused rather than disgusted
+    if (isUncivilized) {
+        return pickRandom([
+            `flinches away, making a startled noise. <What... what you doing?>`,
+            `wrinkles ${possessivePronoun} nose, clearly confused by the wet warmth. <This... strange. Why you do this?>`,
+            `freezes, unsure how to react to the sensation. <This not... normal.>`,
+            `shifts away, wiping at ${possessivePronoun} ${target} with a puzzled expression. <You mark me? Like animal?>`
+        ]);
+    }
+
+    // Default: negative reactions scaled by severity of the target
+    // Face is the most offensive target, feet/back the mildest
+    var targetLower = String(target || "").toLowerCase();
+    var isFaceTarget = targetLower === "face" || targetLower === "mouth" || targetLower === "lips";
+    var isIntimateTarget = targetLower === "vagina" || targetLower === "pussy" || targetLower === "breasts" || targetLower === "chest";
+
+    if (isFaceTarget) {
+        return pickRandom([
+            `jerk away in shock, ${possessivePronoun} face twisting in disgust. <What the fuck is wrong with you?!>`,
+            `sputters and wipes furiously at ${possessivePronoun} face, ${possessivePronoun} eyes blazing. <You disgusting piece of—stop!>`,
+            `turns ${possessivePronoun} head away, sputtering. <Are you insane?! Stop pissing on me!>`,
+            `shoves you back hard, wiping ${possessivePronoun} face. <What is wrong with you?>`
+        ]);
+    }
+
+    if (isIntimateTarget) {
+        return pickRandom([
+            `tenses up, ${possessivePronoun} expression shifting to revulsion. <No. No, that's... don't do that.>`,
+            `pulls away, looking down at ${possessivePronoun} ${target} in disbelief. <That's... that's disgusting. Stop.>`,
+            `wrinkles ${possessivePronoun} nose, pushing you away. <Seriously? On my ${target}? That's gross.>`,
+            `shivers with revulsion, wiping at ${possessivePronoun} ${target}. <Stop. Just... stop.>`
+        ]);
+    }
+
+    // Milder targets (back, thighs, feet, stomach, buttocks)
+    return pickRandom([
+        `shifts uncomfortably, wrinkling ${possessivePronoun} nose. <Really? That's... not okay.>`,
+        `flinches at the warmth, pulling away slightly. <Hey—what are you doing? Stop that.>`,
+        `gives you a sharp look of disapproval. <That's disgusting. Knock it off.>`,
+        `moves away from the stream, wiping at ${possessivePronoun} ${target}. <Did you just... ugh. No.>`,
+        `sighs in irritation, wiping ${possessivePronoun} ${target}. <You could have at least warned me. Gross.>`
+    ]);
+}
+
 function buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, reaction, dialogueTags = []) {
     const vocalization = getVocalization(arousalLevel);
     const tempDesc = getTemperatureDescriptor(arousalLevel);
@@ -3251,10 +3378,10 @@ function getPleasureIntensity(arousalLevel) {
  */
 function getTemperatureDescriptor(arousalLevel) {
     if (arousalLevel < 20) return pickRandom(["warm", "slightly flushed"]);
-    if (arousalLevel < 40) return pickRandom(["warm and flushed", "heated", "slightly hot"]);
+    if (arousalLevel < 40) return pickRandom(["warm and flushed", "heated", "growing warm"]);
     if (arousalLevel < 60) return pickRandom(["hot", "flushed with arousal", "heated with desire"]);
-    if (arousalLevel < 80) return pickRandom(["very hot", "burning with desire", "dripping with arousal"]);
-    return pickRandom(["scalding hot", "feverish with need", "on fire with passion"]);
+    if (arousalLevel < 80) return pickRandom(["very hot", "burning with desire", "trembling with heat"]);
+    return pickRandom(["feverish with need", "on fire with passion", "aching with heat"]);
 }
 
 // ============================================================================
@@ -4136,7 +4263,10 @@ function getMinimumPhaseForAction(actId) {
     
     // Clothing removal requires private phase
     if (act.type === ACT_TYPES.CLOTHING) return INTIMACY_PHASES.PRIVATE;
-    
+
+    // Watersports require intimate phase (deep intimacy established)
+    if (act.type === ACT_TYPES.WATERSPORT) return INTIMACY_PHASES.INTIMATE;
+
     // Tease actions require private phase
     if (act.type === ACT_TYPES.TEASE) return INTIMACY_PHASES.PRIVATE;
     
@@ -5271,15 +5401,15 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     
     // Pick a narrative based on context
     let finalNarrative = pickRandom(narratives);
-    
-    // Prepend transition narrative if we have one
-    if (transitionNarrative && finalNarrative) {
-        // Ensure transition ends with a period before appending the action narrative
+
+    // When we have a transition/initial-contact narrative, use ONLY that as
+    // the player narration. The transition already describes the action
+    // (e.g. "You lean in and kiss her cheek"), so appending the action
+    // narrative ("Your mouth kisses her cheek") produces redundant repetition.
+    if (transitionNarrative) {
         var t = transitionNarrative.trim();
         if (!t.match(/[.!?]$/)) t += ".";
-        finalNarrative = t + " " + finalNarrative;
-    } else if (transitionNarrative) {
-        finalNarrative = transitionNarrative;
+        finalNarrative = t;
     }
     
     // For continue actions, try to use LLM-enhanced version if cached
@@ -5375,6 +5505,11 @@ function buildInitialContactNarration(npc, act, pronouns = {}, player = null) {
     // e.g. "You remove her top." / "You remove your top." / "You undress her completely."
     if (act.type === "clothing" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.CLOTHING)) {
         return buildClothingNarration(act, npc, player);
+    }
+
+    // Watersports actions: simple narration, no anatomy-based templates.
+    if (act.type === "watersport" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.WATERSPORT)) {
+        return "You release a stream of warm urine onto " + posPronoun + " " + (target || "body") + ".";
     }
 
     // Normalize for comparison
@@ -5627,6 +5762,21 @@ function buildActionNarratives(npc, actionId, act, context) {
     // Clothing actions: return a simple clothing narration.
     if (act.type === "clothing" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.CLOTHING)) {
         return [buildClothingNarration(act, npc, context.player)];
+    }
+
+    // Watersports actions: build a simple narration describing the act.
+    if (act.type === "watersport" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.WATERSPORT)) {
+        var peeTarget = target || "body";
+        var whose = posPronoun;
+        // Build a natural-sounding target phrase
+        var targetPhrase = whose + " " + peeTarget;
+        if (peeTarget === "face") targetPhrase = whose + " face";
+        else if (peeTarget === "buttocks") targetPhrase = whose + " buttocks";
+        return [
+            "You release a stream of warm urine onto " + targetPhrase + ".",
+            "You let go, the warm stream trickling down " + targetPhrase + ".",
+            "You aim and pee onto " + targetPhrase + ", the warmth spreading across " + whose + " skin."
+        ];
     }
 
     // Get rich anatomy description
@@ -5960,10 +6110,15 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
             `Spreading ${posPronoun} legs, you part ${posPronoun} ${skinPhrase}${pubicDesc} to expose ${interiorColor} labia.`
         );
     } else {
-        narratives.push(
-            `You part ${posPronoun} ${pubicDesc} and ${verbPresent} ${cleanAnatomyDesc}.`,
-            `You part ${posPronoun} ${pubicDesc}, ${verbPresent} ${cleanAnatomyDesc}.`
-        );
+        // For non-part/spread verbs, the "part pubic hair and verb" pattern
+        // only makes sense for first contact. For continue actions, skip the
+        // parting description and just describe the action directly.
+        if (!isContinueAction) {
+            narratives.push(
+                `You part ${posPronoun} ${pubicDesc} and ${verbPresent} ${cleanAnatomyDesc}.`,
+                `You part ${posPronoun} ${pubicDesc}, ${verbPresent} ${cleanAnatomyDesc}.`
+            );
+        }
     }
     
     // Licking specific

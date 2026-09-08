@@ -20,7 +20,8 @@ var ACT_TYPES = {
     CONTINUE: "continue",     // Continues existing penetration
     END: "end",               // Ends the encounter
     CLOTHING: "clothing",     // Clothing removal/adjustment
-    IMPACT: "impact"          // Causes sensation/pain
+    IMPACT: "impact",         // Causes sensation/pain
+    WATERSPORT: "watersport"  // Urination on/around the partner
 };
 
 var CLOTHING_REQUIREMENTS = {
@@ -472,7 +473,34 @@ var SEX_ACTS = {
     female_ejaculate: { id: "female_ejaculate", tool: "vagina", target: "vagina", verb: "ejaculate", type: ACT_TYPES.CONTINUE, label: "Squirt", desc: "Experience intense release from stimulation", arousal: { p: 45, n: 90 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Cowgirl", "Reverse Cowgirl", "Doggy", "Bent Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, triggersClimax: true, femaleOnly: true, consequence: "female_ejaculate" },
     
     // Mutual climax (both partners)
-    mutual_climax: { id: "mutual_climax", tool: "body", target: "body", verb: "climax together", type: ACT_TYPES.CONTINUE, label: "Climax together", desc: "Both reach orgasm simultaneously", arousal: { p: 50, n: 100 }, pos: ["Standing", "Standing From Behind", "Missionary", "Doggy", "Bent Over", "Cowgirl", "Reverse Cowgirl", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, triggersClimax: true, consequence: "mutual_climax" }
+    mutual_climax: { id: "mutual_climax", tool: "body", target: "body", verb: "climax together", type: ACT_TYPES.CONTINUE, label: "Climax together", desc: "Both reach orgasm simultaneously", arousal: { p: 50, n: 100 }, pos: ["Standing", "Standing From Behind", "Missionary", "Doggy", "Bent Over", "Cowgirl", "Reverse Cowgirl", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, triggersClimax: true, consequence: "mutual_climax" },
+
+    // ===== WATERSPORTS =====
+    // Player urinates on accessible body parts. Requires BOTTOM_OFF for the
+    // player (clothing must be out of the way). Targets must be accessible
+    // from the position. NPC reactions are mostly negative (disgust, anger)
+    // with rare positive exceptions for very bold/forward temperaments at
+    // high arousal. Player gender determines the tool (penis or vagina).
+    pee_on_face: { id: "pee_on_face", tool: "penis", target: "face", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on face", desc: "Urinate on their face", arousal: { p: 0, n: -15 }, pos: ["Standing", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true, consequence: "urine" },
+    pee_on_chest: { id: "pee_on_chest", tool: "penis", target: "chest", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on chest", desc: "Urinate on their chest", arousal: { p: 0, n: -10 }, pos: ["Standing", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true, consequence: "urine" },
+    pee_on_breasts: { id: "pee_on_breasts", tool: "penis", target: "breasts", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on breasts", desc: "Urinate on their breasts", arousal: { p: 0, n: -10 }, pos: ["Standing", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF, maleOnly: true, consequence: "urine" },
+    pee_on_stomach: { id: "pee_on_stomach", tool: "penis", target: "stomach", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on stomach", desc: "Urinate on their stomach", arousal: { p: 0, n: -8 }, pos: ["Standing", "Kneeling Over", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true, consequence: "urine" },
+    pee_on_butt: { id: "pee_on_butt", tool: "penis", target: "buttocks", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on butt", desc: "Urinate on their buttocks", arousal: { p: 0, n: -8 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true, consequence: "urine" },
+    pee_on_back: { id: "pee_on_back", tool: "penis", target: "back", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on back", desc: "Urinate on their back", arousal: { p: 0, n: -5 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true, consequence: "urine" },
+    pee_on_thighs: { id: "pee_on_thighs", tool: "penis", target: "thighs", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on thighs", desc: "Urinate on their thighs", arousal: { p: 0, n: -5 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true, consequence: "urine" },
+    pee_on_pussy: { id: "pee_on_pussy", tool: "penis", target: "vagina", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on pussy", desc: "Urinate on their pussy", arousal: { p: 0, n: -12 }, pos: ["Standing", "Perched", "Missionary", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true, consequence: "urine" },
+    pee_on_feet: { id: "pee_on_feet", tool: "penis", target: "feet", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on feet", desc: "Urinate on their feet", arousal: { p: 0, n: -5 }, pos: ["Standing", "Kneeling"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true, consequence: "urine" },
+
+    // Female player version (uses vagina as tool)
+    pee_on_face_f: { id: "pee_on_face_f", tool: "vagina", target: "face", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on face", desc: "Urinate on their face", arousal: { p: 0, n: -15 }, pos: ["Standing", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
+    pee_on_chest_f: { id: "pee_on_chest_f", tool: "vagina", target: "chest", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on chest", desc: "Urinate on their chest", arousal: { p: 0, n: -10 }, pos: ["Standing", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
+    pee_on_breasts_f: { id: "pee_on_breasts_f", tool: "vagina", target: "breasts", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on breasts", desc: "Urinate on their breasts", arousal: { p: 0, n: -10 }, pos: ["Standing", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF, femaleOnly: true, consequence: "urine" },
+    pee_on_stomach_f: { id: "pee_on_stomach_f", tool: "vagina", target: "stomach", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on stomach", desc: "Urinate on their stomach", arousal: { p: 0, n: -8 }, pos: ["Standing", "Kneeling Over", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
+    pee_on_butt_f: { id: "pee_on_butt_f", tool: "vagina", target: "buttocks", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on butt", desc: "Urinate on their buttocks", arousal: { p: 0, n: -8 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
+    pee_on_back_f: { id: "pee_on_back_f", tool: "vagina", target: "back", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on back", desc: "Urinate on their back", arousal: { p: 0, n: -5 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
+    pee_on_thighs_f: { id: "pee_on_thighs_f", tool: "vagina", target: "thighs", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on thighs", desc: "Urinate on their thighs", arousal: { p: 0, n: -5 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
+    pee_on_pussy_f: { id: "pee_on_pussy_f", tool: "vagina", target: "vagina", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on pussy", desc: "Urinate on their pussy", arousal: { p: 0, n: -12 }, pos: ["Standing", "Perched", "Missionary", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
+    pee_on_feet_f: { id: "pee_on_feet_f", tool: "vagina", target: "feet", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on feet", desc: "Urinate on their feet", arousal: { p: 0, n: -5 }, pos: ["Standing", "Kneeling"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" }
 };
 
 // ============================================================================
@@ -819,7 +847,11 @@ function getActionCategory(actId) {
     if (act.type === ACT_TYPES.IMPACT) {
         return "Impact";
     }
-    
+
+    if (act.type === ACT_TYPES.WATERSPORT) {
+        return "Watersports";
+    }
+
     // Categorize by body area first, then action type
     const actIdLower = (act.id || "").toLowerCase();
     const labelLower = (act.label || "").toLowerCase();
