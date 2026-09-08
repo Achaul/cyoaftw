@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-014
- * Adds: cervix pressure for vaginal bottoming out, oral coughing at depth 3+, improved oral gag/choke
+ * Version: 2026-09-08-017
+ * Fixes: remove "scent of skin" and "intimate aroma", fix "resistant"/"tightly clenched" for penetrated anus, fix "hot cavity" repetition, fix "She her" double pronoun
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-014";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-017";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -278,6 +278,138 @@ function cacheLLMEnhancement(intimacy, actionType, position, enhancedNarrative) 
     }
     
     intimacy.llmEnhancement.cache.set(cacheKey, enhancedNarrative);
+}
+
+// ============================================================================
+// PENETRATION PREFETCH SYSTEM
+// ============================================================================
+
+/**
+ * Get a cached penetration response for a specific act+position+depth.
+ * The penetration response cache is stored on intimacy.penetrationCache (a Map)
+ * separate from the LLM enhancement cache. Keys are `actId||position||depth`.
+ */
+function getCachedPenetrationResponse(intimacy, actId, position, depth) {
+    if (!intimacy || !intimacy.penetrationCache) return null;
+    if (!(intimacy.penetrationCache instanceof Map)) {
+        // Convert from plain object if needed
+        var old = intimacy.penetrationCache;
+        intimacy.penetrationCache = new Map();
+        if (old && typeof old === 'object') {
+            for (var k in old) { if (old.hasOwnProperty(k)) intimacy.penetrationCache.set(k, old[k]); }
+        }
+        return null;
+    }
+    var key = actId + "||" + position + "||" + (depth || 0);
+    return intimacy.penetrationCache.get(key) || null;
+}
+
+/**
+ * Store a penetration response in cache.
+ */
+function cachePenetrationResponse(intimacy, actId, position, depth, text) {
+    if (!intimacy) return;
+    if (!intimacy.penetrationCache || !(intimacy.penetrationCache instanceof Map)) {
+        intimacy.penetrationCache = new Map();
+    }
+    var key = actId + "||" + position + "||" + (depth || 0);
+    // Enforce max size (FIFO)
+    if (intimacy.penetrationCache.size >= 30) {
+        var firstKey = intimacy.penetrationCache.keys().next().value;
+        intimacy.penetrationCache.delete(firstKey);
+    }
+    intimacy.penetrationCache.set(key, text);
+}
+
+/**
+ * Prefetch continue responses for a penetration act.
+ * Called when a penetration act starts (enter/thrust/fuck/etc.). Generates 3
+ * AI responses for the continue variations of that act at depths 1, 2, and 3
+ * in the background, so the player's next "Continue" click gets a cached
+ * AI response instantly.
+ *
+ * @param {Object} npc - The NPC
+ * @param {Object} act - The penetration act that just started
+ * @param {Object} intimacy - The intimacy state
+ * @param {Object} player - The player
+ */
+function prefetchPenetrationContinue(npc, act, intimacy, player) {
+    if (!npc || !act || !intimacy) return;
+    if (typeof ai !== 'function') return;
+    if (act.type !== ACT_TYPES.PENETRATE && act.type !== ACT_TYPES.CONTINUE) return;
+
+    var position = (intimacy.position && intimacy.position.player) || "Unknown";
+
+    // Find continue variants for this penetration target+tool
+    // e.g. if act is "enter_pussy", continues are thrust_pussy, pump_pussy, fuck_pussy, pound_pussy
+    var target = (act.target || "").toLowerCase();
+    var tool = (act.tool || "").toLowerCase();
+    var continueActIds = [];
+
+    // Find all CONTINUE-type acts with the same target and tool
+    if (typeof getAct !== 'function') return;
+    // Scan the act definitions for matching continues
+    var allActIds = Object.keys(getAct('kiss_lips') ? ACTS : {});
+    if (!allActIds.length && typeof window !== 'undefined' && window.INTIMACY_ACTS) {
+        allActIds = Object.keys(window.INTIMACY_ACTS);
+    }
+
+    for (var id in (typeof ACTS !== 'undefined' ? ACTS : (typeof window !== 'undefined' ? window.INTIMACY_ACTS : {}))) {
+        var candidate = getAct(id);
+        if (!candidate) continue;
+        if (candidate.type !== ACT_TYPES.CONTINUE) continue;
+        if ((candidate.target || "").toLowerCase() !== target) continue;
+        if ((candidate.tool || "").toLowerCase() !== tool) continue;
+        continueActIds.push(id);
+    }
+
+    // If no specific continues found, use the act itself as continue
+    if (!continueActIds.length) {
+        continueActIds = [act.id];
+    }
+
+    // Pick up to 3 continue variants to prefetch
+    var toPrefetch = continueActIds.slice(0, 3);
+
+    toPrefetch.forEach(function(continueActId, index) {
+        var depth = index + 1; // prefetch for depths 1, 2, 3
+        var cacheKey = continueActId + "||" + position + "||" + depth;
+
+        // Skip if already cached
+        if (intimacy.penetrationCache && intimacy.penetrationCache instanceof Map && intimacy.penetrationCache.has(cacheKey)) return;
+        // Skip if already being prefetched
+        if (!intimacy._pendingPenetrationPrefetch) intimacy._pendingPenetrationPrefetch = {};
+        if (intimacy._pendingPenetrationPrefetch[cacheKey]) return;
+        intimacy._pendingPenetrationPrefetch[cacheKey] = true;
+
+        // Build the context for this continue act
+        var continueAct = getAct(continueActId);
+        if (!continueAct) { delete intimacy._pendingPenetrationPrefetch[cacheKey]; return; }
+
+        var context = buildActionContext(npc, player, continueAct, intimacy, position);
+        var prompt = buildIntimacyPrompt(context);
+
+        // Fire non-blocking AI call
+        (async function() {
+            try {
+                var result = await ai({
+                    instruction: prompt,
+                    startWith: "",
+                    endButtons: "none",
+                    generatorName: "cyoaftw-engine-core"
+                });
+                var text = result && (result.text || result);
+                if (text && typeof text === 'string' && text.trim()) {
+                    cachePenetrationResponse(intimacy, continueActId, position, depth, text);
+                    console.log("[Intimacy Prefetch] Cached continue response for", continueActId, "depth", depth);
+                }
+            } catch (e) {
+                console.warn("[Intimacy Prefetch] Failed for", continueActId, "depth", depth, e);
+            } finally {
+                delete intimacy._pendingPenetrationPrefetch[cacheKey];
+            }
+        })();
+    });
 }
 
 /**
@@ -2103,19 +2235,38 @@ function updateArousal(npc, player, arousalChange) {
 async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // Build context for AI
     const context = buildActionContext(npc, player, act, intimacy, positionId);
-    
+
     // First, try to build a rich response using our template system
     // This gives consistent, anatomy-aware, context-aware responses
     const templateResponse = buildIntimacyResponse(npc, player, act, intimacy);
-    
+
     // Check for LLM enhancement (for sexual acts only)
     let finalResponse = templateResponse;
     const currentPosition = (intimacy && intimacy.position && intimacy.position.player) || positionId || "Unknown";
-    
+
+    // ── PENETRATION CACHE CHECK ───────────────────────────────────
+    // For penetration/continue acts, check the penetration response cache
+    // first. The cache is keyed by actId||position||depth, so each depth
+    // level gets its own unique AI response. Prefetched by
+    // prefetchPenetrationContinue when the penetration started.
+    if ((act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) && intimacy) {
+        var depth = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
+        var cached = getCachedPenetrationResponse(intimacy, act.id, currentPosition, depth);
+        if (cached) {
+            console.log("[Intimacy Cache] Using prefetched response for", act.id, "depth", depth);
+            return {
+                action: act.id,
+                type: act.type,
+                responseText: cached,
+                context: context
+            };
+        }
+    }
+
     if (isSexualAct(act) && intimacy) {
         // Ensure LLM enhancement is initialized (handles legacy saved games)
         initializeLLMEnhancement(intimacy);
-        
+
         // Try to get cached enhancement
         const cachedEnhancement = getCachedLLMEnhancement(intimacy, act.id, currentPosition);
         if (cachedEnhancement) {
@@ -2149,6 +2300,12 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
             // Also, we can blend: use template for structure, AI for flavor
             if (responseText && responseText.trim() && responseText.includes("<")) {
                 // AI provided a formatted response with angle brackets
+                // Cache it for penetration/continue acts so repeats use the
+                // cached response instead of making another AI call.
+                if ((act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) && intimacy) {
+                    var d = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
+                    cachePenetrationResponse(intimacy, act.id, currentPosition, d, responseText);
+                }
                 return {
                     action: act.id,
                     type: act.type,
@@ -2191,18 +2348,38 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
 function buildActionContext(npc, player, act, intimacy, positionId) {
     const position = getPosition(positionId);
     const clothingState = intimacy.clothing;
-    
+
     // Get NPC personality info
     const personality = npc.personalityProfile || {};
     const traits = npc.personalityTraits || [];
     const temperament = npc.temperament || "neutral";
-    
+
     // Get player gender for pronoun handling
     const playerGender = (player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
-    
+
     // Build clothing description
     const clothingDesc = buildClothingDescription(clothingState, act.playerIsBottom ? "npc" : "player");
-    
+
+    // Build anatomy context for the AI (same as LLM enhancement path)
+    var anatomyContext = {};
+    if (npc.anatomy) {
+        var sexualParts = ["vagina", "anus", "penis", "breasts", "nipples", "pubicHair", "buttocks"];
+        var suppressedParts = [];
+        if (act.id && act.id.includes("_clothed")) {
+            var targetLower = String(act.target || "").toLowerCase();
+            if (targetLower === "breasts" || targetLower === "chest") {
+                suppressedParts = ["breasts", "nipples"];
+            } else if (targetLower === "butt" || targetLower === "buttocks" || targetLower === "ass") {
+                suppressedParts = ["buttocks"];
+            }
+        }
+        sexualParts.forEach(function(part) {
+            if (npc.anatomy[part] && suppressedParts.indexOf(part) === -1) {
+                anatomyContext[part] = npc.anatomy[part];
+            }
+        });
+    }
+
     return {
         npc: {
             name: npc.name || "NPC",
@@ -2212,7 +2389,9 @@ function buildActionContext(npc, player, act, intimacy, positionId) {
             traits: traits,
             personality: personality,
             arousal: intimacy.arousal.npc,
-            virginity: { ...intimacy.virginity }
+            virginity: { ...intimacy.virginity },
+            speechPattern: npc.speechPattern || npc.speechStyle || "",
+            anatomy: anatomyContext
         },
         player: {
             gender: playerGender,
@@ -2238,8 +2417,13 @@ function buildActionContext(npc, player, act, intimacy, positionId) {
         history: intimacy.actionHistory.slice(-3).map(a => getAct(a.actId)),
         stage: getIntimacyStage(clothingState),
         isPenetrating: intimacy.penetration.active,
+        penetrationDepth: intimacy.penetration ? (intimacy.penetration.depth || 0) : 0,
         hasLube: intimacy.hasLube,
-        lubeLevel: intimacy.lubeLevel
+        lubeLevel: intimacy.lubeLevel,
+        // Template-generated response to feed the AI so it can enhance rather
+        // than generate from scratch. This gives the AI the template's audio
+        // cues, anatomy descriptions, and depth effects as a base.
+        templateResponse: buildIntimacyResponse(npc, player, act, intimacy)
     };
 }
 
@@ -2268,13 +2452,13 @@ function buildClothingDescription(clothingState, actor) {
  * Build AI prompt for intimacy action response
  */
 function buildIntimacyPrompt(context) {
-    const { npc, player, action, position, clothing, clothingDesc, history, stage, isPenetrating, hasLube } = context;
-    
+    const { npc, player, action, position, clothing, clothingDesc, history, stage, isPenetrating, penetrationDepth, hasLube, templateResponse } = context;
+
     // Determine who is acting
     const actorIsPlayer = !action.playerIsBottom;
     const actor = actorIsPlayer ? "You" : (npc.name || "They");
     const receiver = actorIsPlayer ? (npc.name || "them") : "You";
-    
+
     // Build the action description
     let actionDesc = action.label;
     if (actorIsPlayer) {
@@ -2282,34 +2466,51 @@ function buildIntimacyPrompt(context) {
     } else {
         actionDesc = `${npc.name || "They"} ${action.verb}s your ${action.target} with their ${action.tool}`;
     }
-    
+
     // Build continuity context
     const continuity = buildContinuityContext(history, action);
-    
+
     // Build position context
     const positionContext = `Position: ${position.label}.`;
-    
+
     // Build clothing context
     const clothingContext = `Clothing: ${clothingDesc}`;
-    
+
     // Build arousal context
     const arousalContext = `Arousal: ${describeArousalLevel(npc.arousal)} (NPC), ${describeArousalLevel(player.arousal)} (Player).`;
-    
+
     // Build personality context
     const personalityContext = buildPersonalityContext(npc);
-    
+
+    // Build speech pattern context
+    const speechContext = npc.speechPattern
+        ? `Speech pattern: ${npc.speechPattern}`
+        : "";
+
+    // Build anatomy context
+    var anatomyContext = "";
+    if (npc.anatomy && Object.keys(npc.anatomy).length > 0) {
+        anatomyContext = `Anatomy: ${JSON.stringify(npc.anatomy)}`;
+    }
+
     // Build lube context
     const lubeContext = hasLube ? "There is lubrication available." : "There is no lubrication.";
-    
-    // Build penetration context
-    const penetrationContext = isPenetrating ? `Currently penetrating: ${context.penetration.tool} in ${context.penetration.target}.` : "Not currently penetrating.";
 
-    // Build clothing guard for over-clothes actions: instruct the AI not to
-    // reveal hidden physical characteristics (breast size, nipple details, etc.)
-    // that are covered by clothing. Detected via the action id "_clothed" suffix.
+    // Build penetration context with depth
+    const penetrationContext = isPenetrating
+        ? `Currently penetrating: ${context.penetration ? context.penetration.tool : action.tool} in ${context.penetration ? context.penetration.target : action.target}. Depth: ${penetrationDepth || 1}/5.`
+        : "Not currently penetrating.";
+
+    // Build clothing guard for over-clothes actions
     const isClothedAction = action.actId && action.actId.includes("_clothed");
     const clothingGuard = isClothedAction
         ? "- This action is performed OVER clothing. Do NOT describe or imply the bare appearance, size, shape, or other hidden physical characteristics of the covered body part. Describe only sensations felt through the fabric."
+        : "";
+
+    // Build template response context — feed the system-generated response
+    // to the AI so it can enhance it rather than generating from scratch.
+    const templateContext = templateResponse
+        ? `Base response (enhance this, keep the same facts but make it more vivid and in-character):\n"${templateResponse}"`
         : "";
 
     // Construct the full prompt
@@ -2323,6 +2524,7 @@ INSTRUCTIONS:
 - Be vivid, sensual, and in-character based on the personality traits below.
 - If this is a continuation of a previous action, maintain flow and build on it.
 - Do NOT include the player's action in your response - only the NPC's reaction.
+- Use the base response as a foundation — keep its physical details, sounds, and reactions, but make the language more vivid and natural.
 ${clothingGuard ? clothingGuard + "\n" : ""}
 CONTEXT:
 - Action: ${actionDesc}
@@ -2333,10 +2535,14 @@ CONTEXT:
 - ${penetrationContext}
 - ${lubeContext}
 ${personalityContext}
+${speechContext ? "\n" + speechContext : ""}
+${anatomyContext ? "\n" + anatomyContext : ""}
+
+${templateContext ? "\n" + templateContext : ""}
 
 RESPOND:
 `;
-    
+
     return prompt;
 }
 
@@ -2977,26 +3183,26 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             isNearClimax ? `grits ${possessivePronoun} teeth briefly as you enter ${possessivePronoun} anus, ${subjectPronoun.toLowerCase()} is so close to the peak ${subjectPronoun.toLowerCase()} can barely contain it.` : 
             (shouldSemenDrip ? `grits ${possessivePronoun} teeth briefly as you enter ${possessivePronoun} anus, your previous load squirting out around your ${tool}.` : 
             `grits ${possessivePronoun} teeth briefly as you enter ${possessivePronoun} anus.`),
-            isNearClimax ? `trembles as you breach ${possessivePronoun} tight entrance, ${subjectPronoun.toLowerCase()} is nearly there.` : 
-            (shouldSemenDrip ? `trembles as you breach ${possessivePronoun} tight entrance, your semen dripping out as you push in.` : 
-            `trembles as you breach ${possessivePronoun} tight entrance, the resistance giving way.`),
-            isNearClimax ? `pushes back against you as you enter, ${possessivePronoun} tight channel clenching around your ${tool}, ${subjectPronoun.toLowerCase()} is right on the brink.` : 
-            `pushes back against you as you enter, ${possessivePronoun} tight channel clenching around your ${tool}.`,
-            `gasps as you ${verb} ${objectPronoun}, ${possessivePronoun} hot vice pressure intense.`,
-            `clenches around you as you enter ${possessivePronoun}, ${possessivePronoun} anus adjusting to your intrusion.`
+            isNearClimax ? `trembles as you breach ${possessivePronoun} entrance, ${subjectPronoun.toLowerCase()} is nearly there.` : 
+            (shouldSemenDrip ? `trembles as you breach ${possessivePronoun} entrance, your semen dripping out as you push in.` : 
+            `trembles as you breach ${possessivePronoun} entrance, the resistance giving way.`),
+            isNearClimax ? `pushes back against you as you enter, ${possessivePronoun} channel gripping your ${tool}, ${subjectPronoun.toLowerCase()} is right on the brink.` : 
+            `pushes back against you as you enter, ${possessivePronoun} channel gripping your ${tool}.`,
+            `gasps as you ${verb} ${objectPronoun}, the tight pressure intense.`,
+            `tenses around you as you enter, ${possessivePronoun} body adjusting to your intrusion.`
         ],
         continue: [
-            isNearClimax ? `clenches desperately around your shaft, ${subjectPronoun.toLowerCase()} is so close to climax ${subjectPronoun.toLowerCase()} can't hold back much longer, ${possessivePronoun} hot cavity gripping your ${tool}.` : 
-            (shouldSemenDrip ? `clenches around your shaft, ${possessivePronoun} hot cavity gripping your ${tool}, your semen seeping out with each thrust.` : 
-            `clenches around your shaft, ${possessivePronoun} hot cavity gripping your ${tool}.`),
-            isNearClimax ? `matches your rhythm, ${possessivePronoun} tight channel clenching desperately around your ${tool}, ${subjectPronoun.toLowerCase()} is right on the edge.` : 
-            (shouldSemenDrip ? `matches your rhythm, ${possessivePronoun} tight channel clenching around your ${tool}, your earlier ejaculation leaking out.` : 
-            `matches your rhythm, ${possessivePronoun} tight channel clenching and releasing around your ${tool}.`),
-            isNearClimax ? `grunts with each thrust, ${subjectPronoun.toLowerCase()} is so close to climax ${subjectPronoun.toLowerCase()} can't last much longer, your ${tool} in ${possessivePronoun} hot cavity.` : 
-            `grunts with each thrust, ${possessivePronoun} hot cavity taking you in.`,
-            isNearClimax ? `${possessivePronoun} hot cavity pulses around your shaft with each movement, ${subjectPronoun.toLowerCase()} is so close to release.` : 
-            (shouldSemenDrip ? `${possessivePronoun} hot cavity pulses around your shaft with each movement, pushing out traces of your semen.` : 
-            `${possessivePronoun} hot cavity pulses around your shaft with each movement.`)
+            isNearClimax ? `clenches desperately, ${subjectPronoun.toLowerCase()} is so close to climax ${subjectPronoun.toLowerCase()} can't hold back much longer, ${possessivePronoun} passage gripping your ${tool} tightly.` : 
+            (shouldSemenDrip ? `clenches, ${possessivePronoun} passage gripping your ${tool}, your semen seeping out with each thrust.` : 
+            `clenches, ${possessivePronoun} passage gripping your ${tool} tightly.`),
+            isNearClimax ? `matches your rhythm, ${possessivePronoun} depths gripping your ${tool} desperately, ${subjectPronoun.toLowerCase()} is right on the edge.` : 
+            (shouldSemenDrip ? `matches your rhythm, ${possessivePronoun} depths gripping your ${tool}, your earlier ejaculation leaking out.` : 
+            `matches your rhythm, ${possessivePronoun} depths gripping and releasing around your ${tool}.`),
+            isNearClimax ? `grunts with each thrust, ${subjectPronoun.toLowerCase()} is so close to climax ${subjectPronoun.toLowerCase()} can't last much longer, your ${tool} buried deep in ${possessivePronoun} passage.` : 
+            `grunts with each thrust, taking you in deep.`,
+            isNearClimax ? `pulses around your shaft with each movement, ${subjectPronoun.toLowerCase()} is so close to release.` : 
+            (shouldSemenDrip ? `pulses around your shaft with each movement, pushing out traces of your semen.` : 
+            `pulses around your shaft with each movement.`)
         ]
     };
     
@@ -5141,8 +5347,8 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     ]);
 
     const sizeDescriptors = {
-        tight: ["tight", "clenching", "constricted", "narrow", "virgin", "resistant"],
-        snug: ["snug", "firm", "tightly clenched", "resilient"],
+        tight: ["tight", "constricted", "narrow", "virgin"],
+        snug: ["snug", "firm", "resilient"],
         firm: ["firm", "muscular", "controlled", "toned"],
         supple: ["supple", "yielding", "soft", "pliant", "flexible"],
         loose: ["loose", "relaxed", "experienced", "used", "accommodating"],
@@ -5153,7 +5359,7 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
 
     // Texture descriptors — wrinkly/puckered skin is the anus's natural state
     const sphincterDescriptors = {
-        tight: ["clenched", "resistant", "tense and shut", "tightly squeezed", "wrinkled tight"],
+        tight: ["clenched", "tense and shut", "tightly squeezed", "wrinkled tight"],
         snug: ["puckered", "wrinkled", "firm", "tightly furled", "crinkled"],
         firm: ["controlled", "clenched", "puckered", "muscular", "ridged"],
         supple: ["yielding", "receptive", "soft", "wrinkled", "loose-skinned"],
@@ -5546,6 +5752,9 @@ if (typeof window !== 'undefined') {
     window.LLM_ENHANCEMENT_CONFIG = LLM_ENHANCEMENT_CONFIG;
     window.isSexualAct = isSexualAct;
     window.clearLLMEnhancementCache = clearLLMEnhancementCache;
+    window.prefetchPenetrationContinue = prefetchPenetrationContinue;
+    window.getCachedPenetrationResponse = getCachedPenetrationResponse;
+    window.cachePenetrationResponse = cachePenetrationResponse;
 }
 
 // ============================================================================
@@ -6635,7 +6844,7 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
         ]) : '';
         
         // Adjust cavity description based on whether it's been opened
-        const cavityDesc = isAnusOpen ? pickRandom(['well-used passage', 'stretched channel', 'yielding cavity', 'open bowels']) : pickRandom(['tight channel', 'clenching cavity', 'resistant passage', 'tight bowels']);
+        const cavityDesc = isAnusOpen ? pickRandom(['well-used passage', 'stretched channel', 'yielding depths', 'open bowels']) : pickRandom(['tight channel', 'gripping passage', 'snug depths', 'tight bowels']);
         
         return [
             `You ejaculate into ${anatomyDesc}, filling ${posPronoun} ${cavityDesc} with ${isMultipleEjaculation ? 'another thick deposit, the cavity already swollen and heavy with semen' : 'your hot seed, the viscous fluid filling the unseen depths'} ${isMultipleEjaculation ? sloshingSound : ''}${scentDesc ? ', ' + scentDesc : ''}.`,
@@ -6673,12 +6882,11 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
         (actualTool === 'mouth' || actualTool === 'tongue') && (verbBase === 'lick' || verbBase === 'rim')
             ? `Your tongue ${verbConjugation(verbBase, 'third')} ${anatomyDesc}${scentDesc ? ', ' + scentDesc : ''}.`
             : `Your ${actualTool} ${toolVerb}${prepositionText}${anatomyDesc}.`,
-        // Penetration/fingering - sphincters are normally tight and resistant
-        // For penis/cock tool, explicitly mention the anatomy for clarity
+        // Penetration/fingering - first entry into a tight passage
         verbBase === 'penetrate' || verbBase === 'finger' || verbBase === 'enter' ?
             actualTool === 'penis' || actualTool === 'cock' ?
-                `You press your cockhead against ${anatomyDesc}${scentDesc ? ', ' + scentDesc : ''}, ${analEasy ? 'sliding your length into the well-lubricated passage' + getAnalSound() : highArousal ? `your ${cockState} cock breaching the reluctant sphincter as it stretches around your ${shaftState} shaft` + getAnalSound() : 'gently pressing past the tight entrance, the resistance giving way to your persistence' + getAnalSound()}.` :
-                `You ${verbPresent} ${anatomyDesc}${scentDesc ? ', ' + scentDesc : ''}, ${analEasy ? 'sliding your length into the well-lubricated passage' + getAnalSound() : highArousal ? 'your finger breaching the reluctant sphincter as it stretches around your digit' + getAnalSound() : 'gently pressing past the tight entrance, the resistance giving way to your persistence' + getAnalSound()}.` : null,
+                `You press your cockhead against ${anatomyDesc}${scentDesc ? ', ' + scentDesc : ''}, ${analEasy ? 'sliding your length into the well-lubricated passage' + getAnalSound() : highArousal ? `your ${cockState} cock pushing past the tight ring as it stretches around your ${shaftState} shaft` + getAnalSound() : 'gently pressing past the entrance, the ring giving way to your persistence' + getAnalSound()}.` :
+                `You ${verbPresent} ${anatomyDesc}${scentDesc ? ', ' + scentDesc : ''}, ${analEasy ? 'sliding your length into the well-lubricated passage' + getAnalSound() : highArousal ? 'your finger pushing past the tight ring as it stretches around your digit' + getAnalSound() : 'gently pressing past the entrance, the ring giving way to your persistence' + getAnalSound()}.` : null,
         verbBase === 'tease' || verbBase === 'circle' ?
             `You ${verbPresent} ${anatomyDesc}, tracing the ${highArousal ? 'slightly yielding' : 'tight, wrinkled'} rim${scentDesc ? ', ' + scentDesc : ''}.` : null,
         verbBase === 'spread' ?
@@ -6687,7 +6895,7 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             `Your tongue ${verbConjugation(verbBase, 'third')} ${anatomyDesc}, ${highArousal ? 'wetting the sensitive skin with slow, deliberate strokes' : 'tracing the textured flesh with firm laps'}${scentDesc ? ', ' + scentDesc : ''}.` : null,
         // Intercourse actions - already inside, describe the feeling
         verbBase === 'fuck' || verbBase === 'thrust' || verbBase === 'pound' || verbBase === 'grind' || verbBase === 'slide' ?
-            `You ${verbPresent} into ${anatomyDesc}, ${posPronoun} passage ${highArousal ? 'clenching your shaft like a vice' : 'gripping your shaft tightly'}${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.` : null,
+            `You ${verbPresent} into ${anatomyDesc}, ${posPronoun} passage ${highArousal ? 'gripping your shaft rhythmically' : 'gripping your shaft tightly'}${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.` : null,
         verbBase === 'ejaculate' || verbBase === 'ejaculate on' ?
             `You ${verbPresent} into ${anatomyDesc}, ${posPronoun} bowels ${highArousal ? 'milking your release with desperate pulses' : 'accepting your seed deeply'}${scentDesc ? ', ' + scentDesc : ''}.` : null,
         // Generic fallback for other verbs
@@ -7098,12 +7306,11 @@ function getScentDescriptor(npc, target, isAnalAct = false) {
         } else {
             return pickRandom([
                 "and the musky, earthy scent of the area fills the air",
-                "and a raw, intimate aroma rises between you",
-                "and the heady smell of sweat and skin hangs in the air",
-                "and a deep, musky scent fills the space",
-                "and the unmistakable, earthy musk of the area surrounds you",
-                "and a faint, raw aroma drifts by, unmistakably human",
-                "and the warm, slightly salty scent of the cleft lingers"
+                "and a raw, musky aroma rises between you",
+                "and a deep, earthy musk fills the space",
+                "and the unmistakable, raw musk of the area surrounds you",
+                "and a faint, earthy aroma drifts by",
+                "and the warm, slightly salty musk of the cleft lingers"
             ]);
         }
     }
@@ -7122,7 +7329,7 @@ function getScentDescriptor(npc, target, isAnalAct = false) {
             return pickRandom([
                 "and a warm, intoxicating scent fills the air",
                 "and the musk of arousal surrounds you",
-                "and a subtle, intimate aroma drifts by",
+                "and a subtle, warm aroma drifts by",
                 "and the heady smell of passion fills the space",
                 "and a faint, pleasurable fragrance lingers"
             ]);
