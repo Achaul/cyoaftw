@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-028
- * Improves: intimacy AI prompt — polish-only, don't invent new speech (keep existing if present)
+ * Version: 2026-09-08-029
+ * Fixes: remove bracket requirement from cache validation, purge cache after use, add purge functions
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-028";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-029";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -254,6 +254,15 @@ function getCachedLLMEnhancement(intimacy, actionType, position) {
 }
 
 /**
+ * Delete a cached LLM enhancement (purge after use so it doesn't repeat).
+ */
+function purgeCachedLLMEnhancement(intimacy, actionType, position) {
+    if (!intimacy?.llmEnhancement?.cache || !(intimacy.llmEnhancement.cache instanceof Map)) return;
+    var cacheKey = actionType + "||" + position;
+    intimacy.llmEnhancement.cache.delete(cacheKey);
+}
+
+/**
  * Store LLM-enhanced narrative in cache
  * @param {Object} intimacy - The intimacy state
  * @param {string} actionType - The action ID
@@ -302,6 +311,15 @@ function getCachedPenetrationResponse(intimacy, actId, position, depth) {
     }
     var key = actId + "||" + position + "||" + (depth || 0);
     return intimacy.penetrationCache.get(key) || null;
+}
+
+/**
+ * Delete a cached penetration response (purge after use so it doesn't repeat).
+ */
+function purgeCachedPenetrationResponse(intimacy, actId, position, depth) {
+    if (!intimacy || !intimacy.penetrationCache || !(intimacy.penetrationCache instanceof Map)) return;
+    var key = actId + "||" + position + "||" + (depth || 0);
+    intimacy.penetrationCache.delete(key);
 }
 
 /**
@@ -2330,7 +2348,9 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         var depth = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
         var cached = getCachedPenetrationResponse(intimacy, act.id, currentPosition, depth);
         if (cached) {
-            console.log("[Intimacy Cache] Using prefetched response for", act.id, "depth", depth);
+            console.log("[Intimacy Cache] Using cached response for", act.id, "depth", depth);
+            // Purge after use so it doesn't repeat
+            purgeCachedPenetrationResponse(intimacy, act.id, currentPosition, depth);
             return {
                 action: act.id,
                 type: act.type,
@@ -2349,6 +2369,8 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         const cachedEnhancement = getCachedLLMEnhancement(intimacy, act.id, currentPosition);
         if (cachedEnhancement) {
             finalResponse = cachedEnhancement;
+            // Purge after use so it doesn't repeat
+            purgeCachedLLMEnhancement(intimacy, act.id, currentPosition);
         } else {
             // Fire off non-blocking enhancement request for future use
             // This will cache the result when it completes
@@ -2382,7 +2404,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
                     generatorName: "cyoaftw-engine-core"
                 });
                 var responseText = result && (result.text || result);
-                if (responseText && responseText.trim() && responseText.includes("<")) {
+                if (responseText && responseText.trim()) {
                     // Cache for penetration/continue acts
                     if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
                         var d = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
@@ -2392,7 +2414,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
                     cacheLLMEnhancement(intimacy, act.id, currentPosition, responseText);
                     console.log("[Intimacy AI] Cached response for", act.id, "(", responseText.substring(0, 60), "...)");
                 } else {
-                    console.log("[Intimacy AI] Response rejected (no brackets or empty) for", act.id);
+                    console.log("[Intimacy AI] Response rejected (empty) for", act.id);
                 }
             } catch (e) {
                 console.warn("[Intimacy AI] Background prefetch failed for", act.id, e);
