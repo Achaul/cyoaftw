@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-029
- * Fixes: remove bracket requirement from cache validation, purge cache after use, add purge functions
+ * Version: 2026-09-08-030
+ * Improves: explicit act description in prompt (tool + verb + target + act type), prevent vaginal sex hallucination for non-penetration acts
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-029";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-030";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2603,6 +2603,17 @@ function buildIntimacyPrompt(context) {
         ? `Base response (enhance this, keep the same facts but make it more vivid and in-character):\n"${templateResponse}"`
         : "";
 
+    // Build the full act description — be explicit about what's happening
+    var actType = act.type === ACT_TYPES.PENETRATE ? "penetration (entering)" :
+                 act.type === ACT_TYPES.CONTINUE ? "continued penetration (thrusting)" :
+                 act.type === ACT_TYPES.TEASE ? "teasing/touching" :
+                 act.type === ACT_TYPES.IMPACT ? "impact (spanking/slapping)" :
+                 act.type === ACT_TYPES.CLOTHING ? "clothing removal" :
+                 act.type === ACT_TYPES.WATERSPORT ? "watersports" :
+                 "intimate action";
+
+    var actDescription = `The player is using their ${action.tool} to ${action.verb} the NPC's ${action.target}. This is a ${actType} act. The NPC's reaction should be about the sensation of ${action.tool} on ${action.target}, NOT about vaginal sex or penetration unless the act IS penetration.`;
+
     // Construct the full prompt
     const prompt = `
 You are ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}, reacting to a sexual act.
@@ -2611,16 +2622,17 @@ ${npc.personalityTraits && npc.personalityTraits.length ? `Traits: ${npc.persona
 
 INSTRUCTIONS:
 - Take the BASE RESPONSE below and polish it. Improve sentence structure, make the language more vivid and erotic, but keep the same meaning and details.
-- Keep it PHYSICAL: focus on the sensation of ${action.tool} on ${action.target}, the pressure, the friction, the body's response.
+- ${actDescription}
 - Do NOT invent new body parts, actions, or context not in the base response.
+- Do NOT describe penetration or vaginal sex unless the base response describes it.
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
 - Do NOT invent new dialogue or speech. If the base response has no spoken words, do not add any. Keep existing speech if present, but do not create new lines of dialogue.
-- Keep your response to 1-3 sentences. Match the length of the base response.
+- Keep your response to 1-3 sentences. Match the length of the base response exactly.
 - If the base response includes a sound (grunt, gasp, squeal), keep it.
 - If the base response mentions depth, pressure, or a specific body part, keep that detail.
 ${clothingGuard ? clothingGuard + "\n" : ""}
 
-ACT: ${action.tool} on ${action.target}, ${action.verb}
+ACT: ${action.tool} ${action.verb} ${action.target} (${actType})
 ${positionContext} | ${clothingContext} | ${arousalContext} | ${penetrationContext}
 ${anatomyContext ? "\n" + anatomyContext : ""}
 
