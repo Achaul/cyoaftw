@@ -6,8 +6,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-09-07-001";
-    console.log("[Intimacy Acts] Loaded v2026-09-07-001 - _clothed action filtering by specific clothing item");
+    window.INTIMACY_ACTS_VERSION = "2026-09-07-004";
+    console.log("[Intimacy Acts] Loaded v2026-09-07-004 - titfuck + assjob + receive relabel + pull_out_generic");
 }
 
 // ============================================================================
@@ -340,6 +340,13 @@ var SEX_ACTS = {
     // NEW: Priority 2 - Vaginal on penis continue action
     squeeze_cock: { id: "squeeze_cock", tool: "vagina", target: "penis", verb: "squeeze", type: ACT_TYPES.CONTINUE, label: "Squeeze cock", desc: "Squeeze their cock with your pussy", arousal: { p: 30, n: 70 }, pos: ["Cowgirl", "Reverse Cowgirl", "Astride Lap", "Missionary", "Standing", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, requiresLube: true, intensity: "medium", femaleOnly: true, requiresNpcMale: true },
     
+    // NEW: Titfuck / assjob — rubbing penis between breasts or buttocks
+    // These are tease-type actions that use the penis as tool but target
+    // breasts/buttocks. They're not penetration — the penis slides between
+    // the body parts rather than entering an orifice. Male player only.
+    titfuck: { id: "titfuck", tool: "penis", target: "breasts", verb: "fuck", type: ACT_TYPES.TEASE, label: "Fuck their tits", desc: "Slide your penis between their breasts", arousal: { p: 20, n: 35 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF, maleOnly: true, requiresNpcFemale: true, objectDialogueTags: ["breasts fucked"] },
+    assjob: { id: "assjob", tool: "penis", target: "buttocks", verb: "rub", type: ACT_TYPES.TEASE, label: "Hotdog their ass", desc: "Rub your penis between their butt cheeks", arousal: { p: 15, n: 25 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Spooning", "Against Wall From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true },
+    
     // ===== ANAL ACTIONS =====
     grope_ass: { id: "grope_ass", tool: "hand", target: "buttocks", verb: "grope", type: ACT_TYPES.TEASE, label: "Grope ass", desc: "Grope their ass", arousal: { p: 8, n: 20 }, pos: ["Standing", "Standing From Behind", "Perched", "Doggy", "Bent Over", "Spooning", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
     squeeze_ass: { id: "squeeze_ass", tool: "hand", target: "buttocks", verb: "squeeze", type: ACT_TYPES.TEASE, label: "Squeeze ass", desc: "Squeeze their ass cheeks", arousal: { p: 8, n: 22 }, pos: ["Standing", "Standing From Behind", "Perched", "Doggy", "Bent Over", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
@@ -372,7 +379,7 @@ var SEX_ACTS = {
     pound_anus: { id: "pound_anus", tool: "penis", target: "anus", verb: "pound", type: ACT_TYPES.CONTINUE, label: "Pound anus", desc: "Pound into their anus hard", arousal: { p: 35, n: 75 }, pos: ["Doggy", "Bent Over", "Standing From Behind", "Against Wall From Behind"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, requiresLube: true, intensity: "hard", maleOnly: true },
     fuck_anus: { id: "fuck_anus", tool: "penis", target: "anus", verb: "fuck", type: ACT_TYPES.CONTINUE, label: "Fuck anus", desc: "Fuck their anus", arousal: { p: 30, n: 80 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Against Wall From Behind"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, requiresLube: true, intensity: "hard", maleOnly: true },
     
-    accept_penis_anus: { id: "accept_penis_anus", tool: "anus", target: "penis", verb: "accept", type: ACT_TYPES.PENETRATE, label: "Accept penis in anus", desc: "Let them enter your anus", arousal: { p: 40, n: 25 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Against Wall From Behind"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, requiresLube: true, takesVirginity: [VIRGINITY_TYPES.ANAL], playerIsBottom: true, requiresNpcMale: true },
+    accept_penis_anus: { id: "accept_penis_anus", tool: "anus", target: "penis", verb: "accept", type: ACT_TYPES.PENETRATE, label: "Ask them to enter your anus", desc: "Ask them to enter your anus", arousal: { p: 40, n: 25 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Against Wall From Behind"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, requiresLube: true, takesVirginity: [VIRGINITY_TYPES.ANAL], playerIsBottom: true, requiresNpcMale: true },
     take_penis_anus: { id: "take_penis_anus", tool: "anus", target: "penis", verb: "take", type: ACT_TYPES.CONTINUE, label: "Take penis in anus", desc: "Take their penis deeper into your anus", arousal: { p: 35, n: 30 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Against Wall From Behind"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, requiresLube: true, requiresNpcMale: true },
     
     // NEW: Priority 2 - Hump Ass Back Onto Cock (reverse anal penetration)
@@ -402,7 +409,7 @@ var SEX_ACTS = {
     deepthroat_penis: { id: "deepthroat_penis", tool: "mouth", target: "penis", verb: "deepthroat", type: ACT_TYPES.PENETRATE, label: "Deepthroat penis", desc: "Deepthroat their penis", arousal: { p: 20, n: 60 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcMale: true },
     
     // Male player receiving oral
-    accept_penis_mouth: { id: "accept_penis_mouth", tool: "mouth", target: "penis", verb: "accept", type: ACT_TYPES.PENETRATE, label: "Accept cock in mouth", desc: "Accept their penis in your mouth", arousal: { p: 25, n: 40 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Oral Service", "Prone Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresNpcMale: true },
+    accept_penis_mouth: { id: "accept_penis_mouth", tool: "mouth", target: "penis", verb: "accept", type: ACT_TYPES.PENETRATE, label: "Ask them to put it in your mouth", desc: "Ask them to put their penis in your mouth", arousal: { p: 25, n: 40 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Oral Service", "Prone Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresNpcMale: true },
     deepthroat_penis_player: { id: "deepthroat_penis_player", tool: "mouth", target: "penis", verb: "deepthroat", type: ACT_TYPES.CONTINUE, label: "Deepthroat their cock", desc: "Deepthroat their penis", arousal: { p: 30, n: 60 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Oral Service", "Prone Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresNpcMale: true },
     
     // NEW: Priority 2 - Testicles (balls) oral actions
@@ -416,14 +423,16 @@ var SEX_ACTS = {
     rub_cock_on_face: { id: "rub_cock_on_face", tool: "penis", target: "face", verb: "rub", type: ACT_TYPES.TEASE, label: "Rub cock on face", desc: "Rub your penis against their face", arousal: { p: 20, n: 40 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Kneeling By Face"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true },
     
     // ===== ORAL ON PLAYER =====
-    kiss_player_mouth: { id: "kiss_player_mouth", tool: "mouth", target: "mouth", verb: "kiss", type: ACT_TYPES.TEASE, label: "Let them kiss your lips", desc: "Let them kiss your lips", arousal: { p: 5, n: 5 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: true },
-    suck_player_nipples: { id: "suck_player_nipples", tool: "mouth", target: "nipples", verb: "suck", type: ACT_TYPES.TEASE, label: "Let them suck your nipples", desc: "Let them suck on your nipples", arousal: { p: 40, n: 12 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF, playerIsBottom: true },
-    lick_player_pussy: { id: "lick_player_pussy", tool: "mouth", target: "vagina", verb: "lick", type: ACT_TYPES.TEASE, label: "Let them lick your pussy", desc: "Let them lick your pussy", arousal: { p: 50, n: 12 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerFemale: true },
-    eat_player_pussy: { id: "eat_player_pussy", tool: "mouth", target: "vagina", verb: "eat", type: ACT_TYPES.TEASE, label: "Let them eat your pussy", desc: "Let them eat your pussy", arousal: { p: 60, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerFemale: true },
-    suck_player_penis: { id: "suck_player_penis", tool: "mouth", target: "penis", verb: "suck", type: ACT_TYPES.TEASE, label: "Let them suck your cock", desc: "Let them suck your penis", arousal: { p: 40, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
-    deepthroat_player_penis: { id: "deepthroat_player_penis", tool: "mouth", target: "penis", verb: "deepthroat", type: ACT_TYPES.TEASE, label: "Let them deepthroat you", desc: "Let them deepthroat your penis", arousal: { p: 60, n: 20 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
-    lick_player_anus: { id: "lick_player_anus", tool: "mouth", target: "anus", verb: "lick", type: ACT_TYPES.TEASE, label: "Let them lick your anus", desc: "Let them lick your anus", arousal: { p: 50, n: 10 }, pos: ["Doggy", "Bent Over", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true },
-    rim_player_anus: { id: "rim_player_anus", tool: "mouth", target: "anus", verb: "rim", type: ACT_TYPES.TEASE, label: "Let them rim your anus", desc: "Let them rim your anus", arousal: { p: 60, n: 15 }, pos: ["Doggy", "Bent Over", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true },
+    kiss_player_mouth: { id: "kiss_player_mouth", tool: "mouth", target: "mouth", verb: "kiss", type: ACT_TYPES.TEASE, label: "Ask them to kiss your lips", desc: "Ask them to kiss your lips", arousal: { p: 5, n: 5 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: true },
+    suck_player_nipples: { id: "suck_player_nipples", tool: "mouth", target: "nipples", verb: "suck", type: ACT_TYPES.TEASE, label: "Ask them to suck your nipples", desc: "Ask them to suck on your nipples", arousal: { p: 40, n: 12 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF, playerIsBottom: true },
+    lick_player_pussy: { id: "lick_player_pussy", tool: "mouth", target: "vagina", verb: "lick", type: ACT_TYPES.TEASE, label: "Ask them to lick your pussy", desc: "Ask them to lick your pussy", arousal: { p: 50, n: 12 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerFemale: true },
+    eat_player_pussy: { id: "eat_player_pussy", tool: "mouth", target: "vagina", verb: "eat", type: ACT_TYPES.TEASE, label: "Ask them to eat your pussy", desc: "Ask them to eat your pussy", arousal: { p: 60, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerFemale: true },
+    suck_player_penis: { id: "suck_player_penis", tool: "mouth", target: "penis", verb: "suck", type: ACT_TYPES.TEASE, label: "Ask them to suck your cock", desc: "Ask them to suck your penis", arousal: { p: 40, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
+    deepthroat_player_penis: { id: "deepthroat_player_penis", tool: "mouth", target: "penis", verb: "deepthroat", type: ACT_TYPES.TEASE, label: "Ask them to deepthroat you", desc: "Ask them to deepthroat your penis", arousal: { p: 60, n: 20 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
+    lick_player_balls: { id: "lick_player_balls", tool: "mouth", target: "testicles", verb: "lick", type: ACT_TYPES.TEASE, label: "Ask them to lick your balls", desc: "Ask them to lick your testicles", arousal: { p: 30, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
+    suck_player_balls: { id: "suck_player_balls", tool: "mouth", target: "testicles", verb: "suck", type: ACT_TYPES.TEASE, label: "Ask them to suck your balls", desc: "Ask them to suck on your testicles", arousal: { p: 35, n: 20 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
+    lick_player_anus: { id: "lick_player_anus", tool: "mouth", target: "anus", verb: "lick", type: ACT_TYPES.TEASE, label: "Ask them to lick your anus", desc: "Ask them to lick your anus", arousal: { p: 50, n: 10 }, pos: ["Doggy", "Bent Over", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true },
+    rim_player_anus: { id: "rim_player_anus", tool: "mouth", target: "anus", verb: "rim", type: ACT_TYPES.TEASE, label: "Ask them to rim your anus", desc: "Ask them to rim your anus", arousal: { p: 60, n: 15 }, pos: ["Doggy", "Bent Over", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true },
     
     // ===== END ACTIONS =====
     stop: { id: "stop", type: ACT_TYPES.END, label: "Stop", desc: "Stop intimate actions", arousal: { p: 0, n: 0 }, pos: ["Standing", "Perched", "Missionary", "Doggy", "Bent Over", "Spooning", "Astride Lap", "Kneeling", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
@@ -440,6 +449,11 @@ var SEX_ACTS = {
     // NEW: End oral actions from COT
     release_cock: { id: "release_cock", type: ACT_TYPES.END, label: "Release cock", desc: "Release their penis from your hand", arousal: { p: 0, n: 0 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcMale: true },
     pull_out_of_mouth: { id: "pull_out_of_mouth", type: ACT_TYPES.END, label: "Pull Away from mouth", desc: "Pull your penis out of their mouth", arousal: { p: 0, n: 0 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Oral Service", "Prone Oral Service", "Kneeling By Face", "Squatting Before", "Riding Face"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true },
+
+    // Generic pull-out: works for any active penetration regardless of orifice.
+    // The label/desc are dynamic — the engine updates them based on what's
+    // currently being penetrated. Always available when penetration is active.
+    pull_out_generic: { id: "pull_out_generic", type: ACT_TYPES.END, label: "Pull Out", desc: "Withdraw from current penetration", arousal: { p: 0, n: 0 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Doggy", "Bent Over", "Spooning", "Astride Lap", "Kneeling", "Kneeling Over", "Against Wall", "Against Wall From Behind", "Cowgirl", "Reverse Cowgirl", "Sixty-Nine", "Oral Service", "Prone Oral Service", "Kneeling By Face", "Squatting Before", "Riding Face"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
 
     // ===== NEW: Priority 2 - SPECIAL PAIRING ACTIONS =====
     // M2M: Frot (cock-to-cock rubbing)

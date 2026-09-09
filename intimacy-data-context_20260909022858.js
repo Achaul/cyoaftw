@@ -241,6 +241,7 @@ var NATURAL_LABELS = {
     grope_breasts: "Touch their breasts",
     caress_breasts: "Caress their breasts",
     squeeze_breasts: "Squeeze their breasts",
+    titfuck: "Fuck their {npcBreasts}",
     tease_nipples: "Tease their nipples",
     pinch_nipples: "Pinch their nipples",
     flick_nipples: "Flick their nipples",
@@ -286,6 +287,7 @@ var NATURAL_LABELS = {
     // Anal actions
     grope_ass: "Touch their {buttocks}",
     squeeze_ass: "Squeeze their {buttocks}",
+    assjob: "Hotdog their {buttocks}",
     slap_ass: "Spank their {buttocks}",
     spread_cheeks: "Spread their {buttocks} cheeks",
     touch_anus: "Touch their {anus}",
@@ -304,7 +306,7 @@ var NATURAL_LABELS = {
     thrust_anus: "Thrust into their {anus} from behind",
     pound_anus: "Pound into their {anus} from behind",
     fuck_anus: "Take their {anus} from behind",
-    accept_penis_anus: "Let them enter your {anus}",
+    accept_penis_anus: "Ask them to enter your {anus}",
     take_penis_anus: "Take their {penis} deeper into your {anus}",
     
     // Penis actions (on NPC)
@@ -317,13 +319,15 @@ var NATURAL_LABELS = {
     deepthroat_penis: "Take their {penis} deep",
     
     // On player
-    suck_player_nipples: "Let them suck your {nipples}",
-    lick_player_pussy: "Let them pleasure you with their mouth on your {pussy}",
-    eat_player_pussy: "Let them taste your {pussy}",
-    suck_player_penis: "Let them please you with their mouth on your {penis}",
-    deepthroat_player_penis: "Let them take your {penis} deep",
-    lick_player_anus: "Let them lick your {anus}",
-    rim_player_anus: "Let them rim your {anus}",
+    suck_player_nipples: "Ask them to suck your {nipples}",
+    lick_player_pussy: "Ask them to pleasure you with their mouth on your {pussy}",
+    eat_player_pussy: "Ask them to taste your {pussy}",
+    suck_player_penis: "Ask them to please you with their mouth on your {penis}",
+    deepthroat_player_penis: "Ask them to take your {penis} deep",
+    lick_player_balls: "Ask them to lick your {balls}",
+    suck_player_balls: "Ask them to suck your {balls}",
+    lick_player_anus: "Ask them to lick your {anus}",
+    rim_player_anus: "Ask them to rim your {anus}",
     
     // Climax actions - natural
     ejaculate_in_vagina: "Finish inside their {pussy}",

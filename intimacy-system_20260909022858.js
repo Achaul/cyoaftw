@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-019
- * Adds: _source tagging (cached-ai/live-ai/template/llm-enhanced) for debug mode, penetration continue verb fix
+ * Version: 2026-09-08-021
+ * Adds: penetration gating (continue requires active penetration, enter blocked if already inside, penis locked while penetrating), generic pull_out_generic with rich withdrawal narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-019";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-021";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -1103,7 +1103,9 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         const intimacy = npc && npc.intimacy;
         if (intimacy && intimacy.penetration && intimacy.penetration.active) {
             const currentTarget = intimacy.penetration.target;
+            const currentTool = intimacy.penetration.tool;
             const newTarget = act.target;
+            const newTool = act.tool;
             
             // If trying to penetrate a different orifice, block it
             if (currentTarget && newTarget && currentTarget !== newTarget) {
@@ -1123,6 +1125,63 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
                     return { valid: false, reason: "pull out first" };
                 }
             }
+
+            // If the same tool is penetrating but the new act uses a different
+            // tool for the same target, block it (e.g. penis is in vagina,
+            // can't switch to fingers without pulling out first).
+            if (currentTool && newTool && currentTool !== newTool && currentTarget === newTarget) {
+                return { valid: false, reason: "pull out first" };
+            }
+        }
+    }
+
+    // ── PENETRATION GATING ───────────────────────────────────────
+    // Gate penetration-related actions based on the current penetration state:
+    // 1. CONTINUE actions require an active penetration of the same target+tool
+    // 2. PENETRATE (enter) actions are blocked if that tool is already penetrating
+    // 3. Non-penetrative actions using the penis are blocked while the penis
+    //    is penetrating (fingers/tongue/mouth remain free)
+    var _intimacy = npc && npc.intimacy;
+    if (_intimacy && _intimacy.penetration && _intimacy.penetration.active) {
+        var _penTool = _intimacy.penetration.tool;
+        var _penTarget = _intimacy.penetration.target;
+
+        // 1. CONTINUE actions: must match the current penetration target+tool
+        if (act.type === ACT_TYPES.CONTINUE) {
+            if (act.target !== _penTarget && act.tool !== _penTool) {
+                return { valid: false, reason: "not penetrating this" };
+            }
+            // Also check tool match — can't thrust with penis if fingers are in
+            if (act.tool === _penTool && act.target !== _penTarget) {
+                return { valid: false, reason: "wrong orifice" };
+            }
+        }
+
+        // 2. PENETRATE (enter) actions: blocked if same tool+target already active
+        //    (you're already inside — use continue actions instead)
+        if (act.type === ACT_TYPES.PENETRATE) {
+            if (act.tool === _penTool && act.target === _penTarget) {
+                return { valid: false, reason: "already inside" };
+            }
+        }
+
+        // 3. Non-penetrative actions using the penis are blocked while penis
+        //    is penetrating. Fingers, tongue, mouth, hand remain free.
+        if (act.type !== ACT_TYPES.CONTINUE && act.type !== ACT_TYPES.END &&
+            act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.WATERSPORT) {
+            if (act.tool === "penis" && _penTool === "penis") {
+                // The penis is busy penetrating — block non-penetration uses of it
+                // unless it's targeting the same orifice (which would be a continue,
+                // already handled above).
+                if (act.target !== _penTarget) {
+                    return { valid: false, reason: "tool in use" };
+                }
+            }
+        }
+    } else {
+        // No active penetration: CONTINUE actions are not available
+        if (act.type === ACT_TYPES.CONTINUE) {
+            return { valid: false, reason: "not penetrated" };
         }
     }
 
@@ -1130,7 +1189,15 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     if (act.type === ACT_TYPES.END) {
         const intimacy = npc && npc.intimacy;
         const lastAction = intimacy && intimacy.lastAction ? intimacy.lastAction.actId : null;
-        
+
+        // Generic pull-out: only valid when penetration is active
+        if (actId === "pull_out_generic") {
+            if (intimacy && intimacy.penetration && intimacy.penetration.active) {
+                return { valid: true };
+            }
+            return { valid: false, reason: "not penetrating" };
+        }
+
         if (!lastAction) {
             // No prior action, only allow generic end actions
             if (actId !== "stop" && actId !== "pause") {
@@ -1635,6 +1702,15 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     
     // Handle end actions
     if (act.type === ACT_TYPES.END) {
+        // Generic pull-out: withdraw from current penetration with narration
+        if (actId === "pull_out_generic") {
+            var pullOutNarrative = endPenetrationWithNarration(npc, intimacy, "pull out");
+            if (pullOutNarrative) {
+                return { action: actId, type: "end", responseText: pullOutNarrative };
+            }
+            // No active penetration — nothing to pull out from
+            return { action: actId, type: "end", responseText: "" };
+        }
         if (actId === "stop") {
             endIntimacyEncounter(npc);
         }
@@ -3012,6 +3088,8 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     const verb = act.verb || "enter";
     let tool = act.tool || "penis";
     const target = (act.target || "vagina").toLowerCase();
+    // Local shorthand used in depth-based effects below
+    var posPronoun = possessivePronoun || (typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their");
     
     // Get more descriptive vocabulary based on arousal
     const vocalization = getVocalization(arousalLevel);
@@ -4840,36 +4918,78 @@ function endPenetrationWithNarration(npc, intimacy, reason = "transition") {
     if (!intimacy || !intimacy.penetration || !intimacy.penetration.active) {
         return null;
     }
-    
+
     const penetration = intimacy.penetration;
     const tool = penetration.tool || "unknown";
     const target = penetration.target || "unknown";
     const playerIsBottom = penetration.playerIsBottom || false;
-    
+    const depth = penetration.depth || 0;
+
     // Clear penetration state
     intimacy.penetration.active = false;
-    
+    intimacy.penetration.tool = null;
+    intimacy.penetration.target = null;
+    intimacy.penetration.depth = 0;
+
     // Generate pull-out narration based on what was being penetrated
     const posPronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
-    
-    let pullOutNarrative = null;
-    
-    if (target === "vagina" || target === "pussy") {
-        pullOutNarrative = `You pull out from ${posPronoun} vagina`;
-    } else if (target === "anus" || target === "ass") {
-        pullOutNarrative = `You pull out from ${posPronoun} anus`;
-    } else if (target === "mouth" || target === "lips") {
-        pullOutNarrative = `You pull out from ${posPronoun} mouth`;
-    } else if (playerIsBottom) {
-        // Player was receiving penetration
-        pullOutNarrative = `${posPronoun} ${tool} pulls out from you`;
+
+    var pullOutNarrative = null;
+
+    if (playerIsBottom) {
+        // Player was receiving penetration — the NPC's tool pulls out of the player
+        if (target === "vagina" || target === "pussy") {
+            pullOutNarrative = pickRandom([
+                `${posPronoun} ${tool} slides out of your pussy, the sudden emptiness leaving you gasping.`,
+                `You lift yourself off ${posPronoun} ${tool}, your slick folds clinging as you pull free.`,
+                `${posPronoun} ${tool} withdraws from you with a wet sound, leaving your pussy flushed and wanting.`
+            ]);
+        } else if (target === "anus" || target === "ass") {
+            pullOutNarrative = pickRandom([
+                `${posPronoun} ${tool} pulls out of your ass, the ring of muscle clenching shut behind it.`,
+                `You pull yourself off ${posPronoun} ${tool}, your stretched hole slowly puckering closed.`,
+                `${posPronoun} ${tool} withdraws from you, leaving a lingering ache and a gape that slowly closes.`
+            ]);
+        } else if (target === "mouth" || target === "lips") {
+            pullOutNarrative = pickRandom([
+                `${posPronoun} ${tool} slips from your mouth, a strand of saliva briefly connecting you.`,
+                `You release ${posPronoun} ${tool} from your lips, taking a deep breath.`,
+                `${posPronoun} ${tool} pulls free from your mouth, leaving the taste lingering.`
+            ]);
+        } else {
+            pullOutNarrative = `${posPronoun} ${tool} pulls out from you.`;
+        }
+    } else {
+        // Player was the one penetrating — the player's tool pulls out of the NPC
+        if (target === "vagina" || target === "pussy") {
+            pullOutNarrative = pickRandom([
+                `You pull out from ${posPronoun} pussy, the wet folds clinging to your ${tool} as you withdraw.`,
+                `You slide your ${tool} free from ${posPronoun} slick depths, a string of arousal briefly connecting you.`,
+                `You withdraw from ${posPronoun} pussy, the swollen lips slowly pressing back together.`
+            ]);
+        } else if (target === "anus" || target === "ass") {
+            pullOutNarrative = pickRandom([
+                `You pull out from ${posPronoun} anus, the stretched ring slowly clenching shut behind you.`,
+                `You withdraw your ${tool} from ${posPronoun} depths, the loosened sphincter twitching in the open air.`,
+                depth >= 5 ? `You pull out from ${posPronoun} anus, leaving a gape that slowly puckers back.` :
+                `You slide free from ${posPronoun} anus, the ring of muscle fluttering as it tries to close.`
+            ]);
+        } else if (target === "mouth" || target === "lips") {
+            pullOutNarrative = pickRandom([
+                `You pull out from ${posPronoun} mouth, a thin strand of saliva briefly connecting you.`,
+                `You withdraw your ${tool} from ${posPronoun} lips, leaving a wet sheen behind.`,
+                `You slip free from ${posPronoun} mouth, ${posPronoun} jaw working as ${posPronoun} lips close.`
+            ]);
+        } else {
+            pullOutNarrative = `You withdraw from ${posPronoun} ${target}.`;
+        }
     }
-    
+
     // Clear the act tracking
     if (intimacy.lastAction && intimacy.lastAction.actId) {
         delete intimacy.lastAction.actId;
     }
-    
+
     return pullOutNarrative;
 }
 
