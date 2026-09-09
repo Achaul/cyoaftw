@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-025
- * Fixes: non-blocking AI enrichment (show template immediately, cache AI for next time), short response constraint in prompt
+ * Version: 2026-09-08-028
+ * Improves: intimacy AI prompt — polish-only, don't invent new speech (keep existing if present)
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-025";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-028";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2583,32 +2583,27 @@ function buildIntimacyPrompt(context) {
 
     // Construct the full prompt
     const prompt = `
+You are ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}, reacting to a sexual act.
+${npc.temperament ? `Temperament: ${npc.temperament}.` : ""}
+${npc.personalityTraits && npc.personalityTraits.length ? `Traits: ${npc.personalityTraits.join(", ")}.` : ""}
+
 INSTRUCTIONS:
-- Respond as ${npc.name || "the NPC"} reacting to the following intimate action.
-- Write in second person ("you") from ${npc.name || "their"} perspective.
-- Include both the NPC's verbal response AND their physical reaction.
-- Wrap ALL direct speech in <angle brackets>. Example: <Yes, that feels good.>
-- Third-person actions (She sighs, He leans) go OUTSIDE the angle brackets.
-- Be vivid, sensual, and in-character based on the personality traits below.
-- If this is a continuation of a previous action, maintain flow and build on it.
-- Do NOT include the player's action in your response - only the NPC's reaction.
-- Use the base response as a foundation — keep its physical details, sounds, and reactions, but make the language more vivid and natural.
-- Keep your response SHORT: 1-3 sentences maximum. Match the length of the base response.
-- Do NOT write long paragraphs or elaborate prose. Be concise and punchy.
+- Take the BASE RESPONSE below and polish it. Improve sentence structure, make the language more vivid and erotic, but keep the same meaning and details.
+- Keep it PHYSICAL: focus on the sensation of ${action.tool} on ${action.target}, the pressure, the friction, the body's response.
+- Do NOT invent new body parts, actions, or context not in the base response.
+- Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
+- Do NOT invent new dialogue or speech. If the base response has no spoken words, do not add any. Keep existing speech if present, but do not create new lines of dialogue.
+- Keep your response to 1-3 sentences. Match the length of the base response.
+- If the base response includes a sound (grunt, gasp, squeal), keep it.
+- If the base response mentions depth, pressure, or a specific body part, keep that detail.
 ${clothingGuard ? clothingGuard + "\n" : ""}
-CONTEXT:
-- Action: ${actionDesc}
-- ${continuity}
-- ${positionContext}
-- ${clothingContext}
-- ${arousalContext}
-- ${penetrationContext}
-- ${lubeContext}
-${personalityContext}
-${speechContext ? "\n" + speechContext : ""}
+
+ACT: ${action.tool} on ${action.target}, ${action.verb}
+${positionContext} | ${clothingContext} | ${arousalContext} | ${penetrationContext}
 ${anatomyContext ? "\n" + anatomyContext : ""}
 
-${templateContext ? "\n" + templateContext : ""}
+BASE RESPONSE (polish this — keep the same physical details and sounds, make the sentence structure cleaner and the language more erotic):
+"${templateResponse || ""}"
 
 RESPOND:
 `;
