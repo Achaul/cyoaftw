@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-022
- * Fixes: END actions crash in buildActionNarratives (target undefined for pull_out_generic)
+ * Version: 2026-09-08-024
+ * Fixes: ai() scope issue — check both bare `ai` and `window.ai` for Perchance global access
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-022";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-024";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -335,7 +335,7 @@ function cachePenetrationResponse(intimacy, actId, position, depth, text) {
  */
 function prefetchPenetrationContinue(npc, act, intimacy, player) {
     if (!npc || !act || !intimacy) return;
-    if (typeof ai !== 'function') return;
+    if (typeof ai !== 'function' && typeof window.ai !== 'function') return;
     if (act.type !== ACT_TYPES.PENETRATE && act.type !== ACT_TYPES.CONTINUE) return;
 
     var position = (intimacy.position && intimacy.position.player) || "Unknown";
@@ -392,7 +392,7 @@ function prefetchPenetrationContinue(npc, act, intimacy, player) {
         // Fire non-blocking AI call
         (async function() {
             try {
-                var result = await ai({
+                var result = await (typeof ai === "function" ? ai : window.ai)({
                     instruction: prompt,
                     startWith: "",
                     endButtons: "none",
@@ -453,7 +453,8 @@ async function requestLLMEnhancement(npc, act, intimacy, baseNarrative) {
     const enhancementPromise = (async () => {
         try {
             // Only proceed if AI function is available
-            if (typeof ai !== 'function') {
+            var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
+            if (!_ai) {
                 return null;
             }
             
@@ -463,7 +464,7 @@ async function requestLLMEnhancement(npc, act, intimacy, baseNarrative) {
             // Build the prompt
             const prompt = buildLLMEnhancementPrompt(context, hasVerbal);
             
-            const result = await ai({
+            const result = await _ai({
                 instruction: prompt,
                 startWith: "",
                 endButtons: "none",
@@ -2359,12 +2360,18 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     
     // If we have the AI system available, use it for additional variety
     // but blend with our template system
-    if (typeof ai === 'function') {
+    // Note: `ai` is injected by Perchance as a global at runtime, but it may
+    // not be in scope when intimacy-system.js loads as a <script src> tag.
+    // Check both bare `ai` and `window.ai` for safety.
+    var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
+    if (_ai) {
         try {
             // Generate the prompt
             const prompt = buildIntimacyPrompt(context);
-            
-            const result = await ai({
+
+            console.log("[Intimacy AI] Calling ai() for", act.id, "phase:", act.type, "position:", currentPosition);
+
+            const result = await _ai({
                 instruction: prompt,
                 startWith: "",
                 endButtons: "none",
@@ -2372,7 +2379,13 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
             });
             
             const responseText = result && (result.text || result);
-            
+
+            console.log("[Intimacy AI] Response received:", {
+                hasText: !!(responseText && responseText.trim()),
+                hasBrackets: !!(responseText && responseText.includes("<")),
+                textPreview: responseText ? responseText.substring(0, 80) : "(empty)"
+            });
+
             // If AI gives us a good response, use it. Otherwise fall back to finalResponse
             // Also, we can blend: use template for structure, AI for flavor
             if (responseText && responseText.trim() && responseText.includes("<")) {
@@ -2413,6 +2426,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         }
     } else {
         // No AI available, use our best response (LLM-enhanced or template)
+        console.log("[Intimacy AI] ai() NOT available (typeof ai:", typeof ai, ", typeof window.ai:", typeof (typeof window !== 'undefined' ? window.ai : 'undefined'), ") — using template for", act.id);
         return {
             action: act.id,
             type: act.type,

@@ -1357,7 +1357,12 @@ function conversationRepeatAvailable(entry, ctx) {
 function buildConversationOption(entry, npc, ctx) {
     const optionId = String(entry.id || "").trim();
     const label = _npcPickConversationVariant(npc, `${optionId}:label`, entry.labelVariants, entry.label, ctx);
-    const action = _npcResolveConversationValue(entry.action, npc, ctx);
+    // Do NOT resolve the action property via _npcResolveConversationValue —
+    // if it's a function (like ask-to-follow/stop-following/make-a-move), we
+    // need to pass it through as a function reference so it fires on click,
+    // not during menu rendering. String actions ("trade", "intimacy", etc.)
+    // pass through unchanged.
+    const action = typeof entry.action === "function" ? entry.action : _npcResolveConversationValue(entry.action, npc, ctx);
     const promptText = _npcPickConversationVariant(npc, `${optionId}:text`, entry.textVariants, entry.text, ctx);
     const playerText = _npcPickConversationVariant(
         npc,
