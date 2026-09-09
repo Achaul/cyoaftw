@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-024
- * Fixes: ai() scope issue — check both bare `ai` and `window.ai` for Perchance global access
+ * Version: 2026-09-08-025
+ * Fixes: non-blocking AI enrichment (show template immediately, cache AI for next time), short response constraint in prompt
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-024";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-025";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2358,83 +2358,56 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         }
     }
     
-    // If we have the AI system available, use it for additional variety
-    // but blend with our template system
-    // Note: `ai` is injected by Perchance as a global at runtime, but it may
-    // not be in scope when intimacy-system.js loads as a <script src> tag.
-    // Check both bare `ai` and `window.ai` for safety.
+    // ── NON-BLOCKING AI ENRICHMENT ─────────────────────────────────
+    // Instead of blocking while the AI generates a response, we return the
+    // template response immediately and fire a non-blocking AI call in the
+    // background. The AI result is cached for the NEXT time the player does
+    // the same act at the same depth — so the second click gets the AI-
+    // enhanced response instantly.
+    //
+    // This mirrors the talk system's prefetch pattern: show system text now,
+    // use AI enhancement when it's ready (cached for next time).
     var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
-    if (_ai) {
-        try {
-            // Generate the prompt
-            const prompt = buildIntimacyPrompt(context);
 
-            console.log("[Intimacy AI] Calling ai() for", act.id, "phase:", act.type, "position:", currentPosition);
-
-            const result = await _ai({
-                instruction: prompt,
-                startWith: "",
-                endButtons: "none",
-                generatorName: "cyoaftw-engine-core"
-            });
-            
-            const responseText = result && (result.text || result);
-
-            console.log("[Intimacy AI] Response received:", {
-                hasText: !!(responseText && responseText.trim()),
-                hasBrackets: !!(responseText && responseText.includes("<")),
-                textPreview: responseText ? responseText.substring(0, 80) : "(empty)"
-            });
-
-            // If AI gives us a good response, use it. Otherwise fall back to finalResponse
-            // Also, we can blend: use template for structure, AI for flavor
-            if (responseText && responseText.trim() && responseText.includes("<")) {
-                // AI provided a formatted response with angle brackets
-                // Cache it for penetration/continue acts so repeats use the
-                // cached response instead of making another AI call.
-                if ((act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) && intimacy) {
-                    var d = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
-                    cachePenetrationResponse(intimacy, act.id, currentPosition, d, responseText);
+    if (_ai && isSexualAct(act) && intimacy) {
+        // Fire non-blocking AI enrichment for next time
+        (async function() {
+            try {
+                var prompt = buildIntimacyPrompt(context);
+                console.log("[Intimacy AI] Background prefetch for", act.id, "depth:", intimacy.penetration ? intimacy.penetration.depth : 0);
+                var result = await _ai({
+                    instruction: prompt,
+                    startWith: "",
+                    endButtons: "none",
+                    generatorName: "cyoaftw-engine-core"
+                });
+                var responseText = result && (result.text || result);
+                if (responseText && responseText.trim() && responseText.includes("<")) {
+                    // Cache for penetration/continue acts
+                    if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
+                        var d = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
+                        cachePenetrationResponse(intimacy, act.id, currentPosition, d, responseText);
+                    }
+                    // Also cache as LLM enhancement for non-penetration acts
+                    cacheLLMEnhancement(intimacy, act.id, currentPosition, responseText);
+                    console.log("[Intimacy AI] Cached response for", act.id, "(", responseText.substring(0, 60), "...)");
+                } else {
+                    console.log("[Intimacy AI] Response rejected (no brackets or empty) for", act.id);
                 }
-                return {
-                    action: act.id,
-                    type: act.type,
-                    responseText: responseText,
-                    context: context,
-                    _source: "live-ai"
-                };
-            } else {
-                // AI response wasn't good, use our best response (LLM-enhanced or template)
-                return {
-                    action: act.id,
-                    type: act.type,
-                    responseText: finalResponse,
-                    context: context,
-                    _source: finalResponse === templateResponse ? "template" : "llm-enhanced"
-                };
+            } catch (e) {
+                console.warn("[Intimacy AI] Background prefetch failed for", act.id, e);
             }
-        } catch (error) {
-            console.error(`[Intimacy] AI generation failed: ${error}`);
-            // Fall back to best response (LLM-enhanced or template)
-            return {
-                action: act.id,
-                type: act.type,
-                responseText: finalResponse,
-                context: context,
-                _source: finalResponse === templateResponse ? "template" : "llm-enhanced"
-            };
-        }
-    } else {
-        // No AI available, use our best response (LLM-enhanced or template)
-        console.log("[Intimacy AI] ai() NOT available (typeof ai:", typeof ai, ", typeof window.ai:", typeof (typeof window !== 'undefined' ? window.ai : 'undefined'), ") — using template for", act.id);
-        return {
-            action: act.id,
-            type: act.type,
-            responseText: finalResponse,
-            context: context,
-            _source: finalResponse === templateResponse ? "template" : "llm-enhanced"
-        };
+        })();
     }
+
+    // Return template response immediately — no blocking
+    return {
+        action: act.id,
+        type: act.type,
+        responseText: finalResponse,
+        context: context,
+        _source: finalResponse === templateResponse ? "template" : "llm-enhanced"
+    };
 }
 
 /**
@@ -2620,6 +2593,8 @@ INSTRUCTIONS:
 - If this is a continuation of a previous action, maintain flow and build on it.
 - Do NOT include the player's action in your response - only the NPC's reaction.
 - Use the base response as a foundation — keep its physical details, sounds, and reactions, but make the language more vivid and natural.
+- Keep your response SHORT: 1-3 sentences maximum. Match the length of the base response.
+- Do NOT write long paragraphs or elaborate prose. Be concise and punchy.
 ${clothingGuard ? clothingGuard + "\n" : ""}
 CONTEXT:
 - Action: ${actionDesc}
