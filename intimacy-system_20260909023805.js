@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-021
- * Adds: penetration gating (continue requires active penetration, enter blocked if already inside, penis locked while penetrating), generic pull_out_generic with rich withdrawal narration
+ * Version: 2026-09-08-022
+ * Fixes: END actions crash in buildActionNarratives (target undefined for pull_out_generic)
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-021";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-022";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -6368,7 +6368,6 @@ function buildActionNarratives(npc, actionId, act, context) {
     if (act.type === "watersport" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.WATERSPORT)) {
         var peeTarget = target || "body";
         var whose = posPronoun;
-        // Build a natural-sounding target phrase
         var targetPhrase = whose + " " + peeTarget;
         if (peeTarget === "face") targetPhrase = whose + " face";
         else if (peeTarget === "buttocks") targetPhrase = whose + " buttocks";
@@ -6377,6 +6376,14 @@ function buildActionNarratives(npc, actionId, act, context) {
             "You let go, the warm stream trickling down " + targetPhrase + ".",
             "You aim and pee onto " + targetPhrase + ", the warmth spreading across " + whose + " skin."
         ];
+    }
+
+    // END actions (including pull_out_generic): return empty — the narration
+    // is handled by endPenetrationWithNarration / generateEndResponse, not
+    // by buildActionNarratives. Without this guard, target.toLowerCase()
+    // throws since END acts have no target.
+    if (act.type === "end" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.END)) {
+        return [];
     }
 
     // Get rich anatomy description
