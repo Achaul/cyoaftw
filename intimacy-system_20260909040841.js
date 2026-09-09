@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-030
- * Improves: explicit act description in prompt (tool + verb + target + act type), prevent vaginal sex hallucination for non-penetration acts
+ * Version: 2026-09-08-031
+ * Fixes: act/ACT_TYPES not defined in buildIntimacyPrompt and prefetchPenetrationContinue, use string types and getAllActIds
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-030";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-031";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -354,7 +354,7 @@ function cachePenetrationResponse(intimacy, actId, position, depth, text) {
 function prefetchPenetrationContinue(npc, act, intimacy, player) {
     if (!npc || !act || !intimacy) return;
     if (typeof ai !== 'function' && typeof window.ai !== 'function') return;
-    if (act.type !== ACT_TYPES.PENETRATE && act.type !== ACT_TYPES.CONTINUE) return;
+    if (act.type !== "penetrate" && act.type !== "continue") return;
 
     var position = (intimacy.position && intimacy.position.player) || "Unknown";
 
@@ -366,20 +366,16 @@ function prefetchPenetrationContinue(npc, act, intimacy, player) {
 
     // Find all CONTINUE-type acts with the same target and tool
     if (typeof getAct !== 'function') return;
-    // Scan the act definitions for matching continues
-    var allActIds = Object.keys(getAct('kiss_lips') ? ACTS : {});
-    if (!allActIds.length && typeof window !== 'undefined' && window.INTIMACY_ACTS) {
-        allActIds = Object.keys(window.INTIMACY_ACTS);
-    }
+    var allActIds = typeof getAllActIds === 'function' ? getAllActIds() : Object.keys(window.SEX_ACTS || {});
 
-    for (var id in (typeof ACTS !== 'undefined' ? ACTS : (typeof window !== 'undefined' ? window.INTIMACY_ACTS : {}))) {
+    allActIds.forEach(function(id) {
         var candidate = getAct(id);
-        if (!candidate) continue;
-        if (candidate.type !== ACT_TYPES.CONTINUE) continue;
-        if ((candidate.target || "").toLowerCase() !== target) continue;
-        if ((candidate.tool || "").toLowerCase() !== tool) continue;
+        if (!candidate) return;
+        if (candidate.type !== "continue") return;
+        if ((candidate.target || "").toLowerCase() !== target) return;
+        if ((candidate.tool || "").toLowerCase() !== tool) return;
         continueActIds.push(id);
-    }
+    });
 
     // If no specific continues found, use the act itself as continue
     if (!continueActIds.length) {
@@ -2604,15 +2600,15 @@ function buildIntimacyPrompt(context) {
         : "";
 
     // Build the full act description — be explicit about what's happening
-    var actType = act.type === ACT_TYPES.PENETRATE ? "penetration (entering)" :
-                 act.type === ACT_TYPES.CONTINUE ? "continued penetration (thrusting)" :
-                 act.type === ACT_TYPES.TEASE ? "teasing/touching" :
-                 act.type === ACT_TYPES.IMPACT ? "impact (spanking/slapping)" :
-                 act.type === ACT_TYPES.CLOTHING ? "clothing removal" :
-                 act.type === ACT_TYPES.WATERSPORT ? "watersports" :
+    var actTypeName = action.type === "penetrate" ? "penetration (entering)" :
+                 action.type === "continue" ? "continued penetration (thrusting)" :
+                 action.type === "tease" ? "teasing/touching" :
+                 action.type === "impact" ? "impact (spanking/slapping)" :
+                 action.type === "clothing" ? "clothing removal" :
+                 action.type === "watersport" ? "watersports" :
                  "intimate action";
 
-    var actDescription = `The player is using their ${action.tool} to ${action.verb} the NPC's ${action.target}. This is a ${actType} act. The NPC's reaction should be about the sensation of ${action.tool} on ${action.target}, NOT about vaginal sex or penetration unless the act IS penetration.`;
+    var actDescription = `The player is using their ${action.tool} to ${action.verb} the NPC's ${action.target}. This is a ${actTypeName} act. The NPC's reaction should be about the sensation of ${action.tool} on ${action.target}, NOT about vaginal sex or penetration unless the act IS penetration.`;
 
     // Construct the full prompt
     const prompt = `
