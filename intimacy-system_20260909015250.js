@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-017
- * Fixes: remove "scent of skin" and "intimate aroma", fix "resistant"/"tightly clenched" for penetrated anus, fix "hot cavity" repetition, fix "She her" double pronoun
+ * Version: 2026-09-08-019
+ * Adds: _source tagging (cached-ai/live-ai/template/llm-enhanced) for debug mode, penetration continue verb fix
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-017";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-019";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2258,7 +2258,8 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
                 action: act.id,
                 type: act.type,
                 responseText: cached,
-                context: context
+                context: context,
+                _source: "cached-ai"
             };
         }
     }
@@ -2310,7 +2311,8 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
                     action: act.id,
                     type: act.type,
                     responseText: responseText,
-                    context: context
+                    context: context,
+                    _source: "live-ai"
                 };
             } else {
                 // AI response wasn't good, use our best response (LLM-enhanced or template)
@@ -2318,7 +2320,8 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
                     action: act.id,
                     type: act.type,
                     responseText: finalResponse,
-                    context: context
+                    context: context,
+                    _source: finalResponse === templateResponse ? "template" : "llm-enhanced"
                 };
             }
         } catch (error) {
@@ -2328,7 +2331,8 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
                 action: act.id,
                 type: act.type,
                 responseText: finalResponse,
-                context: context
+                context: context,
+                _source: finalResponse === templateResponse ? "template" : "llm-enhanced"
             };
         }
     } else {
@@ -2337,7 +2341,8 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
             action: act.id,
             type: act.type,
             responseText: finalResponse,
-            context: context
+            context: context,
+            _source: finalResponse === templateResponse ? "template" : "llm-enhanced"
         };
     }
 }
@@ -6295,8 +6300,19 @@ function buildActionNarratives(npc, actionId, act, context) {
     const verbPresent = verbConjugation(verbBase, 'present');
     const verbIng = verbConjugation(verbBase, 'ing');
     
-    // For continue actions, modify the verb to indicate continuity
-    const continueVerbPresent = isContinueAction ? `continue to ${verbPresent}` : verbPresent;
+    // For continue actions on penetration acts, DON'T prepend "continue to" —
+    // the player is already inside. The verb should describe ongoing
+    // intercourse, not a re-entry. "You thrust into her" is correct for both
+    // first thrust and continued thrusting. "Continue to thrust" sounds
+    // like the player paused and is starting again.
+    var continueVerbPresent;
+    if (isContinueAction && (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE)) {
+        // Penetration continue: use the verb as-is (no "continue to" prefix)
+        continueVerbPresent = verbPresent;
+    } else {
+        // Non-penetration continue: keep "continue to" prefix
+        continueVerbPresent = isContinueAction ? `continue to ${verbPresent}` : verbPresent;
+    }
     
     // Generate narratives based on action type and target
     switch (target.toLowerCase()) {
