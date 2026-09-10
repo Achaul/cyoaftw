@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-031
- * Fixes: act/ACT_TYPES not defined in buildIntimacyPrompt and prefetchPenetrationContinue, use string types and getAllActIds
+ * Version: 2026-09-08-032
+ * Adds: anti-repetition guard (pickUnique), sensory detail injection (friction, fluids, skin, pubic hair, partial withdrawal), hidden flavor context for AI polish
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-031";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-032";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2624,6 +2624,7 @@ ${anatomyContext ? "\n" + anatomyContext : ""}
 BASE RESPONSE (polish this — keep the same physical details and sounds, make the sentence structure cleaner and the language more erotic):
 "${templateResponse || ""}"
 
+${buildHiddenFlavorContext(npc, action.target, intimacy, { isAroused: isAroused, isWet: isWet, hasLube: hasLube }) ? "\n" + buildHiddenFlavorContext(npc, action.target, intimacy, { isAroused: isAroused, isWet: isWet, hasLube: hasLube }) + "\n" : ""}
 RESPOND:
 `;
 
@@ -2815,6 +2816,267 @@ function getWeightedReaction(reactions, arousalLevel, maxTier) {
 function pickRandom(arr) {
     if (!Array.isArray(arr) || arr.length === 0) return "";
     return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/**
+ * Anti-repetition pickRandom: avoids returning the same result as the
+ * last N outputs. Stores recent picks on intimacy._recentNarratives.
+ */
+function pickUnique(arr, intimacy, key) {
+    if (!Array.isArray(arr) || arr.length === 0) return "";
+    if (!intimacy) return pickRandom(arr);
+    if (!intimacy._recentNarratives) intimacy._recentNarratives = {};
+    if (!intimacy._recentNarratives[key]) intimacy._recentNarratives[key] = [];
+
+    var recent = intimacy._recentNarratives[key];
+    var pool = arr.filter(function(item) { return recent.indexOf(item) === -1; });
+    if (pool.length === 0) { recent.length = 0; pool = arr.slice(); }
+    var pick = pool[Math.floor(Math.random() * pool.length)];
+    recent.push(pick);
+    if (recent.length > 3) recent.shift();
+    return pick;
+}
+
+// ============================================================================
+// SENSORY DETAIL FRAGMENT POOLS
+// Injected into templates at random to add variety and erotic detail.
+// Each fragment is appended to the base narrative sentence.
+// ============================================================================
+
+var SENSORY_FRAGMENTS = {
+    // Friction/sensation — varies by body part
+    friction: {
+        vagina: [
+            ", the slick heat enveloping you",
+            ", her inner walls clinging with each stroke",
+            ", the wet friction pulling at your shaft",
+            ", her depths gripping you with each thrust",
+            ", the soft wet flesh yielding around you"
+        ],
+        anus: [
+            ", the tight ring gripping your shaft",
+            ", the ribbed passage squeezing rhythmically",
+            ", the dry friction giving way to slickness",
+            ", the muscular walls clenching and releasing",
+            ", the tight friction sending sparks through you"
+        ],
+        mouth: [
+            ", the wet warmth of her mouth enveloping you",
+            ", her tongue working against the underside",
+            ", the suction pulling at your tip",
+            ", the slick pressure of her cheeks hollowing around you",
+            ", the wet heat of her throat pulsing"
+        ],
+        breasts: [
+            ", the soft flesh yielding under your touch",
+            ", the warm skin pressing against your palm",
+            ", the firm weight filling your hand"
+        ],
+        buttocks: [
+            ", the firm flesh dimpling under your grip",
+            ", the warm curves filling your palms",
+            ", the soft skin stretching taut as you squeeze"
+        ],
+        general: [
+            ", the warmth of her body against yours",
+            ", the soft skin beneath your touch",
+            ", the heat radiating from her body"
+        ]
+    },
+
+    // Fluid descriptors — only when aroused/lubricated
+    fluids: {
+        vagina: [
+            ", her arousal coating your shaft",
+            ", the slick sounds of her wetness filling the air",
+            ", a thread of her juices stretching between you",
+            ", her slick folds parting easily for you",
+            ", the wet heat of her arousal soaking your skin"
+        ],
+        anus: [
+            ", the lube easing your passage",
+            ", the slick channel accepting you smoothly",
+            ", the slickness letting you glide deeper"
+        ],
+        mouth: [
+            ", saliva dripping from the corners of her mouth",
+            ", the wet sounds of her mouth working you"
+        ],
+        general: [
+            ", her body slick with arousal",
+            ", the wet heat between you growing"
+        ]
+    },
+
+    // Skin/pigmentation — from NPC anatomy
+    skin: {
+        vagina: [
+            ", her {interiorColor} folds parting for you",
+            ", the {skinTone} skin flushing with heat",
+            ", the {interiorColor} of her inner lips glistening"
+        ],
+        anus: [
+            ", the {skinTone} ring of muscle stretching around you",
+            ", the darkened skin puckering with each movement",
+            ", the {skinTone} flesh clenching tight"
+        ],
+        breasts: [
+            ", her {skinTone} skin warm under your hands",
+            ", the {skinTone} curves flushed with arousal"
+        ],
+        general: [
+            ", her {skinTone} skin glowing with heat",
+            ", the {skinTone} flush spreading across her body"
+        ]
+    },
+
+    // Pubic hair — from NPC anatomy
+    pubic: {
+        vagina: [
+            ", parting her {pubicDesc} to reach her depths",
+            ", pressing through her {pubicDesc}",
+            ", her {pubicDesc} brushing against your skin"
+        ],
+        anus: [
+            ", the {pubicDesc} around her hole tickling your shaft",
+            ", the coarse hair dusting her cleft brushing against you"
+        ],
+        general: []
+    },
+
+    // Partial withdrawal mini-narratives (penetration only, 10% chance)
+    partialWithdrawal: [
+        " You pull back until only your tip remains inside, then drive back in.",
+        " You withdraw halfway, the suction tugging at your shaft, before sinking deep again.",
+        " You slide almost fully out, the cool air hitting your wet shaft, then plunge back in.",
+        " You pull back slowly, feeling every inch drag against her walls, before thrusting home."
+    ]
+};
+
+/**
+ * Get a sensory fragment for the current act. Each fragment type has
+ * an independent chance of appearing.
+ * @param {Object} npc - The NPC
+ * @param {string} target - The body part being targeted
+ * @param {Object} intimacy - The intimacy state (for anti-repetition)
+ * @param {Object} options - { isAroused, isWet, hasLube, isPenetration }
+ */
+function getSensoryFragment(npc, target, intimacy, options) {
+    if (!npc || !target) return "";
+    options = options || {};
+
+    var targetKey = "general";
+    var targetLower = String(target).toLowerCase();
+    if (targetLower === "vagina" || targetLower === "pussy") targetKey = "vagina";
+    else if (targetLower === "anus" || targetLower === "ass") targetKey = "anus";
+    else if (targetLower === "mouth" || targetLower === "lips") targetKey = "mouth";
+    else if (targetLower === "breasts" || targetLower === "nipples") targetKey = "breasts";
+    else if (targetLower === "buttocks" || targetLower === "butt" || targetLower === "ass") targetKey = "buttocks";
+
+    var fragments = [];
+
+    // Friction (30% chance)
+    if (Math.random() < 0.30) {
+        var pool = SENSORY_FRAGMENTS.friction[targetKey] || SENSORY_FRAGMENTS.friction.general;
+        if (pool.length) fragments.push(pickUnique(pool, intimacy, "friction"));
+    }
+
+    // Fluids (25% chance, only when aroused/wet/lubed)
+    if (Math.random() < 0.25 && (options.isAroused || options.isWet || options.hasLube)) {
+        var fluidPool = SENSORY_FRAGMENTS.fluids[targetKey] || SENSORY_FRAGMENTS.fluids.general;
+        if (fluidPool.length) fragments.push(pickUnique(fluidPool, intimacy, "fluids"));
+    }
+
+    // Skin/pigmentation (20% chance)
+    if (Math.random() < 0.20) {
+        var skinTone = getSkinDescription(npc) || "";
+        var interiorColor = "";
+        if (targetKey === "vagina") interiorColor = getVaginalInteriorColor(npc) || "";
+        else if (targetKey === "anus") interiorColor = getAnalInteriorColor(npc) || "";
+
+        var skinPool = SENSORY_FRAGMENTS.skin[targetKey] || SENSORY_FRAGMENTS.skin.general;
+        if (skinPool.length && (skinTone || interiorColor)) {
+            var skinFrag = pickUnique(skinPool, intimacy, "skin");
+            skinFrag = skinFrag.replace(/\{skinTone\}/g, skinTone || "flushed");
+            skinFrag = skinFrag.replace(/\{interiorColor\}/g, interiorColor || "pink");
+            fragments.push(skinFrag);
+        }
+    }
+
+    // Pubic hair (15% chance, only for genital targets)
+    if (Math.random() < 0.15 && (targetKey === "vagina" || targetKey === "anus")) {
+        var pubicDesc = getPubicDescription(npc) || "";
+        var pubicPool = SENSORY_FRAGMENTS.pubic[targetKey] || [];
+        if (pubicPool.length && pubicDesc) {
+            var pubicFrag = pickUnique(pubicPool, intimacy, "pubic");
+            pubicFrag = pubicFrag.replace(/\{pubicDesc\}/g, pubicDesc);
+            fragments.push(pubicFrag);
+        }
+    }
+
+    // Partial withdrawal (10% chance, penetration only)
+    if (Math.random() < 0.10 && options.isPenetration) {
+        fragments.push(pickUnique(SENSORY_FRAGMENTS.partialWithdrawal, intimacy, "withdrawal"));
+    }
+
+    return fragments.join("");
+}
+
+/**
+ * Build hidden flavor context for the AI polish prompt. These are
+ * sensory details the AI can optionally weave into its polished response
+ * but are NOT part of the visible template (so the template stays clean).
+ */
+function buildHiddenFlavorContext(npc, target, intimacy, options) {
+    if (!npc || !target) return "";
+    options = options || {};
+
+    var targetKey = "general";
+    var targetLower = String(target).toLowerCase();
+    if (targetLower === "vagina" || targetLower === "pussy") targetKey = "vagina";
+    else if (targetLower === "anus" || targetLower === "ass") targetKey = "anus";
+    else if (targetLower === "mouth" || targetLower === "lips") targetKey = "mouth";
+
+    var flavors = [];
+    var skinTone = getSkinDescription(npc) || "";
+    var pubicDesc = getPubicDescription(npc) || "";
+    var interiorColor = "";
+    if (targetKey === "vagina") interiorColor = getVaginalInteriorColor(npc) || "";
+    else if (targetKey === "anus") interiorColor = getAnalInteriorColor(npc) || "";
+
+    // Friction
+    var frictionPool = SENSORY_FRAGMENTS.friction[targetKey] || SENSORY_FRAGMENTS.friction.general;
+    if (frictionPool.length) flavors.push("Friction: " + pickRandom(frictionPool).replace(/^,\s*/, ""));
+
+    // Fluids
+    if (options.isAroused || options.isWet || options.hasLube) {
+        var fluidPool = SENSORY_FRAGMENTS.fluids[targetKey] || SENSORY_FRAGMENTS.fluids.general;
+        if (fluidPool.length) flavors.push("Fluids: " + pickRandom(fluidPool).replace(/^,\s*/, ""));
+    }
+
+    // Skin
+    if (skinTone || interiorColor) {
+        var skinPool = SENSORY_FRAGMENTS.skin[targetKey] || SENSORY_FRAGMENTS.skin.general;
+        if (skinPool.length) {
+            var skinFrag = pickRandom(skinPool).replace(/^,\s*/, "");
+            skinFrag = skinFrag.replace(/\{skinTone\}/g, skinTone || "flushed");
+            skinFrag = skinFrag.replace(/\{interiorColor\}/g, interiorColor || "pink");
+            flavors.push("Skin: " + skinFrag);
+        }
+    }
+
+    // Pubic hair
+    if (pubicDesc && (targetKey === "vagina" || targetKey === "anus")) {
+        var pubicPool = SENSORY_FRAGMENTS.pubic[targetKey] || [];
+        if (pubicPool.length) {
+            var pubicFrag = pickRandom(pubicPool).replace(/^,\s*/, "");
+            pubicFrag = pubicFrag.replace(/\{pubicDesc\}/g, pubicDesc);
+            flavors.push("Pubic hair: " + pubicFrag);
+        }
+    }
+
+    if (!flavors.length) return "";
+    return "HIDDEN FLAVOR (optional — weave 1-2 of these into your polish if they fit):\n" + flavors.join("\n");
 }
 
 /**
@@ -5929,9 +6191,24 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     
     // Determine action category and generate appropriate narrative
     const narratives = buildActionNarratives(npc, actionId, act, { ...context, isContinueAction });
-    
-    // Pick a narrative based on context
-    let finalNarrative = pickRandom(narratives);
+
+    // Pick a narrative, avoiding recent repeats (anti-repetition)
+    let finalNarrative = pickUnique(narratives, intimacy, "narrative");
+
+    // Inject sensory fragments (friction, fluids, skin, pubic hair, partial withdrawal)
+    // These add variety and erotic detail to otherwise repetitive templates.
+    if (finalNarrative) {
+        var sensory = getSensoryFragment(npc, act.target, intimacy, {
+            isAroused: isAroused,
+            isWet: isWet,
+            hasLube: intimacy ? intimacy.hasLube : false,
+            isPenetration: act.type === "penetrate" || act.type === "continue"
+        });
+        if (sensory) {
+            // Append sensory fragments before the final period
+            finalNarrative = finalNarrative.replace(/\.$/, sensory + ".");
+        }
+    }
 
     // When we have a transition/initial-contact narrative, use ONLY that as
     // the player narration. The transition already describes the action
