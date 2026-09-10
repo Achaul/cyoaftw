@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-033
- * Improves: AI prompt style guide — direct, physical, grounded prose with do/don't examples
+ * Version: 2026-09-08-036
+ * Adds: size difference sensory fragments (25% chance when sizes differ), player passed to getSensoryFragment
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-033";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-036";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2601,37 +2601,39 @@ function buildIntimacyPrompt(context) {
 
     // Construct the full prompt
     const prompt = `
-You are ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}, reacting to a sexual act.
-${npc.temperament ? `Temperament: ${npc.temperament}.` : ""}
-${npc.personalityTraits && npc.personalityTraits.length ? `Traits: ${npc.personalityTraits.join(", ")}.` : ""}
+You are polishing a sentence from a sex scene in a text adventure game.
+The NPC is ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}.${npc.temperament ? ` Temperament: ${npc.temperament}.` : ""}${npc.personalityTraits && npc.personalityTraits.length ? ` Traits: ${npc.personalityTraits.join(", ")}.` : ""}
 
 INSTRUCTIONS:
-- Take the BASE RESPONSE below and polish it. Improve sentence structure, make the language more vivid and erotic, but keep the same meaning and details.
-- ${actDescription}
+- Fix grammar, polish sentence structure, and refine the BASE RESPONSE below. Make it read like a clean, well-written sentence in a published novel — not a rough draft.
+- Make the language more vivid and erotic, but keep the same meaning, the same act, and the same details. Do NOT invent anything new.
+- The act: ${action.tool} ${action.verb} ${action.target} (${actTypeName}).${actDescription.includes("NOT about vaginal sex") ? " Do NOT describe penetration or vaginal sex unless the base response describes it." : ""}
 - Do NOT invent new body parts, actions, or context not in the base response.
-- Do NOT describe penetration or vaginal sex unless the base response describes it.
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
-- Do NOT invent new dialogue or speech. If the base response has no spoken words, do not add any. Keep existing speech if present, but do not create new lines of dialogue.
-- Keep your response to 1-3 sentences. Match the length of the base response exactly.
+- Do NOT invent new dialogue or speech. Keep existing speech if present, do not add new lines of dialogue.
+- Keep your response to 1-3 sentences. Match the length of the base response.
 - If the base response includes a sound (grunt, gasp, squeal), keep it.
 - If the base response mentions depth, pressure, or a specific body part, keep that detail.
 
-STYLE — write direct, physical, grounded prose:
-- Describe what the body DOES and FEELS. Use literal language: "press", "grip", "slide", "clench", "yield".
-- Do NOT use metaphors or abstract imagery. No "anchored to the heat", no "drowning in sensation", no "waves of electricity".
-- Do NOT use flowery or poetic language. No "garden of delights", no "temple of desire", no "sacred valley".
+STYLE — write clear, direct, grammatically correct English:
+- Use proper sentence structure. Subject, verb, object. Complete sentences. No fragments, no run-ons.
+- Describe what the body does and feels. Use literal language: "press", "grip", "slide", "clench", "yield".
+- Do NOT use metaphors or abstract imagery. No "anchored to the heat", no "drowning in sensation".
+- Do NOT use flowery or poetic language. No "garden of delights", no "temple of desire".
+- Write in the same perspective as the base response. If it's second person ("You spread..."), keep it second person. If it's third person ("She arches..."), keep it third person.
 - RIGHT: "You press your cock against her slick folds, the wet heat parting around your tip."
 - RIGHT: "She clenches around your shaft, the tight ring of muscle gripping you with each thrust."
 - WRONG: "Your fingers remain anchored to the heat of her flushed backside."
-- WRONG: "Waves of pleasure crash through her like a storm upon the shore."
+- WRONG: "Forcing her glutes wide, you lay bare the dusky ring of her anus, the velvet skin stretching taut and translucent under the pressure of your grip."
 - Be raw. Be direct. Use the body part names, the tool names, the action verbs. Nothing more.
 ${clothingGuard ? clothingGuard + "\n" : ""}
 
-ACT: ${action.tool} ${action.verb} ${action.target} (${actType})
+ACT: ${action.tool} ${action.verb} ${action.target} (${actTypeName})
 ${positionContext} | ${clothingContext} | ${arousalContext} | ${penetrationContext}
 ${anatomyContext ? "\n" + anatomyContext : ""}
+${getSizeContext(player, npc) ? "\n" + getSizeContext(player, npc) : ""}
 
-BASE RESPONSE (polish this — keep the same physical details and sounds, make the sentence structure cleaner and the language more erotic):
+BASE RESPONSE (polish this — fix grammar, refine the language, make it more erotic, but keep the same meaning and details):
 "${templateResponse || ""}"
 
 ${buildHiddenFlavorContext(npc, action.target, intimacy, { isAroused: isAroused, isWet: isWet, hasLube: hasLube }) ? "\n" + buildHiddenFlavorContext(npc, action.target, intimacy, { isAroused: isAroused, isWet: isWet, hasLube: hasLube }) + "\n" : ""}
@@ -2960,7 +2962,36 @@ var SENSORY_FRAGMENTS = {
         " You withdraw halfway, the suction tugging at your shaft, before sinking deep again.",
         " You slide almost fully out, the cool air hitting your wet shaft, then plunge back in.",
         " You pull back slowly, feeling every inch drag against her walls, before thrusting home."
-    ]
+    ],
+
+    // Size difference descriptors — only injected when player and NPC differ
+    // in size. Uses {frameDesc} placeholder replaced with the relative size phrase.
+    sizeDifference: {
+        "player-larger": [
+            ", her small frame dwarfed beneath you",
+            ", her petite body struggling to take your full size",
+            ", her smaller frame fitting beneath you like she was made for it",
+            ", the size difference making her gasp with each thrust"
+        ],
+        "player-much-larger": [
+            ", her tiny body barely able to accommodate your girth",
+            ", the sheer size difference stretching her to her limit",
+            ", her small frame shaking as your cock fills her completely",
+            ", her diminutive body trembling under your much larger frame"
+        ],
+        "npc-larger": [
+            ", her larger body enveloping you with warmth",
+            ", her ample frame pressing against you with weight and heat",
+            ", her size making your cock feel small inside her",
+            ", her bigger body swallowing you in its depths"
+        ],
+        "npc-much-larger": [
+            ", her massive frame dwarfing you beneath her",
+            ", her enormous body engulfing your cock with ease",
+            ", the size difference making you feel small inside her",
+            ", her towering body pressing you down with its weight"
+        ]
+    }
 };
 
 /**
@@ -3027,6 +3058,16 @@ function getSensoryFragment(npc, target, intimacy, options) {
     // Partial withdrawal (10% chance, penetration only)
     if (Math.random() < 0.10 && options.isPenetration) {
         fragments.push(pickUnique(SENSORY_FRAGMENTS.partialWithdrawal, intimacy, "withdrawal"));
+    }
+
+    // Size difference (25% chance, only when sizes differ)
+    if (options.player) {
+        var rel = getRelativeSize(options.player, npc);
+        if (rel && SENSORY_FRAGMENTS.sizeDifference[rel]) {
+            if (Math.random() < 0.25) {
+                fragments.push(pickUnique(SENSORY_FRAGMENTS.sizeDifference[rel], intimacy, "size"));
+            }
+        }
     }
 
     return fragments.join("");
@@ -6144,6 +6185,10 @@ if (typeof window !== 'undefined') {
     window.getAnalInteriorColor = getAnalInteriorColor;
     window.getScentDescriptor = getScentDescriptor;
     window.isAnalEntryEasy = isAnalEntryEasy;
+    window.getNPCSize = getNPCSize;
+    window.getPlayerSize = getPlayerSize;
+    window.getRelativeSize = getRelativeSize;
+    window.getSizeContext = getSizeContext;
     window.isCivilizedSpecies = isCivilizedSpecies;
     window.canNPCSpeak = canNPCSpeak;
     window.getNPCDialogueStyle = getNPCDialogueStyle;
@@ -6209,6 +6254,7 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     // These add variety and erotic detail to otherwise repetitive templates.
     if (finalNarrative) {
         var sensory = getSensoryFragment(npc, act.target, intimacy, {
+            player: player,
             isAroused: isAroused,
             isWet: isWet,
             hasLube: intimacy ? intimacy.hasLube : false,
@@ -7485,10 +7531,25 @@ function buildThighNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
  */
 function getSkinDescription(npc) {
     if (!npc) return "";
-    
-    const skinTone = (npc.skinTone || "").toLowerCase();
-    if (!skinTone) return "";
-    
+
+    // Try npc.skinTone first (set during NPC creation)
+    var skinTone = (npc.skinTone || "").toLowerCase();
+
+    // If no skinTone, check nsfw anatomy body color
+    if (!skinTone && npc.nsfwTraits && npc.nsfwTraits.anatomy) {
+        var body = npc.nsfwTraits.anatomy.body || {};
+        skinTone = (body.color || "").toLowerCase();
+    }
+
+    // Also check surfaceColor (covers fur, scales, etc.)
+    var surfaceColor = (npc.surfaceColor || "").toLowerCase();
+    var surfaceType = (npc.surfaceType || "skin").toLowerCase();
+
+    if (!skinTone && !surfaceColor) return "";
+
+    // Use surfaceColor as fallback if skinTone is empty (non-human skin types)
+    var effectiveTone = skinTone || surfaceColor;
+
     const skinDescriptors = {
         // Human-like skin tones
         'pale': ["pale", "ivory", "fair", "alabaster"],
@@ -7497,8 +7558,7 @@ function getSkinDescription(npc) {
         'olive': ["olive", "warm olive", "mediterranean", "dusky"],
         'brown': ["brown", "deep brown", "caramel", "mahogany"],
         'dark brown': ["dark brown", "rich chocolate", "espresso", "deep umber"],
-        'black': ["dark", "ebony", "midnight", " obsidian"],
-        
+        'black': ["dark", "ebony", "midnight", "obsidian"],
         // Fantasy skin tones
         'warm ivory': ["warm ivory", "creamy", "pearl-like", "soft ivory"],
         'copper': ["copper", "bronze", "russet", "burnished"],
@@ -7521,11 +7581,28 @@ function getSkinDescription(npc) {
         'dark green': ["dark green", "forest", "deep emerald", "mossy green"],
         'gray': ["gray", "silver-gray", "steel", "pewter"],
         'mottled': ["mottled", "patchwork", "speckled", "dappled"],
-        'pale': ["pale", "wan", "ghostly", "milky"]
+        'pale blue': ["pale blue", "icy", "frost-kissed", "cerulean"],
+        'silver-white': ["silver-white", "luminous", "moon-pale", "ethereal"],
+        'faint green': ["faint green", "pale verdant", "ghostly green", "wisp-green"],
+        'smoky gray': ["smoky gray", "misty", "fog-colored", "shadow-touched"],
+        'candlelit gold': ["candlelit gold", "amber", "gilded", "warm gold"],
+        'sun-browned': ["sun-browned", "weathered tan", "leathery", "wind-kissed"],
+        'warm tan': ["warm tan", "golden-brown", "honey-toned", "amber"],
+        'ash-white': ["ash-white", "bone-pale", "chalky", "bleached"],
+        'ivory': ["ivory", "bone-white", "alabaster", "pearl"],
+        'deep green': ["deep green", "forest", "emerald", "pine"],
+        'olive': ["olive", "warm olive", "mediterranean", "dusky"]
     };
-    
-    const descriptors = skinDescriptors[skinTone] || [skinTone];
-    return pickRandom(descriptors);
+
+    const descriptors = skinDescriptors[effectiveTone] || [effectiveTone];
+    var desc = pickRandom(descriptors);
+
+    // Include surface type if it's not "skin" (fur, scales, hide, etc.)
+    if (surfaceType && surfaceType !== "skin") {
+        desc = desc + " " + surfaceType;
+    }
+
+    return desc;
 }
 
 /**
@@ -7537,31 +7614,113 @@ function getSkinDescription(npc) {
  * @param {Object} player - The player
  * @returns {boolean} - True if anal penetration should be easy
  */
+// ============================================================================
+// RELATIVE SIZE SYSTEM
+// ============================================================================
+
+/**
+ * Get the size of an NPC from its species template or anatomy.
+ * Returns: "tiny", "small", "medium", "large", "huge", or "medium" (default).
+ */
+function getNPCSize(npc) {
+    if (!npc) return "medium";
+    // Check anatomy first (from nsfw traits)
+    if (npc.anatomy && (npc.anatomy.size || npc.anatomy.bodySize)) {
+        return String(npc.anatomy.size || npc.anatomy.bodySize).toLowerCase();
+    }
+    // Check nsfw traits
+    if (npc.nsfwTraits && npc.nsfwTraits.size) {
+        return String(npc.nsfwTraits.size).toLowerCase();
+    }
+    // Fall back to species template
+    if (typeof getSpeciesTemplate === "function") {
+        var template = getSpeciesTemplate(npc.species);
+        if (template && template.size) return String(template.size).toLowerCase();
+    }
+    // Check for species-based size (from world data via window)
+    if (typeof window !== "undefined" && typeof window.getSpeciesTemplate === "function") {
+        var template = window.getSpeciesTemplate(npc.species);
+        if (template && template.size) return String(template.size).toLowerCase();
+    }
+    return "medium";
+}
+
+/**
+ * Get the player's size. Player has no anatomy or species, so default to
+ * "medium" (Human-sized). Could be extended to read from a player size
+ * field if one is added in the future.
+ */
+function getPlayerSize(player) {
+    if (!player) return "medium";
+    if (player.size) return String(player.size).toLowerCase();
+    if (player.anatomy && player.anatomy.size) return String(player.anatomy.size).toLowerCase();
+    if (player.stats && player.stats.size) return String(player.stats.size).toLowerCase();
+    return "medium"; // Default: Human-sized player
+}
+
+var SIZE_ORDER = ["tiny", "small", "medium", "large", "huge", "gigantic"];
+
+/**
+ * Compare player and NPC sizes. Returns a descriptor for the AI prompt
+ * and template narratives:
+ * - "" (same size or unknown — omit)
+ * - "player-larger" (player is at least 1 size category larger)
+ * - "npc-larger" (NPC is at least 1 size category larger)
+ * - "player-much-larger" (2+ categories larger)
+ * - "npc-much-larger" (2+ categories larger)
+ */
+function getRelativeSize(player, npc) {
+    var pSize = getPlayerSize(player);
+    var nSize = getNPCSize(npc);
+    var pIdx = SIZE_ORDER.indexOf(pSize);
+    var nIdx = SIZE_ORDER.indexOf(nSize);
+    if (pIdx < 0) pIdx = 2; // default medium
+    if (nIdx < 0) nIdx = 2;
+    var diff = pIdx - nIdx;
+    if (diff === 0) return "";
+    if (diff >= 2) return "player-much-larger";
+    if (diff === 1) return "player-larger";
+    if (diff <= -2) return "npc-much-larger";
+    if (diff === -1) return "npc-larger";
+    return "";
+}
+
+/**
+ * Get a human-readable size descriptor for the AI prompt.
+ * Only returns text when sizes differ. Same size returns "".
+ */
+function getSizeContext(player, npc) {
+    var rel = getRelativeSize(player, npc);
+    if (!rel) return "";
+    if (rel === "player-larger") return "Size: the player is larger than the NPC. The NPC's body is smaller, making orifices tighter and the frame more delicate beneath the player.";
+    if (rel === "player-much-larger") return "Size: the player is much larger than the NPC. The size difference is significant — the NPC is small compared to the player, and their body struggles to accommodate the player's larger frame.";
+    if (rel === "npc-larger") return "Size: the NPC is larger than the player. The NPC's body is bigger, with more mass and deeper orifices that envelop the player more fully.";
+    if (rel === "npc-much-larger") return "Size: the NPC is much larger than the player. The size difference is significant — the NPC's large frame dwarfs the player, and their body can easily accommodate or overwhelm the player.";
+    return "";
+}
+
+/**
+ * Check if anal entry should be easy (based on prior use or size advantage)
+ * Returns true if: already penetrated, or NPC is larger than player.
+ */
 function isAnalEntryEasy(npc, player) {
     if (!npc) return false;
-    
+
     // Check if anus has already been penetrated in this encounter
     const penetration = npc.intimacy && npc.intimacy.penetration;
     if (penetration && penetration.target === 'anus' && penetration.active) {
         return true; // Already penetrated - easier to continue
     }
-    
-    // Check size comparison - if NPC is larger, it's easier
-    // This is a simplification; in reality, larger NPC might have larger opening
-    if (player && player.anatomy && npc.anatomy) {
-        const playerSize = (player.anatomy.size || player.anatomy.bodySize || "").toLowerCase();
-        const npcSize = (npc.anatomy.size || npc.anatomy.bodySize || "").toLowerCase();
-        
-        const sizeOrder = ['petite', 'small', 'average', 'medium', 'large', 'huge', 'gigantic'];
-        const playerSizeIndex = sizeOrder.indexOf(playerSize);
-        const npcSizeIndex = sizeOrder.indexOf(npcSize);
-        
-        // If NPC is larger than player by at least one size category
-        if (npcSizeIndex > playerSizeIndex + 0) {
+
+    // Check size comparison using the new relative size system
+    if (player && npc) {
+        var rel = getRelativeSize(player, npc);
+        // If NPC is larger, anal entry is easier (larger orifice)
+        if (rel === 'npc-larger' || rel === 'npc-much-larger') {
             return true;
         }
     }
-    
+
     return false; // Default: sphincters are tight and resistant
 }
 
