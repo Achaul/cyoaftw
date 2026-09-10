@@ -2357,38 +2357,28 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         }
     }
 
+    // ── CACHED RESPONSE CHECK ─────────────────────────────────────
+    // Check LLM enhancement cache for non-penetration sexual acts.
+    // Penetration acts already checked above (penetration cache).
+    // Purge after use so responses don't repeat.
     if (isSexualAct(act) && intimacy) {
-        // Ensure LLM enhancement is initialized (handles legacy saved games)
         initializeLLMEnhancement(intimacy);
-
-        // Try to get cached enhancement
         const cachedEnhancement = getCachedLLMEnhancement(intimacy, act.id, currentPosition);
         if (cachedEnhancement) {
             finalResponse = cachedEnhancement;
-            // Purge after use so it doesn't repeat
             purgeCachedLLMEnhancement(intimacy, act.id, currentPosition);
-        } else {
-            // Fire off non-blocking enhancement request for future use
-            // This will cache the result when it completes
-            requestLLMEnhancement(npc, act, intimacy, templateResponse).catch(e => {
-                console.warn(`[Intimacy LLM] Enhancement request failed:`, e);
-            });
         }
     }
-    
-    // ── NON-BLOCKING AI ENRICHMENT ─────────────────────────────────
-    // Instead of blocking while the AI generates a response, we return the
-    // template response immediately and fire a non-blocking AI call in the
-    // background. The AI result is cached for the NEXT time the player does
-    // the same act at the same depth — so the second click gets the AI-
-    // enhanced response instantly.
-    //
-    // This mirrors the talk system's prefetch pattern: show system text now,
-    // use AI enhancement when it's ready (cached for next time).
+
+    // ── NON-BLOCKING AI PREFETCH ──────────────────────────────────
+    // Fire a single non-blocking AI call to polish the template response.
+    // The result is cached for the NEXT time the player does the same act
+    // at the same position/depth. This is the ONLY AI path — the old
+    // requestLLMEnhancement system is disabled to prevent double-caching
+    // and conflicting responses.
     var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
 
     if (_ai && isSexualAct(act) && intimacy) {
-        // Fire non-blocking AI enrichment for next time
         (async function() {
             try {
                 var prompt = buildIntimacyPrompt(context);
@@ -2401,13 +2391,12 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
                 });
                 var responseText = result && (result.text || result);
                 if (responseText && responseText.trim()) {
-                    // Cache for penetration/continue acts
                     if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
                         var d = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
                         cachePenetrationResponse(intimacy, act.id, currentPosition, d, responseText);
+                    } else {
+                        cacheLLMEnhancement(intimacy, act.id, currentPosition, responseText);
                     }
-                    // Also cache as LLM enhancement for non-penetration acts
-                    cacheLLMEnhancement(intimacy, act.id, currentPosition, responseText);
                     console.log("[Intimacy AI] Cached response for", act.id, "(", responseText.substring(0, 60), "...)");
                 } else {
                     console.log("[Intimacy AI] Response rejected (empty) for", act.id);
@@ -2424,7 +2413,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         type: act.type,
         responseText: finalResponse,
         context: context,
-        _source: finalResponse === templateResponse ? "template" : "llm-enhanced"
+        _source: finalResponse === templateResponse ? "template" : "cached-ai"
     };
 }
 
