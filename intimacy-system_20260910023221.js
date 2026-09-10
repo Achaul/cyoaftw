@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-032
- * Adds: anti-repetition guard (pickUnique), sensory detail injection (friction, fluids, skin, pubic hair, partial withdrawal), hidden flavor context for AI polish
+ * Version: 2026-09-08-033
+ * Improves: AI prompt style guide — direct, physical, grounded prose with do/don't examples
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-032";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-033";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2615,6 +2615,16 @@ INSTRUCTIONS:
 - Keep your response to 1-3 sentences. Match the length of the base response exactly.
 - If the base response includes a sound (grunt, gasp, squeal), keep it.
 - If the base response mentions depth, pressure, or a specific body part, keep that detail.
+
+STYLE — write direct, physical, grounded prose:
+- Describe what the body DOES and FEELS. Use literal language: "press", "grip", "slide", "clench", "yield".
+- Do NOT use metaphors or abstract imagery. No "anchored to the heat", no "drowning in sensation", no "waves of electricity".
+- Do NOT use flowery or poetic language. No "garden of delights", no "temple of desire", no "sacred valley".
+- RIGHT: "You press your cock against her slick folds, the wet heat parting around your tip."
+- RIGHT: "She clenches around your shaft, the tight ring of muscle gripping you with each thrust."
+- WRONG: "Your fingers remain anchored to the heat of her flushed backside."
+- WRONG: "Waves of pleasure crash through her like a storm upon the shore."
+- Be raw. Be direct. Use the body part names, the tool names, the action verbs. Nothing more.
 ${clothingGuard ? clothingGuard + "\n" : ""}
 
 ACT: ${action.tool} ${action.verb} ${action.target} (${actType})
