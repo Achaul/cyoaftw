@@ -953,6 +953,9 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
       setTimeout(extendChooseChatOption, 1000);
       return;
     }
+    // Don't double-wrap
+    if (window.chooseChatOption._nsfwWrapped) return;
+
     const orig = window.chooseChatOption;
     window.chooseChatOption = function(option) {
       const result = orig.apply(this, arguments);
@@ -986,7 +989,12 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
       
       return result;
     };
+    window.chooseChatOption._nsfwWrapped = true;
   }
+
+  // Expose so the engine can re-apply the wrapper after it overwrites
+  // window.chooseChatOption (the engine loads after the nsfw system).
+  window._nsfwWrapChooseChatOption = extendChooseChatOption;
 
   function extendAdvanceStoryTurn() {
     if (typeof window.advanceStoryTurn !== "function") {
