@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-11-009
+ * Version: 2026-09-11-010
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-009";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-010";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -825,7 +825,8 @@ function resetIntimacyState(npc) {
             hasAnalPee: false,
             impactCount: 0,
             impactToleranceReached: false,
-            nipplePlayCount: 0
+            nipplePlayCount: 0,
+            analEjaculationCount: 0
         },
         fertility: {
             isFertile: npcGender === "female" ? false : null,
@@ -898,7 +899,8 @@ function endIntimacyEncounter(npc) {
         hasAnalPee: false,
         impactCount: 0,
         impactToleranceReached: false,
-        nipplePlayCount: 0
+        nipplePlayCount: 0,
+        analEjaculationCount: 0
     };
     
     // Clear last action and history so the next encounter starts fresh
@@ -2156,6 +2158,11 @@ function handleClimax(npc, player, act, intimacy) {
             intimacy.climax.lastInternalEjaculation = ejaculationTarget;
             intimacy.climax.hasInternalEjaculation = true;
             result.internalEjaculation = ejaculationTarget;
+            // Track anal ejaculation count for "full bowels" effects
+            if (ejaculationTarget === "anus") {
+                if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
+                intimacy.encounterFlags.analEjaculationCount = (intimacy.encounterFlags.analEjaculationCount || 0) + 1;
+            }
         }
     }
     
@@ -3611,6 +3618,11 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     const matchingEjaculation = ejaculationTarget && ((isVaginalPenetration && ejaculationTarget === "vagina") || (isAnalPenetration && ejaculationTarget === "anus"));
     // Cum in cavity: 50% chance for cum-specific descriptions during continue
     const shouldSemenDrip = matchingEjaculation && Math.random() < 0.50;
+
+    // Track anal ejaculation count for "full bowels" / "distended stomach" effects
+    const analCumCount = (intimacy && intimacy.encounterFlags && intimacy.encounterFlags.analEjaculationCount) || 0;
+    const isBowelsFull = isAnalPenetration && analCumCount >= 5;
+    const isBowelsStuffed = isAnalPenetration && analCumCount >= 10;
     
     // Arousal level for climax approach narratives
     const npcArousal = intimacy ? intimacy.arousal.npc : 0;
@@ -4027,6 +4039,23 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
 
     // Scent descriptors are now added in the player narrative builder functions
     // to avoid double insertion, so we skip adding them here
+
+    // ── FULL BOWELS / DISTENDED STOMACH (anal, continue phase) ────
+    // When cummed into 5+ times, describe fullness. At 10+, describe visible
+    // stomach distension. These append to the existing response.
+    if (isBowelsStuffed && phase === "continue" && Math.random() < 0.50) {
+        response = response.replace(/\.$/, "") + pickRandom([
+            ` ${posPronoun} stomach bulges visibly, round and distended from the sheer amount of cum packed into ${posPronoun} bowels.`,
+            ` You can see ${posPronoun} belly swelling, the skin taut and rounded — stuffed full of your loads.`,
+            ` ${posPronoun} distended gut presses against the surface beneath ${posPronoun}, heavy and full with all the cum you've pumped inside.`
+        ]);
+    } else if (isBowelsFull && phase === "continue" && Math.random() < 0.40) {
+        response = response.replace(/\.$/, "") + pickRandom([
+            ` ${posPronoun} bowels feel heavy and full, packed with ${analCumCount} loads of your cum.`,
+            ` "So full," ${subjectPronoun.toLowerCase()} murmurs, ${posPronoun} stomach heavy with the cum you've left inside.`,
+            ` You can feel the slick mess of ${analCumCount} loads squelching inside ${posPronoun} with each thrust.`
+        ]);
+    }
 
     // ── TRAPPED AIR / FART EFFECTS (anal, continue phase) ─────────
     // Trapped air from deep anal penetration escapes, producing sounds
@@ -5632,6 +5661,40 @@ function endPenetrationWithNarration(npc, intimacy, reason = "transition") {
                 depth >= 5 ? `You pull out from ${posPronoun} anus, leaving a gape that slowly puckers back.` :
                 `You slide free from ${posPronoun} anus, the ring of muscle fluttering as it tries to close.`
             ]);
+            // ── CUM OVERFLOW: messy release when bowels are full ──
+            var analCum = (intimacy.encounterFlags && intimacy.encounterFlags.analEjaculationCount) || 0;
+            if (analCum >= 5) {
+                var subjPronoun = (typeof getSubjectPronoun === "function" ? getSubjectPronoun(npc) : "She") || "she";
+                var isMassive = analCum >= 10;
+                var overflowLine = isMassive
+                    ? pickRandom([
+                        ` The moment you pull free, a flood of cum gushes from ${posPronoun} gaping hole, thick rivers of it running down ${posPronoun} thighs and pooling on the floor below. ${subjPronoun} groans, ${posPronoun} stomach visibly distended from the sheer volume inside ${posPronoun}.`,
+                        ` Cum pours out of ${posPronoun} ruined ass in thick, white streams, splattering the ground beneath. ${posPronoun} belly is rounded and swollen, the skin stretched taut with the load you've left inside. ${subjPronoun} whimpers, barely able to stay upright.`,
+                        ` As your ${tool} slides free, ${posPronoun} stretched hole gapes and releases — a heavy, messy gush of cum bubbling out and dripping down ${posPronoun} legs. ${posPronoun} stomach bulges out, full and round, and ${subjPronoun} lets out a shaky "so full..."`
+                    ])
+                    : pickRandom([
+                        ` As you withdraw, a thick stream of cum dribbles from ${posPronoun} stretched hole, running down ${posPronoun} thighs. ${subjPronoun} lets out a shaky breath. "So full..."`,
+                        ` Your cum leaks from ${posPronoun} loosened sphincter in a steady trickle, pooling between ${posPronoun} legs. ${subjPronoun} shivers, ${posPronoun} bowels full and heavy with your load.`,
+                        ` The moment you pull out, cum bubbles and squelches from ${posPronoun} gaping hole, thick drools of it sliding down ${posPronoun} skin. "I'm so full," ${subjPronoun.toLowerCase()} murmurs.`
+                    ]);
+                pullOutNarrative += overflowLine;
+                // High chance of involuntary peeing during release
+                if (Math.random() < 0.60) {
+                    pullOutNarrative += pickRandom([
+                        ` The pressure of the release triggers something — a warm stream of piss joins the mess, running down ${posPronoun} legs. ${subjPronoun} gasps and tries to clamp down, but can't stop it.`,
+                        ` ${subjPronoun} loses control, a spurt of urine mixing with the cum dripping from ${posPronoun} ass, the wet mess spreading beneath ${posPronoun}.`,
+                        ` The overwhelming fullness forces a release — ${subjPronoun.toLowerCase()} pees, the hot stream adding to the puddle of cum between ${posPronoun} thighs.`
+                    ]);
+                }
+                // 40% chance of collapsing
+                if (Math.random() < 0.40) {
+                    pullOutNarrative += pickRandom([
+                        ` ${subjPronoun} legs give out, and ${subjPronoun.toLowerCase()} sinks to the floor, cum and piss still leaking from ${posPronoun} ruined hole.`,
+                        ` ${subjPronoun} collapses forward onto ${posPronoun} knees, ${posPronoun} ass in the air, the mess continuing to drain from ${posPronoun} stretched hole.`,
+                        ` Overwhelmed, ${subjPronoun.toLowerCase()} slumps down, ${posPronoun} body trembling as the cum continues to leak out of ${posPronoun} well-used ass.`
+                    ]);
+                }
+            }
         } else if (target === "mouth" || target === "lips") {
             pullOutNarrative = pickRandom([
                 `You pull out from ${posPronoun} mouth, a thin strand of saliva briefly connecting you.`,
