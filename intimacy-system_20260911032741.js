@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-10-002
+ * Version: 2026-09-10-006
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-10-002";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-10-006";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2812,6 +2812,16 @@ function getArousalDescriptor(level) {
 }
 
 /**
+ * Convert arousal from 0-800 scale to 0-100 scale.
+ * The intimacy system stores arousal on a 0-800 scale (ORGASM_THRESHOLD=800),
+ * but the reaction/dialogue helper functions use 0-100 thresholds.
+ */
+function scaleArousal(arousalLevel) {
+    if (typeof arousalLevel !== 'number') return 0;
+    return Math.min(100, Math.max(0, Math.round(arousalLevel / 8)));
+}
+
+/**
  * Get body part reaction intensity based on arousal
  */
 function getReactionIntensity(arousalLevel) {
@@ -3219,10 +3229,10 @@ var BODY_PART_REACTIONS = {
     
     // Breasts/Nipples
     breasts: {
-        mild: ["breathes a little faster", "lets out a soft sigh", "glances at you shyly", "bits her lip"],
-        moderate: ["lets out a soft moan", "arches her back slightly", "presses into your touch", "gasps softly"],
-        high: ["moans", "grinds against your hand", "whispers encouragement", "shivers"],
-        intense: ["gasps and moans loudly", "pushes her chest into your face", "begs you not to stop", "trembles"]
+        mild: ["breathes a little faster", "lets out a soft sigh", "glances at you shyly", "bites her lip"],
+        moderate: ["lets out a soft moan", "shifts closer to you", "presses into your touch", "gasps softly"],
+        high: ["moans", "leans into your hands", "whispers encouragement", "shivers"],
+        intense: ["gasps and moans loudly", "pushes her chest toward you", "begs you not to stop", "trembles"]
     },
     nipples: {
         mild: ["lets out a tiny gasp", "shivers slightly", "bits her lip", "tenses slightly"],
@@ -3314,6 +3324,14 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
         return pickRandom(BODY_PART_REACTIONS.general.moderate);
     }
     
+    // ── RECEIVE ACTIONS (playerIsBottom) ───────────────────────
+    // For receive actions, the NPC is the actor performing the action on
+    // the player. The response should reflect the NPC's compliance or
+    // enthusiasm based on temperament, not a body-part reaction.
+    if (act.playerIsBottom) {
+        return buildReceiveResponse(npc, player, act, intimacy);
+    }
+    
     const npcName = npc.name || "They";
     const isProperName = !/^(a |an |the )/i.test(npcName);
     const subjectPronoun = getSubjectPronoun(npc) || "They";
@@ -3358,7 +3376,7 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
         legs: "moderate", feet: "moderate"
     };
     var maxTier = SENSITIVITY_TIERS[target.toLowerCase()] || "high";
-    const reaction = getWeightedReaction(bodyReactions, arousalLevel, maxTier);
+    const reaction = getWeightedReaction(bodyReactions, scaleArousal(arousalLevel), maxTier);
     
     // Get anatomy descriptions
     let anatomyDesc = "";
@@ -3426,16 +3444,21 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
     var isLightForeplay = npcArousalGain <= 10;
     var isHeavyForeplay = npcArousalGain >= 20;
 
-    // Get descriptors based on arousal
-    const tempDesc = getTemperatureDescriptor(arousalLevel);
-    const intensity = getReactionIntensity(arousalLevel);
-    const vocalization = getVocalization(arousalLevel);
+    // Get descriptors based on arousal (scale 0-800 to 0-100 for helper functions)
+    var scaledArousal = scaleArousal(arousalLevel);
+    const tempDesc = getTemperatureDescriptor(scaledArousal);
+    const intensity = getReactionIntensity(scaledArousal);
+    const vocalization = getVocalization(scaledArousal);
+
+    // Cap dialogue intensity by foreplay intensity — gentle acts shouldn't
+    // produce extreme verbal responses even at high arousal.
+    var maxDialogueTier = isLightForeplay ? "mild" : isHeavyForeplay ? "high" : "moderate";
 
     // Get dialogue from tags (CoT-style) — lower chance for light foreplay
     let dialogueLine = null;
     var dialogueChance = isLightForeplay ? 0.10 : isHeavyForeplay ? 0.35 : 0.25;
     if (Math.random() < dialogueChance && dialogueTags && dialogueTags.length > 0) {
-        dialogueLine = getDialogueFromTags(dialogueTags, arousalLevel, npc);
+        dialogueLine = getDialogueFromTags(dialogueTags, arousalLevel, npc, maxDialogueTier);
     }
 
     // Build template pool based on foreplay intensity
@@ -4405,10 +4428,10 @@ var DIALOGUE_DATABASE = {
     },
     "breasts touched": {
         low: ["That feels nice", "Mmm", "Gentle touch"],
-        mild: ["Yes, that's good", "I like that", "More, please"],
-        moderate: ["Oh yes, just like that", "Squeeze them harder", "Don't stop"],
-        high: ["Fuck, that's incredible", "I need more", "Yes, yes, yes!"],
-        intense: ["YES! More! Fuck yes!", "I'm going to cum if you keep doing that", "Don't you dare stop"]
+        mild: ["That's nice", "I like that", "Keep doing that"],
+        moderate: ["That feels good", "Softer, just like that", "Your hands are warm"],
+        high: ["That's wonderful", "I love your touch", "Keep going"],
+        intense: ["Yes, just like that", "Don't stop touching me", "That's amazing"]
     },
     
     // ==== PUSSY/VAGINA (NPC's pussy being stimulated) ====
@@ -4485,8 +4508,16 @@ var DIALOGUE_DATABASE = {
  * Respects NPC speech capabilities (non-verbal, uncivilized, civilized)
  * Returns an object with: { text: string, isVerbal: boolean, isNonVerbal: boolean }
  */
-function getDialogueFromTags(tags, arousalLevel, npc) {
+function getDialogueFromTags(tags, arousalLevel, npc, maxTier) {
     if (!tags || tags.length === 0) return null;
+    
+    // Scale arousal from 0-800 to 0-100 for the tier thresholds
+    var scaled = scaleArousal(arousalLevel);
+    
+    // Cap the maximum dialogue tier (e.g. "moderate" for gentle acts)
+    var tierOrder = ["low", "mild", "moderate", "high", "intense"];
+    var maxIndex = maxTier ? tierOrder.indexOf(maxTier) : 4;
+    if (maxIndex < 0) maxIndex = 4;
     
     // Get NPC dialogue style
     const dialogueStyle = getNPCDialogueStyle(npc);
@@ -4508,21 +4539,28 @@ function getDialogueFromTags(tags, arousalLevel, npc) {
     for (const tag of tags) {
         const tagDialogue = DIALOGUE_DATABASE[tag];
         if (tagDialogue) {
-            // Get arousal-based lines
+            // Get arousal-based lines, capped by maxTier
             let text;
-            if (arousalLevel < 20 && tagDialogue.low) {
+            if (scaled < 20 && maxIndex >= 0 && tagDialogue.low) {
                 text = pickRandom(tagDialogue.low);
-            } else if (arousalLevel < 40 && tagDialogue.mild) {
+            } else if (scaled < 40 && maxIndex >= 1 && tagDialogue.mild) {
                 text = pickRandom(tagDialogue.mild);
-            } else if (arousalLevel < 60 && tagDialogue.moderate) {
+            } else if (scaled < 60 && maxIndex >= 2 && tagDialogue.moderate) {
                 text = pickRandom(tagDialogue.moderate);
-            } else if (arousalLevel < 80 && tagDialogue.high) {
+            } else if (scaled < 80 && maxIndex >= 3 && tagDialogue.high) {
                 text = pickRandom(tagDialogue.high);
-            } else if (tagDialogue.intense) {
+            } else if (maxIndex >= 4 && tagDialogue.intense) {
                 text = pickRandom(tagDialogue.intense);
             } else {
-                // Fallback to any available
-                text = pickRandom(Object.values(tagDialogue).flat());
+                // Fallback: pick from the highest available tier at or below maxIndex
+                for (var i = Math.min(maxIndex, 4); i >= 0; i--) {
+                    var tierName = tierOrder[i];
+                    if (tagDialogue[tierName]) {
+                        text = pickRandom(tagDialogue[tierName]);
+                        break;
+                    }
+                }
+                if (!text) text = pickRandom(Object.values(tagDialogue).flat());
             }
             // Special case: cock in mouth is always non-verbal
             const isNonVerbalTag = tag === "cock in mouth";
@@ -4531,20 +4569,21 @@ function getDialogueFromTags(tags, arousalLevel, npc) {
     }
     
     // Fallback to general dialogue
-    return getDialogueFromTags(["general"], arousalLevel, npc);
+    return getDialogueFromTags(["general"], arousalLevel, npc, maxTier);
 }
 
 /**
  * Get a reaction based on arousal level from a simple reactions object
  */
 function getArousalBasedReaction(reactions, arousalLevel) {
-    if (arousalLevel < 20 && reactions.low) {
+    var scaled = scaleArousal(arousalLevel);
+    if (scaled < 20 && reactions.low) {
         return pickRandom(reactions.low);
-    } else if (arousalLevel < 40 && reactions.mild) {
+    } else if (scaled < 40 && reactions.mild) {
         return pickRandom(reactions.mild);
-    } else if (arousalLevel < 60 && reactions.moderate) {
+    } else if (scaled < 60 && reactions.moderate) {
         return pickRandom(reactions.moderate);
-    } else if (arousalLevel < 80 && reactions.high) {
+    } else if (scaled < 80 && reactions.high) {
         return pickRandom(reactions.high);
     } else if (reactions.intense) {
         return pickRandom(reactions.intense);
@@ -5381,6 +5420,10 @@ function changePosition(npc, player, newPositionId, options = {}) {
 
     npc.intimacy.position.player = newPositionId;
     npc.intimacy.position.npc = newPositionId;
+    
+    // Clear last action so the next action after position change doesn't
+    // build a transition narration referencing the pre-change action.
+    npc.intimacy.lastAction = null;
     
     // Clear LLM enhancement cache on position change
     clearLLMEnhancementCache(npc.intimacy);
@@ -6606,6 +6649,7 @@ if (typeof window !== 'undefined') {
     window.getRelativeSize = getRelativeSize;
     window.getSizeContext = getSizeContext;
     window.getNippleState = getNippleState;
+    window.scaleArousal = scaleArousal;
     window.isCivilizedSpecies = isCivilizedSpecies;
     window.canNPCSpeak = canNPCSpeak;
     window.getNPCDialogueStyle = getNPCDialogueStyle;
@@ -6643,6 +6687,16 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     const posPronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
     const subjectPronoun = typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "They";
     const objPronoun = typeof getObjectPronoun === 'function' ? getObjectPronoun(npc) : "them";
+    
+    // ── RECEIVE ACTIONS (playerIsBottom) ───────────────────────
+    // For receive actions, the NPC is the actor and the player is the
+    // target. Use dedicated narrative builder that describes the NPC
+    // acting on the player's body (using "your" for player parts).
+    if (act.playerIsBottom) {
+        var receiveNarratives = buildReceiveNarrative(npc, act, { isContinueAction });
+        var receiveNarrative = pickUnique(receiveNarratives, intimacy, "narrative");
+        return receiveNarrative || receiveNarratives[0];
+    }
     
     // Build transition narrative if switching from a different action or for first action
     let transitionNarrative = "";
@@ -6735,6 +6789,10 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
  */
 function getTargetNoun(actObj, posPronoun) {
     var t = actObj && actObj.target ? actObj.target : "body";
+    // For receive actions (playerIsBottom), the target is the player's body part
+    if (actObj && actObj.playerIsBottom) {
+        return "your " + t;
+    }
     return (posPronoun || "their") + " " + t;
 }
 
@@ -7082,6 +7140,155 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
     }
     
     return "";
+}
+
+/**
+ * Build narrative for "receive" actions (playerIsBottom = true).
+ * The NPC is the actor performing the action on the player.
+ * Uses "your" for the player's body parts since we don't have player anatomy.
+ */
+function buildReceiveNarrative(npc, act, context) {
+    var verb = act.verb || "touch";
+    var target = act.target || "body";
+    var subjPronoun = (typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "She") || "she";
+    var subjLower = subjPronoun.toLowerCase();
+    var posPronoun = (typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "her") || "her";
+    var objPronoun = (typeof getObjectPronoun === 'function' ? getObjectPronoun(npc) : "her") || "her";
+    var isContinueAction = context.isContinueAction || false;
+
+    var verbPresent = verbConjugation(verb, 'present');
+    var verbIng = verbConjugation(verb, 'ing');
+
+    // Map target to a player-perspective phrase
+    var playerTarget = "your " + target;
+    if (target === "penis" || target === "cock") playerTarget = "your cock";
+    else if (target === "testicles" || target === "balls") playerTarget = "your balls";
+    else if (target === "vagina" || target === "pussy") playerTarget = "your pussy";
+    else if (target === "nipples") playerTarget = "your nipples";
+    else if (target === "anus") playerTarget = "your anus";
+    else if (target === "mouth" || target === "lips") playerTarget = "your mouth";
+
+    var continuePrefix = isContinueAction ? "continue to " : "";
+
+    // Build varied templates per verb
+    var templates = [];
+
+    if (verb === "kiss") {
+        templates = [
+            `${subjPronoun} leans in and presses ${posPronoun} lips to ${playerTarget}.`,
+            `${subjPronoun} ${continuePrefix}${verbPresent} ${playerTarget}, ${posPronoun} mouth warm and soft against you.`,
+            `${subjPronoun} cups your face and ${verbPresent} ${playerTarget} gently.`
+        ];
+    } else if (verb === "suck") {
+        templates = [
+            `${subjPronoun} ${continuePrefix}${verbPresent} ${playerTarget}, ${posPronoun} mouth warm and wet around you.`,
+            `${subjPronoun} takes ${playerTarget} into ${posPronoun} mouth, ${verbIng} you with slow, deliberate pulls.`,
+            `${subjPronoun} wraps ${posPronoun} lips around ${playerTarget} and ${verbPresent} you, ${posPronoun} cheeks hollowing.`
+        ];
+    } else if (verb === "lick") {
+        templates = [
+            `${subjPronoun} ${continuePrefix}${verbPresent} ${playerTarget}, ${posPronoun} tongue warm and wet against you.`,
+            `${subjPronoun} runs ${posPronoun} tongue over ${playerTarget}, ${verbIng} you slowly.`,
+            `${subjPronoun} bends down and ${verbPresent} ${playerTarget}, ${posPronoun} tongue tracing along you.`
+        ];
+    } else if (verb === "deepthroat") {
+        templates = [
+            `${subjPronoun} takes ${playerTarget} deep into ${posPronoun} throat, swallowing around you.`,
+            `${subjPronoun} sinks ${posPronoun} mouth down ${playerTarget}, ${posPronoun} throat gripping you tightly.`
+        ];
+    } else if (verb === "rim") {
+        templates = [
+            `${subjPronoun} ${continuePrefix}${verbPresent} ${playerTarget}, ${posPronoun} tongue circling the sensitive skin.`,
+            `${subjPronoun} presses ${posPronoun} face to ${playerTarget} and ${verbPresent} you, ${posPronoun} tongue wet and probing.`
+        ];
+    } else if (verb === "eat") {
+        templates = [
+            `${subjPronoun} ${continuePrefix}${verbPresent} ${playerTarget}, ${posPronoun} mouth working against you.`,
+            `${subjPronoun} buries ${posPronoun} face between your legs, ${verbIng} ${playerTarget} eagerly.`
+        ];
+    } else {
+        templates = [
+            `${subjPronoun} ${continuePrefix}${verbPresent} ${playerTarget}.`,
+            `${subjPronoun} ${verbPresent} you, ${posPronoun} attention focused on ${playerTarget}.`
+        ];
+    }
+
+    return templates;
+}
+
+/**
+ * Build NPC response for "receive" actions — the NPC is the actor, so
+ * the response reflects their compliance, hesitation, or enthusiasm based
+ * on temperament and arousal.
+ */
+function buildReceiveResponse(npc, player, act, intimacy) {
+    var subjPronoun = (typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "She") || "she";
+    var subjLower = subjPronoun.toLowerCase();
+    var posPronoun = (typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "her") || "her";
+    var objPronoun = (typeof getObjectPronoun === 'function' ? getObjectPronoun(npc) : "her") || "her";
+
+    var temperament = String(npc.temperament || "").toLowerCase();
+    var isBold = temperament === "forward" || temperament === "bold" || temperament === "lustful";
+    var isShy = temperament === "shy" || temperament === "timid" || temperament === "reserved";
+    var isNeutral = !isBold && !isShy;
+
+    var arousalLevel = intimacy ? intimacy.arousal.npc : 0;
+    var scaledArousal = scaleArousal(arousalLevel);
+    var highArousal = scaledArousal > 60;
+
+    var verb = act.verb || "touch";
+    var verbIng = verbConjugation(verb, 'ing');
+
+    var actDesc = act.desc || act.label || "do that";
+    // Shorten the act description for the response
+    var shortDesc = actDesc.replace(/^Ask them to\s+/i, "").replace(/^Ask them\s+/i, "");
+
+    // Build response pools by temperament
+    var responses;
+
+    if (isShy) {
+        responses = [
+            `${subjLower} hesitates for a moment, then nods slowly.`,
+            `${subjPronoun} looks away, a flush creeping up ${posPronoun} neck. "You want me to... ${shortDesc}?"`,
+            `${subjPronoun} bites ${posPronoun} lip, then quietly moves to comply.`,
+            `"I... I've never..." ${subjLower} trails off, but ${posPronoun} hands are already moving.`
+        ];
+        if (highArousal) {
+            responses.push(
+                `${subjPronoun} swallows hard, then leans in, ${posPronoun} movements tentative but willing.`,
+                `"Okay," ${subjLower} whispers, ${posPronoun} voice barely audible.`
+            );
+        }
+    } else if (isBold) {
+        responses = [
+            `"You want me to ${shortDesc}? Sure." ${subjPronoun} grins and gets to it without hesitation.`,
+            `${subjPronoun} doesn't need to be asked twice. ${subjPronoun} ${verbIng} you eagerly.`,
+            `${subjPronoun} smirks. "I was hoping you'd ask."`,
+            `${subjPronoun} drops to ${posPronoun} knees and ${verbIng} you, bold and sure.`
+        ];
+        if (highArousal) {
+            responses.push(
+                `${subjPronoun} grabs you and ${verbIng} you, ${posPronoun} enthusiasm obvious.`,
+                `"Mmm, finally," ${subjLower} murmurs, ${posPronoun} hands already on you.`
+            );
+        }
+    } else {
+        // Neutral temperament
+        responses = [
+            `${subjPronoun} nods and moves to comply, ${posPronoun} expression warm.`,
+            `"Alright," ${subjLower} says, leaning in to ${shortDesc}.`,
+            `${subjPronoun} considers for a moment, then ${verbIng} you with careful attention.`,
+            `${subjPronoun} smiles faintly and obeys, ${posPronoun} touch gentle.`
+        ];
+        if (highArousal) {
+            responses.push(
+                `${subjPronoun} doesn't hesitate — ${posPronoun} arousal has ${posPronoun} eager to please.`,
+                `${subjPronoun} responds with growing heat, ${verbIng} you more intensely.`
+            );
+        }
+    }
+
+    return pickRandom(responses);
 }
 
 /**

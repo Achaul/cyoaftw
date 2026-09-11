@@ -6,8 +6,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_POSITIONS_VERSION = "2026-09-08-001";
-    console.log("[Intimacy Positions] Loaded v2026-09-08-001 - Systematic review: fixed validTools + analFriendly + anus in accessibleTargets");
+    window.INTIMACY_POSITIONS_VERSION = "2026-09-10-001";
+    console.log("[Intimacy Positions] Loaded v2026-09-10-001 - Systematic review: analFriendly + validTools + tongue for oral positions");
 }
 
 var INTIMACY_POSITIONS = {
@@ -21,7 +21,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
+        validTools: ["hand", "mouth", "fingers", "tongue", "vagina", "penis"],
         analFriendly: false,
         description: "Both standing, facing each other"
     },
@@ -35,7 +35,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "penis", "vagina"],
+        validTools: ["hand", "mouth", "fingers", "tongue", "penis", "vagina"],
         analFriendly: true,
         description: "Player standing behind the NPC"
     },
@@ -49,7 +49,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
+        validTools: ["hand", "mouth", "fingers", "tongue", "vagina", "penis"],
         analFriendly: false,
         description: "NPC has player pinned against a wall"
     },
@@ -63,7 +63,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "fingers", "mouth", "penis", "vagina"],
+        validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina"],
         analFriendly: true,
         description: "Player has NPC pinned against a wall from behind"
     },
@@ -78,8 +78,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
-        analFriendly: false,
+        validTools: ["hand", "mouth", "fingers", "tongue", "vagina", "penis"],
+        analFriendly: true,
         description: "NPC sitting on player's lap"
     },
     
@@ -92,8 +92,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
-        analFriendly: false,
+        validTools: ["hand", "mouth", "fingers", "tongue", "vagina", "penis"],
+        analFriendly: true,
         description: "Player straddling NPC's lap"
     },
 
@@ -107,8 +107,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "penis", "vagina"],
-        analFriendly: false,
+        validTools: ["hand", "mouth", "fingers", "tongue", "penis", "vagina"],
+        analFriendly: true,
         description: "Player on top, facing NPC"
     },
     
@@ -121,7 +121,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "fingers", "mouth", "penis"],
+        validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina"],
         analFriendly: true,
         description: "NPC on hands and knees, player behind"
     },
@@ -135,7 +135,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "fingers", "mouth", "penis"],
+        validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina"],
         analFriendly: true,
         description: "NPC bent over a surface"
     },
@@ -149,7 +149,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "fingers", "mouth", "penis", "vagina"],
+        validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina"],
         analFriendly: true,
         description: "Both lying on side, player behind NPC"
     },
@@ -164,8 +164,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "penis", "vagina"],
-        analFriendly: false,
+        validTools: ["hand", "mouth", "fingers", "tongue", "penis", "vagina"],
+        analFriendly: true,
         description: "NPC kneeling before player"
     },
     
@@ -178,7 +178,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
+        validTools: ["hand", "mouth", "fingers", "tongue", "vagina", "penis"],
         analFriendly: true,
         description: "NPC kneeling over player"
     },
@@ -193,8 +193,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
-        analFriendly: false,
+        validTools: ["hand", "mouth", "fingers", "tongue", "vagina", "penis"],
+        analFriendly: true,
         description: "Player on back, NPC on top facing player"
     },
     
@@ -207,7 +207,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "fingers", "mouth", "vagina", "penis"],
+        validTools: ["hand", "fingers", "mouth", "tongue", "vagina", "penis"],
         analFriendly: true,
         description: "Player on back, NPC on top facing away"
     },
@@ -222,7 +222,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["mouth", "hand", "fingers", "vagina", "penis"],
+        validTools: ["mouth", "tongue", "hand", "fingers", "vagina", "penis"],
         analFriendly: true,
         description: "Oral service with reciprocal access"
     },
@@ -236,7 +236,7 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["mouth", "hand", "fingers", "vagina", "penis"],
+        validTools: ["mouth", "tongue", "hand", "fingers", "vagina", "penis"],
         analFriendly: true,
         description: "NPC performing oral on player"
     },
@@ -250,8 +250,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["mouth", "hand", "fingers", "penis", "vagina"],
-        analFriendly: false,
+        validTools: ["mouth", "tongue", "hand", "fingers", "penis", "vagina"],
+        analFriendly: true,
         description: "NPC lying down performing oral"
     },
 
@@ -264,8 +264,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "penis", "vagina"],
-        analFriendly: false,
+        validTools: ["hand", "mouth", "fingers", "tongue", "penis", "vagina"],
+        analFriendly: true,
         description: "Player standing, NPC kneeling at face level"
     },
 
@@ -278,8 +278,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "penis", "vagina"],
-        analFriendly: false,
+        validTools: ["hand", "mouth", "fingers", "tongue", "penis", "vagina"],
+        analFriendly: true,
         description: "Player standing, NPC squatting in front"
     },
 
@@ -292,8 +292,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "vagina", "penis"],
-        analFriendly: false,
+        validTools: ["hand", "mouth", "fingers", "tongue", "vagina", "penis"],
+        analFriendly: true,
         description: "NPC sitting on player's face"
     },
 
@@ -306,8 +306,8 @@ var INTIMACY_POSITIONS = {
             player: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"],
             npc: ["face", "mouth", "lips", "neck", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "butt", "anus", "back", "arm", "hand", "hair", "legs", "feet", "shoulders", "stomach", "nipples"]
         },
-        validTools: ["hand", "mouth", "fingers", "penis", "vagina"],
-        analFriendly: false,
+        validTools: ["hand", "mouth", "fingers", "tongue", "penis", "vagina"],
+        analFriendly: true,
         description: "NPC restrained on X-cross performing oral"
     }
 };
