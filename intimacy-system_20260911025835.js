@@ -2,8 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-08-036
- * Adds: size difference sensory fragments (25% chance when sizes differ), player passed to getSensoryFragment
+ * Version: 2026-09-10-002
+ * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-08-036";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-10-002";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -822,7 +822,10 @@ function resetIntimacyState(npc) {
         },
         // Encounter tracking for special events
         encounterFlags: {
-            hasAnalPee: false
+            hasAnalPee: false,
+            impactCount: 0,
+            impactToleranceReached: false,
+            nipplePlayCount: 0
         },
         fertility: {
             isFertile: npcGender === "female" ? false : null,
@@ -889,6 +892,25 @@ function endIntimacyEncounter(npc) {
     
     // Reset penetration state
     npc.intimacy.penetration = { active: false, tool: null, target: null, depth: 0 };
+    
+    // Reset encounter tracking flags (impact count, nipple play count, etc.)
+    npc.intimacy.encounterFlags = {
+        hasAnalPee: false,
+        impactCount: 0,
+        impactToleranceReached: false,
+        nipplePlayCount: 0
+    };
+    
+    // Clear last action and history so the next encounter starts fresh
+    // (no stale "continue" button or transition narration from a previous session)
+    npc.intimacy.lastAction = null;
+    npc.intimacy.actionHistory = [];
+    
+    // Clear sensory fragment anti-repetition tracker
+    if (npc.intimacy._recentNarratives) delete npc.intimacy._recentNarratives;
+    
+    // Clear penetration cache
+    if (npc.intimacy.penetrationCache) npc.intimacy.penetrationCache.clear();
     
     // Clear LLM enhancement cache
     clearLLMEnhancementCache(npc.intimacy);
@@ -1703,6 +1725,13 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     intimacy.actionHistory.push({ actId, timestamp: Date.now() });
     if (intimacy.actionHistory.length > 20) {
         intimacy.actionHistory.shift();
+    }
+    
+    // Track nipple play count for erection state progression
+    var actTargetLower = String(act.target || "").toLowerCase();
+    if (actTargetLower === "nipples" || actTargetLower === "breasts") {
+        if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
+        intimacy.encounterFlags.nipplePlayCount = (intimacy.encounterFlags.nipplePlayCount || 0) + 1;
     }
     
     // Handle clothing actions
@@ -2991,6 +3020,22 @@ var SENSORY_FRAGMENTS = {
             ", the size difference making you feel small inside her",
             ", her towering body pressing you down with its weight"
         ]
+    },
+
+    // Species/skin color descriptors — injected when NPC has non-human skin
+    // or a distinctive skin tone. Uses {skinDesc} replaced at runtime.
+    species: {
+        nonHuman: [
+            ", her {skinDesc} skin warm beneath your hands",
+            ", the {skinDesc} of her body pressed against you",
+            ", the exotic {skinDesc} of her flesh yielding to your touch",
+            ", running your hands over her {skinDesc} skin"
+        ],
+        distinctTone: [
+            ", her {skinDesc} complexion flushing with heat",
+            ", the {skinDesc} of her skin glistening with a light sheen",
+            ", her {skinDesc} body warm and alive under your touch"
+        ]
     }
 };
 
@@ -3070,6 +3115,24 @@ function getSensoryFragment(npc, target, intimacy, options) {
         }
     }
 
+    // Species/skin color (20% chance for non-human, 10% for distinctive human tone)
+    var skinDesc = getSkinDescription(npc) || "";
+    var surfaceType = String(npc.surfaceType || "skin").toLowerCase();
+    if (skinDesc) {
+        var isNonHuman = surfaceType !== "skin" && surfaceType !== "";
+        var chance = isNonHuman ? 0.20 : 0.10;
+        if (Math.random() < chance) {
+            var speciesPool = isNonHuman
+                ? SENSORY_FRAGMENTS.species.nonHuman
+                : SENSORY_FRAGMENTS.species.distinctTone;
+            if (speciesPool && speciesPool.length) {
+                var speciesFrag = pickUnique(speciesPool, intimacy, "species");
+                speciesFrag = speciesFrag.replace(/\{skinDesc\}/g, skinDesc);
+                fragments.push(speciesFrag);
+            }
+        }
+    }
+
     return fragments.join("");
 }
 
@@ -3124,6 +3187,17 @@ function buildHiddenFlavorContext(npc, target, intimacy, options) {
             pubicFrag = pubicFrag.replace(/\{pubicDesc\}/g, pubicDesc);
             flavors.push("Pubic hair: " + pubicFrag);
         }
+    }
+
+    // Species/skin color
+    var fullSkinDesc = getSkinDescription(npc) || "";
+    var _surfaceType = String(npc.surfaceType || "skin").toLowerCase();
+    if (fullSkinDesc) {
+        var _isNonHuman = _surfaceType !== "skin" && _surfaceType !== "";
+        var speciesLine = _isNonHuman
+            ? "Species: the NPC has " + fullSkinDesc + " — weave this detail into the polish"
+            : "Skin: " + fullSkinDesc + " skin — weave this detail into the polish";
+        flavors.push(speciesLine);
     }
 
     if (!flavors.length) return "";
@@ -3342,49 +3416,79 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
     const verb = act.verb || "touch";
     const tool = act.tool || "hand";
     const target = act.target || "body";
-    
+
+    // Determine foreplay intensity from the act's arousal impact.
+    // Low-n acts (cheek kiss: n=3, hair stroke: n=5) are "light foreplay" —
+    // they should produce subdued reactions (smiles, sighs, leans in).
+    // High-n acts (squeeze ass: n=22, spread cheeks: n=30) are "heavy foreplay" —
+    // they can produce moans, gasps, arching.
+    var npcArousalGain = (act.arousal && act.arousal.n) || 5;
+    var isLightForeplay = npcArousalGain <= 10;
+    var isHeavyForeplay = npcArousalGain >= 20;
+
     // Get descriptors based on arousal
     const tempDesc = getTemperatureDescriptor(arousalLevel);
     const intensity = getReactionIntensity(arousalLevel);
     const vocalization = getVocalization(arousalLevel);
-    const pleasureIntensity = getPleasureIntensity(arousalLevel);
-    
-    // Get dialogue from tags (CoT-style) - 35% chance of verbal response
+
+    // Get dialogue from tags (CoT-style) — lower chance for light foreplay
     let dialogueLine = null;
-    if (Math.random() < 0.35 && dialogueTags && dialogueTags.length > 0) {
+    var dialogueChance = isLightForeplay ? 0.10 : isHeavyForeplay ? 0.35 : 0.25;
+    if (Math.random() < dialogueChance && dialogueTags && dialogueTags.length > 0) {
         dialogueLine = getDialogueFromTags(dialogueTags, arousalLevel, npc);
     }
-    
-    // Select a response template - just the reaction, no action repetition
-    // These will be processed by formatIntimacyNPCResponse which adds subject pronoun
-    // Fixed: Removed duplicate combinations like "trembles with pleasure with pleasure"
-    // Fixed: Removed "softly" suffix that creates contradictions with reactions that already have adverbs
-    // Fixed: Removed templates that create awkward phrasing with pleasureIntensity
-    const templates = [
-        `${reaction} at your touch.`,
-        `${reaction}, ${tempDesc}.`,
-        `${reaction} at the sensation.`,
-        `lets out a ${vocalization}.`,
-        `lets out a ${vocalization}.`,
-        `shivers ${intensity}.`,
-        `${reaction}.`,
-        `${reaction}, breathing ${intensity}.`,
-        `${reaction} and bites ${possessivePronoun} lip.`,
-        `${reaction} and arches ${possessivePronoun} back.`
-    ];
-    
+
+    // Build template pool based on foreplay intensity
+    var templates;
+
+    if (isLightForeplay) {
+        // Light foreplay: subdued, gentle reactions. No moans, no arching,
+        // no loud sounds. Just soft, warm, appreciative responses.
+        templates = [
+            `smiles softly.`,
+            `leans into your touch.`,
+            `sighs contentedly.`,
+            `${reaction} at your touch.`,
+            `closes her eyes for a moment.`,
+            `lets out a quiet breath.`,
+            `relaxes beneath your touch.`,
+            `${reaction} softly.`,
+            `turns toward you slightly.`
+        ];
+    } else if (isHeavyForeplay) {
+        // Heavy foreplay: can have moans, gasps, arching — but still
+        // not as extreme as penetration-level reactions.
+        templates = [
+            `${reaction} at your touch.`,
+            `${reaction}, ${tempDesc}.`,
+            `${reaction} at the sensation.`,
+            `lets out a ${vocalization}.`,
+            `shivers ${intensity}.`,
+            `${reaction}, breathing ${intensity}.`,
+            `${reaction} and bites ${possessivePronoun} lip.`
+        ];
+    } else {
+        // Medium foreplay: moderate reactions
+        templates = [
+            `${reaction} at your touch.`,
+            `${reaction}, ${tempDesc}.`,
+            `${reaction} at the sensation.`,
+            `lets out a ${vocalization}.`,
+            `shivers ${intensity}.`,
+            `${reaction}.`,
+            `${reaction}, breathing ${intensity}.`
+        ];
+    }
+
     let response = pickRandom(templates);
-    
+
     // Add verbal dialog from tags (CoT-style)
     if (dialogueLine) {
         if (dialogueLine.isNonVerbal) {
-            // For non-verbal NPCs, add the sound without quotes as part of the physical reaction
             if (Math.random() < 0.5) {
                 response = `${response} ${dialogueLine.text}`;
             }
         } else if (dialogueLine.isVerbal) {
-            // For verbal NPCs, add quoted speech
-            // 60% chance to replace with dialogue, 40% to append
             if (Math.random() < 0.6) {
                 response = `says "${dialogueLine.text}"`;
             } else {
@@ -3392,7 +3496,7 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
             }
         }
     }
-    
+
     return response;
 }
 
@@ -3923,42 +4027,114 @@ function generateNPCClimaxReaction(npc, npcGender, intimacy) {
  * Now uses CoT-style dialogue tags for verbal responses
  */
 function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possessivePronoun, objectPronoun, arousalLevel, bodyPartDesc, reaction, dialogueTags = []) {
-    const verb = act.verb || "touch";
+    const verb = act.verb || "slap";
     const vocalization = getVocalization(arousalLevel);
-    
-    // Get dialogue from tags (CoT-style) - 25% chance for impact
+    var target = act.target || "buttocks";
+
+    // Track impact count on encounter flags
+    if (!intimacy) intimacy = {};
+    if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
+    intimacy.encounterFlags.impactCount = (intimacy.encounterFlags.impactCount || 0) + 1;
+    var impactCount = intimacy.encounterFlags.impactCount;
+
+    // Determine tolerance based on NPC size
+    var npcSize = getNPCSize(npc);
+    var tolerance = npcSize === "small" || npcSize === "tiny" ? 3 :
+                   npcSize === "large" || npcSize === "huge" ? 8 : 5;
+
+    // Bold/forward NPCs tolerate more
+    var temperament = String(npc.temperament || "").toLowerCase();
+    if (temperament === "bold" || temperament === "forward" || temperament === "dominant") {
+        tolerance += 2;
+    }
+    // Shy/submissive NPCs tolerate less
+    if (temperament === "shy" || temperament === "submissive" || temperament === "nervous") {
+        tolerance = Math.max(2, tolerance - 1);
+    }
+
+    // Check if tolerance is reached
+    var overTolerance = impactCount > tolerance;
+    if (overTolerance) {
+        intimacy.encounterFlags.impactToleranceReached = true;
+    }
+
+    // Build skin color progression: pink → red → welted
+    var skinState = "pink";
+    if (impactCount >= 5) skinState = "red";
+    if (impactCount >= 8) skinState = "welted";
+    if (impactCount >= 3) skinState = "rosy";
+
+    var skinDesc = "";
+    if (skinState === "rosy") skinDesc = ", the skin flushing pink where you struck";
+    else if (skinState === "red") skinDesc = ", the skin reddening under the repeated slaps";
+    else if (skinState === "welted") skinDesc = ", the skin welted and tender from the repeated strikes";
+
+    // Get dialogue from tags
     let dialogueLine = null;
-    if (Math.random() < 0.25 && dialogueTags && dialogueTags.length > 0) {
+    if (Math.random() < 0.20 && dialogueTags && dialogueTags.length > 0) {
         dialogueLine = getDialogueFromTags(dialogueTags, arousalLevel, npc);
     }
-    
-    const templates = [
-        `yelps at the sudden contact.`,
-        `gasps in surprise.`,
-        `reacts with a soft cry.`,
-        `${reaction} at the impact.`,
-        `tenses then relaxes into the sensation.`,
-        `lets out a sharp ${vocalization}.`,
-        `jumps slightly at the contact.`
-    ];
-    
+
+    var templates;
+
+    if (overTolerance) {
+        // Past tolerance — pain, not excitement. NPC protests or pulls away.
+        templates = [
+            `cries out, pulling away from your hand. <Stop, that hurts!>`,
+            `flinches hard, ${possessivePronoun} body tensing. <Enough, it stings!>`,
+            `twists away, ${possessivePronoun} voice sharp. <I said that's enough!>`,
+            `shoves your hand away, ${possessivePronoun} eyes flashing. <I'm not enjoying that anymore.>`,
+            `pulls back, rubbing ${possessivePronoun} ${target}. <That's too much. Stop.>`
+        ];
+        // 30% chance the NPC slaps back
+        if (Math.random() < 0.30) {
+            return pickRandom(templates) + ` She slaps you across the face.`;
+        }
+        return pickRandom(templates);
+    }
+
+    if (impactCount >= tolerance - 1) {
+        // Approaching tolerance — the sting is becoming uncomfortable
+        templates = [
+            `winces, the ${skinState === "welted" ? "welted skin" : "reddened skin"} stinging. <That's starting to really hurt...>`,
+            `hisses, ${possessivePronoun} ${target} tender from the repeated slaps${skinDesc}.`,
+            `tenses, the sting mixing with the heat${skinDesc}. <Maybe... maybe give it a rest?>`
+        ];
+    } else if (impactCount >= 3) {
+        // Multiple slaps — skin coloring, stinging but still exciting
+        templates = [
+            `yelps, the slap ringing loud${skinDesc}.`,
+            `gasps at the sharp crack of your hand${skinDesc}.`,
+            `jumps at the contact, ${possessivePronoun} ${target} stinging warmly${skinDesc}.`,
+            `lets out a sharp cry, the impact echoing${skinDesc}.`,
+            `${reaction} at the impact, the ${skinState} flush spreading across ${possessivePronoun} skin.`
+        ];
+    } else {
+        // Early slaps — surprise, excitement
+        templates = [
+            `yelps at the sharp crack of the slap.`,
+            `gasps, the loud smack echoing in the air.`,
+            `jumps, ${possessivePronoun} ${target} stinging from the impact.`,
+            `cries out at the sudden, sharp contact.`,
+            `${reaction} at the loud slap.`
+        ];
+    }
+
     let response = pickRandom(templates);
-    
-    // Add verbal dialog from tags (CoT-style)
+
+    // Add verbal dialog from tags (CoT-style) — only when not over tolerance
     if (dialogueLine && !response.includes('"')) {
         if (dialogueLine.isNonVerbal) {
-            // For non-verbal NPCs, add the sound without quotes
             if (Math.random() < 0.5) {
                 response = `${response} ${dialogueLine.text}`;
             }
         } else if (dialogueLine.isVerbal) {
-            // For verbal NPCs, add quoted speech
             if (Math.random() < 0.5) {
                 response = `${response} "${dialogueLine.text}"`;
             }
         }
     }
-    
+
     return response;
 }
 
@@ -5340,17 +5516,153 @@ function requiresPullOutFirst(npc, act, intimacy) {
 function buildPositionChangeNarration(npc, positionChangeInfo) {
     if (!positionChangeInfo) return null;
     
-    const { oldPositionLabel, newPositionLabel, pullOutNarrative } = positionChangeInfo;
+    const { oldPosition, oldPositionLabel, newPosition, newPositionLabel, pullOutNarrative } = positionChangeInfo;
     
-    // If there was a pull-out, include it in the narration
+    // Get pronouns for the NPC
+    var posPronoun = (typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "her") || "her";
+    var subjPronoun = (typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "She") || "she";
+    var objPronoun = (typeof getObjectPronoun === 'function' ? getObjectPronoun(npc) : "her") || "her";
+    var subjLower = subjPronoun.toLowerCase();
+    
+    // Get position objects for role info
+    var newPosObj = (typeof getPosition === 'function') ? getPosition(newPosition) : null;
+    var oldPosObj = (typeof getPosition === 'function') ? getPosition(oldPosition) : null;
+    var newDesc = newPosObj ? newPosObj.description : newPositionLabel;
+    
+    // Build the choreography narration for the new position
+    var choreography = getPositionChoreography(newPosition, posPronoun, subjPronoun, objPronoun, subjLower);
+    
+    // If there was a pull-out, prepend it
     if (pullOutNarrative) {
-        return `${pullOutNarrative}, then reposition from ${oldPositionLabel} to ${newPositionLabel}.`;
+        return `${pullOutNarrative} ${choreography}`;
     }
     
-    // Generate player action narration
-    const playerNarrative = `You reposition from ${oldPositionLabel} to ${newPositionLabel}.`;
+    return choreography;
+}
+
+/**
+ * Get rich choreography narration for a position transition.
+ * Describes the arrangement of the new position, not the full motion.
+ */
+function getPositionChoreography(newPosition, posPronoun, subjPronoun, objPronoun, subjLower) {
+    // Each position has 2-3 varied templates describing the final arrangement
+    var templates = {
+        "Standing": [
+            `You draw ${objPronoun} up to stand face to face with you, ${posPronoun} body warm against yours.`,
+            `You guide ${objPronoun} to ${posPronoun} feet, standing together, your bodies pressed close.`,
+            `You stand facing each other, ${posPronoun} breath warm on your neck as ${subjLower} settles against you.`
+        ],
+        "Standing From Behind": [
+            `You move behind ${objPronoun}, pressing your chest against ${posPronoun} back, your arms reaching around ${posPronoun} waist.`,
+            `You step around behind ${objPronoun}, pulling ${posPronoun} hips back against yours, ${posPronoun} back pressed to your chest.`,
+            `You guide ${objPronoun} to face away from you, closing the distance until your body is flush against ${posPronoun} backside.`
+        ],
+        "Against Wall": [
+            `${subjPronoun} presses you back against the wall, pinning you there with ${posPronoun} weight, ${posPronoun} eyes dark with intent.`,
+            `You find your back against the wall as ${subjLower} crowds into you, ${posPronoun} body a warm, heavy pressure pinning you in place.`,
+            `${subjPronoun} backs you up against the wall, caging you with ${posPronoun} arms, ${posPronoun} face inches from yours.`
+        ],
+        "Against Wall From Behind": [
+            `You press ${objPronoun} against the wall, ${posPronoun} back to the surface, your body holding ${objPronoun} in place from behind.`,
+            `You guide ${objPronoun} forward until ${posPronoun} hands meet the wall, then press yourself against ${posPronoun} back, pinning ${objPronoun} there.`,
+            `You walk ${objPronoun} to the wall and press ${posPronoun} against it, your chest flush to ${posPronoun} back, ${posPronoun} cheek against the cool surface.`
+        ],
+        "Perched": [
+            `You settle into a seat and draw ${objPronoun} onto your lap, ${posPronoun} thighs parting to straddle you, ${posPronoun} weight warm and close.`,
+            `You sit and pull ${objPronoun} down onto your thighs, ${posPronoun} knees bracketing your hips, facing you.`,
+            `You ease back and guide ${objPronoun} onto your lap, ${posPronoun} settling between your thighs with ${posPronoun} legs draped over yours.`
+        ],
+        "Astride Lap": [
+            `You straddle ${posPronoun} lap, sinking down to sit on ${posPronoun} thighs, your weight settling against ${objPronoun}.`,
+            `You swing a leg over and settle astride ${posPronoun} lap, facing ${objPronoun}, your hips flush against ${posPronoun}.`,
+            `You climb into ${posPronoun} lap, knees on either side of ${posPronoun} hips, your bodies pressed together.`
+        ],
+        "Missionary": [
+            `You ease ${objPronoun} down onto ${posPronoun} back and settle over ${objPronoun}, your weight braced on your arms, ${posPronoun} legs parting beneath you.`,
+            `You lower ${objPronoun} to the surface and follow ${objPronoun} down, covering ${posPronoun} body with yours, face to face.`,
+            `You lay ${objPronoun} back and position yourself above ${objPronoun}, ${posPronoun} thighs spreading to receive you, your hips settling between ${posPronoun}.`
+        ],
+        "Doggy": [
+            `You guide ${objPronoun} onto all fours, positioning yourself behind ${objPronoun}, your hands on ${posPronoun} hips.`,
+            `You turn ${objPronoun} around and ease ${objPronoun} down onto hands and knees, kneeling behind ${objPronoun} with your palms on ${posPronoun} waist.`,
+            `${subjPronoun} drops to all fours and you kneel behind ${objPronoun}, your body aligned with ${posPronoun} upturned rear.`
+        ],
+        "Bent Over": [
+            `You bend ${objPronoun} over the nearest surface, pressing ${posPronoun} down with one hand, stepping behind ${objPronoun}.`,
+            `You guide ${objPronoun} forward until ${posPronoun} is bent at the waist, hands braced on the surface, ${posPronoun} backside presented to you.`,
+            `You press ${objPronoun} down over the edge, ${posPronoun} hips tilted up, and step between ${posPronoun} spread legs.`
+        ],
+        "Spooning": [
+            `You lower ${objPronoun} onto ${posPronoun} side and curl up behind ${objPronoun}, your chest flush to ${posPronoun} back, your arm draped over ${posPronoun} waist.`,
+            `You settle onto your side behind ${objPronoun}, pulling ${posPronoun} back against your chest, your bodies nesting together.`,
+            `You lie down and draw ${objPronoun} into the curve of your body, ${posPronoun} back pressed to your front, your knees behind ${posPronoun}.`
+        ],
+        "Kneeling": [
+            `You guide ${objPronoun} down to ${posPronoun} knees before you, standing over ${objPronoun}, looking down at ${objPronoun} upturned face.`,
+            `${subjPronoun} kneels at your feet, looking up at you, ${posPronoun} hands resting on your thighs.`,
+            `You stand as ${subjLower} sinks to ${posPronoun} knees in front of you, ${posPronoun} face level with your hips.`
+        ],
+        "Kneeling Over": [
+            `You lie back as ${subjLower} kneels over you, ${posPronoun} knees on either side of your hips, looking down at you.`,
+            `You settle onto your back and ${subjLower} straddles you on ${posPronoun} knees, hovering above you.`,
+            `You stretch out beneath ${objPronoun} as ${subjLower} kneels over your body, ${posPronoun} weight poised above you.`
+        ],
+        "Cowgirl": [
+            `You lie back and ${subjLower} straddles you, sinking down onto your hips, ${posPronoun} hands braced on your chest, looking down at you.`,
+            `You settle onto your back as ${subjLower} swings a leg over and seats ${posPronoun}self astride you, ${posPronoun} weight settling on your lap.`,
+            `${subjPronoun} pushes you down and climbs on top, straddling your hips, ${posPronoun} thighs gripping your sides.`
+        ],
+        "Reverse Cowgirl": [
+            `You lie back and ${subjLower} straddles you facing away, ${posPronoun} back to you, ${posPronoun} weight settling on your hips.`,
+            `${subjPronoun} turns around and lowers ${posPronoun}self onto your lap, ${posPronoun} back facing you, your view of ${posPronoun} rear unobstructed.`,
+            `You stretch out as ${subjLower} mounts you in reverse, ${posPronoun} shoulders and back the last thing you see before ${posPronoun} hips settle against yours.`
+        ],
+        "Sixty-Nine": [
+            `You lie on your back and ${subjLower} lowers ${posPronoun}self over you in the opposite direction, ${posPronoun} hips above your face, ${posPronoun} mouth at your waist.`,
+            `You arrange ${objPronoun} so ${posPronoun} body mirrors yours, head to toe, each of you with access to the other's hips.`,
+            `You guide ${objPronoun} into position above you, your mouths at opposite ends, your bodies aligned in reverse.`
+        ],
+        "Oral Service": [
+            `You position yourself above ${objPronoun} as ${subjLower} settles beneath you, ${posPronoun} face turned up toward your hips.`,
+            `You stand or kneel over ${objPronoun}, ${posPronoun} mouth at your groin, ${posPronoun} hands on your thighs.`,
+            `${subjPronoun} lies back and opens ${posPronoun} mouth for you as you guide yourself into position above ${posPronoun} face.`
+        ],
+        "Prone Oral Service": [
+            `You lie back as ${subjLower} settles between your legs, ${posPronoun} face hovering over your lap, ${posPronoun} elbows resting on your thighs.`,
+            `You stretch out and ${subjLower} positions ${posPronoun}self face-down between your legs, ${posPronoun} mouth at your groin.`,
+            `${subjPronoun} lowers ${posPronoun}self over your hips, lying against you, ${posPronoun} breath warm against you.`
+        ],
+        "Kneeling By Face": [
+            `You stand before ${objPronoun} as ${subjLower} kneels at your feet, ${posPronoun} face level with your hips, looking up at you.`,
+            `${subjPronoun} drops to ${posPronoun} knees in front of you, ${posPronoun} mouth at the right height, ${posPronoun} eyes on yours.`,
+            `You step close as ${subjLower} kneels before you, ${posPronoun} face turned up, ${posPronoun} hands on your thighs.`
+        ],
+        "Squatting Before": [
+            `You stand over ${objPronoun} as ${subjLower} squats at your feet, ${posPronoun} thighs spread, ${posPronoun} face level with your hips.`,
+            `${subjPronoun} squats in front of you, ${posPronoun} weight on ${posPronoun} heels, looking up at you from below.`,
+            `You step forward as ${subjLower} squats before you, ${posPronoun} mouth at the right height, ${posPronoun} knees wide.`
+        ],
+        "Riding Face": [
+            `${subjPronoun} straddles your face, ${posPronoun} knees on either side of your head, ${posPronoun} hips above your mouth.`,
+            `You lie back as ${subjLower} lowers ${posPronoun}self over your face, ${posPronoun} thighs bracketing your head.`,
+            `${subjPronoun} settles ${posPronoun}self over your mouth, gripping your head between ${posPronoun} knees, ${posPronoun} body poised above you.`
+        ],
+        "Mounted On X-Cross Oral Service": [
+            `${subjPronoun} is restrained on the X-cross, arms and legs spread, ${posPronoun} mouth at hip level as you step before ${objPronoun}.`,
+            `You approach ${objPronoun} on the cross, ${posPronoun} limbs splayed and bound, ${posPronoun} face turned toward your hips.`,
+            `${subjPronoun} hangs from the X-cross, restrained and waiting, as you position yourself in front of ${posPronoun} mouth.`
+        ]
+    };
     
-    return playerNarrative;
+    var pool = templates[newPosition];
+    if (!pool) {
+        // Fallback: use the position description
+        var newPosObj = (typeof getPosition === 'function') ? getPosition(newPosition) : null;
+        var desc = newPosObj ? newPosObj.description : newPosition;
+        return `You reposition until ${subjLower} is ${desc.toLowerCase()}.`;
+    }
+    
+    return pickRandom(pool);
 }
 
 /**
@@ -5737,6 +6049,104 @@ function describeBreasts(npc, anatomy, posPronoun, arousalDescriptors) {
 }
 
 /**
+ * Get nipple erection state based on play count and arousal.
+ * Nipples progress from soft/normal → stiffening → fully erect as they're
+ * played with. When erect, the areola wrinkles and the skin tightens.
+ * Returns an object with state descriptors for use in narration.
+ */
+function getNippleState(npc, arousalLevel) {
+    var intimacy = npc.intimacy || {};
+    var flags = intimacy.encounterFlags || {};
+    var playCount = flags.nipplePlayCount || 0;
+    // Arousal scale is 0-800 (ORGASM_THRESHOLD). Read from npc.intimacy
+    // if arousalLevel not provided or out of range.
+    var arousal = (typeof arousalLevel === "number" && arousalLevel > 0) ? arousalLevel :
+                  (intimacy.arousal && intimacy.arousal.npc) ? intimacy.arousal.npc : 0;
+    var highArousal = arousal > 480;   // ~60% of threshold
+    var mediumArousal = arousal > 240; // ~30% of threshold
+
+    // Determine erection state: play count drives progression, arousal
+    // accelerates it. First touch = soft/normal. 2-3 touches = stiffening.
+    // 4+ touches = fully erect. High arousal can skip ahead.
+    var erection;
+    if (playCount >= 4 || (playCount >= 2 && highArousal)) {
+        erection = "erect";
+    } else if (playCount >= 2 || (playCount >= 1 && mediumArousal)) {
+        erection = "stiffening";
+    } else {
+        erection = "soft";
+    }
+
+    // State-specific descriptors
+    var budDesc, areolaTexture, sensation;
+    if (erection === "erect") {
+        budDesc = pickRandom([
+            "hard, tight buds",
+            "stiff, puckered peaks",
+            "erect, straining nubs",
+            "firmly peaked nipples"
+        ]);
+        areolaTexture = pickRandom([
+            "the skin wrinkling around the base",
+            "the areola tightening into small, puckered ridges",
+            "the surrounding skin drawn taut and crinkled",
+            "the areola contracting into tiny goosebumps"
+        ]);
+        sensation = pickRandom([
+            "the stiff peaks sensitive to every brush",
+            "each touch sending a sharp jolt through the hardened flesh",
+            "the tight buds aching under the pressure",
+            "the peaked nipples exquisitely responsive"
+        ]);
+    } else if (erection === "stiffening") {
+        budDesc = pickRandom([
+            "stiffening buds",
+            "slowly hardening nipples",
+            "firming peaks",
+            "growing nubs"
+        ]);
+        areolaTexture = pickRandom([
+            "the areola beginning to pucker",
+            "the skin tightening around the base",
+            "the surrounding skin starting to crinkle",
+            "the areola slowly contracting"
+        ]);
+        sensation = pickRandom([
+            "the hardening buds growing more sensitive",
+            "each touch making them stiffen further",
+            "the firming nipples responding eagerly",
+            "the awakening buds tingling under your fingers"
+        ]);
+    } else {
+        budDesc = pickRandom([
+            "soft, flat buds",
+            "smooth, relaxed nipples",
+            "gentle, unaroused nubs",
+            "soft, quiet peaks"
+        ]);
+        areolaTexture = pickRandom([
+            "the smooth areola",
+            "the flat, soft surrounding skin",
+            "the untroubled skin around each bud",
+            "the relaxed areola"
+        ]);
+        sensation = pickRandom([
+            "the soft buds beginning to stir",
+            "the gentle contact sending a faint warmth through them",
+            "the quiet nipples just starting to respond",
+            "the soft flesh yielding to your touch"
+        ]);
+    }
+
+    return {
+        erection: erection,
+        budDesc: budDesc,
+        areolaTexture: areolaTexture,
+        sensation: sensation
+    };
+}
+
+/**
  * Describe nipples with rich detail
  */
 function describeNipples(npc, anatomy, posPronoun, arousalDescriptors) {
@@ -5756,11 +6166,17 @@ function describeNipples(npc, anatomy, posPronoun, arousalDescriptors) {
     
     const stateDesc = arousalDescriptors.engorgement ? arousalDescriptors.engorgement : 
                      arousalDescriptors.state ? arousalDescriptors.state : "";
+
+    // Get nipple erection state from play history (reads arousal from npc.intimacy)
+    var nippleState = (typeof getNippleState === 'function') ? getNippleState(npc) : null;
+    var erectDesc = nippleState ? nippleState.budDesc : "";
+    var areolaTex = nippleState ? nippleState.areolaTexture : "";
     
     return pickRandom([
         `${posPronoun} ${nippleAdj ? nippleAdj + " " : ""}${pickRandom(["nipples", "teats", "buds", "peaks"])}`,
         `${posPronoun} ${nippleAdj ? nippleAdj + " " : ""}${nippleTexture} ${pickRandom(["nipples", "nubs"])}`,
         `${stateDesc ? posPronoun + " " + stateDesc + " " : ""}${nippleAdj ? nippleAdj + " " : ""}nipples, surrounded by ${areolaPigment} ${areolaSize} areolas`,
+        erectDesc ? `${posPronoun} ${erectDesc}, ${areolaTex}` : `${posPronoun} ${nippleAdj ? nippleAdj + " " : ""}nipples`,
         `${posPronoun} ${nippleAdj ? nippleAdj + " " : ""}nipples`
     ].map(function(s) { return s.replace(/\s+/g, ' ').trim(); }));
 }
@@ -6189,6 +6605,7 @@ if (typeof window !== 'undefined') {
     window.getPlayerSize = getPlayerSize;
     window.getRelativeSize = getRelativeSize;
     window.getSizeContext = getSizeContext;
+    window.getNippleState = getNippleState;
     window.isCivilizedSpecies = isCivilizedSpecies;
     window.canNPCSpeak = canNPCSpeak;
     window.getNPCDialogueStyle = getNPCDialogueStyle;
@@ -6884,7 +7301,7 @@ function getVerbForTool(verb, tool) {
     }
     
     // Plural tools use base verb form
-    const pluralTools = new Set(['fingers', 'hands', 'palms', 'testicles', 'balls', 'lips']);
+    const pluralTools = new Set(['fingers', 'hands', 'palms', 'testicles', 'balls', 'lips', 'teeth']);
     
     if (pluralTools.has(tool)) {
         return verbConjugation(verb, 'present'); // Base form for plural
@@ -7083,13 +7500,23 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         );
     }
     
-    // Finger penetration
+    // Finger penetration — dedicated templates for fingering that avoid
+    // "her her" duplication and produce varied, vivid descriptions
     if (verbBase === 'finger' || verbBase === 'penetrate') {
+        // cleanAnatomyDesc may already start with posPronoun ("her plump labia")
+        // so don't prepend another posPronoun before it
         narratives.push(
-            `You ${verbPresent} ${posPronoun} ${cleanAnatomyDesc}, sliding deep into ${posPronoun} ${highArousal ? 'slick, welcoming' : 'warm, tight'} channel.`
+            `You slide your fingers into ${cleanAnatomyDesc}, ${posPronoun} ${highArousal ? 'slick walls gripping you' : 'warm channel tightening around you'}.`,
+            `You curl your fingers inside ${cleanAnatomyDesc}, pressing against ${posPronoun} ${highArousal ? 'swollen front wall' : 'inner ridge'}.`,
+            `Your fingers pump into ${cleanAnatomyDesc}, the wet sounds filling the air.`
         );
+        if (highArousal) {
+            narratives.push(
+                `You thrust your fingers deep into ${cleanAnatomyDesc}, ${posPronoun} juices coating your hand.`
+            );
+        }
     }
-    
+
     // Teasing
     if (verbBase === 'tease') {
         narratives.push(
@@ -7236,9 +7663,16 @@ function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDe
 function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
     const { arousalLevel = 0, isContinueAction = false } = context;
     const highArousal = arousalLevel > 70;
-    const actualTool = act.tool || pickRandom(['hands', 'palms', 'fingers']);
+    const actualTool = verbBase === 'bite' ? 'teeth' : (verbBase === 'pinch' ? 'fingers' : (act.tool || pickRandom(['hands', 'palms', 'fingers'])));
     const toolVerb = getVerbForTool(verbBase, actualTool);
-    
+
+    // Get nipple erection state for nipple-targeted acts
+    var nippleState = (typeof getNippleState === 'function' && (act.target === 'nipples' || verbBase === 'pinch' || verbBase === 'flick' || verbBase === 'bite')) ? getNippleState(npc, arousalLevel) : null;
+    var nBudDesc = nippleState ? nippleState.budDesc : "";
+    var nAreolaTex = nippleState ? nippleState.areolaTexture : "";
+    var nSensation = nippleState ? nippleState.sensation : "";
+    var nErection = nippleState ? nippleState.erection : "";
+
     return [
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
@@ -7246,9 +7680,27 @@ function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         verbBase === 'kiss' ? `You press your lips to ${anatomyDesc}, ${highArousal ? 'tracing the soft curves with your tongue' : 'exploring the warm surface'}.` : null,
         verbBase === 'lick' ? `Your tongue ${verbIng} ${anatomyDesc}, ${highArousal ? 'tracing the soft curves' : 'exploring the warm surface'}.` : null,
         verbBase === 'suck' ? `Your mouth ${verbIng} ${anatomyDesc}, ${highArousal ? 'drawing them firmly between your lips' : 'wrapping your lips around them'}.` : null,
-        verbBase === 'pinch' || verbBase === 'flick' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'teasing the sensitive peaks' : 'playing with the firm nubs'}.` : null,
+        // Pinch — uses fingers, not "hand". References areola texture and nipple
+        // erection state. Pinch is a firm, targeted squeeze of the nipple
+        // between fingertips — distinct from the lighter "flick" action.
+        verbBase === 'pinch' ? `You ${verbPresent} ${nBudDesc ? nBudDesc : anatomyDesc} between your fingertips, ${nAreolaTex ? nAreolaTex + ', ' : ''}${nSensation || 'rolling the firm bud with deliberate pressure'}.` : null,
+        verbBase === 'pinch' ? `Your fingers close around ${nBudDesc ? nBudDesc : anatomyDesc}, ${nErection === 'erect' ? 'the stiff flesh resistant between your grip' : nErection === 'stiffening' ? 'the hardening bud firming under your touch' : 'the soft bud yielding to your pressure'}.` : null,
+        verbBase === 'pinch' ? `You trap ${nBudDesc ? nBudDesc : anatomyDesc} between thumb and finger, ${nAreolaTex || 'pinching gently'}, ${nSensation || 'the sensitive flesh responding to the pressure'}.` : null,
+        verbBase === 'pinch' ? `Your fingertips ${verbPresent} ${nBudDesc ? nBudDesc : anatomyDesc}, ${highArousal ? 'tugging with firm, deliberate pressure' : 'squeezing with careful, measured force'}.` : null,
+        verbBase === 'pinch' ? `You ${verbPresent} ${anatomyDesc}, feeling the ${highArousal ? 'stiff peaks harden' : 'buds tighten'} under your grip${nAreolaTex ? ', ' + nAreolaTex : ''}.` : null,
+        // Flick — lighter than pinch, fingertip tap
+        verbBase === 'flick' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'the firm peaks bouncing under the impact' : 'the soft buds twitching at the tap'}.` : null,
+        verbBase === 'flick' ? `Your fingertip ${toolVerb} ${nBudDesc ? nBudDesc : anatomyDesc}, ${nSensation ? nSensation : 'a quick, sharp tap that makes them stiffen'}.` : null,
         verbBase === 'tease' ? `You ${verbPresent} ${anatomyDesc}, circling but never quite touching the ${highArousal ? 'hard, aching' : 'perky'} tips.` : null,
-        `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling the warm flesh giving way' : 'enjoying the soft texture'}.`
+        // Bite/nibble — uses teeth, not "mouth biting". Alternate between
+        // gentle nibble and slightly firmer bite. Never too hard.
+        verbBase === 'bite' ? `Your teeth graze ${anatomyDesc}, nibbling gently at the ${highArousal ? 'stiff peaks' : 'sensitive buds'}.` : null,
+        verbBase === 'bite' ? `You ${verbPresent} ${anatomyDesc} with your teeth, a careful pinch of pressure that makes ${posPronoun} breath catch.` : null,
+        verbBase === 'bite' ? `You nibble at ${anatomyDesc}, your teeth barely closing around the ${highArousal ? 'swollen' : 'firm'} nub before releasing.` : null,
+        verbBase === 'bite' ? `Your teeth close softly around ${anatomyDesc}, the gentle pressure sending a shiver through ${posPronoun} chest.` : null,
+        verbBase === 'bite' ? `You nip at ${anatomyDesc}, a fleeting pinch of teeth that makes ${posPronoun} ${highArousal ? 'stiff nipples' : 'buds'} tighten instinctively.` : null,
+        verbBase === 'bite' ? `Your teeth trace the edge of ${anatomyDesc}, nibbling in tiny, deliberate increments until ${posPronoun} breath hitches.` : null,
+        verbBase === 'bite' || verbBase === 'pinch' || verbBase === 'flick' ? null : `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling the warm flesh giving way' : 'enjoying the soft texture'}.`
     ].filter(Boolean);
 }
 
@@ -7423,9 +7875,11 @@ function buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc
         verbBase === 'grope' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'kneading the soft flesh' : 'exploring the curves'}.` : null,
         verbBase === 'grope' ? `Your ${actualTool} ${verbIng} ${anatomyDesc}, ${highArousal ? 'gripping the soft flesh' : 'exploring the firm curves'}` : null,
         
-        // Slap
-        verbBase === 'slap' ? `You ${verbPresent} ${anatomyDesc}, the ${highArousal ? 'flesh jiggling' : 'impact echoing'}.` : null,
-        verbBase === 'slap' ? `Your ${actualTool === 'hand' ? 'hand' : actualTool === 'palm' ? 'palm' : 'hand'} ${toolVerb} ${anatomyDesc}, leaving a ${highArousal ? 'rosy handprint' : 'tingling mark'}.` : null,
+        // Slap — clear spanking with sound, skin coloring, flesh reaction
+        verbBase === 'slap' ? `You slap ${anatomyDesc}, the crack of your palm echoing sharply.` : null,
+        verbBase === 'slap' ? `Your hand comes down hard on ${anatomyDesc}, the flesh rippling from the impact.` : null,
+        verbBase === 'slap' ? `You spank ${anatomyDesc}, the loud smack ringing out as the skin reddens under your hand.` : null,
+        verbBase === 'slap' ? `You bring your palm down on ${anatomyDesc} with a sharp crack, the sting blooming ${highArousal ? 'across the flushed skin' : 'warm across the surface'}.` : null,
         
         // Kiss
         verbBase === 'kiss' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'trailing your lips across the soft skin' : 'pressing a gentle kiss'}.` : null,
@@ -7494,10 +7948,42 @@ function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
         ];
     }
     
+    // Get favorability and attraction for mood-aware kiss narration
+    var _favor = (npc.memory && typeof npc.memory.favorability === "number") ? npc.memory.favorability : 0;
+    var _attraction = (npc.relationship && typeof npc.relationship.attraction === "number") ? npc.relationship.attraction : 0;
+    var _lust = (npc.relationship && typeof npc.relationship.lust === "number") ? npc.relationship.lust : 0;
+    var highFavor = _favor >= 60;
+    var highAttraction = _attraction >= 30;
+
     return [
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
-        verbBase === 'kiss' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing firmly against the warm lips' : 'gently touching the soft surface'}.` : null,
+        // Kiss templates — mood-aware, with favorability and attraction details
+        verbBase === 'kiss' ? (function() {
+            var kissLines = [
+                `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing firmly, tasting the warmth of her breath' : 'gently touching the soft surface'}.`
+            ];
+            if (highFavor && highAttraction) {
+                kissLines.push(
+                    `Your excitement grows as you press against ${anatomyDesc}, sliding your tongue against hers, tasting something sweet.`,
+                    `A tingle runs up your spine as she presses her mouth against yours, her lips warm and inviting, and your loins tighten with the heat of it.`,
+                    `You deepen the kiss against ${anatomyDesc}, your tongue finding hers, the soft wet contact sending a jolt through your chest.`,
+                    `You kiss ${anatomyDesc} hungrily, the sweetness of her mouth and the press of her body against yours making your pulse race.`,
+                    `You linger against ${anatomyDesc}, tasting the faint sweetness on her tongue, your body responding to the warmth of the kiss with a familiar ache.`
+                );
+            } else if (highFavor) {
+                kissLines.push(
+                    `You ${verbPresent} ${anatomyDesc}, a warmth spreading through you as her lips soften against yours.`,
+                    `You press into the kiss, tasting her, the gentleness of it making your breath catch.`
+                );
+            } else {
+                kissLines.push(
+                    `You ${verbPresent} ${anatomyDesc}, the soft contact sending a pleasant warmth through you.`,
+                    `Your lips meet ${anatomyDesc}, the tentative press of the kiss coaxing a quiet breath from you both.`
+                );
+            }
+            return kissLines[Math.floor(Math.random() * kissLines.length)];
+        })() : null,
         verbBase === 'suck' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'drawing deeply' : 'gently pulling'}${getMouthSound()}.` : null,
         verbBase === 'bite' || verbBase === 'nibble' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'with eager pressure' : 'playfully'}.` : null,
         verbBase === 'lick' ? `Your ${actualTool === 'tongue' ? actualTool : 'tongue'} ${verbIng} ${anatomyDesc}, ${highArousal ? 'hungrily' : 'exploratively'}${getMouthSound()}.` : null,

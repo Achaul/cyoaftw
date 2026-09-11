@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-08-16-007
+ * Version: 2026-09-10-001
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-09-07-004";
-    console.log("[Intimacy Acts] Loaded v2026-09-07-004 - titfuck + assjob + receive relabel + pull_out_generic");
+    window.INTIMACY_ACTS_VERSION = "2026-09-10-001";
+    console.log("[Intimacy Acts] Loaded v2026-09-10-001 - pinch tool fix (fingers) + nipple play details");
 }
 
 // ============================================================================
@@ -275,7 +275,7 @@ var SEX_ACTS = {
     caress_breasts: { id: "caress_breasts", tool: "hand", target: "breasts", verb: "caress", type: ACT_TYPES.TEASE, label: "Caress breasts", desc: "Gently caress their breasts", arousal: { p: 8, n: 20 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF, objectDialogueTags: ["breasts touched"] },
     
     tease_nipples: { id: "tease_nipples", tool: "hand", target: "nipples", verb: "tease", type: ACT_TYPES.TEASE, label: "Tease nipples", desc: "Tease their nipples with your fingers", arousal: { p: 10, n: 30 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Astride Lap", "Doggy", "Bent Over", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF },
-    pinch_nipples: { id: "pinch_nipples", tool: "hand", target: "nipples", verb: "pinch", type: ACT_TYPES.TEASE, label: "Pinch nipples", desc: "Pinch their nipples", arousal: { p: 10, n: 35 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF },
+    pinch_nipples: { id: "pinch_nipples", tool: "fingers", target: "nipples", verb: "pinch", type: ACT_TYPES.TEASE, label: "Pinch nipples", desc: "Pinch their nipples", arousal: { p: 10, n: 35 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF },
     flick_nipples: { id: "flick_nipples", tool: "fingers", target: "nipples", verb: "flick", type: ACT_TYPES.TEASE, label: "Flick nipples", desc: "Flick their nipples with your fingertips", arousal: { p: 8, n: 30 }, pos: ["Standing", "Perched", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF },
     
     kiss_nipples: { id: "kiss_nipples", tool: "mouth", target: "nipples", verb: "kiss", type: ACT_TYPES.TEASE, label: "Kiss nipples", desc: "Kiss their nipples", arousal: { p: 10, n: 30 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF },
