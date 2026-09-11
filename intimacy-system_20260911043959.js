@@ -4033,23 +4033,31 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     // that vary by NPC size: small = squeaky, medium = normal, large = loud/deep
     if (shouldFart && phase === "continue") {
         var airLine;
+        var _fartSound1 = pickRandom(["fart", "burst of air"]);
+        var _fartSound2 = pickRandom(["whistle", "squeak"]);
+        var _fartSound3 = pickRandom(["pfffft", "squeak"]);
+        var _fartSound4 = pickRandom(["fart", "burst of trapped air"]);
+        var _fartSound5 = pickRandom(["brap", "blorp", "rrrt"]);
+        var _fartSound6 = pickRandom(["fart", "blast of air"]);
+        var _fartSound7 = pickRandom(["pfffft", "squelch", "fart"]);
+        var _fartSound8 = pickRandom(["brap", "pft"]);
         if (isSmallNpc) {
             airLine = pickRandom([
-                ` A small, squeaky ${pickRandom(["fart", "burst of air"])} escapes from ${posPronoun} ass as you thrust in, and ${posPronoun} face goes red with embarrassment.`,
-                ` Trapped air squeaks out of ${posPronoun} stretched hole with a high-pitched ${pickRandom(["whistle", "squeak"])}, and ${posPronoun} bury${posPronoun === "her" ? "s" : ""} ${posPronoun} face in shame.`,
-                ` A tiny, embarrassing ${pickRandom(["pfffft", "squeak")} escapes from between ${posPronoun} cheeks, the sound impossibly small and lewd.`
+                " A small, squeaky " + _fartSound1 + " escapes from " + posPronoun + " ass as you thrust in, and " + posPronoun + " face goes red with embarrassment.",
+                " Trapped air squeaks out of " + posPronoun + " stretched hole with a high-pitched " + _fartSound2 + ", and " + posPronoun + " burys " + posPronoun + " face in shame.",
+                " A tiny, embarrassing " + _fartSound3 + " escapes from between " + posPronoun + " cheeks, the sound impossibly small and lewd."
             ]);
         } else if (isLargeNpc) {
             airLine = pickRandom([
-                ` A loud, deep ${pickRandom(["fart", "burst of trapped air"])} erupts from ${posPronoun} ass as you pound in, the sound echoing obscenely off the walls.`,
-                ` Trapped air escapes with a vulgar, rumbling ${pickRandom(["brap", "blorp", "rrrt")} that reverberates through ${posPronoun} large frame.`,
-                ` A deep, guttural ${pickRandom(["fart", "blast of air")} thunders out of ${posPronoun} well-fucked hole, loud and unladylike. ${subjectPronoun} doesn't seem to notice.`
+                " A loud, deep " + _fartSound4 + " erupts from " + posPronoun + " ass as you pound in, the sound echoing obscenely off the walls.",
+                " Trapped air escapes with a vulgar, rumbling " + _fartSound5 + " that reverberates through " + posPronoun + " large frame.",
+                " A deep, guttural " + _fartSound6 + " thunders out of " + posPronoun + " well-fucked hole, loud and unladylike. " + subjectPronoun + " doesn't seem to notice."
             ]);
         } else {
             airLine = pickRandom([
-                ` Trapped air escapes from ${posPronoun} ass with a lewd ${pickRandom(["pfffft", "squelch", "fart")}, the sound punctuating the rhythm of your thrusts.`,
-                ` A wet ${pickRandom(["fart", "burst of air")} slips out of ${posPronoun} stretched hole, and ${posPronoun} cheeks flush with embarrassment.`,
-                ` Air trapped inside escapes with a sharp ${pickRandom(["brap", "pft")} as you pull back, the sound filling the silence between thrusts.`
+                " Trapped air escapes from " + posPronoun + " ass with a lewd " + _fartSound7 + ", the sound punctuating the rhythm of your thrusts.",
+                " A wet " + _fartSound1 + " slips out of " + posPronoun + " stretched hole, and " + posPronoun + " cheeks flush with embarrassment.",
+                " Air trapped inside escapes with a sharp " + _fartSound8 + " as you pull back, the sound filling the silence between thrusts."
             ]);
         }
         response = response.replace(/\.$/, "") + airLine;
