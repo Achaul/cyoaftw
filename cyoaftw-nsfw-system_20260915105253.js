@@ -1,6 +1,6 @@
-// === cyoaftw-nsfw-system.js === - v2026-09-07-004
-// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, make-a-move, action function passthrough fix
-window.__NSFW_SYSTEM_VERSION = "2026-09-07-004";
+// === cyoaftw-nsfw-system.js === - v2026-09-11-001
+// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, make-a-move, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply
+window.__NSFW_SYSTEM_VERSION = "2026-09-11-001";
 (function() {
   'use strict';
 
@@ -465,7 +465,40 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
             }
         }
     }
-    
+
+    // ── STAT-BASED FALLBACK ACCEPTANCE ───────────────────────────
+    // If the AI hasn't returned an affirmative (not cached, timed out,
+    // or unavailable), fall back to NPC stats to decide acceptance.
+    // This ensures seduce/proposition can succeed without AI.
+    if (!isAccepted && !isRejected && affirmativeFromCache === undefined &&
+        (option.id === "seduce" || option.id === "proposition")) {
+        var _favor = (npc.memory && typeof npc.memory.favorability === "number") ? npc.memory.favorability : 0;
+        var _attraction = (npc.relationship && typeof npc.relationship.attraction === "number") ? npc.relationship.attraction :
+                          (npc.memory && typeof npc.memory.attraction === "number") ? npc.memory.attraction : 0;
+        var _lust = (npc.relationship && typeof npc.relationship.lust === "number") ? npc.relationship.lust :
+                    (npc.memory && typeof npc.memory.lust === "number") ? npc.memory.lust : 0;
+        var _temperament = String(npc.temperament || "").toLowerCase();
+        var _isBold = _temperament === "forward" || _temperament === "bold" || _temperament === "lustful";
+
+        // Seduce is easier — accepts if favor >= 20 or attraction >= 15 or lust >= 20
+        // Proposition is harder — accepts if favor >= 40 or attraction >= 25 or lust >= 30
+        // Bold NPCs get a -10 threshold reduction
+        var _threshold = (option.id === "proposition") ? 40 : 20;
+        var _attrThreshold = (option.id === "proposition") ? 25 : 15;
+        var _lustThreshold = (option.id === "proposition") ? 30 : 20;
+        if (_isBold) { _threshold -= 10; _attrThreshold -= 10; _lustThreshold -= 10; }
+
+        if (_favor >= _threshold || _attraction >= _attrThreshold || _lust >= _lustThreshold) {
+            isAccepted = true;
+            console.log("[NSFW Inquiry] Stat-based fallback ACCEPT for", option.id,
+                "(favor=" + _favor + ", attraction=" + _attraction + ", lust=" + _lust + ", bold=" + _isBold + ")");
+        } else {
+            isRejected = true;
+            console.log("[NSFW Inquiry] Stat-based fallback REJECT for", option.id,
+                "(favor=" + _favor + ", attraction=" + _attraction + ", lust=" + _lust + ")");
+        }
+    }
+
     // Process acceptance
     if (isAccepted) {
       if (option.onAccept) {
@@ -867,6 +900,11 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
           if (typeof window.addSessionFollower === "function") {
             window.addSessionFollower(npc);
           }
+          // Show confirmation message
+          if (typeof window.addChatMessage === "function") {
+            var _name = npc && npc.name ? npc.name : "They";
+            window.addChatMessage("left", _name, "Alright, I'll come with you.", { mode: "auto" });
+          }
         }
       },
       {
@@ -888,6 +926,11 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
         action: function(npc) {
           if (typeof window.removeSessionFollower === "function") {
             window.removeSessionFollower(npc);
+          }
+          // Show confirmation message
+          if (typeof window.addChatMessage === "function") {
+            var _name = npc && npc.name ? npc.name : "They";
+            window.addChatMessage("left", _name, "Alright, I'll stay here then.", { mode: "auto" });
           }
         }
       }
