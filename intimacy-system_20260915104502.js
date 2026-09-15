@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-11-010
+ * Version: 2026-09-11-011
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-010";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-011";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -153,6 +153,10 @@ function clearLLMEnhancementCache(intimacy) {
         intimacy.llmEnhancement.active = false;
         intimacy.llmEnhancement.pendingPromise = null;
     }
+    // Also clear player narrative cache
+    if (intimacy && intimacy.playerNarrativeCache && intimacy.playerNarrativeCache instanceof Map) {
+        intimacy.playerNarrativeCache.clear();
+    }
 }
 
 /**
@@ -287,6 +291,113 @@ function cacheLLMEnhancement(intimacy, actionType, position, enhancedNarrative) 
     }
     
     intimacy.llmEnhancement.cache.set(cacheKey, enhancedNarrative);
+}
+
+// ============================================================================
+// PLAYER NARRATIVE CACHE (AI-polished player action descriptions)
+// ============================================================================
+
+/**
+ * Get a cached AI-polished player narrative.
+ * Keyed by actId||position (same pattern as NPC response caches).
+ */
+function getCachedPlayerNarrative(intimacy, actId, position) {
+    if (!intimacy || !intimacy.playerNarrativeCache) return null;
+    if (!(intimacy.playerNarrativeCache instanceof Map)) return null;
+    var key = actId + "||" + position;
+    return intimacy.playerNarrativeCache.get(key) || null;
+}
+
+/**
+ * Store an AI-polished player narrative in the cache.
+ */
+function cachePlayerNarrative(intimacy, actId, position, narrative) {
+    if (!intimacy) return;
+    if (!intimacy.playerNarrativeCache || !(intimacy.playerNarrativeCache instanceof Map)) {
+        intimacy.playerNarrativeCache = new Map();
+    }
+    var key = actId + "||" + position;
+    intimacy.playerNarrativeCache.set(key, narrative);
+}
+
+/**
+ * Purge a cached player narrative after use.
+ */
+function purgeCachedPlayerNarrative(intimacy, actId, position) {
+    if (!intimacy || !intimacy.playerNarrativeCache || !(intimacy.playerNarrativeCache instanceof Map)) return;
+    var key = actId + "||" + position;
+    intimacy.playerNarrativeCache.delete(key);
+}
+
+/**
+ * Build the AI prompt for polishing the PLAYER narrative (the "You..." action description).
+ * Separate from the NPC response prompt — this polishes the player's action text.
+ */
+function buildPlayerNarrativePrompt(context) {
+    var npc = context.npc;
+    var player = context.player;
+    var action = context.action;
+    var position = context.position;
+    var templateResponse = context.templateResponse; // The template player narrative
+
+    var _species = (npc.species || "Human").toLowerCase();
+    var _isUncivilized = _species && !isCivilizedSpecies(_species);
+    var _speciesNote = _isUncivilized
+        ? "\nThe NPC is an uncivilized " + npc.species + ". Describe their body in raw, animal terms — coarse hair, rough skin, non-human features where relevant."
+        : (npc.species && npc.species !== "Human")
+            ? "\nThe NPC is a " + npc.species + ". Include species-appropriate physical details (skin color, texture, features)."
+            : "";
+
+    var _skinDesc = "";
+    if (typeof getSkinDescription === "function") {
+        _skinDesc = getSkinDescription(npc);
+    }
+    var _sizeContext = "";
+    if (typeof getSizeContext === "function") {
+        _sizeContext = getSizeContext(player, npc) || "";
+    }
+
+    var actTypeName = action.type === "penetrate" ? "penetration (entering)" :
+                 action.type === "continue" ? "continued penetration (thrusting)" :
+                 action.type === "tease" ? "teasing/touching" :
+                 action.type === "impact" ? "impact (spanking/slapping)" :
+                 "intimate action";
+
+    var prompt = [
+"You are polishing the PLAYER'S action description from a sex scene in a text adventure game.",
+"The NPC is " + (npc.name || "the NPC") + ", a " + (npc.species || "Human") + " " + (npc.gender || "female") + "." + (npc.temperament ? " Temperament: " + npc.temperament + "." : ""),
+"",
+"INSTRUCTIONS:",
+"- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and erotic.",
+"- Keep the same meaning, the same act, and the same physical details. Do NOT invent new actions or body parts.",
+"- The act: " + action.tool + " " + action.verb + " " + action.target + " (" + actTypeName + ").",
+"- Write in second person (\"You press...\"). This is the player's perspective.",
+"- Use direct, literal language: \"press\", \"push\", \"slide\", \"grip\", \"clench\". No metaphors.",
+"- Keep it to 1-2 sentences. Match the length of the base text.",
+"- If the base text mentions sphincter, wrinkled skin, tight ring, scent, difficulty, or size — keep those details.",
+"- If the base text describes blocked/failed insertion — keep that. Do NOT make it succeed if the base says it failed.",
+"- Do NOT add NPC dialogue or speech. This is only the player's action description.",
+"- Do NOT add narration, inner monologue, or atmospheric description. Stay on the body.",
+"",
+"STYLE:",
+"- RIGHT: \"You push the head of your hard cock against her anus, the wrinkled sphincter clenching tight. You push slowly, the wrinkled flesh pulling taut as you force the ring open.\"",
+"- RIGHT: \"You press your cock against her wrinkled sphincter, but the tight ring refuses to yield. You can't get it in.\"",
+"- WRONG: \"Your fingers remain anchored to the heat of her flushed backside.\"",
+"- WRONG: \"Forcing her glutes wide, you lay bare the dusky ring of her anus, the velvet skin stretching taut.\"",
+"",
+"ACT: " + action.tool + " " + action.verb + " " + action.target + " (" + actTypeName + ")",
+"Position: " + (position.label || "Unknown") + ".",
+_speciesNote ? _speciesNote : "",
+_skinDesc ? "NPC skin: " + _skinDesc : "",
+_sizeContext ? _sizeContext : "",
+"",
+"BASE TEXT (polish this — fix grammar, refine, make more erotic, keep same meaning and details):",
+"\"" + (templateResponse || "") + "\"",
+"",
+"RESPOND:"
+    ].filter(function(l) { return l !== ""; }).join("\n");
+
+    return prompt;
 }
 
 // ============================================================================
@@ -846,7 +957,9 @@ function resetIntimacyState(npc) {
             cache: new Map(),
             pendingPromise: null,
             active: false
-        }
+        },
+        // Cache for AI-polished player narratives (separate from NPC response cache)
+        playerNarrativeCache: new Map()
     };
 }
 
@@ -2648,9 +2761,22 @@ function buildIntimacyPrompt(context) {
     var actDescription = `The player is using their ${action.tool} to ${action.verb} the NPC's ${action.target}. This is a ${actTypeName} act. The NPC's reaction should be about the sensation of ${action.tool} on ${action.target}, NOT about vaginal sex or penetration unless the act IS penetration.`;
 
     // Construct the full prompt
+    var _species = (npc.species || "Human").toLowerCase();
+    var _isUncivilized = _species && !isCivilizedSpecies(_species);
+    var _speechPattern = npc.speechPattern || npc.speechStyle || "";
+    var _speciesContext = "";
+    if (_isUncivilized) {
+        _speciesContext = "\nSPECIES NOTE: This NPC is uncivilized (" + npc.species + "). Their speech is simple, direct, and possibly broken. They may use grunts, gestures, or crude words instead of refined language. Do NOT make them speak eloquently. If the base response has no dialogue, do NOT add dialogue for an uncivilized NPC — use body language instead.";
+    } else if (npc.species && npc.species !== "Human") {
+        _speciesContext = "\nSPECIES NOTE: This NPC is a " + npc.species + ". Keep their reactions consistent with their species characteristics if apparent.";
+    }
+    var _speechContext = _speechPattern
+        ? "\nSPEECH: This NPC speaks with a " + _speechPattern + " pattern. Match this in any dialogue. Do NOT change their speech style."
+        : "";
+
     const prompt = `
 You are polishing a sentence from a sex scene in a text adventure game.
-The NPC is ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}.${npc.temperament ? ` Temperament: ${npc.temperament}.` : ""}${npc.personalityTraits && npc.personalityTraits.length ? ` Traits: ${npc.personalityTraits.join(", ")}.` : ""}
+The NPC is ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}.${npc.temperament ? ` Temperament: ${npc.temperament}.` : ""}${npc.personalityTraits && npc.personalityTraits.length ? ` Traits: ${npc.personalityTraits.join(", ")}.` : ""}${_speciesContext}${_speechContext}
 
 INSTRUCTIONS:
 - Fix grammar, polish sentence structure, and refine the BASE RESPONSE below. Make it read like a clean, well-written sentence in a published novel — not a rough draft.
@@ -6845,6 +6971,10 @@ if (typeof window !== 'undefined') {
     window.LLM_ENHANCEMENT_CONFIG = LLM_ENHANCEMENT_CONFIG;
     window.isSexualAct = isSexualAct;
     window.clearLLMEnhancementCache = clearLLMEnhancementCache;
+    window.buildPlayerNarrativePrompt = buildPlayerNarrativePrompt;
+    window.getCachedPlayerNarrative = getCachedPlayerNarrative;
+    window.cachePlayerNarrative = cachePlayerNarrative;
+    window.purgeCachedPlayerNarrative = purgeCachedPlayerNarrative;
     window.prefetchPenetrationContinue = prefetchPenetrationContinue;
     window.getCachedPenetrationResponse = getCachedPenetrationResponse;
     window.cachePenetrationResponse = cachePenetrationResponse;
@@ -6938,13 +7068,13 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     if (isContinueAction && intimacy && typeof initializeLLMEnhancement === 'function') {
         // Ensure LLM enhancement system is initialized
         initializeLLMEnhancement(intimacy);
-        
+
         const currentPosition = (intimacy.position && intimacy.position.player) || "Unknown";
         const cachedEnhancement = getCachedLLMEnhancement(intimacy, actionId, currentPosition);
         if (cachedEnhancement) {
             return cachedEnhancement;
         }
-        
+
         // If no cache, fire off LLM enhancement request for future use
         // and return our generated narrative for now
         if (typeof requestLLMEnhancement === 'function') {
@@ -6953,7 +7083,56 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
             });
         }
     }
-    
+
+    // ── PLAYER NARRATIVE AI POLISH ────────────────────────────────
+    // Check if we have a cached AI-polished player narrative for this
+    // act+position. If so, use it. If not, fire a background AI call
+    // to polish the template narrative and cache for next time.
+    // Same non-blocking pattern as the NPC response cache.
+    if (intimacy && !act.playerIsBottom) {
+        var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
+        var _currentPosition = (intimacy.position && intimacy.position.player) || "Unknown";
+
+        // Check player narrative cache first
+        var cachedPlayerNarr = getCachedPlayerNarrative(intimacy, actionId, _currentPosition);
+        if (cachedPlayerNarr) {
+            console.log("[Intimacy AI] Using cached player narrative for", actionId);
+            purgeCachedPlayerNarrative(intimacy, actionId, _currentPosition);
+            return cachedPlayerNarr;
+        }
+
+        // Fire background AI to polish the player narrative for next time
+        if (_ai && isSexualAct(act)) {
+            (async function() {
+                try {
+                    var posObj = (typeof getPosition === 'function') ? getPosition(_currentPosition) : null;
+                    var playerContext = {
+                        npc: npc,
+                        player: player,
+                        action: act,
+                        position: posObj || { label: _currentPosition },
+                        templateResponse: finalNarrative
+                    };
+                    var prompt = buildPlayerNarrativePrompt(playerContext);
+                    console.log("[Intimacy AI] Background player narrative prefetch for", actionId);
+                    var result = await _ai({
+                        instruction: prompt,
+                        startWith: "",
+                        endButtons: "none",
+                        generatorName: "cyoaftw-engine-core"
+                    });
+                    var polished = result && (result.text || result);
+                    if (polished && polished.trim()) {
+                        cachePlayerNarrative(intimacy, actionId, _currentPosition, polished.trim());
+                        console.log("[Intimacy AI] Cached player narrative for", actionId, "(" + polished.substring(0, 60) + "...)");
+                    }
+                } catch (e) {
+                    console.warn("[Intimacy AI] Player narrative prefetch failed for", actionId, e);
+                }
+            })();
+        }
+    }
+
     return finalNarrative;
 }
 
