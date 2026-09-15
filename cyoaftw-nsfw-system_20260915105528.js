@@ -647,6 +647,15 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
                 selectedNPC._pendingSeductionOption = "follow-player";
                 // For now, set a flag to indicate they're ready to follow
                 selectedNPC._waitingToFollow = true;
+                // Actually add to session followers so they follow the player
+                if (typeof window.addSessionFollower === "function") {
+                    window.addSessionFollower(selectedNPC);
+                }
+                // Show confirmation
+                if (typeof window.addChatMessage === "function") {
+                    var _name = selectedNPC && selectedNPC.name ? selectedNPC.name : "They";
+                    window.addChatMessage("left", _name, "Alright, lead the way.", { mode: "auto" });
+                }
               },
               relationshipImpact: { lust: +2, attraction: +2 }
             };
