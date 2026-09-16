@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-11-015
+ * Version: 2026-09-11-016
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,12 +12,12 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-015";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-016";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.INTIMACY_SYSTEM_VERSION = "2026-09-05-001";
-    console.log("[Intimacy System] Loaded v2026-09-11-015 - Dragonborn civilized + new species templates");
+    console.log("[Intimacy System] Loaded v2026-09-11-016 - cloaca anatomy + tail descriptions + banned words removal + dynamic speech enforcement");
 }
 
 // ============================================================================
@@ -2778,6 +2778,17 @@ function buildIntimacyPrompt(context) {
         _speciesContext = "\nSPECIES NOTE: This NPC is uncivilized (" + npc.species + "). Their speech is simple, direct, and possibly broken. They may use grunts, gestures, or crude words instead of refined language. Do NOT make them speak eloquently. If the base response has no dialogue, do NOT add dialogue for an uncivilized NPC — use body language instead.";
     } else if (npc.species && npc.species !== "Human") {
         _speciesContext = "\nSPECIES NOTE: This NPC is a " + npc.species + ". Keep their reactions consistent with their species characteristics if apparent.";
+    }
+    // Add anatomy type note for reptilian species
+    var _anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    if (_anatomyType === "reptilian") {
+        _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\" in descriptions, not \"vagina\" or \"anus\". The opening is smooth-scaled and muscular, not mammalian.";
+    } else if (_anatomyType === "mixed") {
+        _speciesContext += "\nANATOMY NOTE: This species has mixed anatomy — humanoid genitals but with scaly texture. Mention scales in descriptions.";
+    }
+    // Add tail note if applicable
+    if (typeof hasNPCTail === "function" && hasNPCTail(npc)) {
+        _speciesContext += "\nThis NPC has a tail. When the player is behind them, mention the tail in descriptions (brushing, curling, wrapping, twitching).";
     }
     // Build speech context from the full profile if available
     var _speechContext = "";
@@ -5923,6 +5934,22 @@ function buildPositionChangeNarration(npc, positionChangeInfo) {
  * Describes the arrangement of the new position, not the full motion.
  */
 function getPositionChoreography(newPosition, posPronoun, subjPronoun, objPronoun, subjLower) {
+    // Tail fragment for tailed species in behind-positions
+    var _tailFragment = "";
+    // Note: npc is not passed to this function, so we check window.G.activeNPC
+    var _npc = (typeof G !== "undefined" && G.activeNPC) ? G.activeNPC : null;
+    if (_npc && typeof hasNPCTail === "function" && hasNPCTail(_npc)) {
+        var _behindPositions = ["Standing From Behind", "Against Wall From Behind", "Doggy", "Bent Over", "Spooning", "Reverse Cowgirl"];
+        if (_behindPositions.indexOf(newPosition) !== -1) {
+            _tailFragment = pickRandom([
+                posPronoun + " tail brushes against your thigh as you press close",
+                posPronoun + " thick tail curls to the side, clearing the way",
+                posPronoun + " tail wraps loosely around your wrist for a moment",
+                posPronoun + " tail swishes against your hip"
+            ]);
+        }
+    }
+
     // Each position has 2-3 varied templates describing the final arrangement
     var templates = {
         "Standing": [
@@ -6039,8 +6066,13 @@ function getPositionChoreography(newPosition, posPronoun, subjPronoun, objPronou
         var desc = newPosObj ? newPosObj.description : newPosition;
         return `You reposition until ${subjLower} is ${desc.toLowerCase()}.`;
     }
-    
-    return pickRandom(pool);
+
+    var result = pickRandom(pool);
+    // Append tail fragment if applicable
+    if (_tailFragment) {
+        result = result.replace(/\.$/, "") + ", " + _tailFragment + ".";
+    }
+    return result;
 }
 
 /**
@@ -6172,8 +6204,23 @@ function describeAnatomy(npc, target, options = {}) {
     
     // Get arousal descriptors
     const arousalDescriptors = getArousalDescriptors(arousalLevel, isAroused, isWet, isErect, isOnCooldown);
-    
-    switch (target.toLowerCase()) {
+
+    // Check anatomy type — reptilian species have cloaca instead of
+    // separate vagina and anus. Map those targets to "cloaca".
+    var anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    var effectiveTarget = target;
+    if (anatomyType === "reptilian") {
+        var targetLower = target.toLowerCase();
+        if (targetLower === "vagina" || targetLower === "pussy" || targetLower === "clitoris" || targetLower === "clit" ||
+            targetLower === "anus" || targetLower === "ass" || targetLower === "butt" || targetLower === "buttocks") {
+            // For reptilian anatomy, vagina and anus are the same opening (cloaca)
+            effectiveTarget = "cloaca";
+        }
+    }
+
+    switch (effectiveTarget.toLowerCase()) {
+        case "cloaca":
+            return describeCloaca(npc, anatomy, posPronoun, arousalDescriptors);
         case "vagina":
         case "pussy":
             return describeVagina(npc, anatomy, posPronoun, arousalDescriptors);
@@ -6560,6 +6607,32 @@ function describeNipples(npc, anatomy, posPronoun, arousalDescriptors) {
 }
 
 /**
+ * Describe cloaca (reptilian anatomy — single opening for both
+ * vaginal and anal functions). Used for lizardfolk, kobolds, and
+ * other reptilian species. Scaled, muscular, different from mammalian
+ * anatomy.
+ */
+function describeCloaca(npc, anatomy, posPronoun, arousalDescriptors) {
+    var skinDesc = (typeof getSkinDescription === "function") ? getSkinDescription(npc) : "";
+    var sizeAdj = pickRandom(["tight", "smooth-scaled", "muscular", "slick"]);
+    var cloacaTerm = pickRandom(["cloaca", "vent", "slit", "opening"]);
+
+    var candidates = [
+        posPronoun + " " + sizeAdj + " " + skinDesc + " " + cloacaTerm,
+        posPronoun + " " + skinDesc + " " + cloacaTerm + ", the smooth scales parting slightly",
+        posPronoun + " scaled " + cloacaTerm + ", a single sleek opening"
+    ];
+
+    // Arousal affects the cloaca — it gapes/widens when aroused
+    var stateDesc = arousalDescriptors.engorgement ? pickRandom(["parting", "widening", "gaping slightly", "dilated"]) : "";
+    if (stateDesc) {
+        candidates.push(posPronoun + " " + stateDesc + " " + skinDesc + " " + cloacaTerm + ", the scales pulling apart with arousal");
+    }
+
+    return pickRandom(candidates).replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Describe anus with rich detail
  * Uses anatomical terms: star, rosebud, pucker, ring, etc.
  */
@@ -6583,7 +6656,7 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
 
     const sizeDescriptors = {
         tight: ["tight", "constricted", "narrow", "virgin"],
-        snug: ["snug", "firm", "resilient"],
+        snug: ["snug", "firm", "tight"],
         firm: ["firm", "muscular", "controlled", "toned"],
         supple: ["supple", "yielding", "soft", "pliant", "flexible"],
         loose: ["loose", "relaxed", "experienced", "used", "accommodating"],
@@ -6685,8 +6758,7 @@ function describeMouth(npc, anatomy, posPronoun, arousalDescriptors) {
     return pickRandom([
         `${posPronoun} ${pickRandom(["soft", "warm", "inviting", "parted", "pouty"])} lips`,
         `${posPronoun} ${pickRandom(["sweet", "warm", "soft", "moist"])} mouth`,
-        `${posPronoun} ${pickRandom(["full", "plump", "sensual", "kissable"])} lips`,
-        `${posPronoun} ${surfaceType}-soft lips`
+        `${posPronoun} ${pickRandom(["full", "plump", "sensual", "kissable"])} lips`
     ]);
 }
 
@@ -6986,6 +7058,8 @@ if (typeof window !== 'undefined') {
     window.getNippleState = getNippleState;
     window.scaleArousal = scaleArousal;
     window.canCompleteAnalInsertion = canCompleteAnalInsertion;
+    window.getNPCAnatomyType = getNPCAnatomyType;
+    window.hasNPCTail = hasNPCTail;
     window.isCivilizedSpecies = isCivilizedSpecies;
     window.canNPCSpeak = canNPCSpeak;
     window.getNPCDialogueStyle = getNPCDialogueStyle;
@@ -8529,7 +8603,7 @@ function buildButtockNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc
         
         // Squeeze
         verbBase === 'squeeze' ? `You ${verbPresent} ${anatomyDesc}, feeling the ${highArousal ? 'warm, yielding' : 'firm, resistant'} flesh.` : null,
-        verbBase === 'squeeze' ? `You grip ${anatomyDesc}, massaging the ${highArousal ? 'pliant' : 'resilient'} globes.` : null,
+        verbBase === 'squeeze' ? `You grip ${anatomyDesc}, massaging the ${highArousal ? 'pliant' : 'firm'} globes.` : null,
         
         // Grope
         verbBase === 'grope' ? `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'kneading the soft flesh' : 'exploring the curves'}.` : null,
@@ -8936,6 +9010,43 @@ function isCivilizedSpecies(species) {
     if (!species) return false;
     const civilizedSpecies = ["human", "elf", "dwarf", "halfling", "dragonborn"];
     return civilizedSpecies.includes(species.toLowerCase());
+}
+
+/**
+ * Get the anatomy type for an NPC based on species template.
+ * Returns "humanoid" (standard genitals), "reptilian" (cloaca), or "mixed"
+ * (humanoid genitals with scaly texture).
+ */
+function getNPCAnatomyType(npc) {
+    if (!npc || !npc.species) return "humanoid";
+    var template = null;
+    if (typeof getSpeciesTemplate === "function") {
+        template = getSpeciesTemplate(npc.species);
+    } else if (typeof window !== "undefined" && typeof window.getSpeciesTemplate === "function") {
+        template = window.getSpeciesTemplate(npc.species);
+    }
+    if (template && template.anatomyType) return template.anatomyType;
+    return "humanoid";
+}
+
+/**
+ * Check if NPC has a tail based on species template or anatomy features.
+ */
+function hasNPCTail(npc) {
+    if (!npc) return false;
+    // Check species template
+    var template = null;
+    if (typeof getSpeciesTemplate === "function") {
+        template = getSpeciesTemplate(npc.species);
+    } else if (typeof window !== "undefined" && typeof window.getSpeciesTemplate === "function") {
+        template = window.getSpeciesTemplate(npc.species);
+    }
+    if (template && template.hasTail) return true;
+    // Check anatomy features for tail mention
+    if (npc.anatomy && Array.isArray(npc.anatomy.features)) {
+        return npc.anatomy.features.some(function(f) { return /tail/i.test(String(f)); });
+    }
+    return false;
 }
 
 /**
