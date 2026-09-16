@@ -1,6 +1,6 @@
-// === cyoaftw-nsfw-system.js === - v2026-09-11-001
+// === cyoaftw-nsfw-system.js === - v2026-09-11-002
 // Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, make-a-move, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply
-window.__NSFW_SYSTEM_VERSION = "2026-09-11-001";
+window.__NSFW_SYSTEM_VERSION = "2026-09-11-002";
 (function() {
   'use strict';
 
@@ -1022,7 +1022,10 @@ console.log("[NSFW System] Loaded - NSFW options in base catalogue");
       const envMod = getEnvironmentalModifier(window.G.activeRoom);
       if (option.relationshipImpact.lust) applyLustImpact(npc, option.relationshipImpact.lust, envMod);
       if (option.relationshipImpact.attraction) applyAttractionImpact(npc, option.relationshipImpact.attraction);
-      if (option.action && typeof option.action === "function") option.action(npc);
+      if (option.action && typeof option.action === "function") {
+        console.log("[NSFW Wrapper] Firing action for option:", option.id, "with NPC:", npc.name);
+        option.action(npc);
+      }
       
       // Handle meal date interaction
       const handled = handleMealDateInteraction(npc, option);
