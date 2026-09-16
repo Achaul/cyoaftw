@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-11-012
+ * Version: 2026-09-11-013
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,12 +12,12 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-012";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-013";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.INTIMACY_SYSTEM_VERSION = "2026-09-05-001";
-    console.log("[Intimacy System] Loaded v2026-09-11-012 - fix player narrative polish conflict + remove old LLM enhancement from generateIntimacyNarrative");
+    console.log("[Intimacy System] Loaded v2026-09-11-013 - reject meta-commentary in AI responses + stronger prompt instructions");
 }
 
 // ============================================================================
@@ -394,7 +394,9 @@ _sizeContext ? _sizeContext : "",
 "BASE TEXT (polish this — fix grammar, refine, make more erotic, keep same meaning and details):",
 "\"" + (templateResponse || "") + "\"",
 "",
-"RESPOND:"
+"IMPORTANT: Output ONLY the polished text. No explanations, no commentary, no meta-discussion. Just output the final polished sentence.",
+"",
+"RESPOND with only the polished text, nothing else:"
     ].filter(function(l) { return l !== ""; }).join("\n");
 
     return prompt;
@@ -2551,7 +2553,13 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
                 });
                 var responseText = result && (result.text || result);
                 if (responseText && responseText.trim()) {
-                    if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
+                    // Reject meta-commentary (AI talking about the task instead
+                    // of returning polished text)
+                    var _trimmed = responseText.trim();
+                    var _isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the polished/i.test(_trimmed);
+                    if (_isMeta) {
+                        console.log("[Intimacy AI] Response rejected (meta-commentary) for", act.id, ":", _trimmed.substring(0, 80));
+                    } else if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
                         var d = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
                         cachePenetrationResponse(intimacy, act.id, currentPosition, d, responseText);
                     } else {
@@ -2810,6 +2818,8 @@ ${getSizeContext(player, npc) ? "\n" + getSizeContext(player, npc) : ""}
 BASE RESPONSE (polish this — fix grammar, refine the language, make it more erotic, but keep the same meaning and details):
 "${templateResponse || ""}"
 
+IMPORTANT: Output ONLY the polished response text. No explanations, no commentary, no meta-discussion. If the base response is a fragment, complete it into a full sentence. Just output the final polished text.
+
 ${(() => {
     var _intimacy = ctxIntimacy || context.intimacy || null;
     if (!_intimacy) return "";
@@ -2819,8 +2829,8 @@ ${(() => {
     var _flavor = (typeof buildHiddenFlavorContext === 'function') ? buildHiddenFlavorContext(npc, action.target, _intimacy, { isAroused: _isAroused, isWet: _isWet, hasLube: hasLube }) : "";
     return _flavor ? "\n" + _flavor + "\n" : "";
 })()}
-RESPOND:
-`;
+RESPOND with only the polished text, nothing else:`;
+
 
     return prompt;
 }
@@ -7103,8 +7113,14 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
                     });
                     var polished = result && (result.text || result);
                     if (polished && polished.trim()) {
-                        cachePlayerNarrative(intimacy, actionId, _currentPosition, polished.trim());
-                        console.log("[Intimacy AI] Cached player narrative for", actionId, "(" + polished.substring(0, 60) + "...)");
+                        // Reject meta-commentary
+                        var _isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the polished/i.test(polished.trim());
+                        if (_isMeta) {
+                            console.log("[Intimacy AI] Player narrative rejected (meta-commentary) for", actionId);
+                        } else {
+                            cachePlayerNarrative(intimacy, actionId, _currentPosition, polished.trim());
+                            console.log("[Intimacy AI] Cached player narrative for", actionId, "(" + polished.substring(0, 60) + "...)");
+                        }
                     }
                 } catch (e) {
                     console.warn("[Intimacy AI] Player narrative prefetch failed for", actionId, e);
