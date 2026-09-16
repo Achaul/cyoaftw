@@ -6,7 +6,7 @@ const ZONE_TEMPLATES = [
         hostileArea: false,
         ambiance: "The sounds of daily life fill the air. People go about their business.",
         roomTypes: ["Tavern", "Inn", "Street", "Alleyway", "Square", "Avenue", "Gate"],
-        allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling"],
+        allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling", "Dragonborn"],
         lightLevel: "bright",
         defaultDanger: "safe"
     },
@@ -15,7 +15,7 @@ const ZONE_TEMPLATES = [
         hostileArea: true,
         ambiance: "The air is cold and stale. Distant sounds echo from unseen passages.",
         roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel"],
-        allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat"],
+        allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat", "Kobold", "Lizardfolk"],
         lightLevel: "dark",
         defaultDanger: "hostile"
     },
@@ -24,7 +24,7 @@ const ZONE_TEMPLATES = [
         hostileArea: true,
         ambiance: "Crumbling stone and silence. Whatever once thrived here is long gone.",
         roomTypes: ["Hallway", "Altar", "Library", "Tower", "Shrine"],
-        allowedSpecies: ["Skeleton", "Ghost", "Goblin"],
+        allowedSpecies: ["Skeleton", "Ghost", "Goblin", "Lizardfolk"],
         lightLevel: "dim",
         defaultDanger: "hostile"
     },
@@ -33,9 +33,18 @@ const ZONE_TEMPLATES = [
         hostileArea: false,
         ambiance: "Torchlight flickers across ancient stone. A civilization lives below the world.",
         roomTypes: ["Cavern", "Vault", "Underground Hallway", "Underground Gate"],
-        allowedSpecies: ["Dwarf", "Goblin", "Human"],
+        allowedSpecies: ["Dwarf", "Goblin", "Human", "Kobold", "Dragonborn"],
         lightLevel: "dim",
         defaultDanger: "tense"
+    },
+    {
+        name: "Swamp",
+        hostileArea: true,
+        ambiance: "Thick mist clings to the water. The ground squelches underfoot, and something large moves in the reeds.",
+        roomTypes: ["Marsh", "Broken Ground", "Swamp Camp", "Submerged Ruin"],
+        allowedSpecies: ["Lizardfolk", "Rat", "Kobold"],
+        lightLevel: "dim",
+        defaultDanger: "hostile"
     }
 ];
 
@@ -250,6 +259,78 @@ const SPECIES_TEMPLATES = [
             values: ["names", "unfinished promises", "places of death"],
             topics: ["lost memories", "betrayal", "buried truths", "the moment of death"],
             taboos: ["mocking the dead", "breaking memorials"]
+        }
+    },
+    {
+        species: "Dragonborn",
+        isHumanoid: true,
+        size: "large",
+        isCivilized: true,
+        speechStyle: "direct",
+        lore: "Dragonborn carry the blood of ancient dragons in their scales and breath. They value honor above all — a promise given is a debt that outlasts death. Their clans trace lineage to specific dragon ancestors, and they judge others by the weight of their word.",
+        anatomyProfile: {
+            surfaceType: "scales",
+            skinTones: ["deep green", "bronze", "crimson", "deep blue", "black", "gold"],
+            hairColors: ["none"],
+            hairStyles: ["none"],
+            eyeColors: ["gold", "amber", "red", "green", "bronze"],
+            builds: ["powerful", "broad-shouldered", "tall", "muscular", "imposing"],
+            features: ["draconic snout", "swept-back horns", "thick scaly hide", "a thick tail", "clawed hands", "a breath weapon's heat shimmer"],
+            movements: ["moves with heavy purpose", "carries themselves like a soldier", "steps with the weight of their heritage"],
+            voices: ["deep and resonant", "rumbling", "commanding", "draconic growl", "booming"]
+        },
+        culture: {
+            values: ["honor", "clan duty", "oaths", "ancestral pride"],
+            topics: ["clan history", "dragon ancestors", "oaths sworn and broken", "battles won"],
+            taboos: ["broken oaths", "dishonor", "cowardice in the face of duty"]
+        }
+    },
+    {
+        species: "Lizardfolk",
+        isHumanoid: true,
+        size: "medium",
+        isCivilized: false,
+        speechStyle: "broken",
+        lore: "Lizardfolk are reptilian survivors shaped by swamp and jungle. They think in terms of predator and prey, not good and evil. Their tribes value practical cunning over sentiment, and they eat what they kill. Trust is earned through shared danger, not words.",
+        anatomyProfile: {
+            surfaceType: "scales",
+            skinTones: ["moss green", "swamp brown", "olive", "dark green", "gray-green"],
+            hairColors: ["none"],
+            hairStyles: ["none"],
+            eyeColors: ["amber", "yellow", "red", "black"],
+            builds: ["wiry", "lean", "sinewy", "compact", "reptilian"],
+            features: ["a snout full of sharp teeth", "a thick muscular tail", "clawed webbed hands", "a frilled crest", "slit-pupil eyes", "a forked tongue"],
+            movements: ["moves with liquid stillness", "lowers into a crouch when watching", "flicks their tongue to taste the air"],
+            voices: ["hissing", "guttural", "sibilant", "low rumble", "chittering"]
+        },
+        culture: {
+            values: ["survival", "tribal strength", "hunting prowess", "territory"],
+            topics: ["prey", "water sources", "dangerous predators", "tribal boundaries"],
+            taboos: ["wasting meat", "showing weakness before the tribe", "trespass on sacred ground"]
+        }
+    },
+    {
+        species: "Kobold",
+        isHumanoid: true,
+        size: "tiny",
+        isCivilized: false,
+        speechStyle: "clipped",
+        lore: "Kobolds are small dragon-kin who survive through cleverness, traps, and sheer numbers. They revere dragons as gods and model their tunnels after dragon lairs. A lone kobold is a scout or a trap-setter — where there is one, there are always more.",
+        anatomyProfile: {
+            surfaceType: "scales",
+            skinTones: ["rust red", "dark brown", "deep orange", "mottled brown", "dusty red"],
+            hairColors: ["none"],
+            hairStyles: ["none"],
+            eyeColors: ["amber", "red", "yellow", "pale orange"],
+            builds: ["tiny", "wiry", "scrawny", "quick", "fragile-looking"],
+            features: ["small horns", "a thin whip-like tail", "tiny clawed hands", "sharp little teeth", "reptilian eyes", "a snout"],
+            movements: ["darts between shadows", "moves in quick skittering bursts", "freezes stock-still when spotted"],
+            voices: ["yipping", "chittering", "high-pitched", "rapid", "squeaky"]
+        },
+        culture: {
+            values: ["traps", "numbers", "dragon worship", "cleverness"],
+            topics: ["tunnel routes", "trap designs", "the dragon they serve", "intruders in the warren"],
+            taboos: ["damaging traps carelessly", "mentioning the dragon's wrath", "stealing from the hoard"]
         }
     }
 ];

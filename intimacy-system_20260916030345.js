@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-11-013
+ * Version: 2026-09-11-015
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,12 +12,12 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-013";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-015";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.INTIMACY_SYSTEM_VERSION = "2026-09-05-001";
-    console.log("[Intimacy System] Loaded v2026-09-11-013 - reject meta-commentary in AI responses + stronger prompt instructions");
+    console.log("[Intimacy System] Loaded v2026-09-11-015 - Dragonborn civilized + new species templates");
 }
 
 // ============================================================================
@@ -2772,19 +2772,32 @@ function buildIntimacyPrompt(context) {
     var _species = (npc.species || "Human").toLowerCase();
     var _isUncivilized = _species && !isCivilizedSpecies(_species);
     var _speechPattern = npc.speechPattern || npc.speechStyle || "";
+    var _speechProfile = npc.speechProfile || {};
     var _speciesContext = "";
     if (_isUncivilized) {
         _speciesContext = "\nSPECIES NOTE: This NPC is uncivilized (" + npc.species + "). Their speech is simple, direct, and possibly broken. They may use grunts, gestures, or crude words instead of refined language. Do NOT make them speak eloquently. If the base response has no dialogue, do NOT add dialogue for an uncivilized NPC — use body language instead.";
     } else if (npc.species && npc.species !== "Human") {
         _speciesContext = "\nSPECIES NOTE: This NPC is a " + npc.species + ". Keep their reactions consistent with their species characteristics if apparent.";
     }
-    var _speechContext = _speechPattern
-        ? "\nSPEECH: This NPC speaks with a " + _speechPattern + " pattern. Match this in any dialogue. Do NOT change their speech style."
-        : "";
+    // Build speech context from the full profile if available
+    var _speechContext = "";
+    if (_speechProfile.tone || _speechProfile.styleDescription || _speechProfile.languageNotes) {
+        _speechContext = "\nSPEECH STYLE: Tone: " + (_speechProfile.tone || _speechPattern || "neutral") +
+            ". Style: " + (_speechProfile.styleDescription || "") +
+            ". Language: " + (_speechProfile.languageNotes || "") +
+            ". Match this in any dialogue. Do NOT change their speech style.";
+    } else if (_speechPattern) {
+        _speechContext = "\nSPEECH: This NPC speaks with a " + _speechPattern + " pattern. Match this in any dialogue. Do NOT change their speech style.";
+    }
+    // Add temperament inflection if available
+    var _temperamentInflection = "";
+    if (npc.temperament && typeof window !== "undefined" && typeof window.getTemperamentInflection === "function") {
+        _temperamentInflection = "\n" + window.getTemperamentInflection(npc.temperament);
+    }
 
     const prompt = `
 You are polishing a sentence from a sex scene in a text adventure game.
-The NPC is ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}.${npc.temperament ? ` Temperament: ${npc.temperament}.` : ""}${npc.personalityTraits && npc.personalityTraits.length ? ` Traits: ${npc.personalityTraits.join(", ")}.` : ""}${_speciesContext}${_speechContext}
+The NPC is ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}.${npc.temperament ? ` Temperament: ${npc.temperament}.` : ""}${npc.personalityTraits && npc.personalityTraits.length ? ` Traits: ${npc.personalityTraits.join(", ")}.` : ""}${_speciesContext}${_speechContext}${_temperamentInflection}
 
 INSTRUCTIONS:
 - Fix grammar, polish sentence structure, and refine the BASE RESPONSE below. Make it read like a clean, well-written sentence in a published novel — not a rough draft.
@@ -8921,7 +8934,7 @@ function canCompleteAnalInsertion(npc, player) {
  */
 function isCivilizedSpecies(species) {
     if (!species) return false;
-    const civilizedSpecies = ["human", "elf", "dwarf", "halfling"];
+    const civilizedSpecies = ["human", "elf", "dwarf", "halfling", "dragonborn"];
     return civilizedSpecies.includes(species.toLowerCase());
 }
 

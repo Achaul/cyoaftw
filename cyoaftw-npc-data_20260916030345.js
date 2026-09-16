@@ -1,8 +1,8 @@
 // ── cyoaftw-npc-data.js v2026-08-16-0004 ── Added Receive category + position fixes
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-08-16-0004";
-    console.log("[NPC Data] Loaded v2026-08-16-0004 - Added Receive category + position fixes");
+    window.NPC_DATA_VERSION = "2026-09-11-001";
+    console.log("[NPC Data] Loaded v2026-09-11-001 - speech profile tone/style/language + temperament inflection");
 }
 
 // ── DATA ARRAYS ──────────────────────────────────────────────────
@@ -50,6 +50,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "short to medium",
         vocabulary: "plain everyday words",
         cadence: "answers the question first, then adds one useful detail",
+        tone: "neutral and conversational",
+        styleDescription: "ordinary, unremarkable speech",
+        languageNotes: "speaks the common tongue naturally",
         cues: ["speaks plainly", "keeps the point clear", "does not dress up simple facts"],
         avoid: ["poetic imagery", "dramatic pauses", "mysterious tavern-sage lines"]
     },
@@ -58,6 +61,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "short",
         vocabulary: "blunt practical words",
         cadence: "gets to the point immediately",
+        tone: "firm and commanding",
+        styleDescription: "aggressive, no-nonsense delivery",
+        languageNotes: "uses simplified, forceful language",
         cues: ["uses firm statements", "sounds decisive", "cuts off rambling"],
         avoid: ["flowery phrasing", "soft hedging", "long explanations"]
     },
@@ -66,6 +72,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "short to medium",
         vocabulary: "rough practical words",
         cadence: "dry and matter-of-fact",
+        tone: "low and gravelly",
+        styleDescription: "work-hardened, sparing with words",
+        languageNotes: "uses rough dialect, drops pleasantries",
         cues: ["keeps sentences tight", "sounds worn or work-hardened", "shows warmth sparingly"],
         avoid: ["courtly language", "pretty metaphors", "theatrical threats"]
     },
@@ -74,6 +83,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "medium",
         vocabulary: "precise but readable words",
         cadence: "measured and controlled",
+        tone: "composed and measured",
+        styleDescription: "elegant, careful word choice",
+        languageNotes: "uses refined language, may include archaic phrasing",
         cues: ["chooses words carefully", "sounds composed", "may use titles when appropriate"],
         avoid: ["purple prose", "archaic filler", "grand speeches"]
     },
@@ -82,6 +94,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "short",
         vocabulary: "plain careful words",
         cadence: "gives partial answers before trust is earned",
+        tone: "flat and noncommittal",
+        styleDescription: "evasive, testing the listener",
+        languageNotes: "uses minimal language, withholds detail",
         cues: ["holds something back", "tests the listener first", "keeps tone restrained"],
         avoid: ["rambling", "open confession", "needless scene description"]
     },
@@ -90,6 +105,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "short to medium",
         vocabulary: "casual conversational words",
         cadence: "friendly and lightly colored by local habit",
+        tone: "warm and unhurried",
+        styleDescription: "friendly, down-to-earth delivery",
+        languageNotes: "uses local sayings, comfortable colloquialisms",
         cues: ["sounds approachable", "may use a plain saying now and then", "keeps the mood human and readable"],
         avoid: ["cutesy chatter", "thick dialect spelling", "storybook whimsy"]
     },
@@ -98,6 +116,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "very short",
         vocabulary: "lean functional words",
         cadence: "fragmented but clear",
+        tone: "sharp and high-pitched",
+        styleDescription: "manic, fast-paced delivery with nervous energy",
+        languageNotes: "uses simplified language, drops articles and fillers, may use a harsh guttural dialect",
         cues: ["answers in compact beats", "drops filler", "keeps emotion tucked in"],
         avoid: ["long setup", "speechifying", "decorative wording"]
     },
@@ -106,6 +127,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "short to medium",
         vocabulary: "simple uncertain words",
         cadence: "hesitates and self-corrects",
+        tone: "quavering and uncertain",
+        styleDescription: "anxious, second-guessing delivery",
+        languageNotes: "uses hedging language, trails off mid-sentence",
         cues: ["second-guesses details", "sounds alert to danger", "watches for reactions"],
         avoid: ["confident lectures", "poetic dread", "slick sarcasm"]
     },
@@ -114,6 +138,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "medium",
         vocabulary: "plain emphatic words",
         cadence: "energetic and open",
+        tone: "loud and hearty",
+        styleDescription: "larger-than-life, enthusiastic delivery",
+        languageNotes: "uses emphatic language, may include rowdy exclamations",
         cues: ["sounds larger than life without losing clarity", "speaks with confidence", "lets attitude show"],
         avoid: ["long monologues", "fancy ornament", "endless shouting"]
     },
@@ -122,6 +149,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "short to medium",
         vocabulary: "plain words with a dry edge",
         cadence: "understated and pointed",
+        tone: "dry and sardonic",
+        styleDescription: "understated, pointed delivery with dry humor",
+        languageNotes: "uses ironic wordplay, understatement",
         cues: ["uses dry humor sparingly", "sounds unimpressed", "lands the point cleanly"],
         avoid: ["constant snark", "florid irony", "riddle-talk"]
     },
@@ -130,6 +160,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "very short",
         vocabulary: "simple concrete words",
         cadence: "broken or primitive but understandable",
+        tone: "guttural and harsh",
+        styleDescription: "primitive, fragmented delivery",
+        languageNotes: "uses simplified pidgin language, drops articles and complex grammar, tribal dialect",
         cues: ["keeps grammar simple", "uses direct warning language", "focuses on immediate facts"],
         avoid: ["eloquent phrasing", "complex syntax", "abstract reflection"]
     },
@@ -138,6 +171,9 @@ const NPC_SPEECH_PROFILES = {
         sentenceLength: "short to medium",
         vocabulary: "plain quiet words",
         cadence: "low and controlled",
+        tone: "hushed and faint",
+        styleDescription: "ethereal, barely-audible delivery",
+        languageNotes: "uses minimal language, may include archaic or mournful phrasing",
         cues: ["sounds hushed", "stays concise", "treats silence as useful"],
         avoid: ["stagey suspense", "breathy seduction", "atmospheric rambling"]
     }
@@ -1529,6 +1565,9 @@ function getNPCSpeechProfile(npc, room, zoneTemplate) {
         sentenceLength: profile.sentenceLength,
         vocabulary: profile.vocabulary,
         cadence: profile.cadence,
+        tone: profile.tone || "",
+        styleDescription: profile.styleDescription || "",
+        languageNotes: profile.languageNotes || "",
         cues: Array.isArray(profile.cues) ? profile.cues.slice() : [],
         avoid: Array.isArray(profile.avoid) ? profile.avoid.slice() : []
     };
@@ -1544,6 +1583,9 @@ function syncNPCSpeechProfile(npc, room, zoneTemplate) {
         sentenceLength: speechProfile.sentenceLength,
         vocabulary: speechProfile.vocabulary,
         cadence: speechProfile.cadence,
+        tone: speechProfile.tone,
+        styleDescription: speechProfile.styleDescription,
+        languageNotes: speechProfile.languageNotes,
         cues: speechProfile.cues.slice(0, 3),
         avoid: speechProfile.avoid.slice(0, 3)
     };
