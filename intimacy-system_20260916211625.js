@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-11-016
+ * Version: 2026-09-11-019
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,12 +12,12 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-016";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-019";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.INTIMACY_SYSTEM_VERSION = "2026-09-05-001";
-    console.log("[Intimacy System] Loaded v2026-09-11-016 - cloaca anatomy + tail descriptions + banned words removal + dynamic speech enforcement");
+    console.log("[Intimacy System] Loaded v2026-09-11-019 - realistic anal pain/discomfort system based on size, lube, experience, temperament");
 }
 
 // ============================================================================
@@ -3820,35 +3820,90 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     }
     
     // For uncivilized species doing anal - they're confused/surprised but consenting
-    if (isAnalPenetration && isUncivilized) {
-        // Different responses for first-time (enter) vs continuing
-        if (phase === "continue") {
-            const confusedContinueResponses = [
-                `still seems unsure. "This is... unusual."`,
-                `shifts uncomfortably. "I'm not used to this..."`,
-                `grunts. "This feels different... but not bad."`,
-                `mumbles. "Strange, but I'll go with it."`,
-                `adjusts ${possessivePronoun} position. "This takes some getting used to."`,
-                `gives you a side glance. "You humans are odd."`,
-                `takes a deep breath. "Alright, keep going I guess."`,
-                `seems to be warming up to it. "Hmm... interesting."`
+    // BUT skip for reptilian species (cloaca = same hole, not unusual to them)
+    var _anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    if (isAnalPenetration && isUncivilized && _anatomyType !== "reptilian") {
+        var _species = (npc.species || "").toLowerCase();
+        var _uncivEnterResponses = [];
+        var _uncivContinueResponses = [];
+
+        if (_species === "goblin") {
+            _uncivEnterResponses = [
+                `twists around, sharp face scrunched up. <Huh? What you doing back there? That not the... that different hole.> Their voice is a high squeak.`,
+                `tilts their head sideways, large ears twitching. <That... that wrong place, yeah? You sure? Weird.>`,
+                `lets out a sharp chitter. <You humans do THIS? With that hole? Okay, okay. Goblin try. Goblin brave.>`,
+                `squints at you over their shoulder. <That goes WHERE? ...Okay. Goblin not asking again.>`
             ];
-            return pickRandom(confusedContinueResponses);
+            _uncivContinueResponses = [
+                `shifts side to side, chittering. <Weird. Weird weird. Not bad though? Goblin confused.>`,
+                `lets out a nasal huff. <Strange feeling. But okay. Goblin go with it. You know things, maybe.>`,
+                `glances back with a toothy grimace. <Keep going, yeah? Goblin getting used to it. Maybe.>`
+            ];
+        } else if (_species === "orc") {
+            _uncivEnterResponses = [
+                `grunts, looking over their shoulder with a raised brow. <That's not the right hole. You know that, right?>`,
+                `a low, guttural rumble. <You humans. Always with the strange ideas. Fine. Go ahead.>`,
+                `snorts through wide nostrils. <Are you sure about this? ...Hmph. Your funeral.>`,
+                `tenses their jaw, tusks catching the light. <That goes where? ...Alright. I've had worse ideas.>`
+            ];
+            _uncivContinueResponses = [
+                `a deep grunt, shifting their weight. <Different. Not bad. Just... different.>`,
+                `rumbles low in their chest. <Keep going. I can take it. Not my first strange thing.>`,
+                `rolls their shoulders with a crack. <Weird. But you know what you're doing. Maybe.>`
+            ];
+        } else if (_species === "lizardfolk") {
+            _uncivEnterResponses = [
+                `their head swivels, tongue flicking rapidly. <Wrong hole. Not for breeding. You... sssure about this?>`,
+                `a guttural hiss, frilled crest twitching. <Sstrange. Not how we mate. But... okay. You do this?>`,
+                `they bare their teeth, not in aggression but confusion. <That goes... there? Odd. Odd odd.> Their tail thumps once.`
+            ];
+            _uncivContinueResponses = [
+                `a wet hiss, body coiling slightly. <Sstrange feeling. Not bad. Not breeding. But... okay.>`,
+                `their tongue darts out, tasting the air. <Different. Different different. You keep going, yes?>`,
+                `a low reptilian rumble. <Weird. But lizardfolk adapt. We adapt to everything.>`
+            ];
+        } else if (_species === "kobold") {
+            _uncivEnterResponses = [
+                `spins around, tail puffing up. <What?! What what what?! That not breeding hole! That other hole! Kobold know holes!>`,
+                `a high-pitched squeak of confusion. <That goes WHERE? No no no... okay maybe yes? Kobold not sure! Kobold trust you!>`,
+                `their ears flatten, squeaking. <You sure? That's the... the bad hole? Kobold mean the not-fun hole? But okay! Kobold brave kobold!>`
+            ];
+            _uncivContinueResponses = [
+                `a rapid chitter, tail curling tight. <Weird weird weird! But not bad! Not bad, no! Kobold can do this!>`,
+                `yips softly, looking back. <Sstrange. Very sstrange. But kobold okay! Kobold tough! Keep going, yes?>`,
+                `their tail whips nervously. <Oooh. That's... that's new. Kobold not expecting that. But okay! Kobold adapt!>`
+            ];
+        } else if (_species === "skeleton") {
+            _uncivEnterResponses = [
+                `its jaw clacks, head turning with a dry creak. <...that... is... not... where... the... living... go...>`,
+                `a hollow rattle. <...strange... even... for... one... such... as... I...>`,
+                `it pauses, empty sockets staring. <...you... are... sure...?... very... well...>`
+            ];
+            _uncivContinueResponses = [
+                `a dry whisper, bones creaking. <...strange... sensation... or... lack... of... it...>`,
+                `its ribcage rattles softly. <...continue... if... you... must... I... am... patient...>`,
+                `a hollow clack of its jaw. <...not... unpleasant... for... the... dead...>`
+            ];
         } else {
-            // First penetration - more surprised
-            const confusedEnterResponses = [
-                `blinks in confusion. "What are you doing back there?"`,
-                `tilts ${possessivePronoun} head. "That's... that's the wrong place, isn't it?"`,
-                `looks surprised. "That's not how we conceive... but, okay?"`,
-                `frowns slightly. "Are you sure about this?"`,
-                `hesitates, then shrugs. "If you insist..."`,
-                `gives you a puzzled look. "That feels... strange."`,
-                `mumbles. "I've never... but I'll try."`,
-                `seems uncertain. "This isn't normal where I come from."`,
-                `narrows ${possessivePronoun} eyes. "Is this some kind of joke?"`,
-                `tenses up. "Wait, that goes where?"`
+            // Generic uncivilized fallback
+            _uncivEnterResponses = [
+                `looks confused. <What are you doing? That's not... okay. Fine.>`,
+                `frowns. <That goes where? Strange. But I'll try.>`,
+                `seems uncertain. <This isn't normal. But... alright.>`,
+                `gives you a puzzled look. <Are you sure? If you say so.>`
             ];
-            return pickRandom(confusedEnterResponses);
+            _uncivContinueResponses = [
+                `shifts uncomfortably. <Strange. But not bad. Keep going.>`,
+                `grunts. <Different. But I'm getting used to it.>`,
+                `seems to be warming up to it. <Hmm. Interesting.>`,
+                `takes a deep breath. <Alright. Keep going.>`
+            ];
+        }
+
+        if (phase === "continue") {
+            return pickRandom(_uncivContinueResponses);
+        } else {
+            return pickRandom(_uncivEnterResponses);
         }
     }
     
@@ -3905,6 +3960,62 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     const hasGagReflex = Math.random() < 0.25;
     
     // Anal penetration templates
+    // Anal is NEVER as easy or comfortable as vaginal. Even experienced NPCs
+    // feel intensity/discomfort. Difficulty scales with size difference and
+    // preparation (lube, dilation, experience).
+    var _analSize = (typeof getRelativeSize === "function" && player) ? getRelativeSize(player, npc) : "";
+    var _isSmallNpc = (typeof getNPCSize === "function") ? ["tiny", "small"].includes(getNPCSize(npc)) : false;
+    var _npcTemperament = String(npc.temperament || "").toLowerCase();
+    var _isBold = _npcTemperament === "forward" || _npcTemperament === "bold" || _npcTemperament === "lustful";
+    var _anusAnat = (npc.anatomy && npc.anatomy.anus) || {};
+    var _isDilated = _anusAnat.size === "loose" || _anusAnat.size === "stretchy" || _anusAnat.size === "gaping";
+    var _hasLubeForAnal = intimacy && intimacy.lube && intimacy.lube.anus && intimacy.lube.anus.hasLube;
+    var _isExperienced = _isDilated || _hasLubeForAnal;
+
+    // Build pain/discomfort descriptors based on size and experience
+    var _painEnter = "";
+    var _painContinue = "";
+    if (_isSmallNpc || _analSize === "player-larger" || _analSize === "player-much-larger") {
+        // Small NPC or player is larger — painful, needs to go slow
+        _painEnter = pickRandom([
+            `hisses through clenched teeth, a sharp burn crossing ${possessivePronoun} face. <Slow... fuck, go slow.>`,
+            `tenses hard, a pained grunt escaping. <Ah—shit. That burns. Give me a second.>`,
+            `flinches, fingers gripping whatever's nearby. <Ow. Ow. Okay. Okay. Just... slow.>`,
+            `sucks in a sharp breath, body clenching involuntarily. <Fuck, that's tight. You're too big for this. Go slow.>`
+        ]);
+        _painContinue = pickRandom([
+            `lets out a strained hiss with each thrust. <Nnh... still getting used to it. Don't go faster.>`,
+            `grunts, face tight with discomfort even as ${subjectPronoun.toLowerCase()} adjusts. <Keep it slow. It's a lot.>`,
+            `winces slightly but doesn't pull away. <Okay... okay. It's intense. But keep going, just slow.>`
+        ]);
+    } else if (_isExperienced && _isBold) {
+        // Experienced + bold — can handle it, even excited by it
+        _painEnter = pickRandom([
+            `groans, pushing back with a grunt. <Fuck yes. That's intense. Keep going.>`,
+            `lets out a sharp exhale, then a wicked grin. <Mmm. That's the burn I like. Go.>`,
+            `shudders but not from pain — from the taboo of it. <Yes. That. More.>`
+        ]);
+        _painContinue = pickRandom([
+            `grunts with something between pain and pleasure. <Fuck... that's deep. Don't stop.>`,
+            `pants, pressing back into you. <It's intense. It's so fucking intense. Keep going.>`,
+            `shivers, the intensity written across ${possessivePronoun} face. <God. That's... that's something. More.>`
+        ]);
+    } else {
+        // Same size, no lube/dilation — uncomfortable burning, needs to warm up
+        _painEnter = pickRandom([
+            `tenses with a sharp hiss, a burning sensation clearly hitting. <Ah... go slow. That burns.>`,
+            `sucks in a breath, body resisting. <Nnh. Give me... give me a second. That's intense.>`,
+            `winces, clenching involuntarily. <Ow. Okay. Slow. Just slow.>`,
+            `grits ${possessivePronoun} teeth, a strained exhale. <Fuck. That's... a lot. Go slow, yeah?>`
+        ]);
+        _painContinue = pickRandom([
+            `shifts, still adjusting. <It's... getting better. Keep it slow though.>`,
+            `exhales shakily with each thrust. <Nnh. It's intense. Not bad, just... intense. Slow.>`,
+            `winces occasionally but doesn't stop you. <Okay... it's okay. Just don't go fast.>`,
+            `pants, the burning fading slowly. <Getting there. Fuck, that's a stretch. Keep it steady.>`
+        ]);
+    }
+
     const analTemplates = {
         enter: [
             // Virginity-specific — only fires on first anal penetration
@@ -3913,6 +4024,8 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             // Size-difficulty — NPC pulls away or struggles when player is large
             (player && (getRelativeSize(player, npc) === "player-larger" || getRelativeSize(player, npc) === "player-much-larger")) ? `flinches and pulls away as you press against ${possessivePronoun} anus, ${posPronoun} small body tensing. "You're too big... go slow."` : null,
             (player && getRelativeSize(player, npc) === "player-much-larger") ? `lets out a pained squeak as the head of your ${tool} stretches ${possessivePronoun} sphincter open, ${posPronoun} face scrunching up. "I don't know if I can..."` : null,
+            // Pain/discomfort responses — anal is never as easy as vaginal
+            _painEnter,
             // Normal enter templates — simple, direct, CoT-style
             isNearClimax ? `grits ${possessivePronoun} teeth as you push your ${tool} into ${possessivePronoun} ass, ${subjectPronoun.toLowerCase()} trembling on the edge of climax.` : 
             (shouldSemenDrip ? `gasps as you push your ${tool} into ${possessivePronoun} ass, your previous load squelching out around you.` : 
@@ -3924,6 +4037,9 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             `groans deeply as you push your ${tool} slowly into ${possessivePronoun} ass.`
         ].filter(Boolean),
         continue: [
+            // Pain/discomfort continues — even warmed up, anal is intense
+            (_isSmallNpc || (_analSize === "player-larger" || _analSize === "player-much-larger")) ? _painContinue : null,
+            (!(_isExperienced && _isBold) && Math.random() < 0.3) ? _painContinue : null,
             isNearClimax ? `clenches desperately, ${subjectPronoun.toLowerCase()} so close to climax ${subjectPronoun.toLowerCase()} can't hold back, ${possessivePronoun} ass gripping your ${tool} tightly.` : 
             (shouldSemenDrip ? `clenches, ${possessivePronoun} cum-filled ass squelching around your ${tool}, your semen bubbling out with each thrust.` : 
             `clenches, ${possessivePronoun} ass gripping your ${tool} tightly.`),
@@ -3939,7 +4055,7 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             shouldSemenDrip ? `takes you in deep, the mess of cum and lube making ${possessivePronoun} ass slick and easy, your shaft sliding through your own load.` :
             `takes you in deep with each thrust, ${possessivePronoun} ass clenching around your ${tool}.`,
             `rocks ${possessivePronoun} hips to meet your rhythm, working ${possessivePronoun} ass on your ${tool}.`
-        ]
+        ].filter(Boolean)
     };
     
     const oralTemplates = {
@@ -6676,13 +6792,24 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
     const sphincterDesc = sphincterDescriptors[sphincter] ? pickRandom(sphincterDescriptors[sphincter]) : sphincter;
 
     // Hair descriptors — the anal area often has hair, add raw detail
-    const hasHair = anatomy.pubicHair && anatomy.pubicHair.description;
-    const hairDesc = hasHair && Math.random() < 0.4
-        ? pickRandom([
-              "hair-dusted", "downy-haired", "furred",
-              "ringed with coarse hair", "surrounded by soft hair"
-          ])
-        : "";
+    // For scaled species, use scale texture instead of hair
+    var _anatomyType2 = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    var hairDesc = "";
+    if (_anatomyType2 === "reptilian" || _anatomyType2 === "mixed") {
+        if (Math.random() < 0.3) {
+            hairDesc = pickRandom([
+                "ringed with fine smooth scales", "smooth-scaled", "surrounded by smaller plates"
+            ]);
+        }
+    } else {
+        const hasHair = anatomy.pubicHair && anatomy.pubicHair.description;
+        hairDesc = hasHair && Math.random() < 0.4
+            ? pickRandom([
+                  "hair-dusted", "downy-haired", "furred",
+                  "ringed with coarse hair", "surrounded by soft hair"
+              ])
+            : "";
+    }
 
     // Pigmentation
     const pigmentDesc = pigmentation && pigmentation !== "natural" && pigmentation !== "natural toned"
@@ -9152,6 +9279,18 @@ function getAnalInteriorColor(npc) {
  * Get pubic hair description
  */
 function getPubicDescription(npc) {
+    // Scaled species (lizardfolk, kobold, dragonborn) have no pubic hair —
+    // instead they have smooth, differently-colored smaller scales.
+    var anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    if (anatomyType === "reptilian" || anatomyType === "mixed") {
+        var skinDesc = (typeof getSkinDescription === "function") ? getSkinDescription(npc) : "";
+        return pickRandom([
+            "smooth " + (skinDesc || "scaled") + " vent, the scales smaller and lighter here",
+            "bare scaled mound, the plates thin and smooth",
+            "smooth vent, no hair but fine smaller scales"
+        ]);
+    }
+
     // Check nsfwTraits first (sexual anatomy), then fallback to regular anatomy
     const nsfwAnatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || {};
     const regularAnatomy = npc.anatomy || {};
