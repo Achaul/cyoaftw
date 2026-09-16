@@ -7,7 +7,7 @@ window.__NSFW_SYSTEM_VERSION = "2026-09-11-002";
 // NSFW conversation options are now defined in base catalogue (cyoaftw-npc-data.js)
 
 // NSFW options are defined in base catalogue - no injection needed
-console.log("[NSFW System] Loaded - NSFW options in base catalogue");
+console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptance + follow action fix + nsfw wrapper re-apply");
 
   const NSFW_SYSTEM_ENABLED = true;
   function getEnvironmentalModifier(room) {

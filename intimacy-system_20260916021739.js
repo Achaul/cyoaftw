@@ -17,7 +17,7 @@ window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-011";
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.INTIMACY_SYSTEM_VERSION = "2026-09-05-001";
-    console.log("[Intimacy System] Loaded v2026-09-05-001 - Fixed cooldown for oral sex (can continue during cooldown), fixed 'closed' descriptors, fixed missing verbs, fixed capitalization, added 'into' and tool specs");
+    console.log("[Intimacy System] Loaded v2026-09-11-011 - player narrative AI polish + species-aware prompts + anal overhaul + cum overflow");
 }
 
 // ============================================================================
