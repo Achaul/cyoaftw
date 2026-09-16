@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-11-011
+ * Version: 2026-09-11-012
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,12 +12,12 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-011";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-012";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.INTIMACY_SYSTEM_VERSION = "2026-09-05-001";
-    console.log("[Intimacy System] Loaded v2026-09-11-011 - player narrative AI polish + species-aware prompts + anal overhaul + cum overflow");
+    console.log("[Intimacy System] Loaded v2026-09-11-012 - fix player narrative polish conflict + remove old LLM enhancement from generateIntimacyNarrative");
 }
 
 // ============================================================================
@@ -7062,26 +7062,6 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
         var t = transitionNarrative.trim();
         if (!t.match(/[.!?]$/)) t += ".";
         finalNarrative = t;
-    }
-    
-    // For continue actions, try to use LLM-enhanced version if cached
-    if (isContinueAction && intimacy && typeof initializeLLMEnhancement === 'function') {
-        // Ensure LLM enhancement system is initialized
-        initializeLLMEnhancement(intimacy);
-
-        const currentPosition = (intimacy.position && intimacy.position.player) || "Unknown";
-        const cachedEnhancement = getCachedLLMEnhancement(intimacy, actionId, currentPosition);
-        if (cachedEnhancement) {
-            return cachedEnhancement;
-        }
-
-        // If no cache, fire off LLM enhancement request for future use
-        // and return our generated narrative for now
-        if (typeof requestLLMEnhancement === 'function') {
-            requestLLMEnhancement(npc, act, intimacy, finalNarrative).catch(e => {
-                console.warn(`[Intimacy LLM] Enhancement request failed:`, e);
-            });
-        }
     }
 
     // ── PLAYER NARRATIVE AI POLISH ────────────────────────────────
