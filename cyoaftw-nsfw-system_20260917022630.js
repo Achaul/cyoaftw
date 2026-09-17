@@ -283,7 +283,23 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
       // Use proper genital names with descriptive size terms
       let genitalDescription = "featureless";
-      if (g === "male") {
+      const hasCloaca = template.cloaca === true;
+      if (hasCloaca) {
+        // Reptilian-kin have a single cloacal vent. Males house a hemipenis
+        // within it; females present the vent itself. Size scales the hemipenis.
+        if (g === "male") {
+          const gs = anatomy.genitalSize.sizeCategory;
+          if (gs === "medium") {
+            genitalDescription = "hemipenis housed in a cloacal vent";
+          } else if (gs === "large") {
+            genitalDescription = "girthy hemipenis housed in a cloacal vent";
+          } else if (gs === "small") {
+            genitalDescription = "slender hemipenis housed in a cloacal vent";
+          }
+        } else if (g === "female") {
+          genitalDescription = "cloacal vent";
+        }
+      } else if (g === "male") {
         const gs = anatomy.genitalSize.sizeCategory;
         if (gs === "medium") {
           genitalDescription = "penis";
@@ -303,7 +319,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         }
       }
       anatomy.genitals = { description: genitalDescription, pigmentation: contrastPigment, status: [], health: 100 };
-      
+
       // Anal orifice size tied to creature size
       // Small creatures have tight/snug, large creatures have loose/gaping/stretchy
       let analSizeDescription;
@@ -318,16 +334,29 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       } else {
         analSizeDescription = pickFrom(["tight", "snug", "firm", "supple", "loose"]);
       }
-      
-      // Add sphincter description to anus with size-based descriptors
-      anatomy.anus = { 
-        description: analSizeDescription + " anus",
-        size: analSizeDescription,
-        sphincter: pickFrom(["tight", "snug", "firm", "supple", "responsive"]),
-        pigmentation: contrastPigment, 
-        status: [], 
-        health: 100 
-      };
+
+      if (hasCloaca) {
+        // The cloaca doubles as the anal opening; describe the vent rather
+        // than a separate anus so narration stays anatomically consistent.
+        anatomy.anus = {
+          description: analSizeDescription + " cloacal vent",
+          size: analSizeDescription,
+          sphincter: pickFrom(["tight", "snug", "firm", "supple", "responsive"]),
+          pigmentation: contrastPigment,
+          status: [],
+          health: 100
+        };
+      } else {
+        // Add sphincter description to anus with size-based descriptors
+        anatomy.anus = {
+          description: analSizeDescription + " anus",
+          size: analSizeDescription,
+          sphincter: pickFrom(["tight", "snug", "firm", "supple", "responsive"]),
+          pigmentation: contrastPigment,
+          status: [],
+          health: 100
+        };
+      }
     }
 
     const bodyweight = pickFrom(["skinny", "smoothly built", "muscular", "chubby", "overweight"]);

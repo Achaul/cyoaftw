@@ -91,6 +91,36 @@ function getPronouns(gender) {
 }
 
 /**
+ * Whether an NPC belongs to a cloaca-bearing species (reptilian-kin).
+ * Reads the hydrated `npc.cloaca` flag, falling back to the species template
+ * (via window.getSpeciesTemplate) when the flag has not been set yet.
+ */
+function _npcHasCloaca(npc) {
+    if (!npc) return false;
+    if (npc.cloaca === true) return true;
+    if (npc.cloaca === false) return false;
+    if (npc.species && typeof window !== "undefined" && typeof window.getSpeciesTemplate === "function") {
+        const tpl = window.getSpeciesTemplate(npc.species);
+        return !!(tpl && tpl.cloaca === true);
+    }
+    return false;
+}
+
+/**
+ * Replace an un-prefixed genital token possessive-aware:
+ *   "your {token}"  -> "your <playerWord>"   (player-owned)
+ *   "their {token}" -> "their <npcWord>"      (NPC-owned)
+ *   bare "{token}"  -> <npcWord>             (default: NPC-owned)
+ */
+function _replaceGenitalToken(label, token, npcWord, playerWord) {
+    if (!label || label.indexOf("{" + token + "}") === -1) return label;
+    // Player-owned first (preceded by "your "), then everything else is NPC-owned.
+    label = label.replace(new RegExp("(your\\s)\\{" + token + "\\}", "gi"), "$1" + playerWord);
+    label = label.replace(new RegExp("\\{" + token + "\\}", "gi"), npcWord);
+    return label;
+}
+
+/**
  * Body parts that should have possessive pronouns added automatically
  */
 const BODY_PARTS_REQUIRING_POSSESSIVE = [
@@ -114,19 +144,29 @@ function getGenderedLabel(act, npc, player) {
     
     const npcPronouns = getPronouns(npcGender);
     const playerPronouns = getPronouns(playerGender);
-    
+
+    // Cloaca-bearing NPCs (reptilian-kin) have a single cloacal vent instead
+    // of separate genitals. Females resolve to "cloaca"; males keep a distinct
+    // "hemipenis" (housed within the vent) so penetration narration reads
+    // naturally. The player (assumed non-cloaca) keeps normal anatomy words.
+    const npcIsCloaca = _npcHasCloaca(npc);
+    const npcGenitals = npcIsCloaca
+        ? { vaginal: "cloaca", penis: "hemipenis", testicles: "" }
+        : { vaginal: npcPronouns.vaginal, penis: npcPronouns.penis, testicles: npcPronouns.testicles };
+
     let label = act.label;
-    
-    // Replace NPC pronouns
+
+    // Replace NPC pronouns. Genital tokens use the cloaca-aware words above;
+    // possessive/object/subject/chest are unaffected by cloaca.
     label = label.replace(/\{npcPossessive\}/gi, npcPronouns.possessive);
     label = label.replace(/\{npcObject\}/gi, npcPronouns.object);
     label = label.replace(/\{npcSubject\}/gi, npcPronouns.subject);
-    label = label.replace(/\{npcPussy\}/gi, npcPronouns.vaginal);
-    label = label.replace(/\{npcCock\}/gi, npcPronouns.penis);
-    label = label.replace(/\{npcBalls\}/gi, npcPronouns.testicles);
+    label = label.replace(/\{npcPussy\}/gi, npcGenitals.vaginal);
+    label = label.replace(/\{npcCock\}/gi, npcGenitals.penis);
+    label = label.replace(/\{npcBalls\}/gi, npcGenitals.testicles);
     label = label.replace(/\{npcChest\}/gi, npcPronouns.chest);
-    
-    // Replace player pronouns
+
+    // Replace player pronouns (player is assumed human / non-cloaca)
     label = label.replace(/\{playerPossessive\}/gi, playerPronouns.possessive);
     label = label.replace(/\{playerObject\}/gi, playerPronouns.object);
     label = label.replace(/\{playerSubject\}/gi, playerPronouns.subject);
@@ -134,16 +174,19 @@ function getGenderedLabel(act, npc, player) {
     label = label.replace(/\{playerCock\}/gi, playerPronouns.penis);
     label = label.replace(/\{playerBalls\}/gi, playerPronouns.testicles);
     label = label.replace(/\{playerChest\}/gi, playerPronouns.chest);
-    
-    // Replace body part placeholders (without npc/player prefix)
-    // These appear in NATURAL_LABELS like "Touch their {pussy}" or "Let them suck your {nipples}"
-    label = label.replace(/\{pussy\}/gi, npcPronouns.vaginal);
-    label = label.replace(/\{vagina\}/gi, npcPronouns.vaginal);
-    label = label.replace(/\{cock\}/gi, npcPronouns.penis);
-    label = label.replace(/\{penis\}/gi, npcPronouns.penis);
-    label = label.replace(/\{dick\}/gi, npcPronouns.penis);
-    label = label.replace(/\{balls\}/gi, npcPronouns.testicles);
-    label = label.replace(/\{testicles\}/gi, npcPronouns.testicles);
+
+    // Replace body part placeholders (without npc/player prefix).
+    // These appear in NATURAL_LABELS like "Touch their {pussy}" or "Let them suck your {nipples}".
+    // Genital tokens are possessive-aware: "your {pussy}" belongs to the player,
+    // "their {pussy}" (or anything else) belongs to the NPC. Without this split,
+    // a cloaca NPC would turn player-side labels like "your {pussy}" into "your cloaca".
+    label = _replaceGenitalToken(label, "pussy", npcGenitals.vaginal, playerPronouns.vaginal);
+    label = _replaceGenitalToken(label, "vagina", npcGenitals.vaginal, playerPronouns.vaginal);
+    label = _replaceGenitalToken(label, "cock", npcGenitals.penis, playerPronouns.penis);
+    label = _replaceGenitalToken(label, "penis", npcGenitals.penis, playerPronouns.penis);
+    label = _replaceGenitalToken(label, "dick", npcGenitals.penis, playerPronouns.penis);
+    label = _replaceGenitalToken(label, "balls", npcGenitals.testicles, playerPronouns.testicles);
+    label = _replaceGenitalToken(label, "testicles", npcGenitals.testicles, playerPronouns.testicles);
     label = label.replace(/\{clit\}/gi, "clitoris");
     label = label.replace(/\{clitoris\}/gi, "clitoris");
     label = label.replace(/\{nipples\}/gi, "nipples");

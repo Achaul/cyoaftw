@@ -1239,6 +1239,13 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         if (act.requiresPlayerMale && playerGender !== "male") return { valid: false, reason: "wrong gender" };
         if (act.requiresPlayerFemale && playerGender !== "female") return { valid: false, reason: "wrong gender" };
     }
+
+    // Cloaca-bearing NPCs (reptilian-kin) have no external testes, so actions
+    // targeting the NPC's testicles are not available — and are hidden rather
+    // than shown disabled, since they can never apply to this NPC.
+    if (npc && npc.cloaca && act.target === "testicles" && act.requiresNpcMale) {
+        return { valid: false, reason: "no external testes (cloaca)", hidden: true };
+    }
     
     // Check prior actions
     if (act.requiresPrior && act.requiresPrior.length > 0) {
@@ -1568,6 +1575,9 @@ function generateAllActionsWithStatus(npc, player, positionId = null) {
                 validActions.push({ ...act, actId });
             }
         } else {
+            // Hidden actions (e.g. NPC-testicle acts for cloaca-bearing NPCs)
+            // never apply to this NPC and should not be shown at all.
+            if (checkResult.hidden) continue;
             // Include invalid action with reason and hint
             const disabledHint = getDisabledHintForReason(checkResult.reason, npc, player, act);
             invalidActions.push({ ...act, actId, disabled: true, disabledReason: checkResult.reason, disabledHint });

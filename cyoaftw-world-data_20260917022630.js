@@ -269,6 +269,7 @@ const SPECIES_TEMPLATES = [
         speechStyle: "direct",
         anatomyType: "mixed",
         hasTail: true,
+        cloaca: true,
         lore: "Dragonborn carry the blood of ancient dragons in their scales and breath. They value honor above all — a promise given is a debt that outlasts death. Their clans trace lineage to specific dragon ancestors, and they judge others by the weight of their word.",
         anatomyProfile: {
             surfaceType: "scales",
@@ -295,6 +296,7 @@ const SPECIES_TEMPLATES = [
         speechStyle: "broken",
         anatomyType: "reptilian",
         hasTail: true,
+        cloaca: true,
         lore: "Lizardfolk are reptilian survivors shaped by swamp and jungle. They think in terms of predator and prey, not good and evil. Their tribes value practical cunning over sentiment, and they eat what they kill. Trust is earned through shared danger, not words.",
         anatomyProfile: {
             surfaceType: "scales",
@@ -321,6 +323,7 @@ const SPECIES_TEMPLATES = [
         speechStyle: "clipped",
         anatomyType: "reptilian",
         hasTail: true,
+        cloaca: true,
         lore: "Kobolds are small dragon-kin who survive through cleverness, traps, and sheer numbers. They revere dragons as gods and model their tunnels after dragon lairs. A lone kobold is a scout or a trap-setter — where there is one, there are always more.",
         anatomyProfile: {
             surfaceType: "scales",
