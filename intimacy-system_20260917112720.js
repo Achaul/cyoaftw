@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-11-019";
+window.__INTIMACY_SYSTEM_VERSION = "2026-09-17-001";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -156,6 +156,10 @@ function clearLLMEnhancementCache(intimacy) {
     // Also clear player narrative cache
     if (intimacy && intimacy.playerNarrativeCache && intimacy.playerNarrativeCache instanceof Map) {
         intimacy.playerNarrativeCache.clear();
+    }
+    // Also clear clothing reveal cache
+    if (intimacy && intimacy.clothingRevealCache && intimacy.clothingRevealCache instanceof Map) {
+        intimacy.clothingRevealCache.clear();
     }
 }
 
@@ -327,6 +331,276 @@ function purgeCachedPlayerNarrative(intimacy, actId, position) {
     if (!intimacy || !intimacy.playerNarrativeCache || !(intimacy.playerNarrativeCache instanceof Map)) return;
     var key = actId + "||" + position;
     intimacy.playerNarrativeCache.delete(key);
+}
+
+// ============================================================================
+// CLOTHING REVEAL CACHE (AI-enriched clothing removal narration)
+// ============================================================================
+
+/**
+ * Get a cached AI-enriched clothing reveal narrative.
+ * Keyed by a descriptor snapshot so the same action produces different
+ * lines for different NPC body types.
+ */
+function getCachedClothingReveal(intimacy, cacheKey) {
+    if (!intimacy || !intimacy.clothingRevealCache) return null;
+    if (!(intimacy.clothingRevealCache instanceof Map)) return null;
+    return intimacy.clothingRevealCache.get(cacheKey) || null;
+}
+
+/**
+ * Store an AI-enriched clothing reveal narrative in the cache.
+ */
+function cacheClothingReveal(intimacy, cacheKey, narrative) {
+    if (!intimacy) return;
+    if (!intimacy.clothingRevealCache || !(intimacy.clothingRevealCache instanceof Map)) {
+        intimacy.clothingRevealCache = new Map();
+    }
+    // Enforce max size (FIFO), same as other caches
+    if (intimacy.clothingRevealCache.size >= 20) {
+        var firstKey = intimacy.clothingRevealCache.keys().next().value;
+        intimacy.clothingRevealCache.delete(firstKey);
+    }
+    intimacy.clothingRevealCache.set(cacheKey, narrative);
+}
+
+/**
+ * Purge a cached clothing reveal after use so it doesn't repeat.
+ */
+function purgeCachedClothingReveal(intimacy, cacheKey) {
+    if (!intimacy || !intimacy.clothingRevealCache || !(intimacy.clothingRevealCache instanceof Map)) return;
+    intimacy.clothingRevealCache.delete(cacheKey);
+}
+
+/**
+ * Build a stable cache key for a clothing reveal action.
+ * Key: clothingAction||clothingItem||target||<descriptor-snapshot>
+ * The descriptor snapshot is derived from stable NPC physical traits
+ * (species, skin, build, breast size) so the same action yields different
+ * enriched lines for different NPC appearances.
+ */
+function buildClothingRevealKey(npc, act) {
+    var action = act.clothingAction || "remove";
+    var item = act.clothingItem || "all";
+    var target = act.target || "npc";
+
+    // Descriptor snapshot from stable NPC traits
+    var nsfwAnatomy = (npc && npc.nsfwTraits && npc.nsfwTraits.anatomy) || {};
+    var baseAnatomy = (npc && npc.anatomy) || {};
+    var species = (npc && npc.species || "").toLowerCase();
+    var skinTone = String(npc.skinTone || npc.surfaceColor || "").toLowerCase();
+    var build = String(baseAnatomy.build || npc.bodyType || "").toLowerCase();
+    var size = String(baseAnatomy.size || npc.size || "").toLowerCase();
+    var breastSize = "";
+    if (nsfwAnatomy.breasts && nsfwAnatomy.breasts.sizeCategory) {
+        breastSize = String(nsfwAnatomy.breasts.sizeCategory).toLowerCase();
+    }
+    var snap = [species, skinTone, build, size, breastSize].join("+");
+
+    return action + "||" + item + "||" + target + "||" + snap;
+}
+
+/**
+ * Map a clothing item to the anatomy parts it reveals.
+ * Used to feed the prompt the anatomy of the body part being uncovered.
+ */
+function getRevealedAnatomyParts(clothingItem) {
+    if (clothingItem === "top") return ["breasts", "nipples"];
+    if (clothingItem === "bottom") return ["buttocks", "vagina", "penis", "pubicHair"];
+    if (clothingItem === "undergarments") return ["vagina", "penis", "pubicHair"];
+    return [];
+}
+
+/**
+ * Build the AI prompt for enriching a clothing removal narration.
+ * Seeds with visible physical descriptors (species, skin, build, hair)
+ * plus the anatomy of the body part being revealed. Neutral to arousal.
+ */
+function buildClothingRevealPrompt(npc, act, player, templateResponse) {
+    var clothingItem = act.clothingItem || "clothing";
+    var clothingAction = act.clothingAction || "remove";
+    var target = act.target || "npc";
+    var npcName = (npc && npc.name) || "the NPC";
+    var species = (npc && npc.species) || "Human";
+    var gender = (npc && npc.gender) || "female";
+
+    // Visible descriptors (already-visible traits, not hidden anatomy)
+    var skinDesc = "";
+    if (typeof getSkinDescription === "function") {
+        skinDesc = getSkinDescription(npc) || "";
+    }
+    var sizeContext = "";
+    if (typeof getSizeContext === "function") {
+        sizeContext = getSizeContext(player, npc) || "";
+    }
+    var baseAnatomy = (npc && npc.anatomy) || {};
+    var build = baseAnatomy.build || npc.bodyType || "";
+    var size = baseAnatomy.size || npc.size || "";
+    var hairDesc = "";
+    if (npc.hairColor) {
+        hairDesc = npc.hairColor + (npc.hairStyle ? " " + npc.hairStyle + " hair" : " hair");
+    }
+
+    // Species note for non-human NPCs
+    var _species = species.toLowerCase();
+    var _isUncivilized = _species && !isCivilizedSpecies(_species);
+    var _speciesNote = _isUncivilized
+        ? "\nThe NPC is an uncivilized " + species + ". Describe their body in raw, animal terms — coarse hair, rough skin, non-human features where relevant."
+        : (species && species !== "Human")
+            ? "\nThe NPC is a " + species + ". Include species-appropriate physical details (skin texture, features)."
+            : "";
+
+    // Reveal anatomy — the body parts exposed by removing this garment.
+    // This is the OPPOSITE of the clothed-action suppression: for removal,
+    // we WANT the anatomy so the narration can describe the reveal.
+    var nsfwAnatomy = (npc && npc.nsfwTraits && npc.nsfwTraits.anatomy) || {};
+    var revealedParts = getRevealedAnatomyParts(clothingItem);
+    var revealDesc = "";
+    if (revealedParts.length > 0) {
+        var parts = [];
+        for (var i = 0; i < revealedParts.length; i++) {
+            var partName = revealedParts[i];
+            var partData = nsfwAnatomy[partName];
+            if (partData) {
+                parts.push(partName + ": " + JSON.stringify(partData));
+            }
+        }
+        if (parts.length > 0) {
+            revealDesc = "\nREVEALED ANATOMY (the body parts exposed by removing this garment):\n" + parts.join("\n");
+        }
+    }
+
+    // Determine the garment label
+    var garmentLabel = clothingItem;
+    if (clothingItem === "top") garmentLabel = "top/shirt";
+    if (clothingItem === "bottom") garmentLabel = "bottom/pants/skirt";
+    if (clothingItem === "undergarments") garmentLabel = "underwear/undergarments";
+
+    // Action verb
+    var actionVerb = "remove";
+    if (clothingAction === "pull_down") actionVerb = "pull down";
+    if (clothingAction === "lift") actionVerb = "lift";
+    if (clothingAction === "move_aside") actionVerb = "move aside";
+    if (!act.clothingItem && !act.clothingAction) actionVerb = "undress completely";
+
+    var whose = target === "player" ? "your" : ((typeof getPossessivePronoun === "function" ? getPossessivePronoun(npc) : "their"));
+
+    var prompt = [
+"You are writing the narration for a clothing removal moment in a text adventure game.",
+"The NPC is " + npcName + ", a " + species + " " + gender + "." +
+    (build ? " Build: " + build + "." : "") +
+    (size ? " Size: " + size + "." : "") +
+    (skinDesc ? " Skin: " + skinDesc + "." : "") +
+    (hairDesc ? " Hair: " + hairDesc + "." : ""),
+"",
+"INSTRUCTIONS:",
+"- The player is " + actionVerb + "ing " + whose + " " + garmentLabel + ".",
+"- Describe the player helping " + (target === "player" ? "themselves" : npcName) + " " + actionVerb + " " + (target === "player" ? "their" : whose) + " " + garmentLabel + ".",
+"- Then describe what body is being revealed as the garment comes off. Be specific and sensory.",
+"- Use the REVEALED ANATOMY data below to describe the exposed body parts accurately (breast size, nipple texture, areola color, pubic hair, etc.).",
+"- Write in second person (\"You help her pull...\"). This is the player's perspective.",
+"- Use direct, literal language: \"pull\", \"slide\", \"lift\", \"expose\", \"bare\". No metaphors.",
+"- Keep it to 1-2 sentences. This is a moment of undressing, not a sex act.",
+"- Do NOT describe sexual arousal, lubrication, or climax. This is a neutral reveal of the body.",
+"- Do NOT add NPC dialogue or speech. This is only narration.",
+"- Do NOT invent new body parts or features not in the revealed anatomy data.",
+"",
+"STYLE:",
+"- RIGHT: \"You help her pull her red shirt off, exposing her petite breasts, the brown areolas hardening in the cool air.\"",
+"- RIGHT: \"You slide her panties down her thighs, baring the dark curls of her pubic hair and the smooth fold of her vulva.\"",
+"- WRONG: \"Your fingers dance across the silken fabric, revealing the temple of her desire.\"",
+"- WRONG: \"She moans with pleasure as you expose her heaving bosom to the night air.\"",
+"",
+"ACTION: " + actionVerb + " " + whose + " " + garmentLabel,
+_speciesNote ? _speciesNote : "",
+sizeContext ? sizeContext : "",
+revealDesc ? revealDesc : "",
+"",
+"BASE TEXT (the plain template — enrich this into a vivid reveal narration):",
+"\"" + (templateResponse || "") + "\"",
+"",
+"IMPORTANT: Output ONLY the enriched narration text. No explanations, no commentary, no meta-discussion. Just output the final narration.",
+"",
+"RESPOND with only the enriched text, nothing else:"
+    ].filter(function(l) { return l !== ""; }).join("\n");
+
+    return prompt;
+}
+
+/**
+ * Prefetch AI-enriched clothing reveal narrations for the NPC-targeted
+ * clothing actions that are currently available given the clothed state.
+ * Called at encounter start so the enriched lines are cached before the
+ * player clicks. Non-blocking — mirrors the penetration prefetch pattern.
+ */
+function prefetchClothingReveals(npc, player, intimacy) {
+    if (!npc || !intimacy) return;
+    if (typeof ai !== "function" && (typeof window === "undefined" || typeof window.ai !== "function")) return;
+
+    var _ai = typeof ai === "function" ? ai : (typeof window !== "undefined" && typeof window.ai === "function" ? window.ai : null);
+    if (!_ai) return;
+
+    var clothingState = intimacy.clothing;
+    if (!clothingState || !clothingState.npc) return;
+
+    // Only prefetch if the NPC is still clothed (at least one item on)
+    var npcCloth = clothingState.npc;
+    var anyOn = npcCloth.top || npcCloth.bottom || npcCloth.undergarments;
+    if (!anyOn) return;
+
+    // Find NPC-targeted clothing actions valid for the current clothing state
+    var allActIds = typeof getAllActIds === "function" ? getAllActIds() : Object.keys(window.SEX_ACTS || {});
+    if (!allActIds || !allActIds.length) return;
+
+    var currentPosition = (intimacy.position && intimacy.position.player) || "Unknown";
+
+    allActIds.forEach(function(actId) {
+        var act = typeof getAct === "function" ? getAct(actId) : null;
+        if (!act) return;
+        if (act.type !== ACT_TYPES.CLOTHING) return;
+        // Only NPC-targeted actions (player undressing has less anatomy data)
+        if (act.target !== "npc") return;
+
+        // Check if the action is valid for the current clothing state
+        if (!clothingState.npc[act.clothingItem]) return;
+
+        // Build cache key and skip if already cached or pending
+        var cacheKey = buildClothingRevealKey(npc, act);
+        if (intimacy.clothingRevealCache && intimacy.clothingRevealCache instanceof Map && intimacy.clothingRevealCache.has(cacheKey)) return;
+        if (!intimacy._pendingClothingPrefetch) intimacy._pendingClothingPrefetch = {};
+        if (intimacy._pendingClothingPrefetch[cacheKey]) return;
+        intimacy._pendingClothingPrefetch[cacheKey] = true;
+
+        // Build the template response (plain narration) to enrich
+        var templateResponse = buildClothingNarration(act, npc, player);
+
+        (async function() {
+            try {
+                var prompt = buildClothingRevealPrompt(npc, act, player, templateResponse);
+                console.log("[Intimacy Clothing] Background reveal prefetch for", actId);
+                var result = await _ai({
+                    instruction: prompt,
+                    startWith: "",
+                    endButtons: "none",
+                    generatorName: "cyoaftw-engine-core"
+                });
+                var enriched = result && (result.text || result);
+                if (enriched && enriched.trim()) {
+                    var _isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(enriched.trim());
+                    if (_isMeta) {
+                        console.log("[Intimacy Clothing] Reveal rejected (meta-commentary) for", actId);
+                    } else {
+                        cacheClothingReveal(intimacy, cacheKey, enriched.trim());
+                        console.log("[Intimacy Clothing] Cached reveal for", actId, "(" + enriched.substring(0, 60) + "...)");
+                    }
+                }
+            } catch (e) {
+                console.warn("[Intimacy Clothing] Reveal prefetch failed for", actId, e);
+            } finally {
+                delete intimacy._pendingClothingPrefetch[cacheKey];
+            }
+        })();
+    });
 }
 
 /**
@@ -992,7 +1266,14 @@ function startIntimacyEncounter(npc, player, positionId = null) {
     }
     
     console.log(`[Intimacy] Started encounter with ${npc.name || 'NPC'} in position: ${pos}`);
-    
+
+    // Prefetch AI-enriched clothing reveal narrations for NPC-targeted
+    // clothing actions that are currently available. Non-blocking — the
+    // enriched lines land in the cache before the player clicks "Remove".
+    if (typeof prefetchClothingReveals === "function") {
+        prefetchClothingReveals(npc, player, npc.intimacy);
+    }
+
     return true;
 }
 
@@ -1150,7 +1431,27 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
 function checkActionValidity(actId, npc, player, positionId, clothingState) {
     const act = getAct(actId);
     if (!act) return { valid: false, reason: "unknown action" };
-    
+
+    // Cloaca-bearing NPC checks — these must run before clothing/position
+    // checks so hidden actions never surface as disabled entries (which
+    // would keep their category heading alive in the menu).
+
+    // Cloaca-bearing NPCs have no external testes, so actions targeting
+    // the NPC's testicles are hidden entirely.
+    if (npc && npc.cloaca && act.target === "testicles" && act.requiresNpcMale) {
+        return { valid: false, reason: "no external testes (cloaca)", hidden: true };
+    }
+
+    // Cloaca-bearing NPCs have a single cloacal vent instead of separate
+    // vaginal and anal openings. Vaginal/clitoral actions are hidden — the
+    // Cloaca (formerly Anus) category with cloaca relabelling handles it.
+    // Player-owned vaginal actions (playerIsBottom) and the player self-climax
+    // (female_ejaculate) are kept, since the player's anatomy is unaffected.
+    if (npc && npc.cloaca && !act.playerIsBottom && act.id !== "female_ejaculate" &&
+        (act.target === "vagina" || act.target === "pussy" || act.target === "clitoris")) {
+        return { valid: false, reason: "cloaca replaces vagina", hidden: true };
+    }
+
     // Check position requirement
     if (act.pos && act.pos.length > 0 && !act.pos.includes(positionId)) {
         return { valid: false, reason: "no position" };
@@ -1240,13 +1541,6 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         if (act.requiresPlayerFemale && playerGender !== "female") return { valid: false, reason: "wrong gender" };
     }
 
-    // Cloaca-bearing NPCs (reptilian-kin) have no external testes, so actions
-    // targeting the NPC's testicles are not available — and are hidden rather
-    // than shown disabled, since they can never apply to this NPC.
-    if (npc && npc.cloaca && act.target === "testicles" && act.requiresNpcMale) {
-        return { valid: false, reason: "no external testes (cloaca)", hidden: true };
-    }
-    
     // Check prior actions
     if (act.requiresPrior && act.requiresPrior.length > 0) {
         const intimacy = npc && npc.intimacy;
@@ -5304,11 +5598,11 @@ function generateEndResponse(npc, player, act) {
 /**
  * Organize actions into menu categories
  */
-function organizeActionsForMenu(validActions) {
+function organizeActionsForMenu(validActions, npc) {
     const categorized = {};
-    
+
     for (const action of validActions) {
-        const category = getActionCategory(action.actId);
+        const category = getActionCategory(action.actId, npc);
         if (!categorized[category]) {
             categorized[category] = [];
         }
@@ -5353,7 +5647,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         console.log(`[DEBUG] After phase filter: ${validActions.length} actions for ${npc.name}, ${clothingActions.length} clothing actions, phase=${phase}`);
     }
     
-    const categorized = organizeActionsForMenu(validActions);
+    const categorized = organizeActionsForMenu(validActions, npc);
     
     // Also get disabled actions with their reasons for showing hints
     const allActionsWithStatus = generateAllActionsWithStatus(npc, player, positionId);
@@ -5365,7 +5659,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         return filterActionsByPhase([mockAction], phase).length > 0;
     });
     
-    const categorizedDisabled = organizeActionsForMenu(filteredDisabledActions);
+    const categorizedDisabled = organizeActionsForMenu(filteredDisabledActions, npc);
     
     // Convert to menu format with natural labels
     const menu = [];
@@ -5374,8 +5668,8 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     // Define phase groups with their categories (now grouped by body area)
     const phaseGroups = {
         social: ["Mouth & Lips", "Hair", "Body", "Breasts"],
-        private: ["Clothing", "Breasts", "Lower Body", "Pussy", "Cock", "Anus", "Impact"],
-        intimate: ["Pussy", "Cock", "Anus", "Mouth & Lips", "Climax", "End", "Receive"]
+        private: ["Clothing", "Breasts", "Lower Body", "Pussy", "Cock", "Anus", "Cloaca", "Impact"],
+        intimate: ["Pussy", "Cock", "Anus", "Cloaca", "Mouth & Lips", "Climax", "End", "Receive"]
     };
     
     // Process each phase group in order
@@ -7212,6 +7506,12 @@ if (typeof window !== 'undefined') {
     window.prefetchPenetrationContinue = prefetchPenetrationContinue;
     window.getCachedPenetrationResponse = getCachedPenetrationResponse;
     window.cachePenetrationResponse = cachePenetrationResponse;
+    window.prefetchClothingReveals = prefetchClothingReveals;
+    window.buildClothingRevealPrompt = buildClothingRevealPrompt;
+    window.buildClothingRevealKey = buildClothingRevealKey;
+    window.getCachedClothingReveal = getCachedClothingReveal;
+    window.cacheClothingReveal = cacheClothingReveal;
+    window.purgeCachedClothingReveal = purgeCachedClothingReveal;
 }
 
 // ============================================================================
@@ -7296,6 +7596,55 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
         var t = transitionNarrative.trim();
         if (!t.match(/[.!?]$/)) t += ".";
         finalNarrative = t;
+    }
+
+    // ── CLOTHING REVEAL AI ENRICHMENT ─────────────────────────────
+    // For NPC-targeted clothing actions, check the clothing reveal
+    // cache for an AI-enriched narration. If cached, use + purge it.
+    // If not cached, fire a background prefetch for next time.
+    // This is the clothing equivalent of the player narrative polish
+    // below — it replaces the plain "You remove her top." with a vivid
+    // reveal narration seeded by the NPC's visible descriptors and
+    // the anatomy of the body part being uncovered.
+    if (intimacy && act.type === ACT_TYPES.CLOTHING && act.target === "npc") {
+        var _clAi = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
+        var _revealKey = buildClothingRevealKey(npc, act);
+
+        var cachedReveal = getCachedClothingReveal(intimacy, _revealKey);
+        if (cachedReveal) {
+            console.log("[Intimacy Clothing] Using cached reveal for", actionId);
+            purgeCachedClothingReveal(intimacy, _revealKey);
+            return cachedReveal;
+        }
+
+        // Fire background AI to enrich the clothing reveal for next time
+        if (_clAi) {
+            (async function() {
+                try {
+                    var _templateResp = finalNarrative || buildClothingNarration(act, npc, context.player);
+                    var _prompt = buildClothingRevealPrompt(npc, act, context.player, _templateResp);
+                    console.log("[Intimacy Clothing] Background reveal prefetch for", actionId);
+                    var _result = await _clAi({
+                        instruction: _prompt,
+                        startWith: "",
+                        endButtons: "none",
+                        generatorName: "cyoaftw-engine-core"
+                    });
+                    var _enriched = _result && (_result.text || _result);
+                    if (_enriched && _enriched.trim()) {
+                        var _isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(_enriched.trim());
+                        if (_isMeta) {
+                            console.log("[Intimacy Clothing] Reveal rejected (meta-commentary) for", actionId);
+                        } else {
+                            cacheClothingReveal(intimacy, _revealKey, _enriched.trim());
+                            console.log("[Intimacy Clothing] Cached reveal for", actionId, "(" + _enriched.substring(0, 60) + "...)");
+                        }
+                    }
+                } catch (e) {
+                    console.warn("[Intimacy Clothing] Reveal prefetch failed for", actionId, e);
+                }
+            })();
+        }
     }
 
     // ── PLAYER NARRATIVE AI POLISH ────────────────────────────────

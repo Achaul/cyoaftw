@@ -190,7 +190,9 @@ function getGenderedLabel(act, npc, player) {
     label = label.replace(/\{clit\}/gi, "clitoris");
     label = label.replace(/\{clitoris\}/gi, "clitoris");
     label = label.replace(/\{nipples\}/gi, "nipples");
-    label = label.replace(/\{anus\}/gi, "anus");
+    // Anus is possessive-aware for cloaca NPCs: "their {anus}" -> NPC's cloaca,
+    // "your {anus}" -> player's anus (player is never cloaca).
+    label = _replaceGenitalToken(label, "anus", npcIsCloaca ? "cloaca" : "anus", "anus");
     label = label.replace(/\{buttocks\}/gi, "buttocks");
     label = label.replace(/\{butt\}/gi, "buttocks");
     label = label.replace(/\{ass\}/gi, "ass");
@@ -235,7 +237,15 @@ function getGenderedLabel(act, npc, player) {
             }
         }
     }
-    
+
+    // Final cloaca pass: for cloaca-bearing NPCs, replace NPC-owned literal
+    // "anus" (preceded by an NPC possessive: her/his/their) with "cloaca".
+    // This catches raw act labels like "Touch anus" -> "Touch her anus" that
+    // bypass the {anus} token path. Player-owned "your anus" is left alone.
+    if (npcIsCloaca) {
+        label = label.replace(/\b(her|his|their)\s+anus\b/gi, "$1 cloaca");
+    }
+
     return label;
 }
 
@@ -297,7 +307,7 @@ var SEX_ACTS = {
     // ===== STAGE 2: CLOTHING REMOVAL =====
     remove_player_top: { id: "remove_player_top", type: ACT_TYPES.CLOTHING, label: "Remove your top", desc: "Take off your top", clothingItem: "top", target: "player", arousal: { p: 0, n: 5 }, pos: ["Standing", "Perched", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.TOP_ON },
     remove_player_bottom: { id: "remove_player_bottom", type: ACT_TYPES.CLOTHING, label: "Remove your bottom", desc: "Take off your bottom clothing", clothingItem: "bottom", target: "player", arousal: { p: 5, n: 10 }, pos: ["Standing", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_ON },
-    remove_player_underwear: { id: "remove_player_underwear", type: ACT_TYPES.CLOTHING, label: "Remove your underwear", desc: "Take off your underwear", clothingItem: "underwear", target: "player", arousal: { p: 8, n: 12 }, pos: ["Standing", "Perched", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_ON },
+    remove_player_underwear: { id: "remove_player_underwear", type: ACT_TYPES.CLOTHING, label: "Remove your underwear", desc: "Take off your underwear", clothingItem: "undergarments", target: "player", arousal: { p: 8, n: 12 }, pos: ["Standing", "Perched", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
     undress_player: { id: "undress_player", type: ACT_TYPES.CLOTHING, label: "Undress completely", desc: "Remove all your clothing", target: "player", arousal: { p: 10, n: 15 }, pos: ["Standing"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
     
     remove_npc_top: { id: "remove_npc_top", type: ACT_TYPES.CLOTHING, label: "Remove their top", desc: "Take off their top", clothingItem: "top", target: "npc", arousal: { p: 5, n: 0 }, pos: ["Standing", "Perched", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.TOP_ON },
@@ -884,7 +894,7 @@ function checkClothingRequirement(requirement, clothingState, isPlayerBottom, ta
 /**
  * Get action category for menu organization
  */
-function getActionCategory(actId) {
+function getActionCategory(actId, npc) {
     const act = getAct(actId);
     if (!act) return "Other";
     
@@ -955,7 +965,9 @@ function getActionCategory(actId) {
         actIdLower.includes("anal") || actIdLower.includes("anus") || actIdLower.includes("butt") || actIdLower.includes("ass") ||
         labelLower.includes("anal") || labelLower.includes("anus") || labelLower.includes("butt") || labelLower.includes("ass") ||
         target === "sphincter") {
-        return "Anus";
+        // Cloaca-bearing NPCs (reptilian-kin) have a cloacal vent instead of
+        // a separate anus, so the section is labelled "Cloaca" for them.
+        return _npcHasCloaca(npc) ? "Cloaca" : "Anus";
     }
     
     // Lower body (hips, thighs, groin)
