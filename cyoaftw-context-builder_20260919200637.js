@@ -356,9 +356,15 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         anatomyBits.push(`${anatomyBody.color} ${anatomyBody.surfaceType}`);
     }
     if (anatomy.movement) anatomyBits.push(anatomy.movement);
-    if (anatomy.voice) anatomyBits.push(`${anatomy.voice} voice`);
 
     const lore = npc.loreNotes || enrichment.speciesLore || "";
+    const articulation = npc.articulation || enrichment.articulation || "";
+    const voice = npc.voice || enrichment.voice || anatomy.voice || "";
+    const background = npc.background || enrichment.background || "";
+    const dialectFlavor = npc.dialectFlavor || enrichment.dialectFlavor || "";
+    const temperamentInflection = typeof getTemperamentInflection === "function"
+        ? getTemperamentInflection(temperament, { favorability, hostility })
+        : "";
     const motive = npc.currentMotive || enrichment.currentMotive || "";
     const values = Array.isArray(enrichment.values) ? enrichment.values : [];
     const speechTics = speechProfile && Array.isArray(speechProfile.cues) && speechProfile.cues.length
@@ -380,14 +386,18 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         `- Species: ${npc.species || "unknown"}, ${gender} (pronoun: ${pronoun})`,
         npc.age ? `- Age: ${npc.age} (${npc.ageCategory || ""})` : "",
         `- Temperament: ${temperament}`,
+        temperamentInflection ? `- ${temperamentInflection}` : "",
         archetype ? `- Archetype: ${archetype}` : "",
         traits.length ? `- Traits: ${traits.join(", ")}` : "",
         quirksLine,
+        background ? `- Background: ${background}${dialectFlavor ? ` - ${dialectFlavor}` : ""}` : "",
         speechStyle ? `- Speech style: ${speechStyle}` : "",
         speechProfile ? `- Speech guide: ${speechProfile.sentenceLength} sentences, ${speechProfile.vocabulary}, ${speechProfile.cadence}` : "",
         speechProfile ? `- Speech sample: "${speechProfile.sample}"` : "",
         speechTics.length ? `- Speech cues: ${speechTics.join("; ")}` : "",
         speechAvoid.length ? `- Avoid in speech: ${speechAvoid.join("; ")}` : "",
+        voice ? `- Voice: ${voice}` : "",
+        articulation ? `- Articulation: ${articulation}` : "",
         physicalTraits ? `- Appearance: ${physicalTraits}` : "",
         appearanceHighlights.length ? `- Notable details: ${appearanceHighlights.join(", ")}` : "",
         anatomyBits.length ? `- Anatomy/movement: ${anatomyBits.join(", ")}` : "",

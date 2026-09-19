@@ -228,6 +228,17 @@ const NPC_DISTINGUISHING_MARKS = [
     "a voice that drops when strangers come close"
 ];
 
+const NPC_BACKGROUNDS = [
+    { background: "grew up in a border trading town", dialectFlavor: "peppers speech with quick trade-cant shorthand" },
+    { background: "born and raised in an isolated mountain clan", dialectFlavor: "carries old-fashioned, formal turns of phrase" },
+    { background: "spent years with a traveling caravan", dialectFlavor: "cadence is a patchwork picked up from a dozen different places" },
+    { background: "grew up in a coastal fishing village", dialectFlavor: "unhurried, sing-song cadence with maritime turns of phrase" },
+    { background: "orphaned young, raised by whoever would take them in", dialectFlavor: "no single clear origin - habits borrowed from everywhere" },
+    { background: "spent time in a monastery or temple school", dialectFlavor: "measured, deliberate phrasing with the occasional formal or archaic word" },
+    { background: "grew up on the road with no fixed home", dialectFlavor: "speaks plainly and efficiently, with little patience for ornament" },
+    { background: "raised within these city walls, rarely traveling far", dialectFlavor: "speaks with unselfconscious local familiarity, assuming shared context" }
+];
+
 const NPC_HUMANOID_MOTIVES = [
     "earn enough coin to feel secure",
     "avoid becoming involved in someone else's trouble",
@@ -1565,6 +1576,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     const preferredTopics = _npcUniquePicks(culture.topics, 3);
     const tabooTopics = _npcUniquePicks(culture.taboos, 2);
     const speechTics = getSpeechTicsForStyle(speechProfile.style, voice);
+    const backgroundEntry = _npcRand(NPC_BACKGROUNDS) || {};
 
     const anatomy = {
         size: template.size || "medium",
@@ -1589,6 +1601,10 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
 
     const enrichment = {
         speciesLore: template.lore || "",
+        articulation: template.articulation || "",
+        voice,
+        background: backgroundEntry.background || "",
+        dialectFlavor: backgroundEntry.dialectFlavor || "",
         values,
         preferredTopics,
         tabooTopics,
@@ -1630,6 +1646,10 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     npc.physicalTraits = buildNPCPhysicalSummary(npc);
     npc.appearanceHighlights = buildNPCAppearanceHighlights(npc);
     npc.loreNotes = enrichment.speciesLore;
+    npc.articulation = enrichment.articulation;
+    npc.voice = enrichment.voice;
+    npc.background = enrichment.background;
+    npc.dialectFlavor = enrichment.dialectFlavor;
     npc.preferredTopics = preferredTopics;
     npc.tabooTopics = tabooTopics;
     npc.currentMotive = enrichment.currentMotive;

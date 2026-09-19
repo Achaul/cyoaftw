@@ -154,6 +154,7 @@ const SPECIES_TEMPLATES = [
         size: "small",
         speechStyle: "clipped",
         lore: "Goblin bands prize cunning, salvage, and status earned by surviving bad odds. They often test strangers before trusting them.",
+        articulation: "Small sharp teeth give hard consonants a slight click. Subtle, not exaggerated.",
         anatomyProfile: {
             surfaceType: "skin",
             skinTones: ["moss green", "yellow-green", "ash gray", "mud brown", "sallow ochre"],
@@ -178,6 +179,7 @@ const SPECIES_TEMPLATES = [
         size: "large",
         speechStyle: "direct",
         lore: "Orcs respect strength, directness, and loyalty proven under pressure. Insults are remembered, but so is courage.",
+        articulation: "Tusks blunt and thicken hard consonants slightly. Otherwise speaks clearly.",
         anatomyProfile: {
             surfaceType: "skin",
             skinTones: ["deep green", "gray-green", "ash gray", "dark umber", "olive"],
@@ -202,6 +204,7 @@ const SPECIES_TEMPLATES = [
         size: "medium",
         speechStyle: "broken",
         lore: "Animated skeletons retain fragments of purpose rather than full lives. They respond to command, trespass, and ritual disturbance.",
+        articulation: "No lungs or vocal cords - speech is a dry, hollow approximation animated by will, not breath. No breath sounds or wet consonants; words land a beat flatter than a living voice.",
         anatomyProfile: {
             surfaceType: "bone",
             skinTones: ["ivory", "yellowed", "ash-white", "smoke-stained", "old brown"],
@@ -224,6 +227,7 @@ const SPECIES_TEMPLATES = [
         size: "tiny",
         speechStyle: "broken",
         lore: "Rats follow food, warmth, and danger-scent. A lone rat is usually a sign that a larger hidden ecology is nearby.",
+        articulation: "A tiny mouth built for gnawing, not speech - words come out as a thin, urgent squeak-and-chitter blend, half-formed but understandable in context.",
         anatomyProfile: {
             surfaceType: "fur",
             skinTones: ["brown", "black", "gray", "mottled", "pale"],
@@ -246,6 +250,7 @@ const SPECIES_TEMPLATES = [
         size: "medium",
         speechStyle: "whisper",
         lore: "Ghosts are memory given shape. They notice names, unfinished business, and places where the living have repeated old mistakes.",
+        articulation: "No physical vocal apparatus - sound seems to arrive from just behind the listener, thin and half-formed, more impression of speech than actual speech.",
         anatomyProfile: {
             surfaceType: "translucent form",
             skinTones: ["pale blue", "silver-white", "faint green", "smoky gray", "candlelit gold"],
@@ -271,6 +276,7 @@ const SPECIES_TEMPLATES = [
         hasTail: true,
         cloaca: true,
         lore: "Dragonborn carry the blood of ancient dragons in their scales and breath. They value honor above all — a promise given is a debt that outlasts death. Their clans trace lineage to specific dragon ancestors, and they judge others by the weight of their word.",
+        articulation: "A rigid snout with no lips - consonants form further back in the throat, with no lip-rounding for sounds like a soft b or w. Comes through as clipped and slightly breathy rather than mumbled or slurred.",
         anatomyProfile: {
             surfaceType: "scales",
             skinTones: ["deep green", "bronze", "crimson", "deep blue", "black", "gold"],
@@ -298,6 +304,7 @@ const SPECIES_TEMPLATES = [
         hasTail: true,
         cloaca: true,
         lore: "Lizardfolk are reptilian survivors shaped by swamp and jungle. They think in terms of predator and prey, not good and evil. Their tribes value practical cunning over sentiment, and they eat what they kill. Trust is earned through shared danger, not words.",
+        articulation: "A long snout and forked tongue soften sibilants into a faint hiss and flatten vowels - the mouth doesn't round the way a human's does.",
         anatomyProfile: {
             surfaceType: "scales",
             skinTones: ["moss green", "swamp brown", "olive", "dark green", "gray-green"],
@@ -325,6 +332,7 @@ const SPECIES_TEMPLATES = [
         hasTail: true,
         cloaca: true,
         lore: "Kobolds are small dragon-kin who survive through cleverness, traps, and sheer numbers. They revere dragons as gods and model their tunnels after dragon lairs. A lone kobold is a scout or a trap-setter — where there is one, there are always more.",
+        articulation: "A small toothy snout gives words a slightly yipping, clipped quality, with sharp sibilants.",
         anatomyProfile: {
             surfaceType: "scales",
             skinTones: ["rust red", "dark brown", "deep orange", "mottled brown", "dusty red"],
