@@ -250,6 +250,13 @@ const SPECIES_TEMPLATES = [
         species: "Ghost",
         isHumanoid: false,
         isCivilized: false,
+        // Immune to regular physical damage (weapons with no elemental
+        // damage bounce off harmlessly) and only elemental-imbued weapons
+        // can actually hurt them - see getSpeciesIsIncorporeal in
+        // cyoaftw-engine-CORE.js and its call sites in the combat damage
+        // functions. Their own attacks likewise skip the player's HP and
+        // drain stamina instead - a ghost's touch is a chill, not a wound.
+        incorporeal: true,
         size: "medium",
         speechStyle: "whisper",
         lore: "Ghosts are memory given shape. They notice names, unfinished business, and places where the living have repeated old mistakes.",
