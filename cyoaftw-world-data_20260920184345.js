@@ -863,6 +863,44 @@ const ROOM_TEMPLATES = [
             { id: "waterlogged-chest", name: "waterlogged chest",  tags: ["storage", "loot"] }
         ],
         imageKey: "Submerged Ruin"
+    },
+
+    // ── ZONE-TRANSITION CORRIDOR TYPES ────────────────────────────
+    // Zone-agnostic connector rooms used only by the zone-transition
+    // corridor system in cyoaftw-engine-CORE.js (see
+    // ZONE_TRANSITION_CORRIDOR_TYPES / chooseRoomTypeForTransition).
+    // Deliberately absent from every ZONE_TEMPLATES.roomTypes list, so
+    // normal weighted room selection never picks them - they only ever
+    // appear via chooseRoomTypeForTransition while a corridor is active.
+    // allowedZones spans all five real zones so they're border-capable
+    // from anywhere, matching a Gate's guaranteed 2-4 exit floor.
+    {
+        type: "Borderlands",
+        zone: "Town",
+        role: "spine",
+        displayName: "Borderlands",
+        baseDescription: "The land here belongs to no single place. Familiar terrain frays at the edges, and the way ahead could lead almost anywhere.",
+        allowedZones: ["town", "dungeon", "ruins", "underground city", "swamp"],
+        parentCluster: [],
+        isConnector: true,
+        structural: [
+            { id: "waymarker",     name: "weathered waymarker", tags: ["landmark"] },
+            { id: "worn-trail",    name: "worn trail",          tags: ["passage"] }
+        ]
+    },
+    {
+        type: "Fringe Path",
+        zone: "Town",
+        role: "spine",
+        displayName: "Fringe Path",
+        baseDescription: "A faint path winds along the fringe between regions, half-swallowed by whatever landscape presses in from either side.",
+        allowedZones: ["town", "dungeon", "ruins", "underground city", "swamp"],
+        parentCluster: [],
+        isConnector: true,
+        structural: [
+            { id: "boundary-stones", name: "boundary stones", tags: ["landmark"] },
+            { id: "overgrown-trail", name: "overgrown trail", tags: ["passage"] }
+        ]
     }
 ];
 

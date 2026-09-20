@@ -983,8 +983,26 @@ const NPC_CONVERSATION_CATALOGUE = [
         resetTimer: { turns: 6 },
         label: "Ask for a rumor",
         textVariants: [
-            "You ask whether they have heard anything worth knowing.",
-            "You nudge the conversation toward rumors and loose talk.",
+            (npc, ctx) => {
+                const role = (ctx && ctx.role) || "";
+                if (role.includes("guard")) return "You ask if there's been any trouble worth watching for.";
+                if (role.includes("healer")) return "You ask if anything's been going around that has people worried.";
+                if (role.includes("priest") || role.includes("archivist")) return "You ask if they've noticed any ill omens lately.";
+                if (["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "blacksmith"].some(tag => role.includes(tag))) {
+                    return "You ask if trade's been good, or if something's been eating into it.";
+                }
+                return "You ask whether they have heard anything worth knowing.";
+            },
+            (npc, ctx) => {
+                const role = (ctx && ctx.role) || "";
+                if (role.includes("guard")) return "You ask what's been keeping the watch busy lately.";
+                if (role.includes("healer")) return "You ask what ailments have kept them busiest this season.";
+                if (role.includes("priest") || role.includes("archivist")) return "You ask what the old stories say about times like these.";
+                if (["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "blacksmith"].some(tag => role.includes(tag))) {
+                    return "You ask what's been moving through the market lately, good or bad.";
+                }
+                return "You nudge the conversation toward rumors and loose talk.";
+            },
             "You invite them to share whispers, gossip, or anything people are not saying openly."
         ],
         intent: "rumor",
@@ -1019,6 +1037,19 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
     {
+        id: "browse-wares",
+        priority: 85,
+        repeat: "always",
+        label: npc => npc && npc.role ? `Ask the ${npc.role} what they're selling` : "Ask what they have for sale",
+        action: "trade",
+        conditions: {
+            metPlayer: true,
+            roleIncludes: ["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "blacksmith"],
+            maxHostility: 79,
+            minFavor: -69
+        }
+    },
+    {
         id: "ask-watch",
         priority: 90,
         repeat: "session",
@@ -1034,6 +1065,100 @@ const NPC_CONVERSATION_CATALOGUE = [
             roleIncludes: ["guard", "scout"],
             maxHostility: 70,
             excludedActionTags: ["ask-watch"]
+        }
+    },
+    {
+        id: "ask-remedies",
+        priority: 92,
+        repeat: "session",
+        label: "Ask about remedies and ailments",
+        textVariants: [
+            "You ask what's been going around and how they've been treating it.",
+            "You ask whether they've seen anything unusual sicken folk lately.",
+            "You ask what remedies they keep close at hand for the worst cases."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-remedies" },
+        conditions: {
+            roleIncludes: ["healer"],
+            maxHostility: 70,
+            excludedActionTags: ["ask-remedies"]
+        }
+    },
+    {
+        id: "ask-repairs",
+        priority: 94,
+        repeat: "session",
+        label: "Ask about repairs and craftsmanship",
+        textVariants: [
+            "You ask what it takes to keep gear from failing when it matters most.",
+            "You ask about the trickiest repair they've had to make lately.",
+            "You ask what separates a good repair from a rushed one."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-repairs" },
+        conditions: {
+            roleIncludes: ["blacksmith", "smith"],
+            maxHostility: 70,
+            excludedActionTags: ["ask-repairs"]
+        }
+    },
+    {
+        id: "ask-lore",
+        priority: 96,
+        repeat: "session",
+        label: (npc, ctx) => (ctx && ctx.role || "").includes("priest") ? "Ask about omens and old rites" : "Ask about the old records",
+        textVariants: [
+            (npc, ctx) => (ctx && ctx.role || "").includes("priest")
+                ? "You ask what omens or old rites still shape how people here live."
+                : "You ask what the old records say about how this place came to be.",
+            (npc, ctx) => (ctx && ctx.role || "").includes("priest")
+                ? "You ask what faith looks like for the people who actually live here."
+                : "You ask what's been lost, misfiled, or simply forgotten in the archives.",
+            "You ask what history they think outsiders always get wrong."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-lore" },
+        conditions: {
+            roleIncludes: ["priest", "archivist"],
+            maxHostility: 70,
+            excludedActionTags: ["ask-lore"]
+        }
+    },
+    {
+        id: "ask-recipe",
+        priority: 97,
+        repeat: "session",
+        label: "Ask about the local fare",
+        textVariants: [
+            "You ask what dish they're proudest of putting together.",
+            "You ask where they source the ingredients that are hardest to come by.",
+            "You ask what the locals actually order versus what's on the sign."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-recipe" },
+        conditions: {
+            roleIncludes: ["cook"],
+            maxHostility: 70,
+            excludedActionTags: ["ask-recipe"]
+        }
+    },
+    {
+        id: "ask-mines",
+        priority: 98,
+        repeat: "session",
+        label: "Ask about the tunnels and the work below",
+        textVariants: [
+            "You ask what it's like working the tunnels day after day.",
+            "You ask if they've struck anything worth talking about lately.",
+            "You ask what dangers they watch for underground that outsiders never think of."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-mines" },
+        conditions: {
+            roleIncludes: ["miner"],
+            maxHostility: 70,
+            excludedActionTags: ["ask-mines"]
         }
     },
     {
