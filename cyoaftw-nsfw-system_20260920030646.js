@@ -1396,10 +1396,12 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   }
 
   // === Unconscious body interactions (kiss / reposition) ===================
-  // Exposed as window.renderUnconsciousBodyActions so the SFW engine's
-  // examineRoomObject() can call it behind a typeof guard. The standard
-  // room-object action menu (Search / Try to wake / Finish off / Leave) is
-  // rendered first, then the NSFW-only Kiss and Position groups are appended.
+  // The SFW engine's renderRoomObjectActionMenu() renders the standard body
+  // buttons (Examine / Search / Try to wake / Finish off / Leave) with direct
+  // function references, then calls window.appendUnconsciousBodyActions (see
+  // bottom of this IIFE) to append the NSFW-only Kiss / Position / Oral /
+  // Penetrate / Spit groups. nsfwRenderBodyMenu() (below) re-renders the whole
+  // menu after an NSFW action by delegating back to renderRoomObjectActionMenu.
   // Narration is AI-polished via the same ai() path the intimacy system uses:
   // the plain template is shown immediately, then a background ai() call
   // refines it and updates the narration element when it returns.
