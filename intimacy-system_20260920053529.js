@@ -1561,25 +1561,11 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
             const currentTool = intimacy.penetration.tool;
             const newTarget = act.target;
             const newTool = act.tool;
-            
-            // If trying to penetrate a different orifice, block it
-            if (currentTarget && newTarget && currentTarget !== newTarget) {
-                // Allow some compatible transitions (e.g., vaginal <-> clitoris)
-                const compatibleTargets = {
-                    vagina: ["pussy", "clitoris", "clit"],
-                    pussy: ["vagina", "clitoris", "clit"],
-                    anus: ["ass", "butthole"],
-                    ass: ["anus", "butthole"],
-                    mouth: ["lips"],
-                    lips: ["mouth"]
-                };
-                
-                const isCompatible = compatibleTargets[currentTarget] && compatibleTargets[currentTarget].includes(newTarget);
-                
-                if (!isCompatible) {
-                    return { valid: false, reason: "pull out first" };
-                }
-            }
+
+            // Switching to a different orifice is allowed — handlePenetrationAction
+            // auto-pulls-out of the current orifice (with narration) before the
+            // new penetration starts. Compatible transitions (vagina <-> clit,
+            // anus <-> ass, mouth <-> lips) need no pull-out.
 
             // If the same tool is penetrating but the new act uses a different
             // tool for the same target, block it (e.g. penis is in vagina,
@@ -1651,6 +1637,20 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
                 return { valid: true };
             }
             return { valid: false, reason: "not penetrating" };
+        }
+
+        // Pull-out END actions for the penis are valid whenever penis
+        // penetration is active, even after a climax action (e.g.
+        // ejaculate_in_vagina) set lastAction to a value not in
+        // END_ACTION_MAPPING. The real precondition for pulling out is
+        // "currently penetrating with the penis", not "last action was a
+        // thrust". Fingering end actions stay gated by lastAction below.
+        var PENIS_PULL_OUT_END_ACTIONS = ["pull_out", "pull_off", "pull_out_of_mouth"];
+        if (PENIS_PULL_OUT_END_ACTIONS.indexOf(actId) !== -1) {
+            if (intimacy && intimacy.penetration && intimacy.penetration.active &&
+                intimacy.penetration.tool === "penis") {
+                return { valid: true };
+            }
         }
 
         if (!lastAction) {
@@ -2273,7 +2273,15 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     if (wasVirgin) intimacy._wasVirgin = true;
     const response = await generateActionResponse(npc, player, act, intimacy, currentPosition);
     if (intimacy._wasVirgin) delete intimacy._wasVirgin;
-    
+
+    // Prepend any pending pull-out narrative from an auto-pull-out triggered by
+    // an orifice switch (set in handlePenetrationAction). The pull-out happens
+    // before the new penetration, so it leads the response.
+    if (intimacy.pendingPullOutNarrative) {
+        response.responseText = intimacy.pendingPullOutNarrative + ' ' + (response.responseText || '');
+        delete intimacy.pendingPullOutNarrative;
+    }
+
     // Add climax info to response if applicable
     if (climaxResult) {
         response.climax = climaxResult;
@@ -2367,11 +2375,19 @@ function handlePenetrationAction(npc, player, act, intimacy, actId) {
                 (currentTarget === newTarget || 
                  (compatibleTargets[currentTarget] && compatibleTargets[currentTarget].includes(newTarget)));
             
-            // If switching to an incompatible orifice, log warning but allow (validation should have caught this)
+            // If switching to an incompatible orifice, auto-pull-out with narration
+            // before starting the new penetration. The narrative is stashed on
+            // intimacy.pendingPullOutNarrative so executeIntimacyAction can prepend
+            // it to the response text.
             if (!isCompatible) {
-                console.warn(`[Intimacy] Attempted to switch penetration from ${currentTarget} to ${newTarget} without pulling out first`);
-                // Still allow it but with a pull-out
-                endPenetrationWithNarration(npc, intimacy, "forced switch");
+                console.log(`[Intimacy] Auto pull-out from ${currentTarget} before switching to ${newTarget}`);
+                var switchPullOut = endPenetrationWithNarration(npc, intimacy, "forced switch");
+                if (switchPullOut) {
+                    intimacy.pendingPullOutNarrative = switchPullOut;
+                }
+                // endPenetrationWithNarration clears intimacy.lastAction; restore it
+                // so the new penetration becomes the continuable last action.
+                intimacy.lastAction = { actId: actId, timestamp: Date.now() };
             }
         }
         
@@ -2582,6 +2598,14 @@ function handleClimax(npc, player, act, intimacy) {
                 if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
                 intimacy.encounterFlags.analEjaculationCount = (intimacy.encounterFlags.analEjaculationCount || 0) + 1;
             }
+        }
+    } else if (act.consequence === CLIMAX_CONFIG.CONSEQUENCE_TYPES.ORAL_SEMEN) {
+        // Track oral ejaculation target for semen drip narratives on pull-out
+        const ejaculationTarget = act.id ? act.id.replace("ejaculate_in_", "").replace("ejaculate_on_", "") : null;
+        if (ejaculationTarget === "mouth") {
+            intimacy.climax.lastInternalEjaculation = "mouth";
+            intimacy.climax.hasInternalEjaculation = true;
+            result.internalEjaculation = "mouth";
         }
     }
     
@@ -4604,16 +4628,29 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             });
             // Replace the trailing comma with a period — the suffix should be
             // a separate sentence after the main response.
-            depthSuffix += pickRandom(bottomOutCues).replace(/,$/, ".");
+            var _bottomOut = pickRandom(bottomOutCues).replace(/,$/, ".");
+            // bottomOutCues are separate sentences (" She..."); close any open
+            // slapping clause before starting the new sentence.
+            if (depthSuffix && !/[.!?]$/.test(depthSuffix)) depthSuffix += ".";
+            depthSuffix += _bottomOut;
         }
 
         // Oral coughing at depth 3+ (25% chance): throat irritation from deep thrusts
         if (isOralPenetration && penetrationDepth >= 3 && !isAtClimaxThreshold && Math.random() < 0.25) {
+            if (depthSuffix && !/[.!?]$/.test(depthSuffix)) depthSuffix += ".";
             depthSuffix += " " + subjectPronoun + " coughs, spittle flying from " + posPronoun + " lips.";
         }
 
         if (depthSuffix) {
-            response = response.replace(/\.$/, "") + depthSuffix + (depthSuffix.endsWith(".") ? "" : ".");
+            // Slapping-sound clauses (", ...") continue the base sentence, so
+            // drop the trailing period; new-sentence suffixes (" She...") keep
+            // it as the sentence break.
+            if (depthSuffix.charAt(0) === ",") {
+                response = response.replace(/\.$/, "") + depthSuffix;
+            } else {
+                response = response + depthSuffix;
+            }
+            if (!/[.!?]$/.test(response)) response += ".";
         }
     }
 
@@ -4624,13 +4661,15 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     // When cummed into 5+ times, describe fullness. At 10+, describe visible
     // stomach distension. These append to the existing response.
     if (isBowelsStuffed && phase === "continue" && Math.random() < 0.50) {
-        response = response.replace(/\.$/, "") + pickRandom([
+        if (!/[.!?]$/.test(response)) response += ".";
+        response = response + pickRandom([
             ` ${posPronoun} stomach bulges visibly, round and distended from the sheer amount of cum packed into ${posPronoun} bowels.`,
             ` You can see ${posPronoun} belly swelling, the skin taut and rounded — stuffed full of your loads.`,
             ` ${posPronoun} distended gut presses against the surface beneath ${posPronoun}, heavy and full with all the cum you've pumped inside.`
         ]);
     } else if (isBowelsFull && phase === "continue" && Math.random() < 0.40) {
-        response = response.replace(/\.$/, "") + pickRandom([
+        if (!/[.!?]$/.test(response)) response += ".";
+        response = response + pickRandom([
             ` ${posPronoun} bowels feel heavy and full, packed with ${analCumCount} loads of your cum.`,
             ` "So full," ${subjectPronoun.toLowerCase()} murmurs, ${posPronoun} stomach heavy with the cum you've left inside.`,
             ` You can feel the slick mess of ${analCumCount} loads squelching inside ${posPronoun} with each thrust.`
@@ -4669,7 +4708,8 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
                 " Air trapped inside escapes with a sharp " + _fartSound8 + " as you pull back, the sound filling the silence between thrusts."
             ]);
         }
-        response = response.replace(/\.$/, "") + airLine;
+        if (!/[.!?]$/.test(response)) response += ".";
+        response = response + airLine;
     }
 
     // ── PULL AWAY (tight anal, continue phase) ────────────────────
@@ -4680,7 +4720,8 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             ` ${subjectPronoun} tenses and shifts away from you, gasping. "Give me a second."`,
             ` ${subjectPronoun} clenches tight and pulls forward, forcing you out with a pained grunt.`
         ]);
-        response = response.replace(/\.$/, "") + pullAwayLine;
+        if (!/[.!?]$/.test(response)) response += ".";
+        response = response + pullAwayLine;
     }
 
     // Add verbal dialog from tags (CoT-style)
@@ -6234,6 +6275,17 @@ function endPenetrationWithNarration(npc, intimacy, reason = "transition") {
                 `You slide your ${tool} free from ${posPronoun} slick depths, a string of arousal briefly connecting you.`,
                 `You withdraw from ${posPronoun} pussy, the swollen lips slowly pressing back together.`
             ]);
+            // ── CUM DRIP: semen leaking out after an internal ejaculation ──
+            var climaxState = intimacy.climax || {};
+            if (climaxState.hasInternalEjaculation && climaxState.lastInternalEjaculation === "vagina") {
+                var vagSubjPronoun = (typeof getSubjectPronoun === "function" ? getSubjectPronoun(npc) : "She") || "she";
+                pullOutNarrative += pickRandom([
+                    ` As you slip free, a thick trickle of cum immediately dribbles from ${posPronoun} well-used pussy, running down ${posPronoun} inner thigh. ${vagSubjPronoun} shivers at the sudden gush.`,
+                    ` The moment your ${tool} withdraws, your seed begins to ooze from ${posPronoun} swollen folds, a warm white drool sliding toward ${posPronoun} ass. "It's leaking out," ${vagSubjPronoun.toLowerCase()} murmurs.`,
+                    ` Cum leaks from ${posPronoun} entrance as you pull out, the slick mess pooling beneath ${posPronoun} and dripping slowly down ${posPronoun} legs.`,
+                    ` Your spent load trickles out of ${posPronoun} pussy the instant you pull free, the lips flushed and sticky with it.`
+                ]);
+            }
         } else if (target === "anus" || target === "ass") {
             pullOutNarrative = pickRandom([
                 `You pull out from ${posPronoun} anus, the stretched ring slowly clenching shut behind you.`,
@@ -6281,6 +6333,17 @@ function endPenetrationWithNarration(npc, intimacy, reason = "transition") {
                 `You withdraw your ${tool} from ${posPronoun} lips, leaving a wet sheen behind.`,
                 `You slip free from ${posPronoun} mouth, ${posPronoun} jaw working as ${posPronoun} lips close.`
             ]);
+            // ── CUM DRIP: semen from the mouth after ejaculating in it ──
+            var mouthClimaxState = intimacy.climax || {};
+            if (mouthClimaxState.hasInternalEjaculation && mouthClimaxState.lastInternalEjaculation === "mouth") {
+                var mouthSubjPronoun = (typeof getSubjectPronoun === "function" ? getSubjectPronoun(npc) : "She") || "she";
+                pullOutNarrative += pickRandom([
+                    ` As you pull free, a thick strand of cum strings from ${posPronoun} lips to your ${tool} before breaking, ${posPronoun} mouth brimming with your seed.`,
+                    ` ${mouthSubjPronoun} coughs as you withdraw, a dollop of cum drooling from the corner of ${posPronoun} mouth and running down ${posPronoun} chin.`,
+                    ` A white trickle spills from ${posPronoun} lips the moment you slip out, ${posPronoun} tongue darting out to catch what it can.`,
+                    ` Your load spills past ${posPronoun} lips as you pull out, thick globs of it dripping onto ${posPronoun} chest.`
+                ]);
+            }
         } else {
             pullOutNarrative = `You withdraw from ${posPronoun} ${target}.`;
         }
@@ -8936,10 +8999,21 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
     // Get the actual tool from the act, default to hand for backward compatibility
     const actualTool = act.tool || "hand";
     const toolVerb = getVerbForTool(verbBase, actualTool);
-    
+
     // Check if this is ejaculation - needs special handling with prepositions
     const isEjaculation = verbBase === 'ejaculate' || verbBase === 'ejaculate on';
-    
+
+    // When the penis is already inside and in motion (continued intercourse or
+    // ejaculation into the anus), describe the interior — bowels/cavity/channel
+    // — rather than the external pucker/sphincter, which only makes sense at
+    // first contact. Finger, tease, lick, and initial-entry actions keep the
+    // external description.
+    if (isEjaculation || (isContinueAction && ['fuck','thrust','pound','penetrate','enter','bury','slide','grind','pump','bottom out'].includes(verbBase))) {
+        anatomyDesc = posPronoun + " " + (isAnusOpen
+            ? pickRandom(['well-used bowels', 'open cavity', 'stretched channel', 'yielding depths'])
+            : pickRandom(['tight bowels', 'clenching cavity', 'narrow channel', 'gripping depths']));
+    }
+
     // For ejaculation, use proper prepositions and enhanced descriptors
     if (isEjaculation) {
         // Get player gender for tool-specific narratives
@@ -8975,7 +9049,7 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             `You ejaculate into ${anatomyDesc}, filling ${posPronoun} ${cavityDesc} with ${isMultipleEjaculation ? 'another thick deposit, the cavity already swollen and heavy with semen' : 'your hot seed, the viscous fluid filling the unseen depths'} ${isMultipleEjaculation ? sloshingSound : ''}${scentDesc ? ', ' + scentDesc : ''}.`,
             `You release into ${anatomyDesc}, ${isMultipleEjaculation ? 'adding to the growing pool of semen already sloshing in ' : 'pumping your thick cum into '}${posPronoun} ${cavityDesc} with a wet squelch${scentDesc ? ', ' + scentDesc : ''}.`,
             `You climax inside ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous deposits with a lewd gurgle, her bowels struggling to contain the growing volume' : 'filling '}${posPronoun} ${cavityDesc}, the slick sounds of release echoing from within${scentDesc ? ', ' + scentDesc : ''}.`,
-            `Your ${penisState} penis ejaculates into ${anatomyDesc}, ${isMultipleEjaculation ? 'more semen forcing its way into the already-full cavity, a wet squelch escaping with each pulse' : 'releasing deep into '}${posPronoun} hot, clenching ${cavityDesc}${scentDesc ? ', ' + scentDesc : ''}.`,
+            `Your ${penisState} penis ejaculates into ${anatomyDesc}, ${isMultipleEjaculation ? 'more semen forcing its way into the already-full cavity, a wet squelch escaping with each pulse, filling ' : 'releasing deep into '}${posPronoun} hot, clenching ${cavityDesc}${scentDesc ? ', ' + scentDesc : ''}.`,
             `You fill ${anatomyDesc} with your seed, ${isAnusOpen ? 'the relaxed ring accepting' : 'the tight ring milking'} your ${isMultipleEjaculation ? 'remaining' : 'thick'} cum into ${posPronoun} depths as the cavity makes wet, obscene sounds${scentDesc ? ', ' + scentDesc : ''}.`,
             `Your ${penisState} cock pumps into ${anatomyDesc}, ${isMultipleEjaculation ? 'another load of semen adding to the slick, sloshing mess inside, her bowels gurgling with the overflow' : 'hot spurt after spurt coating '}${posPronoun} ${cavityDesc} with glistening warmth${scentDesc ? ', ' + scentDesc : ''}.`
         ];
