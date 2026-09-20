@@ -1522,6 +1522,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   //   - anatomyKeys: nsfwTraits.anatomy keys to inject into the prompt for
   //     act-relevant body detail
 
+  console.log("[BODY-DEBUG] IIFE before BODY_ACT_CONTEXT (line ~1525)");
   var BODY_ACT_CONTEXT = {
     "fuck mouth": {
       label: "oral penetration (unconscious)",
@@ -1985,6 +1986,7 @@ anatomyNote,
   // Position → which anatomy regions are visible when their garment is gone.
   // Each entry lists the nsfwTraits.anatomy keys that are exposed/visible in
   // that pose when the corresponding slot (upper/lower) is missing.
+  console.log("[BODY-DEBUG] IIFE before BODY_POSITION_VISIBLE (line ~1988)");
   var BODY_POSITION_VISIBLE = {
     back: {   // front of the body faces up
       upper: ["breasts", "nipples"],
