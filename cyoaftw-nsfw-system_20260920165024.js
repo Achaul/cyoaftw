@@ -930,7 +930,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         nsfw: true,
         conditions: {
           custom: function(npc, ctx) {
-            if (!npc || !npc._seductionAccepted) return false;
+            if (!npc) return false;
             var followers = (window.G && window.G.sessionFollowers) || [];
             return !followers.includes(npc);
           }
