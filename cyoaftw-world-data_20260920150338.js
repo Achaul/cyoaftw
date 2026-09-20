@@ -799,6 +799,70 @@ const ROOM_TEMPLATES = [
             { id: "torch-stands", name: "torch stands", tags: ["light"] }
         ],
         imageKey: "Underground Gate"
+    },
+
+    // ── Swamp ──
+    {
+        type: "Marsh",
+        zone: "Swamp",
+        role: "spine",
+        displayName: "Sunken Marsh",
+        baseDescription: "Black water pools between twisted roots. Every step sinks ankle-deep into the mud, and the reeds hiss faintly in a wind that never seems to reach the ground.",
+        allowedZones: ["swamp"],
+        parentCluster: ["marsh"],
+        isConnector: true,
+        structural: [
+            { id: "twisted-roots", name: "twisted roots", tags: ["hazard", "cover"] },
+            { id: "reed-bed",      name: "reed bed",      tags: ["cover"] }
+        ],
+        imageKey: "Marsh"
+    },
+    {
+        type: "Broken Ground",
+        zone: "Swamp",
+        role: "landmark",
+        displayName: "Broken Ground",
+        baseDescription: "The earth has buckled and split here, thick roots and slabs of peat heaved up at odd angles. Stagnant water fills the gaps between them.",
+        allowedZones: ["swamp"],
+        parentCluster: ["marsh"],
+        isConnector: false,
+        structural: [
+            { id: "heaved-slabs",  name: "heaved slabs of peat", tags: ["hazard", "cover"] },
+            { id: "stagnant-pool", name: "stagnant pool",        tags: ["water", "hazard"] }
+        ],
+        imageKey: "Broken Ground"
+    },
+    {
+        type: "Swamp Camp",
+        zone: "Swamp",
+        role: "landmark",
+        displayName: "Swamp Camp",
+        baseDescription: "A cluster of lean-tos and raised platforms built above the waterline. A smoky fire struggles against the damp, and belongings hang from lines strung between the posts.",
+        allowedZones: ["swamp"],
+        parentCluster: ["camp"],
+        isConnector: false,
+        structural: [
+            { id: "smoky-fire",      name: "smoky fire pit",  tags: ["heat", "light", "social"] },
+            { id: "raised-platform", name: "raised platform", tags: ["rest", "storage"] },
+            { id: "drying-lines",    name: "drying lines",    tags: ["storage"] }
+        ],
+        imageKey: "Swamp Camp"
+    },
+    {
+        type: "Submerged Ruin",
+        zone: "Swamp",
+        role: "landmark",
+        displayName: "Submerged Ruin",
+        baseDescription: "The tops of old stone walls break the surface of the water, half-swallowed by the swamp. Whatever this place once was, the marsh has nearly finished reclaiming it.",
+        allowedZones: ["swamp"],
+        parentCluster: ["ruin"],
+        isConnector: false,
+        structural: [
+            { id: "sunken-walls",      name: "sunken stone walls", tags: ["cover", "landmark"] },
+            { id: "silted-doorway",    name: "silted doorway",     tags: ["passage", "hazard"] },
+            { id: "waterlogged-chest", name: "waterlogged chest",  tags: ["storage", "loot"] }
+        ],
+        imageKey: "Submerged Ruin"
     }
 ];
 
@@ -852,6 +916,10 @@ const ROOM_IMAGE_MAP = {
     "Vault": "https://iili.io/qFXoaEB.jpg",
     "Underground Hallway": "https://iili.io/qFXxz6N.jpg",
     "Underground Gate": "https://iili.io/qFXzdxf.jpg"
+
+    // Swamp room types (Marsh, Broken Ground, Swamp Camp, Submerged Ruin) have
+    // no art yet - getRoomImage() falls back to null for them, which the
+    // renderer already treats as "no background image" rather than an error.
 };
 
 const ZONE_IMAGE_MAP = {

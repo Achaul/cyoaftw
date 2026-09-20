@@ -5517,8 +5517,8 @@ function generateEndResponse(npc, player, act) {
                     ? pickRandom(["a pungent musk", "a strong, animalistic scent", "the raw smell of mating", "a primal aroma"])
                     : pickRandom(["the scent of sex", "a warm, intimate fragrance", "the musky perfume of lovemaking", "the scent of passion"]);
                 
-                const urineDesc = isUncivilized && Math.random() < 0.3 
-                    ? ", a warm trickle of urine escaping as ${subjectPronoun.toLowerCase()} loses control"
+                const urineDesc = isUncivilized && Math.random() < 0.3
+                    ? `, a warm trickle of urine escaping as ${subjectPronoun.toLowerCase()} loses control`
                     : "";
                 
                 return {
