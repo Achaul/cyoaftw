@@ -1422,11 +1422,13 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   function appendUnconsciousBodyGroups(item, el) {
     if (!item || !el) return;
 
+    // Kiss group (always available — mouth/cheek are never clothing-gated)
     window.appendCombatGroup(el, "Kiss", [
       window.createCombatButton("Kiss mouth", () => kissUnconsciousBody(item, "mouth")),
       window.createCombatButton("Kiss cheek", () => kissUnconsciousBody(item, "cheek"))
     ]);
 
+    // Position group
     const currentPos = item.bodyPosition || "back";
     const positions = [
       { key: "back", label: "Roll onto back" },
@@ -1438,12 +1440,179 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         disabled: currentPos === p.key
       })
     ));
+
+    // Oral group — player must have a penis; mouth accessible (not face-down)
+    if (nsfwPlayerHasPenis() && nsfwRegionExposed(item, "mouth")) {
+      window.appendCombatGroup(el, "Oral", [
+        window.createCombatButton("Fuck mouth", () => fuckUnconsciousMouth(item))
+      ]);
+    }
+
+    // Penetrate group — finger and/or penis, gated by anatomy + exposure
+    var penButtons = [];
+    var genitalType = nsfwBodyGenitalType(item);
+    var hasAnus = nsfwBodyHasAnus(item);
+    var isCloaca = genitalType === "cloaca-vent" || genitalType === "cloaca-penis";
+
+    // Finger: vagina or cloacal vent (exposed on back, lower garment gone)
+    if (genitalType === "vagina" && nsfwRegionExposed(item, "genitals")) {
+      penButtons.push(window.createCombatButton("Finger vagina", () => fingerBody(item, "vagina")));
+    } else if (isCloaca && nsfwRegionExposed(item, "genitals")) {
+      penButtons.push(window.createCombatButton("Finger cloacal vent", () => fingerBody(item, "cloaca")));
+    }
+
+    // Finger: anus (exposed on side/face, lower garment gone)
+    if (hasAnus && nsfwRegionExposed(item, "anus")) {
+      penButtons.push(window.createCombatButton("Finger anus", () => fingerBody(item, "anus")));
+    }
+
+    // Penis insertion (player must have penis)
+    if (nsfwPlayerHasPenis()) {
+      if (genitalType === "vagina" && nsfwRegionExposed(item, "genitals")) {
+        penButtons.push(window.createCombatButton("Penetrate vagina", () => penetrateBody(item, "vagina")));
+      } else if (isCloaca && nsfwRegionExposed(item, "genitals")) {
+        penButtons.push(window.createCombatButton("Penetrate cloaca", () => penetrateBody(item, "cloaca")));
+      }
+      if (hasAnus && nsfwRegionExposed(item, "anus")) {
+        penButtons.push(window.createCombatButton("Penetrate anus", () => penetrateBody(item, "anus")));
+      }
+    }
+
+    if (penButtons.length) {
+      window.appendCombatGroup(el, "Penetrate", penButtons);
+    }
+
+    // Spit group — target-dependent exposure gating
+    var spitButtons = [];
+    if (nsfwRegionExposed(item, "mouth")) {
+      spitButtons.push(window.createCombatButton("Spit on face", () => spitOnBody(item, "mouth")));
+    }
+    if (nsfwBodyHasBreasts(item) && nsfwRegionExposed(item, "breasts")) {
+      spitButtons.push(window.createCombatButton("Spit on breasts", () => spitOnBody(item, "breasts")));
+    }
+    if (genitalType && nsfwRegionExposed(item, "genitals")) {
+      var genLabel = nsfwGenitalLabel(item);
+      spitButtons.push(window.createCombatButton("Spit on " + genLabel, () => spitOnBody(item, "genitals")));
+    }
+    if (hasAnus && nsfwRegionExposed(item, "anus")) {
+      spitButtons.push(window.createCombatButton("Spit on anus", () => spitOnBody(item, "anus")));
+    }
+    if (spitButtons.length) {
+      window.appendCombatGroup(el, "Spit", spitButtons);
+    }
   }
 
   // ── AI narration polish ─────────────────────────────────────────
   // Builds a prompt for polishing an unconscious-body action narration.
   // Modeled on buildPlayerNarrativePrompt() from intimacy-system.js but
   // tailored for body interactions rather than sex acts.
+  // ── Act-type context for unconscious body actions ────────────
+  // Each act type carries:
+  //   - difficulty: procedural framing for how the one-sided act physically
+  //     plays out against a limp, uncooperative body
+  //   - involuntary: the ONLY responses the NPC can show — reflexive physical
+  //     reactions, never conscious participation or speech
+  //   - anatomyKeys: nsfwTraits.anatomy keys to inject into the prompt for
+  //     act-relevant body detail
+
+  var BODY_ACT_CONTEXT = {
+    "fuck mouth": {
+      label: "oral penetration (unconscious)",
+      difficulty: "The NPC's jaw hangs slack and unresisting. Their throat is relaxed but offers no cooperation — the player must hold their head and guide the angle themselves. Without a conscious swallowing reflex, saliva pools and drools from their slack mouth. Teeth may scrape if the angle isn't managed.",
+      involuntary: "Reflexive only: a gag reflex if pushed deep, drooling from the slack mouth, shallow breathing through the nose, an occasional involuntary swallow. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals"]
+    },
+    "finger vagina": {
+      label: "vaginal fingering (unconscious)",
+      difficulty: "The NPC's legs are limp and must be spread manually. The body offers no cooperation — the player parts the thighs and positions the hips themselves. The canal may be dry without arousal, making entry stiff.",
+      involuntary: "Reflexive only: a clench around the finger, a slight hip twitch, possible involuntary lubrication from prolonged stimulation. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "vagina", "pubicHair"]
+    },
+    "finger cloacal vent": {
+      label: "cloacal fingering (unconscious)",
+      difficulty: "The NPC's legs are limp and must be spread manually. The cloacal vent is a single muscular opening — tight and unyielding without conscious relaxation. The player must work it open slowly.",
+      involuntary: "Reflexive only: a vent clench, a slight hip twitch. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "anus"]
+    },
+    "finger anus": {
+      label: "anal fingering (unconscious)",
+      difficulty: "The NPC is unconscious and cannot relax the sphincter voluntarily. The anal ring is tight and resistant — the player must work it open slowly with patience. Penetration is awkward and uncooperative.",
+      involuntary: "Reflexive only: a sphincter clench, body tension, a flinch. No awareness, no conscious reaction.",
+      anatomyKeys: ["anus"]
+    },
+    "penetrate vagina": {
+      label: "vaginal penetration (unconscious)",
+      difficulty: "The NPC's legs are limp and must be spread manually. The body offers no cooperation — the player parts the thighs and positions the hips themselves. Entry may be difficult and stiff without natural lubrication.",
+      involuntary: "Reflexive only: a clench around the shaft, a slight hip twitch, possible involuntary lubrication from prolonged stimulation. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "vagina", "pubicHair"]
+    },
+    "penetrate cloaca": {
+      label: "cloacal penetration (unconscious)",
+      difficulty: "The NPC's legs are limp and must be spread manually. The cloacal vent is a single muscular opening — tight and unyielding without conscious relaxation. The player must work their way in slowly.",
+      involuntary: "Reflexive only: a vent clench around the shaft, a slight hip twitch. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "anus"]
+    },
+    "penetrate anus": {
+      label: "anal penetration (unconscious)",
+      difficulty: "The NPC is unconscious and cannot relax the sphincter voluntarily. The anal ring is tight and resistant — the player must force it open slowly. Penetration is awkward and requires patience; the body tenses reflexively against entry.",
+      involuntary: "Reflexive only: a sphincter clench, body tension, a flinch. No awareness, no conscious reaction.",
+      anatomyKeys: ["anus"]
+    },
+    "spit": {
+      label: "spitting / degradation (unconscious)",
+      difficulty: "The NPC cannot react. The spit lands on unmoving, unresponsive flesh.",
+      involuntary: "No reaction whatsoever — the body lies still. The spit may run or pool along the contours of the flesh.",
+      anatomyKeys: []
+    },
+    "kiss": {
+      label: "kiss (unconscious)",
+      difficulty: "The NPC's lips are slack and unresponsive. They offer no reciprocation.",
+      involuntary: "The lips may part slightly under pressure but offer no conscious response. No awareness.",
+      anatomyKeys: []
+    },
+    "reposition": {
+      label: "repositioning (unconscious)",
+      difficulty: "The NPC is a dead weight — limp and uncooperative. The player must manually roll or shift the body.",
+      involuntary: "None. The body moves passively, flopping or rolling as positioned.",
+      anatomyKeys: []
+    }
+  };
+
+  // Derive the act-type key from the actionDesc string ("fuck mouth",
+  // "finger vagina", "penetrate anus", "spit on face", "kiss cheek", etc.)
+  function buildBodyActContext(actionDesc) {
+    var d = String(actionDesc || "").toLowerCase();
+    if (d.indexOf("fuck") !== -1) return BODY_ACT_CONTEXT["fuck mouth"];
+    if (d.indexOf("finger") !== -1) {
+      if (d.indexOf("cloaca") !== -1) return BODY_ACT_CONTEXT["finger cloacal vent"];
+      if (d.indexOf("anus") !== -1) return BODY_ACT_CONTEXT["finger anus"];
+      return BODY_ACT_CONTEXT["finger vagina"];
+    }
+    if (d.indexOf("penetrate") !== -1) {
+      if (d.indexOf("cloaca") !== -1) return BODY_ACT_CONTEXT["penetrate cloaca"];
+      if (d.indexOf("anus") !== -1) return BODY_ACT_CONTEXT["penetrate anus"];
+      return BODY_ACT_CONTEXT["penetrate vagina"];
+    }
+    if (d.indexOf("spit") !== -1) return BODY_ACT_CONTEXT["spit"];
+    if (d.indexOf("kiss") !== -1) return BODY_ACT_CONTEXT["kiss"];
+    if (d.indexOf("roll") !== -1 || d.indexOf("reposition") !== -1)
+      return BODY_ACT_CONTEXT["reposition"];
+    return null;
+  }
+
+  // Collect act-relevant anatomy descriptors from nsfwTraits.anatomy.
+  function buildBodyAnatomyNote(item, anatomyKeys) {
+    if (!item || !Array.isArray(anatomyKeys) || !anatomyKeys.length) return "";
+    var a = (item.nsfwTraits && item.nsfwTraits.anatomy) || {};
+    var parts = [];
+    for (var i = 0; i < anatomyKeys.length; i++) {
+      var key = anatomyKeys[i];
+      if (a[key]) parts.push(key + ": " + JSON.stringify(a[key]));
+    }
+    if (!parts.length) return "";
+    return "\nACT-RELEVANT ANATOMY:\n" + parts.join("\n");
+  }
+
   function buildBodyActionPrompt(item, actionDesc, baseText) {
     const name = nsfwGetEntityName(item);
     const species = (item.species || "human").toLowerCase();
@@ -1463,21 +1632,37 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
     var exposureNote = buildBodyExposureNote(item);
 
+    // Act-type context: difficulty framing + involuntary-reaction guidance
+    var actCtx = buildBodyActContext(actionDesc);
+    var actTypeLine = actCtx ? "\nACT TYPE: " + actCtx.label + "." : "";
+    var difficultyNote = actCtx && actCtx.difficulty
+      ? "\nDIFFICULTY (how this act physically plays out against an unconscious body — weave this into the polish):\n" + actCtx.difficulty
+      : "";
+    var involuntaryNote = actCtx && actCtx.involuntary
+      ? "\nINVOLUNTARY RESPONSES (the ONLY reactions the NPC can show — these are reflexive, not conscious):\n" + actCtx.involuntary
+      : "";
+    var anatomyNote = actCtx
+      ? buildBodyAnatomyNote(item, actCtx.anatomyKeys)
+      : "";
+
     var prompt = [
 "You are polishing a player action description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote,
+"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine,
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and sensory.",
 "- Keep the same meaning and the same act. Do NOT invent new actions or body parts.",
 "- The action: " + actionDesc + ".",
 "- Write in second person (\"You ...\"). This is the player's perspective.",
+"- This is a ONE-WAY interaction: the player acts ON an unconscious body. The NPC cannot respond, resist, react, shift, murmur, or show any awareness. They are a limp, unresponsive body being handled.",
 "- The NPC is unconscious — describe their limp, unresponsive state where relevant.",
 "- Use the clothing + exposure context above: only reference anatomy that is listed as exposed and visible in this pose. Do not describe what is covered.",
 "- Use direct, physical language. No metaphors, no purple prose.",
 "- Keep it to 1-2 sentences. Match the length of the base text.",
-"- Do NOT add NPC dialogue, speech, or reaction. The NPC is unconscious.",
-"- Do NOT add inner monologue or atmospheric description. Stay on the body.",
+"- Do NOT add NPC dialogue, speech, or conscious reaction. The NPC is unconscious and cannot participate.",
+"- Involuntary physical responses ARE allowed where physically plausible (reflexive clenches, drooling, gag reflex, a flinch, shallow breathing) — but only as reflex, never as awareness or participation." + (involuntaryNote ? involuntaryNote : ""),
+difficultyNote,
+anatomyNote,
 "",
 "BASE TEXT (polish this — refine, make more vivid, keep same meaning and details):",
 "\"" + baseText + "\"",
@@ -1538,7 +1723,9 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     item.lastKiss = where;
 
     const name = nsfwGetEntityName(item);
-    const baseText = `You lean in and press a lingering kiss to ${name}'s ${where}.`;
+    const baseText = where === "mouth"
+      ? `You lean in and press a lingering kiss to ${name}'s slack, unresponsive lips. Their mouth offers no reciprocation — the lips part limply under the pressure.`
+      : `You lean in and press a lingering kiss to ${name}'s ${where}. They lie still and unresponsive beneath you.`;
     const actionDesc = "kiss " + where;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} kissed ${name} on the ${where} while they were unconscious.`, 4);
@@ -1583,10 +1770,181 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     }
 
     item.bodyPosition = position;
-    const baseText = `You roll ${name} onto their ${label}.`;
+    const baseText = `You grip ${name}'s limp body and heave them onto their ${label}. They're a dead weight — arms and head flopping passively as you roll them over, offering no help.`;
     const actionDesc = "roll onto " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} repositioned ${name} onto their ${label}.`, 3);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // ── Anatomy / exposure helpers for body actions ──────────────
+
+  // Player gender — mirrors the intimacy system convention
+  // (player.stats.gender, lowercased; "male" => has penis).
+  function nsfwPlayerGender() {
+    var p = window.G && window.G.player;
+    return (p && p.stats && p.stats.gender) ? String(p.stats.gender).toLowerCase() : "male";
+  }
+
+  function nsfwPlayerHasPenis() {
+    var g = nsfwPlayerGender();
+    return g === "male" || g.indexOf("male") !== -1;
+  }
+
+  // Determine NPC genital type from nsfwTraits.anatomy.
+  // Returns "vagina", "penis", "cloaca-vent", "cloaca-penis", or null.
+  function nsfwBodyGenitalType(item) {
+    var a = item && item.nsfwTraits && item.nsfwTraits.anatomy;
+    if (!a || !a.genitals || !a.genitals.description) return null;
+    var d = String(a.genitals.description).toLowerCase();
+    if (d.indexOf("cloaca") !== -1) {
+      return d.indexOf("hemipenis") !== -1 ? "cloaca-penis" : "cloaca-vent";
+    }
+    if (d.indexOf("penis") !== -1) return "penis";
+    if (d.indexOf("vagina") !== -1) return "vagina";
+    return null;
+  }
+
+  // Human-readable label for the NPC's genital opening.
+  function nsfwGenitalLabel(item) {
+    var t = nsfwBodyGenitalType(item);
+    if (t === "vagina") return "vagina";
+    if (t === "penis") return "penis";
+    if (t === "cloaca-vent") return "cloacal vent";
+    if (t === "cloaca-penis") return "cloaca";
+    return null;
+  }
+
+  // True if the NPC has a distinct anal opening (not a cloaca creature,
+  // whose vent doubles as the anus and is handled via the genital path).
+  function nsfwBodyHasAnus(item) {
+    var a = item && item.nsfwTraits && item.nsfwTraits.anatomy;
+    if (!a || !a.anus) return false;
+    var d = String(a.anus.description || "").toLowerCase();
+    return d.indexOf("cloaca") === -1;
+  }
+
+  function nsfwBodyHasBreasts(item) {
+    var a = item && item.nsfwTraits && item.nsfwTraits.anatomy;
+    return !!(a && a.breasts && a.breasts.sizeCategory && a.breasts.sizeCategory !== "flat");
+  }
+
+  // Check whether a body region is bare and accessible in the current pose.
+  // Mirrors BODY_POSITION_VISIBLE / buildBodyExposureNote logic.
+  // region: "mouth" | "breasts" | "genitals" | "anus"
+  function nsfwRegionExposed(item, region) {
+    if (!item) return false;
+    var position = item.bodyPosition || "back";
+    var upperCovered = nsfwBodySlotPresent(item, "upper");
+    var lowerCovered = nsfwBodySlotPresent(item, "lower");
+
+    if (region === "mouth") return position !== "face";
+    if (region === "breasts") return !upperCovered && position === "back";
+    if (region === "genitals") return !lowerCovered && position === "back";
+    if (region === "anus") return !lowerCovered && (position === "side" || position === "face");
+    return false;
+  }
+
+  // ── Body action functions ───────────────────────────────────
+  // Each follows the kissUnconsciousBody pattern: guard, set state flags,
+  // build base text, AI-polish, remember event, save, re-render menu.
+
+  function fuckUnconsciousMouth(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwRegionExposed(item, "mouth")) return;
+    if (!nsfwPlayerHasPenis()) return;
+
+    item.mouthUsed = true;
+    const name = nsfwGetEntityName(item);
+    const baseText = `You hold ${name}'s slack head and guide your cock past their unresisting lips, thrusting into their limp mouth. Their jaw hangs slack; saliva pools and drools from the corner of their lips.`;
+    const actionDesc = "fuck mouth";
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} fucked ${name}'s mouth while they were unconscious.`, 7);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // target: "vagina" | "anus" | "cloaca"
+  function fingerBody(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    const name = nsfwGetEntityName(item);
+    var label;
+    var baseText;
+
+    if (target === "vagina" || target === "cloaca") {
+      if (!nsfwRegionExposed(item, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina";
+      baseText = `You spread ${name}'s limp legs apart and ease a finger into their exposed ${label}. Without arousal the opening is dry and stiff; you work the finger in slowly against the uncooperative body.`;
+    } else if (target === "anus") {
+      if (!nsfwRegionExposed(item, "anus")) return;
+      label = "anus";
+      baseText = `You work a finger against ${name}'s tight, unresisting ${label}, slowly pushing past the resistant ring.`;
+    } else return;
+
+    item.fingered = true;
+    item.fingerTarget = target;
+    const actionDesc = "finger " + label;
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} inserted a finger into ${name}'s ${label} while they were unconscious.`, 6);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // target: "vagina" | "anus" | "cloaca" — requires player penis
+  function penetrateBody(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwPlayerHasPenis()) return;
+    const name = nsfwGetEntityName(item);
+    var label;
+
+    var baseText;
+
+    if (target === "vagina" || target === "cloaca") {
+      if (!nsfwRegionExposed(item, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina";
+      baseText = `You spread ${name}'s limp legs apart and guide your cock into their exposed ${label}. The body offers no cooperation — you hold the hips still and push against the unresisting opening, working your way in.`;
+    } else if (target === "anus") {
+      if (!nsfwRegionExposed(item, "anus")) return;
+      label = "anus";
+      baseText = `You press your cock against ${name}'s tight, unresisting anus. The sphincter clenches reflexively against the intrusion; you work it open slowly, forcing past the resistant ring as the unconscious body tenses beneath you.`;
+    } else return;
+
+    item.penetrated = true;
+    item.penetratedTarget = target;
+    const actionDesc = "penetrate " + label;
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} penetrated ${name}'s ${label} with their cock while they were unconscious.`, 8);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // target: "mouth" | "breasts" | "genitals" | "anus"
+  function spitOnBody(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    const name = nsfwGetEntityName(item);
+    var label;
+
+    if (target === "mouth") {
+      if (!nsfwRegionExposed(item, "mouth")) return;
+      label = "face";
+    } else if (target === "breasts") {
+      if (!nsfwRegionExposed(item, "breasts")) return;
+      label = "breasts";
+    } else if (target === "genitals") {
+      if (!nsfwRegionExposed(item, "genitals")) return;
+      label = nsfwGenitalLabel(item) || "genitals";
+    } else if (target === "anus") {
+      if (!nsfwRegionExposed(item, "anus")) return;
+      label = "anus";
+    } else return;
+
+    item.spatOn = true;
+    item.spitTarget = target;
+    const baseText = `You gather spit and let it fall onto ${name}'s ${label}. The unconscious body doesn't flinch — the spit strikes still, unresponsive flesh and runs slowly along the contours.`;
+    const actionDesc = "spit on " + label;
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} spat on ${name}'s ${label} while they were unconscious.`, 3);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
   }
@@ -1680,17 +2038,22 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     return "\n" + notes.join("\n");
   }
 
-  function describeUnconsciousBodyExamineBase(item) {
+  function describeBodyExamineBase(item) {
     var name = nsfwGetEntityName(item);
+    var isCorpse = item.bodyState === "corpse";
     var position = item.bodyPosition || "back";
     var positionPhrase = position === "face" ? "face-down" : "on their " + position;
     var wounds = typeof window.describeCombatWounds === "function"
       ? window.describeCombatWounds(item) : "";
     var ctx = item.defeatContext || {};
 
-    var base = name + " lies " + positionPhrase + ", utterly still and at your mercy.";
+    var base = isCorpse
+      ? name + " lies " + positionPhrase + ", still and lifeless, utterly at your mercy."
+      : name + " lies " + positionPhrase + ", utterly still and at your mercy.";
     if (ctx.cause === "bleeding") {
-      base += " Slow bleeding has left them pale and flushed.";
+      base += isCorpse
+        ? " Dark, tacky stains mark where the wounds bled out."
+        : " Slow bleeding has left them pale and flushed.";
     } else if (ctx.crit && ctx.target === "head") {
       base += " A dark bruise spreads across the skull.";
     }
@@ -1700,6 +2063,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
   function buildBodyExaminePrompt(item, baseText) {
     var name = nsfwGetEntityName(item);
+    var isCorpse = item.bodyState === "corpse";
     var species = (item.species || "human").toLowerCase();
     var gender = item.gender || "unknown";
     var position = item.bodyPosition || "back";
@@ -1714,19 +2078,28 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       : "";
     var exposureNote = buildBodyExposureNote(item);
 
+    var stateLine = isCorpse
+      ? "currently dead — a lifeless corpse lying " + (position === "face" ? "face-down" : "on their " + position) + ", completely at the player's mercy."
+      : "currently unconscious and lying " + (position === "face" ? "face-down" : "on their " + position) + ", completely at the player's mercy.";
+
+    var stateInstr = isCorpse
+      ? "- The NPC is DEAD — emphasize the stillness, pallor, and lifelessness of the body. No breathing, no movement, no response."
+      : "- The NPC is unconscious — emphasize their limp, vulnerable, unresponsive state.";
+
     return [
 "You are polishing a player 'examine' description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying " + (position === "face" ? "face-down" : "on their " + position) + ", completely at the player's mercy." + speciesNote + woundNote + exposureNote,
+"The NPC is " + name + ", a " + species + " " + gender + ", " + stateLine + speciesNote + woundNote + exposureNote,
 "",
 "INSTRUCTIONS:",
-"- Polish the BASE TEXT below. Make it vivid, sensory, and intimate — the player is taking in the unconscious body.",
+"- Polish the BASE TEXT below. Make it vivid, sensory, and intimate — the player is taking in the body.",
 "- Keep the same meaning and details. Do NOT invent new actions or body parts.",
 "- Write in second person (\"You ...\"). This is the player's perspective.",
-"- The NPC is unconscious — emphasize their limp, vulnerable, unresponsive state.",
+"- This is a ONE-WAY observation: the player is looking at an unconscious body. The NPC cannot respond, react, shift, murmur, or show any awareness — they are a limp, unresponsive body being observed.",
+stateInstr,
 "- Use the clothing + exposure context above: describe only what is actually visible in this pose. If anatomy is listed as exposed, you may reference it sensually; if a region is covered, do not describe what is hidden beneath it.",
 "- You may note the body's exposure, positioning, and the player's control over them. Intimate and sensual framing is allowed; keep it tasteful and to 1-2 sentences.",
 "- Use direct, physical language. No metaphors, no purple prose.",
-"- Do NOT add NPC dialogue, speech, or reaction. The NPC is unconscious.",
+"- Do NOT add NPC dialogue, speech, moans, sighs, or any reaction. The NPC is " + (isCorpse ? "dead" : "unconscious") + " and cannot participate.",
 "- Do NOT add inner monologue. Stay on the body and what the player observes.",
 "",
 "BASE TEXT (polish this — refine, make more vivid, keep same meaning and details):",
@@ -1773,7 +2146,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
   window.describeUnconsciousBodyExamine = function(item) {
     if (!item || item.bodyState !== "unconscious") return null;
-    var base = describeUnconsciousBodyExamineBase(item);
+    var base = describeBodyExamineBase(item);
     polishBodyExamine(item, base);
     return base;
   };

@@ -263,6 +263,32 @@ function buildNPCRecentExchangeBlock(npc, maxTurns = 4) {
     ].join("\n");
 }
 
+// Lines this NPC didn't take part in but was standing there for - another
+// NPC's exchange with the player, picked up passively while sharing a room.
+// Kept separate from RECENT EXCHANGE so it's never confused with something
+// this NPC actually said or was said to them directly.
+function buildNPCOverheardBlock(npc, maxEntries = 3) {
+    if (!npc || !npc.memory || !Array.isArray(npc.memory.overheardLines) || !npc.memory.overheardLines.length) {
+        return "";
+    }
+
+    const now = Date.now();
+    const lines = npc.memory.overheardLines
+        .slice(-maxEntries)
+        .filter(entry => entry && entry.text && entry.timestamp && (now - entry.timestamp) < 10 * 60 * 1000)
+        .map(entry => {
+            const who = entry.speaker === "player" ? "the newcomer" : (entry.aboutName || "someone");
+            return `- Overheard ${who} say: "${String(entry.text).replace(/\s+/g, " ").trim()}"`;
+        });
+
+    if (!lines.length) return "";
+
+    return [
+        "OVERHEARD NEARBY:",
+        ...lines
+    ].join("\n");
+}
+
 function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
     if (!npc) return "";
     const config = options && typeof options === "object" ? options : {};
@@ -294,7 +320,11 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         quirksLine = `- Quirk: ${quirks[Math.floor(Math.random() * quirks.length)]} (occasional, do not repeat every line)`;
     }
 
-    const mood = npc.memory && npc.memory.lastMood ? npc.memory.lastMood : npc.mood || "neutral";
+    const persona = npc.persona || null;
+    const currentState = npc.currentState || null;
+    const mood = (currentState && currentState.mood)
+        ? currentState.mood
+        : (npc.memory && npc.memory.lastMood ? npc.memory.lastMood : npc.mood || "neutral");
     const metPlayer = !!(npc.memory && npc.memory.metPlayer);
     const favorability = npc.memory && typeof npc.memory.favorability === "number"
         ? npc.memory.favorability : 0;
@@ -365,7 +395,9 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
     const temperamentInflection = typeof getTemperamentInflection === "function"
         ? getTemperamentInflection(temperament, { favorability, hostility })
         : "";
-    const motive = npc.currentMotive || enrichment.currentMotive || "";
+    const motive = (currentState && currentState.motive)
+        ? currentState.motive
+        : (npc.currentMotive || enrichment.currentMotive || "");
     const values = Array.isArray(enrichment.values) ? enrichment.values : [];
     const speechTics = speechProfile && Array.isArray(speechProfile.cues) && speechProfile.cues.length
         ? speechProfile.cues
@@ -387,6 +419,10 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         npc.age ? `- Age: ${npc.age} (${npc.ageCategory || ""})` : "",
         `- Temperament: ${temperament}`,
         temperamentInflection ? `- ${temperamentInflection}` : "",
+        persona && persona.summary ? `- Persona: ${persona.summary}` : "",
+        persona && persona.verbalFingerprint ? `- Verbal fingerprint: ${persona.verbalFingerprint}` : "",
+        persona && persona.topicPull ? `- Conversational pull: ${persona.topicPull}` : "",
+        persona && persona.voiceDescriptor ? `- Voice descriptor: ${persona.voiceDescriptor}` : "",
         archetype ? `- Archetype: ${archetype}` : "",
         traits.length ? `- Traits: ${traits.join(", ")}` : "",
         quirksLine,
@@ -426,7 +462,9 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
             : "",
         "- Conversation rules: answer the player directly, stay conversational, and do not volunteer atmospheric description unless it matters.",
         npc.backstory ? `- Backstory: ${String(npc.backstory).slice(0, 200)}` : "",
-        npc.action ? `- Currently: ${npc.action}` : ""
+        (currentState && currentState.gesture) || npc.action
+            ? `- Currently: ${(currentState && currentState.gesture) || npc.action}`
+            : ""
     ].filter(Boolean);
 
     return lines.join("\n");
@@ -439,12 +477,14 @@ function buildPrompt(room, npc, instruction, options = {}) {
     const storyBlock = serializeStoryDirectorBlock(window.G ? window.G.story : null);
     const npcBlock = npc ? buildNPCPersonaBlock(npc, "SPEAKER CONTEXT", options) : "";
     const recentExchangeBlock = npc ? buildNPCRecentExchangeBlock(npc) : "";
+    const overheardBlock = npc ? buildNPCOverheardBlock(npc) : "";
 
     return [
         sceneBlock,
         storyBlock,
         npcBlock,
         recentExchangeBlock,
+        overheardBlock,
         `INSTRUCTION: ${instruction}`
     ].filter(Boolean).join("\n\n");
 }
