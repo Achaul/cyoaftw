@@ -1,6 +1,8 @@
 // === cyoaftw-nsfw-system.js === - v2026-09-11-002
 // Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, make-a-move, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply
 window.__NSFW_SYSTEM_VERSION = "2026-09-11-002";
+console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
+try {
 (function() {
   'use strict';
 
@@ -2171,3 +2173,7 @@ stateInstr,
   initNSFWSystem();
 }
 })();
+} catch (e) {
+  console.error("[BODY-DEBUG] nsfw-system.js IIFE THREW:", e.message, e.stack);
+}
+console.log("[BODY-DEBUG] nsfw-system.js done. appendUnconsciousBodyActions:", typeof window.appendUnconsciousBodyActions, "describeUnconsciousBodyExamine:", typeof window.describeUnconsciousBodyExamine);
