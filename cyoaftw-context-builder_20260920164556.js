@@ -341,6 +341,25 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
     const relationshipGuidance = typeof getNPCRelationshipSpeechGuidance === "function"
         ? getNPCRelationshipSpeechGuidance(npc)
         : null;
+    // Player personality profile from the character-creation questions
+    // (G.player.traits, tallied by selectPersonality in cyoaftw-engine-CORE.js).
+    // Only surfaced once a trait is clearly established (picked in both of
+    // its two opportunities) so this doesn't add noise on a 50/50 split.
+    const playerDominantTrait = typeof getPlayerDominantTrait === "function"
+        ? String(getPlayerDominantTrait() || "").toLowerCase()
+        : "";
+    const playerDominantTraitValue = playerDominantTrait && typeof getPlayerTraitValue === "function"
+        ? getPlayerTraitValue(playerDominantTrait)
+        : 0;
+    const PLAYER_TRAIT_DEMEANOR = {
+        curiosity: "curious and observant - tends to notice details, ask questions, and dig rather than let things go",
+        empathy: "empathetic and people-focused - tends to check on others and offer help before anything else",
+        boldness: "bold and direct - tends to hold their ground, push back, and act rather than wait"
+    };
+    const playerDemeanorLine = (playerDominantTraitValue >= 2 && PLAYER_TRAIT_DEMEANOR[playerDominantTrait])
+        ? PLAYER_TRAIT_DEMEANOR[playerDominantTrait]
+        : "";
+
     const attraction = npc.memory && typeof npc.memory.attraction === "number"
         ? npc.memory.attraction : 0;
     const arousal = npc.memory && typeof npc.memory.arousal === "number"
@@ -446,6 +465,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         `- Mood: ${mood}`,
         `- Familiarity with player: ${metPlayer ? "already acquainted; do not treat this as a first introduction" : "first meeting or not yet properly introduced"}`,
         `- Relationship to player: ${relationship}`,
+        playerDemeanorLine ? `- Player's general demeanor: ${playerDemeanorLine}` : "",
         relationshipGuidance ? `- Default attitude toward player: ${relationshipGuidance.baseline} (${relationshipGuidance.direction})` : "",
         relationshipGuidance ? `- Subtle reaction cue: ${relationshipGuidance.cue}` : "",
         recentPlayerActions.length ? `- Recent player actions toward you: ${recentPlayerActions.map(action => typeof formatNPCActionTag === "function" ? formatNPCActionTag(action) : action).join(", ")}` : "",

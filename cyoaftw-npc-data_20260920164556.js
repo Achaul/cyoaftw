@@ -697,6 +697,128 @@ function _npcPickConversationVariant(npc, optionId, variants, fallback, ctx) {
     return pick;
 }
 
+// ── CONTEXTUAL CONVERSATION TOPICS ──────────────────────────────
+// Short topic phrases (same register as species culture.topics, e.g.
+// ["recent trouble", "work", "weather", "rumors"]) keyed by NPC role and
+// by room type. Used by the "ask-about-topic" catalogue entry below to
+// surface a topic that fits who the NPC is and where the conversation is
+// happening, instead of the same generic questions everywhere. Keys are
+// lowercase to match ctx.role / ctx.roomType, which are already lowercased
+// by getNPCConversationContext().
+
+const NPC_ROLE_TOPIC_POOLS = {
+    "town guard": ["patrol routes", "recent troublemakers", "who's passed through"],
+    "stone guard": ["tunnel security", "cave-ins", "who's recently been seen"],
+    "vendor": ["prices", "best sellers", "where goods come from"],
+    "shopkeeper": ["stock", "customers", "competition"],
+    "wandering merchant": ["the road", "other towns", "rare finds"],
+    "blacksmith": ["commissions", "materials", "local smithing reputation"],
+    "innkeeper": ["guests", "rooms", "town happenings"],
+    "bartender": ["drinks", "regulars", "overheard gossip"],
+    "cook": ["ingredients", "the kitchen", "complaints about the food"],
+    "servant": ["chores", "their employer", "what they overhear"],
+    "priest": ["faith", "omens", "donations"],
+    "archivist": ["old records", "forbidden texts", "the library's condition"],
+    "scholar": ["research", "theories", "rare knowledge"],
+    "pilgrim": ["their journey", "what they're seeking", "the shrine"],
+    "townsfolk": ["daily life", "neighbors", "local news"],
+    "villager": ["daily life", "neighbors", "local news"],
+    "guest": ["why they're visiting", "the inn", "travel plans"],
+    "patron": ["why they're here", "the tavern", "local talk"],
+    "wanderer": ["the road", "where they've been", "having no fixed home"],
+    "adventurer": ["recent jobs", "dangers ahead", "their gear"],
+    "scout": ["the terrain", "threats they've spotted", "safe routes"],
+    "miner": ["the tunnels", "ore veins", "cave-ins"],
+    "raider": ["their territory", "targets", "rival raiders"],
+    "scavenger": ["salvage", "safe pickings", "close calls"],
+    "cultist": ["the cause", "secrecy", "outsiders"],
+    "tomb robber": ["loot", "traps", "competitors"]
+};
+
+const NPC_LOCATION_TOPIC_POOLS = (function () {
+    const townSpine = ["foot traffic", "local news", "who's been seen around"];
+    const townLandmark = ["town business", "arrivals and departures", "watch activity"];
+    const tavern = ["drinks", "gossip", "the regulars"];
+    const inn = ["travelers", "the rooms", "comings and goings"];
+    const dungeonSpine = ["echoes", "structural danger", "what's further in"];
+    const dungeonLandmark = ["what this place was", "old dangers", "relics"];
+    const dungeonInterior = ["hazards", "weapons", "past intruders"];
+    const ruinsSpine = ["decay", "old architecture", "who's been through"];
+    const ruinsLandmark = ["history", "old rituals", "the view from up here"];
+    const undergroundLandmark = ["the city below", "who controls access", "the dangers down here"];
+    const swamp = ["the water", "what's sunk here", "survival"];
+
+    return {
+        "street": townSpine,
+        "avenue": townSpine,
+        "alleyway": townSpine,
+        "square": townLandmark,
+        "gate": townLandmark,
+        "tavern": tavern,
+        "taproom": tavern,
+        "inn": inn,
+        "inn common": inn,
+        "guest room": inn,
+        "kitchen": ["food", "supplies", "the cook"],
+        "cellar": ["storage", "what's kept down here", "pests"],
+        "passage": dungeonSpine,
+        "corridor": dungeonSpine,
+        "tunnel": dungeonSpine,
+        "chamber": dungeonLandmark,
+        "shrine": dungeonLandmark,
+        "trap": dungeonInterior,
+        "armory": dungeonInterior,
+        "hallway": ruinsSpine,
+        "ruins passage": ruinsSpine,
+        "altar": ruinsLandmark,
+        "tower": ruinsLandmark,
+        "library": ["old texts", "lost knowledge", "the dust and decay"],
+        "cavern": undergroundLandmark,
+        "underground gate": undergroundLandmark,
+        "vault": ["valuables", "security", "who built this place"],
+        "underground hallway": ["echoes", "the tunnel network", "traffic"],
+        "marsh": swamp,
+        "broken ground": swamp,
+        "swamp camp": swamp,
+        "submerged ruin": swamp
+    };
+})();
+
+// Merges role topics + location topics + the NPC's species-flavor topics
+// (npc.preferredTopics, set once by generateNPCEnrichment) into one deduped
+// candidate list, role/location first since those are the more specific,
+// context-relevant fit; species topics remain as a fallback so the pool is
+// essentially never empty.
+function getContextualNPCTopics(npc, ctx) {
+    const rolePool = NPC_ROLE_TOPIC_POOLS[ctx && ctx.role] || [];
+    const locationPool = NPC_LOCATION_TOPIC_POOLS[ctx && ctx.roomType] || [];
+    const speciesPool = Array.isArray(npc && npc.preferredTopics) ? npc.preferredTopics : [];
+
+    const merged = [];
+    const seen = {};
+    rolePool.concat(locationPool, speciesPool).forEach(function (topic) {
+        const key = String(topic || "").trim().toLowerCase();
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        merged.push(topic);
+    });
+    return merged;
+}
+
+// Picks one topic for this build of the "ask-about-topic" option and
+// stashes it on ctx so the label and the text template agree on the same
+// topic. buildConversationOption() resolves label before text/playerText,
+// so by the time text runs the pick is already on ctx. The pick itself
+// goes through _npcPickConversationVariant so it also gets the "don't
+// repeat what was just shown" rotation every other conversation option uses.
+function _npcPickAskAboutTopic(npc, ctx) {
+    if (ctx && ctx.__askAboutTopicPick) return ctx.__askAboutTopicPick;
+    const topics = getContextualNPCTopics(npc, ctx);
+    const topic = _npcPickConversationVariant(npc, "ask-about-topic:topic", topics, "what's on their mind", ctx);
+    if (ctx) ctx.__askAboutTopicPick = topic;
+    return topic;
+}
+
 const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "greet-intro",
@@ -799,6 +921,27 @@ const NPC_CONVERSATION_CATALOGUE = [
             metPlayer: true,
             maxHostility: 75,
             excludedActionTags: ["ask-background"]
+        }
+    },
+    {
+        id: "ask-about-topic",
+        priority: 45,
+        repeat: "always",
+        label: (npc, ctx) => `Ask about ${_npcPickAskAboutTopic(npc, ctx)}`,
+        text: (npc, ctx) => {
+            const topic = _npcPickAskAboutTopic(npc, ctx);
+            return _npcRand([
+                `You bring up ${topic} and see what they have to say.`,
+                `You steer the conversation toward ${topic}.`,
+                `You ask them directly about ${topic}.`
+            ]);
+        },
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-about-topic" },
+        conditions: {
+            metPlayer: true,
+            maxHostility: 70,
+            custom: (npc, ctx) => getContextualNPCTopics(npc, ctx).length > 0
         }
     },
     {
@@ -1028,6 +1171,73 @@ const NPC_CONVERSATION_CATALOGUE = [
         intent: "aggression",
         relationshipImpact: { mood: -1, favor: -5, hostility: 5, aggression: 1, intent: "aggression", markMet: true, actionTag: "sharp-question" }
     },
+    // ===== PLAYER-PERSONALITY OPTIONS =====
+    // Gated on the traits tallied from the character-creation questions
+    // (setupPage3 / selectPersonality -> G.player.traits). minPlayerTraits
+    // requires that trait to have been picked in both of its two
+    // opportunities, so this reflects a clearly established personality
+    // rather than a single coin-flip answer.
+    {
+        id: "ask-details",
+        priority: 182,
+        repeat: "session",
+        resetTimer: { turns: 5 },
+        label: "Ask about the small details",
+        textVariants: [
+            "You ask about the small details most people would not think to mention.",
+            "You point out something easy to miss and ask them about it directly.",
+            "You press for specifics instead of letting the answer stay vague."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-details" },
+        conditions: {
+            metPlayer: true,
+            maxHostility: 70,
+            minPlayerTraits: { curiosity: 2 },
+            excludedActionTags: ["ask-details"]
+        }
+    },
+    {
+        id: "listen-closely",
+        priority: 184,
+        repeat: "session",
+        resetTimer: { turns: 5 },
+        label: "Listen closely",
+        textVariants: [
+            "You set your own agenda aside and really listen to what they are saying.",
+            "You give them your full attention and let them lead the conversation.",
+            "You hold back your own questions and just listen for a while."
+        ],
+        intent: "empathy",
+        relationshipImpact: { mood: 1, favor: 4, hostility: -2, intent: "empathy", markMet: true, actionTag: "listen-closely" },
+        conditions: {
+            metPlayer: true,
+            maxHostility: 75,
+            minPlayerTraits: { empathy: 2 },
+            excludedActionTags: ["listen-closely"]
+        }
+    },
+    {
+        id: "push-for-answers",
+        priority: 186,
+        repeat: "session",
+        resetTimer: { turns: 5 },
+        label: "Push for a straight answer",
+        textVariants: [
+            "You hold your ground and push for a straight answer, no dodging.",
+            "You refuse to let the question slide and press them to answer plainly.",
+            "You stand firm and make it clear you are not leaving without an answer."
+        ],
+        intent: "bold",
+        relationshipImpact: (npc, ctx) => ctx.hostility >= 50
+            ? { mood: -1, favor: -3, hostility: 4, intent: "bold", markMet: true, actionTag: "push-for-answers" }
+            : { mood: 0, favor: 3, hostility: 1, intent: "bold", markMet: true, actionTag: "push-for-answers" },
+        conditions: {
+            metPlayer: true,
+            minPlayerTraits: { boldness: 2 },
+            excludedActionTags: ["push-for-answers"]
+        }
+    },
     {
         id: "goodbye",
         priority: 190,
@@ -1115,7 +1325,15 @@ function getNPCConversationContext(npc, extraContext = {}) {
         storyEventCounter: story && typeof story.eventCounter === "number" ? story.eventCounter : 0,
         storyFlags: story && story.flags && typeof story.flags === "object" ? story.flags : {},
         storyRecentEvents: story && Array.isArray(story.recentEvents) ? story.recentEvents.slice() : [],
-        externalState
+        externalState,
+        // Player personality profile from the character-creation questions
+        // (see getPlayerTraitCounts/getPlayerDominantTrait in cyoaftw-engine-CORE.js).
+        // Guarded with typeof so this file keeps working even if loaded
+        // standalone or before the engine payload defines those helpers.
+        playerTraits: typeof getPlayerTraitCounts === "function" ? getPlayerTraitCounts() : {},
+        playerDominantTrait: typeof getPlayerDominantTrait === "function"
+            ? String(getPlayerDominantTrait() || "").toLowerCase()
+            : ""
     };
 }
 
@@ -1147,6 +1365,8 @@ function conversationConditionMatches(conditions, ctx) {
     if (conditions.excludeTemperaments && _npcValueInList(ctx.temperament, conditions.excludeTemperaments)) return false;
     if (conditions.relationships && !_npcValueInList(ctx.relationship, conditions.relationships)) return false;
     if (conditions.dispositions && !_npcValueInList(ctx.disposition, conditions.dispositions)) return false;
+    if (conditions.requiredPlayerTraits && !_npcValueInList(ctx.playerDominantTrait, conditions.requiredPlayerTraits)) return false;
+    if (conditions.excludedPlayerTraits && _npcValueInList(ctx.playerDominantTrait, conditions.excludedPlayerTraits)) return false;
     if (conditions.roomTypes && !_npcValueInList(ctx.roomType, conditions.roomTypes)) return false;
     if (conditions.roomRoles && !_npcValueInList(ctx.roomRole, conditions.roomRoles)) return false;
     if (conditions.zoneNames && !_npcValueInList(ctx.zoneName, conditions.zoneNames)) return false;
@@ -1198,6 +1418,18 @@ function conversationConditionMatches(conditions, ctx) {
     if (typeof conditions.maxInteractionCount === "number" && ctx.interactionCount > conditions.maxInteractionCount) return false;
     if (typeof conditions.minSessionInteractionCount === "number" && ctx.sessionInteractionCount < conditions.minSessionInteractionCount) return false;
     if (typeof conditions.maxSessionInteractionCount === "number" && ctx.sessionInteractionCount > conditions.maxSessionInteractionCount) return false;
+
+    // Player personality thresholds, e.g. { curiosity: 2 } requires the
+    // player to have picked "curiosity" at least twice during setup.
+    if (conditions.minPlayerTraits && typeof conditions.minPlayerTraits === "object") {
+        const playerTraits = ctx.playerTraits || {};
+        const meetsAll = Object.keys(conditions.minPlayerTraits).every(function (traitKey) {
+            const need = conditions.minPlayerTraits[traitKey];
+            const have = typeof playerTraits[traitKey] === "number" ? playerTraits[traitKey] : 0;
+            return have >= need;
+        });
+        if (!meetsAll) return false;
+    }
 
     if (conditions.requiredActionTags && !_npcActionTagsInclude(ctx.actionTags, conditions.requiredActionTags)) return false;
     if (conditions.excludedActionTags && _npcNormalizeList(conditions.excludedActionTags)
