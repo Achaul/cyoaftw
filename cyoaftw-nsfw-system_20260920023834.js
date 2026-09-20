@@ -1410,12 +1410,48 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       : (item && (item.name || item.originalName) || "the body");
   }
 
+  // Renders the full unconscious-body action menu: standard body buttons
+  // (Examine, Search, Wake, Finish off, Leave, loot) built inline, followed by
+  // the NSFW body-action groups (Kiss, Position, Oral, Penetrate, Spit).
+  // The standard buttons are built here directly rather than calling
+  // window.renderRoomObjectActionMenu — that function delegates unconscious
+  // bodies right back here, so calling it would infinite-recurse.
   function nsfwRenderBodyMenu(item) {
-    if (typeof window.renderRoomObjectActionMenu === "function") {
-      window.renderRoomObjectActionMenu(item);
-    }
     const el = document.getElementById("chatOptionsEl");
     if (!el || !item) return;
+    el.innerHTML = "";
+
+    // ── Standard body buttons (mirrors renderRoomObjectActionMenu's body path)
+    var stdButtons = [];
+    if (typeof window.examineRoomObject === "function") {
+      stdButtons.push(window.createCombatButton("Examine", function() { window.examineRoomObject(item); }));
+    }
+    if (item.objectType === "body") {
+      if (!item.bodyLooted && typeof window.searchBodyObject === "function") {
+        stdButtons.push(window.createCombatButton("Search", function() { window.searchBodyObject(item); }));
+      }
+      if (item.bodyState === "unconscious") {
+        if (typeof window.wakeUnconsciousBody === "function") {
+          stdButtons.push(window.createCombatButton("Try to wake", function() { window.wakeUnconsciousBody(item); }));
+        }
+        if (typeof window.finishOffBody === "function") {
+          stdButtons.push(window.createCombatButton("Finish off", function() { window.finishOffBody(item); }, { className: "danger" }));
+        }
+      }
+    }
+    if (typeof window.leaveRoomObject === "function") {
+      stdButtons.push(window.createCombatButton("Leave", function() { window.leaveRoomObject(); }));
+    }
+    if (stdButtons.length) {
+      window.appendCombatGroup(el, "Body", stdButtons);
+    }
+
+    // Loot group (only after the body has been searched)
+    if (item.objectType === "body" && item.bodyLooted && typeof window.renderBodyLootGroup === "function") {
+      window.renderBodyLootGroup(item, el);
+    }
+
+    // ── NSFW body-action groups
     appendUnconsciousBodyGroups(item, el);
   }
 
