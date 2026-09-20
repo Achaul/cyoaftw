@@ -1126,6 +1126,24 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
     {
+        id: "ask-deity",
+        priority: 95,
+        repeat: "session",
+        label: "Ask about the old gods",
+        textVariants: [
+            "You ask which of the old gods still hold sway around here.",
+            "You ask what they know of the gods people still pray to.",
+            "You ask if any deity's name comes up more than the others."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-deity" },
+        conditions: {
+            roleIncludes: ["priest", "archivist", "cultist"],
+            maxHostility: 70,
+            excludedActionTags: ["ask-deity"]
+        }
+    },
+    {
         id: "ask-recipe",
         priority: 97,
         repeat: "session",
