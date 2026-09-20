@@ -1081,6 +1081,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   // Expose so the engine can re-apply the wrapper after it overwrites
   // window.chooseChatOption (the engine loads after the nsfw system).
   window._nsfwWrapChooseChatOption = extendChooseChatOption;
+  console.log("[BODY-DEBUG] IIFE reached line ~1084 (_nsfwWrapChooseChatOption assigned)");
 
   function extendAdvanceStoryTurn() {
     if (typeof window.advanceStoryTurn !== "function") {
@@ -2150,6 +2151,7 @@ stateInstr,
     })();
   }
 
+  console.log("[BODY-DEBUG] IIFE reached line ~2153 (about to assign describeUnconsciousBodyExamine)");
   window.describeUnconsciousBodyExamine = function(item) {
     if (!item || item.bodyState !== "unconscious") return null;
     var base = describeBodyExamineBase(item);
