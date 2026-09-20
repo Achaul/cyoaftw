@@ -1395,6 +1395,397 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     console.log("[NSFW System] Initialized with passive stats and physical traits and meetup date options");
   }
 
+  // === Unconscious body interactions (kiss / reposition) ===================
+  // Exposed as window.renderUnconsciousBodyActions so the SFW engine's
+  // examineRoomObject() can call it behind a typeof guard. The standard
+  // room-object action menu (Search / Try to wake / Finish off / Leave) is
+  // rendered first, then the NSFW-only Kiss and Position groups are appended.
+  // Narration is AI-polished via the same ai() path the intimacy system uses:
+  // the plain template is shown immediately, then a background ai() call
+  // refines it and updates the narration element when it returns.
+
+  function nsfwGetEntityName(item) {
+    return typeof window.getEntityName === "function"
+      ? window.getEntityName(item)
+      : (item && (item.name || item.originalName) || "the body");
+  }
+
+  function nsfwRenderBodyMenu(item) {
+    if (typeof window.renderRoomObjectActionMenu === "function") {
+      window.renderRoomObjectActionMenu(item);
+    }
+    const el = document.getElementById("chatOptionsEl");
+    if (!el || !item) return;
+    appendUnconsciousBodyGroups(item, el);
+  }
+
+  function appendUnconsciousBodyGroups(item, el) {
+    if (!item || !el) return;
+
+    window.appendCombatGroup(el, "Kiss", [
+      window.createCombatButton("Kiss mouth", () => kissUnconsciousBody(item, "mouth")),
+      window.createCombatButton("Kiss cheek", () => kissUnconsciousBody(item, "cheek"))
+    ]);
+
+    const currentPos = item.bodyPosition || "back";
+    const positions = [
+      { key: "back", label: "Roll onto back" },
+      { key: "side", label: "Roll onto side" },
+      { key: "face", label: "Roll onto face" }
+    ];
+    window.appendCombatGroup(el, "Position", positions.map(p =>
+      window.createCombatButton(p.label, () => rollUnconsciousBody(item, p.key), {
+        disabled: currentPos === p.key
+      })
+    ));
+  }
+
+  // ── AI narration polish ─────────────────────────────────────────
+  // Builds a prompt for polishing an unconscious-body action narration.
+  // Modeled on buildPlayerNarrativePrompt() from intimacy-system.js but
+  // tailored for body interactions rather than sex acts.
+  function buildBodyActionPrompt(item, actionDesc, baseText) {
+    const name = nsfwGetEntityName(item);
+    const species = (item.species || "human").toLowerCase();
+    const gender = item.gender || "unknown";
+    const size = item.size || "medium";
+    const wounds = typeof window.describeCombatWounds === "function"
+      ? window.describeCombatWounds(item) : "";
+    const position = item.bodyPosition || "back";
+
+    var speciesNote = species !== "human"
+      ? "\nThe NPC is a " + species + ". Include species-appropriate physical details (skin, texture, features)."
+      : "";
+
+    var woundNote = wounds
+      ? "\nThe NPC has visible wounds: " + wounds + ". Reference them subtly if relevant."
+      : "";
+
+    var exposureNote = buildBodyExposureNote(item);
+
+    var prompt = [
+"You are polishing a player action description from a text adventure game.",
+"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote,
+"",
+"INSTRUCTIONS:",
+"- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and sensory.",
+"- Keep the same meaning and the same act. Do NOT invent new actions or body parts.",
+"- The action: " + actionDesc + ".",
+"- Write in second person (\"You ...\"). This is the player's perspective.",
+"- The NPC is unconscious — describe their limp, unresponsive state where relevant.",
+"- Use the clothing + exposure context above: only reference anatomy that is listed as exposed and visible in this pose. Do not describe what is covered.",
+"- Use direct, physical language. No metaphors, no purple prose.",
+"- Keep it to 1-2 sentences. Match the length of the base text.",
+"- Do NOT add NPC dialogue, speech, or reaction. The NPC is unconscious.",
+"- Do NOT add inner monologue or atmospheric description. Stay on the body.",
+"",
+"BASE TEXT (polish this — refine, make more vivid, keep same meaning and details):",
+"\"" + baseText + "\"",
+"",
+"IMPORTANT: Output ONLY the polished text. No explanations, no meta-discussion. Just the polished sentence.",
+"",
+"RESPOND with only the polished text, nothing else:"
+    ].filter(function(l) { return l !== ""; }).join("\n");
+
+    return prompt;
+  }
+
+  // Show the plain narration immediately, then fire a background ai() call
+  // to polish it. When the result returns, update the narration element if
+  // the player is still looking at this body. Non-blocking — same pattern as
+  // the intimacy system's player-narrative prefetch.
+  function polishBodyNarration(item, actionDesc, baseText) {
+    window.setNarration(baseText);
+
+    var _ai = typeof window.ai === "function" ? window.ai : null;
+    if (!_ai) return;
+
+    (async function() {
+      try {
+        var prompt = buildBodyActionPrompt(item, actionDesc, baseText);
+        var result = await _ai({
+          instruction: prompt,
+          startWith: "",
+          endButtons: "none",
+          generatorName: "cyoaftw-engine-core"
+        });
+        var polished = result && (result.text || result);
+        if (!polished || !polished.trim()) return;
+
+        // Reject meta-commentary (same guard as intimacy system)
+        var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(polished.trim());
+        if (isMeta) {
+          console.log("[Body Actions] Narration rejected (meta-commentary) for:", actionDesc);
+          return;
+        }
+
+        // Only update if the player is still looking at this body
+        if (window.G && window.G.activeObject === item) {
+          window.setNarration(polished.trim());
+        }
+      } catch (e) {
+        console.warn("[Body Actions] Narration polish failed for:", actionDesc, e);
+      }
+    })();
+  }
+
+  function kissUnconsciousBody(item, where) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (where !== "mouth" && where !== "cheek") return;
+
+    item.kissedWhileOut = true;
+    item.bodyKissed = (item.bodyKissed || 0) + 1;
+    item.lastKiss = where;
+
+    const name = nsfwGetEntityName(item);
+    const baseText = `You lean in and press a lingering kiss to ${name}'s ${where}.`;
+    const actionDesc = "kiss " + where;
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} kissed ${name} on the ${where} while they were unconscious.`, 4);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Reposition an unconscious body. Larger creatures (size "large") cannot
+  // simply be turned; the player must pass a strength check
+  // (d20 + physicalProwess bonus vs DC 12).
+  function rollUnconsciousBody(item, position) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!["back", "side", "face"].includes(position)) return;
+
+    const name = nsfwGetEntityName(item);
+    const label = position;
+    const currentPos = item.bodyPosition || "back";
+
+    if (currentPos === position) {
+      window.setNarration(`${name} is already lying on their ${label}.`);
+      nsfwRenderBodyMenu(item);
+      return;
+    }
+
+    // A larger body must be wrestled into position with a strength check.
+    if (item.size === "large") {
+      const prowess = typeof window.getSetupStat === "function"
+        ? window.getSetupStat("physicalProwess", 3)
+        : 3;
+      const roll = window.randInt(1, 20);
+      const strBonus = Math.max(0, Math.floor((prowess - 3) / 2));
+      const total = roll + strBonus;
+      const DC = 12;
+      if (total < DC) {
+        const failText = `You heave against ${name}, but ${name} is too heavy to budge — their bulk won't shift.`;
+        polishBodyNarration(item, "failed roll reposition", failText);
+        window.rememberStoryEvent("combat", `${window.G.player.name} tried to reposition ${name} but couldn't shift their weight.`, 3);
+        window.saveGameState();
+        nsfwRenderBodyMenu(item);
+        return;
+      }
+    }
+
+    item.bodyPosition = position;
+    const baseText = `You roll ${name} onto their ${label}.`;
+    const actionDesc = "roll onto " + label;
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} repositioned ${name} onto their ${label}.`, 3);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // === Unconscious body: examine narration (NSFW) ==========================
+  // Exposed as window.describeUnconsciousBodyExamine so the SFW engine's
+  // examineRoomObject() can call it behind a typeof guard when NSFW is
+  // enabled. Returns an immediate (SFW-safe) base string for setNarration,
+  // then fires a background ai() call to polish it into a more intimate,
+  // sensory description of the unconscious body. Mirrors polishBodyNarration
+  // but is read-only (the player is just looking, not acting on the body).
+
+  // ── Clothing + position exposure context ──────────────────────
+  // Derives, at call time, what the player can see of an unconscious body:
+  //   1. Which regions are covered, from item.equipped (upper → chest, lower →
+  //      groin/rear). Looting via Search deletes these slots, so this stays live.
+  //   2. Which of the *exposed* regions are actually visible in the current
+  //      bodyPosition (back → front; side → rear; face → rear + back).
+  //   3. Anatomy descriptors for the visible+exposed parts, pulled from
+  //      item.nsfwTraits.anatomy (and item.anatomy for build/skin context).
+  // Returns a prompt note string. Empty string when nothing is exposed, so
+  // callers can simply concatenate it. No new persistent state is written.
+
+  function nsfwBodySlotPresent(item, slot) {
+    var eq = item && item.equipped;
+    if (!eq || typeof eq !== "object") return false;
+    var v = eq[slot];
+    return !!v && !Array.isArray(v);
+  }
+
+  // Position → which anatomy regions are visible when their garment is gone.
+  // Each entry lists the nsfwTraits.anatomy keys that are exposed/visible in
+  // that pose when the corresponding slot (upper/lower) is missing.
+  var BODY_POSITION_VISIBLE = {
+    back: {   // front of the body faces up
+      upper: ["breasts", "nipples"],
+      lower: ["pubicHair", "vagina", "penis"]
+    },
+    side: {   // profile; rear is visible
+      upper: [],            // chest is mostly hidden against the ground
+      lower: ["buttocks"]
+    },
+    face: {   // face-down; back and rear visible
+      upper: [],            // back is bare but has no anatomy descriptor key
+      lower: ["buttocks"]
+    }
+  };
+
+  function buildBodyExposureNote(item) {
+    if (!item) return "";
+    var position = item.bodyPosition || "back";
+    var visibleMap = BODY_POSITION_VISIBLE[position] || BODY_POSITION_VISIBLE.back;
+    var upperCovered = nsfwBodySlotPresent(item, "upper");
+    var lowerCovered = nsfwBodySlotPresent(item, "lower");
+
+    // Collect the anatomy keys visible because their covering garment is gone.
+    var exposedKeys = [];
+    if (!upperCovered && visibleMap.upper.length) {
+      exposedKeys = exposedKeys.concat(visibleMap.upper);
+    }
+    if (!lowerCovered && visibleMap.lower.length) {
+      exposedKeys = exposedKeys.concat(visibleMap.lower);
+    }
+
+    var parts = [];
+    var nsfwAnatomy = (item.nsfwTraits && item.nsfwTraits.anatomy) || {};
+    for (var i = 0; i < exposedKeys.length; i++) {
+      var key = exposedKeys[i];
+      var data = nsfwAnatomy[key];
+      if (data) parts.push(key + ": " + JSON.stringify(data));
+    }
+
+    var notes = [];
+    // Clothing status line — always useful framing for the AI.
+    var clothingParts = [];
+    if (upperCovered) clothingParts.push("upper garment on (chest covered)");
+    else clothingParts.push("upper garment gone (chest/breasts bare)");
+    if (lowerCovered) clothingParts.push("lower garment on (groin/rear covered)");
+    else clothingParts.push("lower garment gone (groin/rear bare)");
+    notes.push("Clothing: " + clothingParts.join("; ") + ".");
+
+    // Position-specific note for poses the intimacy anatomy keys don't cover.
+    if (position === "face" && !upperCovered) {
+      notes.push("The NPC is face-down; their bare back is exposed to view.");
+    }
+
+    if (parts.length) {
+      notes.push("VISIBLE/EXPOSED ANATOMY (only these parts are bare and visible in this pose):\n" + parts.join("\n"));
+    }
+
+    return "\n" + notes.join("\n");
+  }
+
+  function describeUnconsciousBodyExamineBase(item) {
+    var name = nsfwGetEntityName(item);
+    var position = item.bodyPosition || "back";
+    var positionPhrase = position === "face" ? "face-down" : "on their " + position;
+    var wounds = typeof window.describeCombatWounds === "function"
+      ? window.describeCombatWounds(item) : "";
+    var ctx = item.defeatContext || {};
+
+    var base = name + " lies " + positionPhrase + ", utterly still and at your mercy.";
+    if (ctx.cause === "bleeding") {
+      base += " Slow bleeding has left them pale and flushed.";
+    } else if (ctx.crit && ctx.target === "head") {
+      base += " A dark bruise spreads across the skull.";
+    }
+    if (wounds) base += " Visible wounds: " + wounds + ".";
+    return base;
+  }
+
+  function buildBodyExaminePrompt(item, baseText) {
+    var name = nsfwGetEntityName(item);
+    var species = (item.species || "human").toLowerCase();
+    var gender = item.gender || "unknown";
+    var position = item.bodyPosition || "back";
+    var wounds = typeof window.describeCombatWounds === "function"
+      ? window.describeCombatWounds(item) : "";
+
+    var speciesNote = species !== "human"
+      ? "\nThe NPC is a " + species + ". Include species-appropriate physical details (skin, texture, features)."
+      : "";
+    var woundNote = wounds
+      ? "\nThe NPC has visible wounds: " + wounds + ". Reference them subtly if relevant."
+      : "";
+    var exposureNote = buildBodyExposureNote(item);
+
+    return [
+"You are polishing a player 'examine' description from a text adventure game.",
+"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying " + (position === "face" ? "face-down" : "on their " + position) + ", completely at the player's mercy." + speciesNote + woundNote + exposureNote,
+"",
+"INSTRUCTIONS:",
+"- Polish the BASE TEXT below. Make it vivid, sensory, and intimate — the player is taking in the unconscious body.",
+"- Keep the same meaning and details. Do NOT invent new actions or body parts.",
+"- Write in second person (\"You ...\"). This is the player's perspective.",
+"- The NPC is unconscious — emphasize their limp, vulnerable, unresponsive state.",
+"- Use the clothing + exposure context above: describe only what is actually visible in this pose. If anatomy is listed as exposed, you may reference it sensually; if a region is covered, do not describe what is hidden beneath it.",
+"- You may note the body's exposure, positioning, and the player's control over them. Intimate and sensual framing is allowed; keep it tasteful and to 1-2 sentences.",
+"- Use direct, physical language. No metaphors, no purple prose.",
+"- Do NOT add NPC dialogue, speech, or reaction. The NPC is unconscious.",
+"- Do NOT add inner monologue. Stay on the body and what the player observes.",
+"",
+"BASE TEXT (polish this — refine, make more vivid, keep same meaning and details):",
+"\"" + baseText + "\"",
+"",
+"IMPORTANT: Output ONLY the polished text. No explanations, no meta-discussion. Just the polished sentence.",
+"",
+"RESPOND with only the polished text, nothing else:"
+    ].join("\n");
+  }
+
+  function polishBodyExamine(item, baseText) {
+    var _ai = typeof window.ai === "function" ? window.ai : null;
+    if (!_ai) return;
+
+    (async function() {
+      try {
+        var prompt = buildBodyExaminePrompt(item, baseText);
+        var result = await _ai({
+          instruction: prompt,
+          startWith: "",
+          endButtons: "none",
+          generatorName: "cyoaftw-engine-core"
+        });
+        var polished = result && (result.text || result);
+        if (!polished || !polished.trim()) return;
+
+        // Reject meta-commentary (same guard as the intimacy / body-action paths)
+        var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(polished.trim());
+        if (isMeta) {
+          console.log("[Body Actions] Examine narration rejected (meta-commentary).");
+          return;
+        }
+
+        // Only update if the player is still looking at this body
+        if (window.G && window.G.activeObject === item) {
+          window.setNarration(polished.trim());
+        }
+      } catch (e) {
+        console.warn("[Body Actions] Examine narration polish failed:", e);
+      }
+    })();
+  }
+
+  window.describeUnconsciousBodyExamine = function(item) {
+    if (!item || item.bodyState !== "unconscious") return null;
+    var base = describeUnconsciousBodyExamineBase(item);
+    polishBodyExamine(item, base);
+    return base;
+  };
+
+  window.renderUnconsciousBodyActions = function(item) {
+    if (!item || item.bodyState !== "unconscious") {
+      if (typeof window.renderRoomObjectActionMenu === "function") window.renderRoomObjectActionMenu(item);
+      return;
+    }
+    nsfwRenderBodyMenu(item);
+  };
+
   initNSFWSystem();
 }
 })();
