@@ -2159,8 +2159,13 @@ stateInstr,
   // after it has rendered the standard body buttons. Adds the NSFW body-action
   // groups (Kiss, Position, Oral, Penetrate, Spit) to the same container.
   window.appendUnconsciousBodyActions = function(item, el) {
-    if (!item || item.bodyState !== "unconscious" || !el) return;
+    console.log("[BODY-DEBUG] NSFW appendUnconsciousBodyActions called", { bodyState: item && item.bodyState, hasEl: !!el });
+    if (!item || item.bodyState !== "unconscious" || !el) {
+      console.log("[BODY-DEBUG] NSFW appendUnconsciousBodyActions bailing early", { item: !!item, bodyState: item && item.bodyState, hasEl: !!el });
+      return;
+    }
     appendUnconsciousBodyGroups(item, el);
+    console.log("[BODY-DEBUG] NSFW appendUnconsciousBodyGroups done, child count:", el.children.length);
   };
 
   initNSFWSystem();
