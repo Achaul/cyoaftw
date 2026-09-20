@@ -5,7 +5,10 @@ const ZONE_TEMPLATES = [
         name: "Town",
         hostileArea: false,
         ambiance: "The sounds of daily life fill the air. People go about their business.",
-        roomTypes: ["Tavern", "Inn", "Street", "Alleyway", "Square", "Avenue", "Gate"],
+        // "Town Hall" is the zone's boss-room type (see ZONE_BOSS_ROOMS in
+        // cyoaftw-engine-CORE.js) - it's a normal, flat-odds entry in this
+        // list like any other room type, not specially weighted.
+        roomTypes: ["Tavern", "Inn", "Street", "Alleyway", "Square", "Avenue", "Gate", "Town Hall"],
         allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling", "Dragonborn"],
         lightLevel: "bright",
         defaultDanger: "safe"
@@ -14,7 +17,7 @@ const ZONE_TEMPLATES = [
         name: "Dungeon",
         hostileArea: true,
         ambiance: "The air is cold and stale. Distant sounds echo from unseen passages.",
-        roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel"],
+        roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel", "Throne Room"],
         allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat", "Kobold", "Lizardfolk"],
         lightLevel: "dark",
         defaultDanger: "hostile"
@@ -23,7 +26,7 @@ const ZONE_TEMPLATES = [
         name: "Ruins",
         hostileArea: true,
         ambiance: "Crumbling stone and silence. Whatever once thrived here is long gone.",
-        roomTypes: ["Hallway", "Altar", "Library", "Tower", "Shrine"],
+        roomTypes: ["Hallway", "Altar", "Library", "Tower", "Shrine", "Inner Sanctum"],
         allowedSpecies: ["Skeleton", "Ghost", "Goblin", "Lizardfolk"],
         lightLevel: "dim",
         defaultDanger: "hostile"
@@ -32,7 +35,7 @@ const ZONE_TEMPLATES = [
         name: "Underground City",
         hostileArea: false,
         ambiance: "Torchlight flickers across ancient stone. A civilization lives below the world.",
-        roomTypes: ["Cavern", "Vault", "Underground Hallway", "Underground Gate"],
+        roomTypes: ["Cavern", "Vault", "Underground Hallway", "Underground Gate", "Chieftain's Hall"],
         allowedSpecies: ["Dwarf", "Goblin", "Human", "Kobold", "Dragonborn"],
         lightLevel: "dim",
         defaultDanger: "tense"
@@ -41,7 +44,7 @@ const ZONE_TEMPLATES = [
         name: "Swamp",
         hostileArea: true,
         ambiance: "Thick mist clings to the water. The ground squelches underfoot, and something large moves in the reeds.",
-        roomTypes: ["Marsh", "Broken Ground", "Swamp Camp", "Submerged Ruin"],
+        roomTypes: ["Marsh", "Broken Ground", "Swamp Camp", "Submerged Ruin", "Witch's Lair"],
         allowedSpecies: ["Lizardfolk", "Rat", "Kobold"],
         lightLevel: "dim",
         defaultDanger: "hostile"
@@ -901,6 +904,92 @@ const ROOM_TEMPLATES = [
             { id: "boundary-stones", name: "boundary stones", tags: ["landmark"] },
             { id: "overgrown-trail", name: "overgrown trail", tags: ["passage"] }
         ]
+    },
+
+    // ── ZONE BOSS ROOMS ────────────────────────────────────────────
+    // One per zone, added as a normal flat-odds entry in that zone's
+    // ZONE_TEMPLATES.roomTypes list. cyoaftw-engine-CORE.js's ZONE_BOSS_ROOMS
+    // map ties each of these back to its zone, and spawnNPCsForRoom checks
+    // for a room of this type to guarantee-place that zone's rare boss NPC
+    // (see the "ZONE BOSS" section there for the full mechanic, including
+    // the room-count safety net that forces this type if the flat odds
+    // haven't naturally produced it after a while).
+    {
+        type: "Town Hall",
+        zone: "Town",
+        role: "landmark",
+        displayName: "Town Hall",
+        baseDescription: "A stately hall of dressed stone, its doors flanked by carved pillars. This is where the town's business - and its leadership - is conducted.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: false,
+        structural: [
+            { id: "council-table", name: "long council table", tags: ["surface", "formal"] },
+            { id: "banners",       name: "hanging banners",     tags: ["landmark"] },
+            { id: "raised-dais",   name: "raised dais",         tags: ["formal", "landmark"] }
+        ],
+        imageKey: "Town Hall"
+    },
+    {
+        type: "Throne Room",
+        zone: "Dungeon",
+        role: "landmark",
+        displayName: "Throne Room",
+        baseDescription: "A cavernous chamber dominated by a crude but imposing throne. Whoever rules this place holds court here.",
+        allowedZones: ["dungeon"],
+        parentCluster: ["chamber"],
+        isConnector: false,
+        structural: [
+            { id: "throne",        name: "crude throne",        tags: ["landmark", "formal"] },
+            { id: "trophy-rack",   name: "trophy rack",         tags: ["danger", "landmark"] },
+            { id: "brazier",       name: "iron brazier",        tags: ["light", "heat"] }
+        ],
+        imageKey: "Throne Room"
+    },
+    {
+        type: "Inner Sanctum",
+        zone: "Ruins",
+        role: "landmark",
+        displayName: "Inner Sanctum",
+        baseDescription: "The deepest, best-preserved chamber in the ruins, sealed away from the collapse outside. Something has clearly been guarding it.",
+        allowedZones: ["ruins"],
+        parentCluster: ["altar", "shrine"],
+        isConnector: false,
+        structural: [
+            { id: "sealed-altar",  name: "sealed altar",        tags: ["landmark", "formal"] },
+            { id: "old-wards",     name: "faded warding marks", tags: ["danger", "landmark"] }
+        ],
+        imageKey: "Inner Sanctum"
+    },
+    {
+        type: "Chieftain's Hall",
+        zone: "Underground City",
+        role: "landmark",
+        displayName: "Chieftain's Hall",
+        baseDescription: "The largest hall in the underground settlement, lit by rows of torches. This is where the chieftain holds audience.",
+        allowedZones: ["underground city"],
+        parentCluster: ["cavern", "vault"],
+        isConnector: false,
+        structural: [
+            { id: "chieftain-seat", name: "chieftain's seat",   tags: ["landmark", "formal"] },
+            { id: "war-trophies",   name: "war trophies",       tags: ["danger", "landmark"] }
+        ],
+        imageKey: "Chieftain's Hall"
+    },
+    {
+        type: "Witch's Lair",
+        zone: "Swamp",
+        role: "landmark",
+        displayName: "Witch's Lair",
+        baseDescription: "A hut raised on stilts above the mire, hung with charms and bundled herbs. Something old and dangerous lives here.",
+        allowedZones: ["swamp"],
+        parentCluster: ["swamp camp"],
+        isConnector: false,
+        structural: [
+            { id: "hanging-charms", name: "hanging charms",     tags: ["danger", "landmark"] },
+            { id: "cauldron",       name: "bubbling cauldron",  tags: ["danger", "work"] }
+        ],
+        imageKey: "Witch's Lair"
     }
 ];
 
