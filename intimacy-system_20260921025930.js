@@ -1425,6 +1425,55 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
 }
 
 /**
+ * Per-act disinhibition threshold (0-100) by act type. Acts at/above this
+ * threshold require the NPC's per-body-category disinhibition (raised by
+ * successfully performing lower-intensity acts in the same category via
+ * executeIntimacyAction → applyActDisinhibitionDelta) to have been built up.
+ * TEASE/CLOTHING/END acts always return 0 — they are always available and
+ * are the acts that build the disinhibition needed to unlock the rest.
+ */
+function _actDisinhibitionThreshold(act) {
+    if (!act || !act.type) return 0;
+    switch (act.type) {
+        case ACT_TYPES.PENETRATE:
+        case ACT_TYPES.CONTINUE:
+            return 35;
+        case ACT_TYPES.IMPACT:
+            return 55;
+        // WATERSPORT acts early-return in executeIntimacyAction and so never
+        // reach the disinhibition grant; gating them would permanently block
+        // the self-contained "Watersports" category. Leave them ungated.
+        case ACT_TYPES.WATERSPORT:
+            return 0;
+        default:
+            return 0;
+    }
+}
+
+/**
+ * Per-act disinhibition grant delta by act type. Lower-intensity acts grant
+ * more (they're how comfort is built); higher-intensity acts still grant a
+ * little to keep advancing once unlocked. Returns 0 for acts that don't
+ * model the NPC's body comfort (CLOTHING/END).
+ */
+function _actDisinhibitionGrantDelta(act) {
+    if (!act || !act.type) return 0;
+    switch (act.type) {
+        case ACT_TYPES.TEASE:
+            return 5;
+        case ACT_TYPES.PENETRATE:
+        case ACT_TYPES.CONTINUE:
+            return 6;
+        case ACT_TYPES.IMPACT:
+            return 4;
+        case ACT_TYPES.WATERSPORT:
+            return 3;
+        default:
+            return 0;
+    }
+}
+
+/**
  * Check if action is valid and return reason if not
  * Returns { valid: boolean, reason?: string } for an action
  */
@@ -1817,7 +1866,29 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
             return { valid: false, reason: "no access" };
         }
     }
-    
+
+    // ── PER-ACT DISINHIBITION GATING ───────────────────────────
+    // The NPC's comfort with escalating acts on their body, tracked per body
+    // category in npc.memory.actDisinhibition. Only gates acts where the
+    // player is the actor (the NPC is the target): "Receive" acts (NPC acting
+    // on the player) are not gated by the NPC's own body disinhibition. The
+    // threshold comes from the act type; the current score is read via the
+    // SFW-side getActDisinhibition helper (exposed on window). Lower-intensity
+    // acts (TEASE) have threshold 0 and raise the score, so repeated teasing
+    // in a category progressively unlocks penetration/impact there.
+    if (isPlayerActor) {
+        var _disinhibThreshold = _actDisinhibitionThreshold(act);
+        if (_disinhibThreshold > 0 && typeof window !== "undefined" &&
+            typeof window.getActDisinhibition === "function" &&
+            typeof window.getActionCategory === "function") {
+            var _catKey = window.getActionCategory(actId, npc);
+            if (_catKey && _catKey !== "Other" &&
+                window.getActDisinhibition(npc, _catKey) < _disinhibThreshold) {
+                return { valid: false, reason: "not disinhibited" };
+            }
+        }
+    }
+
     return { valid: true };
 }
 
@@ -1837,6 +1908,7 @@ function getDisabledHintForReason(reason, npc, player, act) {
         "not worn": "Not wearing",
         "prior required": "Action requires prior step",
         "no active action": "No active action",
+        "not disinhibited": "Not yet comfortable with this",
         "unknown action": "Unknown action"
     };
     return hintMap[reason] || reason;
@@ -2104,6 +2176,35 @@ function getTargetCoveredParts(target) {
 // ============================================================================
 
 /**
+ * Grant progression for a successful intimacy action:
+ *  - Player charisma XP (intimacy is the charisma-leveling path, parallel to
+ *    combat leveling physicalProwess/endurance), via the engine's
+ *    trackCombatSkillGain (exposed as a global/window function).
+ *  - NPC per-body-category disinhibition delta, via the SFW-side
+ *    applyActDisinhibitionDelta (exposed on window from cyoaftw-npc-data.js).
+ *    Only granted for acts where the player is the actor (the NPC is the
+ *    target), since disinhibition models the NPC's comfort with what is done
+ *    to their body. This is the write side of the gating in checkActionValidity.
+ */
+function _grantIntimacyProgression(npc, player, act) {
+    if (!act) return;
+    if (player && typeof window !== "undefined" &&
+        typeof window.trackCombatSkillGain === "function") {
+        window.trackCombatSkillGain(player, { statKey: "charisma", statAmount: 2 });
+    }
+    if (npc && !act.playerIsBottom && typeof window !== "undefined" &&
+        typeof window.applyActDisinhibitionDelta === "function" &&
+        typeof window.getActionCategory === "function") {
+        var catKey = window.getActionCategory(act.id, npc);
+        var delta = _actDisinhibitionGrantDelta(act);
+        if (catKey && catKey !== "Other" && delta !== 0) {
+            window.applyActDisinhibitionDelta(npc, catKey, delta,
+                "intimacy: " + act.id + " (" + catKey + ") +" + delta);
+        }
+    }
+}
+
+/**
  * Execute an intimacy action
  */
 async function executeIntimacyAction(npc, player, actId, positionId = null) {
@@ -2307,7 +2408,12 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
             }
         }
     }
-    
+
+    // Progression: grant player charisma XP and raise the NPC's per-body-
+    // category disinhibition so this act counts toward unlocking more
+    // advanced acts in the same category. See _grantIntimacyProgression.
+    _grantIntimacyProgression(npc, player, act);
+
     return response;
 }
 

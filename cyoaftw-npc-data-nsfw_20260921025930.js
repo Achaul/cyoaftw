@@ -69,6 +69,7 @@
         repeat: "encounter",
         conditions: {
             minAttraction: 35,
+            minDisinhibition: 10,
             locationCheck: "private",
             aloneWithTarget: true,
             custom: function(npc, ctx) {
@@ -94,6 +95,7 @@
         conditions: {
             minAttraction: 45,
             minLust: 25,
+            minDisinhibition: 20,
             locationCheck: "private",
             aloneWithTarget: true,
             custom: function(npc, ctx) {

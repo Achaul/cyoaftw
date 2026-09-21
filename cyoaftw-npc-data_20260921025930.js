@@ -1143,6 +1143,29 @@ const NPC_CONVERSATION_CATALOGUE = [
             excludedActionTags: ["ask-deity"]
         }
     },
+    // Distinct from "ask-deity" above (generic lore, gated by role) - this
+    // is for an NPC who personally follows a specific deity (npc.deity,
+    // set once when they were generated inside a shrine room - see
+    // spawnNPCsForRoom in cyoaftw-engine-CORE.js). hasOwnDeity gates it to
+    // exactly those NPCs, regardless of role.
+    {
+        id: "ask-their-deity",
+        priority: 96,
+        repeat: "session",
+        label: "Ask who they pray to",
+        textVariants: [
+            "You ask which god or spirit they personally hold to.",
+            "You ask who they kneel before when no one else is watching.",
+            "You ask, plainly, who they pray to."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-their-deity" },
+        conditions: {
+            hasOwnDeity: true,
+            maxHostility: 70,
+            excludedActionTags: ["ask-their-deity"]
+        }
+    },
     {
         id: "ask-recipe",
         priority: 97,
@@ -1453,6 +1476,10 @@ function getNPCConversationContext(npc, extraContext = {}) {
             ? String(getRelationshipLabel(npc) || "").toLowerCase()
             : "neutral",
         isHumanoid: npc.isHumanoid === true,
+        // True for a civilized NPC generated inside a shrine room, who was
+        // assigned that shrine's deity as their own (npc.deity - see
+        // spawnNPCsForRoom in cyoaftw-engine-CORE.js). Gates "ask-their-deity".
+        hasOwnDeity: !!npc.deity,
         romanceEligible: typeof isAdultHumanoidNPC === "function" ? isAdultHumanoidNPC(npc) : false,
         tradeAvailable: typeof shouldShowPostReplyTradeAction === "function" ? shouldShowPostReplyTradeAction(npc) : false,
         actionTags,
@@ -1514,6 +1541,7 @@ function conversationConditionMatches(conditions, ctx) {
     if (typeof conditions.metPlayer === "boolean" && ctx.metPlayer !== conditions.metPlayer) return false;
     if (typeof conditions.isHumanoid === "boolean" && ctx.isHumanoid !== conditions.isHumanoid) return false;
     if (typeof conditions.romanceEligible === "boolean" && ctx.romanceEligible !== conditions.romanceEligible) return false;
+    if (typeof conditions.hasOwnDeity === "boolean" && ctx.hasOwnDeity !== conditions.hasOwnDeity) return false;
     if (typeof conditions.tradeAvailable === "boolean" && ctx.tradeAvailable !== conditions.tradeAvailable) return false;
 
     if (conditions.species && !_npcValueInList(ctx.species, conditions.species)) return false;
@@ -2663,4 +2691,9 @@ function generatePostureOrAction(temperament) {
 // Export function to window for NSFW system access (catalogue already exported above)
 if (typeof window !== "undefined") {
     window.queryConversationCatalogue = queryConversationCatalogue;
+    // Per-act disinhibition helpers, used by intimacy-system.js to gate and
+    // progress intimacy acts by body category. See applyActDisinhibitionDelta /
+    // getActDisinhibition above for the storage shape.
+    window.applyActDisinhibitionDelta = applyActDisinhibitionDelta;
+    window.getActDisinhibition = getActDisinhibition;
 }
