@@ -7,8 +7,10 @@ const ZONE_TEMPLATES = [
         ambiance: "The sounds of daily life fill the air. People go about their business.",
         // "Town Hall" is the zone's boss-room type (see ZONE_BOSS_ROOMS in
         // cyoaftw-engine-CORE.js) - it's a normal, flat-odds entry in this
-        // list like any other room type, not specially weighted.
-        roomTypes: ["Tavern", "Inn", "Street", "Alleyway", "Square", "Avenue", "Gate", "Town Hall"],
+        // list like any other room type, not specially weighted. "Cellar
+        // Shrine" is this zone's guaranteed shrine room (ZONE_SHRINE_ROOMS)
+        // in the same style - odd for a Town, tucked away below a tavern.
+        roomTypes: ["Tavern", "Inn", "Street", "Alleyway", "Square", "Avenue", "Gate", "Town Hall", "Cellar Shrine"],
         allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling", "Dragonborn"],
         lightLevel: "bright",
         defaultDanger: "safe"
@@ -17,7 +19,9 @@ const ZONE_TEMPLATES = [
         name: "Dungeon",
         hostileArea: true,
         ambiance: "The air is cold and stale. Distant sounds echo from unseen passages.",
-        roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel", "Throne Room"],
+        // "Buried Shrine" is this zone's guaranteed shrine room
+        // (ZONE_SHRINE_ROOMS) - sealed behind a cave-in, easy to miss.
+        roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel", "Throne Room", "Buried Shrine"],
         allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat", "Kobold", "Lizardfolk"],
         lightLevel: "dark",
         defaultDanger: "hostile"
@@ -26,6 +30,9 @@ const ZONE_TEMPLATES = [
         name: "Ruins",
         hostileArea: true,
         ambiance: "Crumbling stone and silence. Whatever once thrived here is long gone.",
+        // "Shrine" doubles as this zone's guaranteed shrine room
+        // (ZONE_SHRINE_ROOMS) - "Altar" is a second, bonus prayer-capable
+        // room type that can also turn up here at ordinary flat odds.
         roomTypes: ["Hallway", "Altar", "Library", "Tower", "Shrine", "Inner Sanctum"],
         allowedSpecies: ["Skeleton", "Ghost", "Goblin", "Lizardfolk"],
         lightLevel: "dim",
@@ -35,7 +42,10 @@ const ZONE_TEMPLATES = [
         name: "Underground City",
         hostileArea: false,
         ambiance: "Torchlight flickers across ancient stone. A civilization lives below the world.",
-        roomTypes: ["Cavern", "Vault", "Underground Hallway", "Underground Gate", "Chieftain's Hall"],
+        // "Deep Well Shrine" is this zone's guaranteed shrine room
+        // (ZONE_SHRINE_ROOMS) - built around a dried-up well shaft, tucked
+        // between otherwise mundane tunnels.
+        roomTypes: ["Cavern", "Vault", "Underground Hallway", "Underground Gate", "Chieftain's Hall", "Deep Well Shrine"],
         allowedSpecies: ["Dwarf", "Goblin", "Human", "Kobold", "Dragonborn"],
         lightLevel: "dim",
         defaultDanger: "tense"
@@ -44,7 +54,10 @@ const ZONE_TEMPLATES = [
         name: "Swamp",
         hostileArea: true,
         ambiance: "Thick mist clings to the water. The ground squelches underfoot, and something large moves in the reeds.",
-        roomTypes: ["Marsh", "Broken Ground", "Swamp Camp", "Submerged Ruin", "Witch's Lair"],
+        // "Sunken Chapel" is this zone's guaranteed shrine room
+        // (ZONE_SHRINE_ROOMS) - half-submerged, easy to mistake for just
+        // another ruin until you're standing in it.
+        roomTypes: ["Marsh", "Broken Ground", "Swamp Camp", "Submerged Ruin", "Witch's Lair", "Sunken Chapel"],
         allowedSpecies: ["Lizardfolk", "Rat", "Kobold"],
         lightLevel: "dim",
         defaultDanger: "hostile"
@@ -523,6 +536,27 @@ const ROOM_TEMPLATES = [
         imageKey: "Cellar"
     },
     {
+        type: "Cellar Shrine",
+        zone: "Town",
+        role: "landmark",
+        displayName: "Hidden Cellar Shrine",
+        baseDescription: "Behind a false wall of stacked crates, a small hollow has been carved out and quietly kept up - a chipped icon, a few burned-down candle stubs, and a shallow bowl for offerings. Whoever tends it never seems to be around.",
+        allowedZones: ["town"],
+        parentCluster: ["tavern"],
+        isConnector: false,
+        // Prayer-capable (see isShrineRoom in cyoaftw-engine-CORE.js) -
+        // Town's designated guaranteed shrine room (ZONE_SHRINE_ROOMS),
+        // deliberately an odd/hidden spot for one rather than a formal
+        // temple.
+        isShrine: true,
+        structural: [
+            { id: "chipped-icon", name: "chipped icon",     tags: ["ritual", "landmark"] },
+            { id: "candle-stubs", name: "candle stubs",     tags: ["light", "ritual"] },
+            { id: "offering-bowl",name: "offering bowl",    tags: ["ritual"] }
+        ],
+        imageKey: "Cellar"
+    },
+    {
         type: "Passage",
         zone: "Dungeon",
         role: "spine",
@@ -642,6 +676,9 @@ const ROOM_TEMPLATES = [
         allowedZones: ["dungeon", "ruins"],
         parentCluster: ["chamber"],
         isConnector: false,
+        // Prayer-capable (see isShrineRoom in cyoaftw-engine-CORE.js) - this
+        // is Ruins' designated guaranteed shrine room (ZONE_SHRINE_ROOMS).
+        isShrine: true,
         structural: [
             { id: "stone-idol",   name: "stone idol",   tags: ["ritual", "landmark"] },
             { id: "offering-bowl",name: "offering bowl",tags: ["ritual"] },
@@ -664,6 +701,26 @@ const ROOM_TEMPLATES = [
             { id: "workbench",    name: "workbench",    tags: ["surface", "work"] }
         ],
         imageKey: "Armory"
+    },
+    {
+        type: "Buried Shrine",
+        zone: "Dungeon",
+        role: "landmark",
+        displayName: "Buried Shrine",
+        baseDescription: "A cave-in sealed this chamber off long ago, but a narrow gap in the rubble still lets someone squeeze through. Inside, a shrine sits untouched by time, dust thick on every surface except where a devotee has clearly still been kneeling.",
+        allowedZones: ["dungeon"],
+        parentCluster: ["chamber"],
+        isConnector: false,
+        // Prayer-capable (see isShrineRoom) - Dungeon's designated
+        // guaranteed shrine room (ZONE_SHRINE_ROOMS), odd for being
+        // sealed off rather than out in the open.
+        isShrine: true,
+        structural: [
+            { id: "cave-in-rubble", name: "cave-in rubble", tags: ["hazard", "cover"] },
+            { id: "dust-shrine",    name: "dust-caked shrine", tags: ["ritual", "landmark"] },
+            { id: "kneeling-mark",  name: "worn kneeling mark", tags: ["ritual"] }
+        ],
+        imageKey: "Shrine"
     },
 
     // ── Ruins ──
@@ -691,6 +748,10 @@ const ROOM_TEMPLATES = [
         allowedZones: ["ruins"],
         parentCluster: ["chamber"],
         isConnector: false,
+        // Prayer-capable (see isShrineRoom) - a bonus prayer room alongside
+        // Ruins' designated "Shrine" (ZONE_SHRINE_ROOMS), not itself the
+        // guaranteed one, but it counts if it happens to turn up first.
+        isShrine: true,
         structural: [
             { id: "stone-altar",  name: "stone altar",  tags: ["ritual", "landmark"] },
             { id: "ritual-basin", name: "ritual basin", tags: ["ritual"] },
@@ -810,6 +871,26 @@ const ROOM_TEMPLATES = [
         ],
         imageKey: "Underground Gate"
     },
+    {
+        type: "Deep Well Shrine",
+        zone: "Underground City",
+        role: "landmark",
+        displayName: "Deep Well Shrine",
+        baseDescription: "Tucked between two unremarkable tunnels, an old dried-up well shaft has been built up into a shrine, offerings left along its rim where water used to be. No one seems to remember which god it was dug for.",
+        allowedZones: ["underground city"],
+        parentCluster: ["passage"],
+        isConnector: false,
+        // Prayer-capable (see isShrineRoom) - Underground City's
+        // designated guaranteed shrine room (ZONE_SHRINE_ROOMS), odd for
+        // being built around a dead well rather than a proper temple.
+        isShrine: true,
+        structural: [
+            { id: "dry-well-shaft", name: "dry well shaft", tags: ["ritual", "landmark"] },
+            { id: "rim-offerings",  name: "offerings along the rim", tags: ["ritual"] },
+            { id: "worn-carvings",  name: "worn carvings",  tags: ["information"] }
+        ],
+        imageKey: "Shrine"
+    },
 
     // ── Swamp ──
     {
@@ -873,6 +954,26 @@ const ROOM_TEMPLATES = [
             { id: "waterlogged-chest", name: "waterlogged chest",  tags: ["storage", "loot"] }
         ],
         imageKey: "Submerged Ruin"
+    },
+    {
+        type: "Sunken Chapel",
+        zone: "Swamp",
+        role: "landmark",
+        displayName: "Sunken Chapel",
+        baseDescription: "Half-swallowed by black water, a small chapel still stands just enough to be entered. Its floor is a shallow, mirror-still pool, and whatever idol once stood at its center is now visible only as a shape beneath the surface.",
+        allowedZones: ["swamp"],
+        parentCluster: ["marsh", "ruin"],
+        isConnector: false,
+        // Prayer-capable (see isShrineRoom) - Swamp's designated
+        // guaranteed shrine room (ZONE_SHRINE_ROOMS), odd for being
+        // half-submerged rather than dry ground.
+        isShrine: true,
+        structural: [
+            { id: "mirror-pool",   name: "mirror-still pool", tags: ["ritual", "water", "landmark"] },
+            { id: "submerged-idol",name: "submerged idol",    tags: ["ritual"] },
+            { id: "rotted-pews",   name: "rotted pews",       tags: ["cover"] }
+        ],
+        imageKey: "Altar"
     },
 
     // ── ZONE-TRANSITION CORRIDOR TYPES ────────────────────────────

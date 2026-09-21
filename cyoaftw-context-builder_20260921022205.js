@@ -366,6 +366,14 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         ? npc.memory.arousal : 0;
     const disinhibition = npc.memory && typeof npc.memory.disinhibition === "number"
         ? npc.memory.disinhibition : 0;
+    const actDisinhibition = npc.memory && npc.memory.actDisinhibition && typeof npc.memory.actDisinhibition === "object"
+        ? npc.memory.actDisinhibition : {};
+    const actDisinhibitionEntries = Object.keys(actDisinhibition)
+        .filter(function (k) { return typeof actDisinhibition[k] === "number"; })
+        .map(function (k) { return k + " " + actDisinhibition[k] + "/100"; });
+    const actDisinhibitionLine = actDisinhibitionEntries.length
+        ? "- Act disinhibition: " + actDisinhibitionEntries.join(", ")
+        : "";
     const attractionLabel = typeof getAttractionLabel === "function"
         ? getAttractionLabel(npc)
         : "none";
@@ -479,6 +487,9 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
             : "",
         typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc)
             ? `- Disinhibition: ${disinhibition}/100`
+            : "",
+        typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc) && actDisinhibitionLine
+            ? actDisinhibitionLine
             : "",
         "- Conversation rules: answer the player directly, stay conversational, and do not volunteer atmospheric description unless it matters.",
         npc.backstory ? `- Backstory: ${String(npc.backstory).slice(0, 200)}` : "",

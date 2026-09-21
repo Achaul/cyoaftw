@@ -1268,6 +1268,19 @@ const NPC_CONVERSATION_CATALOGUE = [
     },
 
     {
+        id: "insult",
+        priority: 155,
+        repeat: "session",
+        label: "Insult them",
+        textVariants: [
+            "You let a barbed remark slip, aimed right where it'll sting.",
+            "You cut them down with a few well-chosen words.",
+            "You don't bother being kind about it and say exactly what you think."
+        ],
+        intent: "insult",
+        relationshipImpact: { mood: -2, favor: -8, hostility: 6, aggression: 1, attraction: -3, intent: "insult", markMet: true, actionTag: "insult" }
+    },
+    {
         id: "tease",
         priority: 160,
         repeat: "session",
@@ -1429,6 +1442,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
         lust: (npc.relationship && typeof npc.relationship.lust === "number" ? npc.relationship.lust : (npc.memory && typeof npc.memory.lust === "number" ? npc.memory.lust : 0)),
         arousal: (npc.relationship && typeof npc.relationship.arousal === "number" ? npc.relationship.arousal : (npc.memory && typeof npc.memory.arousal === "number" ? npc.memory.arousal : 0)),
         disinhibition: (npc.relationship && typeof npc.relationship.disinhibition === "number" ? npc.relationship.disinhibition : (npc.memory && typeof npc.memory.disinhibition === "number" ? npc.memory.disinhibition : 0)),
+        actDisinhibition: (npc.memory && npc.memory.actDisinhibition && typeof npc.memory.actDisinhibition === "object" ? npc.memory.actDisinhibition : {}),
         metPlayer: !!(npc.memory && npc.memory.metPlayer),
         everGreeted: !!(npc.memory && npc.memory.everGreeted),
         mood: String(npc.memory && npc.memory.lastMood || "neutral").toLowerCase(),
@@ -1555,6 +1569,26 @@ function conversationConditionMatches(conditions, ctx) {
     if (typeof conditions.maxArousal === "number" && ctx.arousal > conditions.maxArousal) return false;
     if (typeof conditions.minDisinhibition === "number" && ctx.disinhibition < conditions.minDisinhibition) return false;
     if (typeof conditions.maxDisinhibition === "number" && ctx.disinhibition > conditions.maxDisinhibition) return false;
+    if (conditions.minActDisinhibition && typeof conditions.minActDisinhibition === "object") {
+        var actMap = ctx.actDisinhibition || {};
+        for (var k in conditions.minActDisinhibition) {
+            if (!Object.prototype.hasOwnProperty.call(conditions.minActDisinhibition, k)) continue;
+            var need = conditions.minActDisinhibition[k];
+            if (typeof need !== "number") continue;
+            var have = typeof actMap[k] === "number" ? actMap[k] : 0;
+            if (have < need) return false;
+        }
+    }
+    if (conditions.maxActDisinhibition && typeof conditions.maxActDisinhibition === "object") {
+        var actMapMax = ctx.actDisinhibition || {};
+        for (var kMax in conditions.maxActDisinhibition) {
+            if (!Object.prototype.hasOwnProperty.call(conditions.maxActDisinhibition, kMax)) continue;
+            var cap = conditions.maxActDisinhibition[kMax];
+            if (typeof cap !== "number") continue;
+            var haveMax = typeof actMapMax[kMax] === "number" ? actMapMax[kMax] : 0;
+            if (haveMax > cap) return false;
+        }
+    }
     if (typeof conditions.minAggressionCount === "number" && ctx.aggressionCount < conditions.minAggressionCount) return false;
     if (typeof conditions.maxAggressionCount === "number" && ctx.aggressionCount > conditions.maxAggressionCount) return false;
     if (typeof conditions.minInteractionCount === "number" && ctx.interactionCount < conditions.minInteractionCount) return false;
@@ -2140,6 +2174,14 @@ function ensureNPCRelationshipState(npc) {
     if (typeof npc.memory.attraction !== "number") npc.memory.attraction = 0;
     if (typeof npc.memory.arousal !== "number") npc.memory.arousal = 0;
     if (typeof npc.memory.disinhibition !== "number") npc.memory.disinhibition = 0;
+    if (!npc.memory.actDisinhibition || typeof npc.memory.actDisinhibition !== "object") {
+        npc.memory.actDisinhibition = {};
+    }
+    Object.keys(npc.memory.actDisinhibition).forEach(function (actKey) {
+        var v = npc.memory.actDisinhibition[actKey];
+        if (typeof v !== "number" || isNaN(v)) v = 0;
+        npc.memory.actDisinhibition[actKey] = Math.max(0, Math.min(100, Math.round(v)));
+    });
 
     npc.hostility = Math.max(0, Math.min(100, Math.round(npc.hostility)));
     npc.memory.favorability = Math.max(-100, Math.min(100, Math.round(npc.memory.favorability)));
@@ -2151,6 +2193,7 @@ function ensureNPCRelationshipState(npc) {
         npc.memory.attraction = 0;
         npc.memory.arousal = 0;
         npc.memory.disinhibition = 0;
+        npc.memory.actDisinhibition = {};
     }
 
     return npc;
@@ -2353,6 +2396,32 @@ function applyNPCRelationshipImpact(npc, impact = {}) {
     return npc;
 }
 
+function applyActDisinhibitionDelta(npc, actKey, delta, reason) {
+    if (!npc || !npc.memory) return npc;
+    if (typeof actKey !== "string" || !actKey) return npc;
+    if (typeof delta !== "number" || delta === 0) return npc;
+    ensureNPCRelationshipState(npc);
+    if (!isAdultHumanoidNPC(npc)) return npc;
+    if (!npc.memory.actDisinhibition || typeof npc.memory.actDisinhibition !== "object") {
+        npc.memory.actDisinhibition = {};
+    }
+    var current = typeof npc.memory.actDisinhibition[actKey] === "number"
+        ? npc.memory.actDisinhibition[actKey] : 0;
+    var next = Math.max(0, Math.min(100, Math.round(current + delta)));
+    npc.memory.actDisinhibition[actKey] = next;
+    if (typeof reason === "string" && reason && typeof rememberStoryEvent === "function") {
+        rememberStoryEvent("intimacy", reason);
+    }
+    return npc;
+}
+
+function getActDisinhibition(npc, actKey) {
+    if (!npc || !npc.memory || !npc.memory.actDisinhibition) return 0;
+    if (typeof actKey !== "string" || !actKey) return 0;
+    var v = npc.memory.actDisinhibition[actKey];
+    return typeof v === "number" && !isNaN(v) ? Math.max(0, Math.min(100, v)) : 0;
+}
+
 function shouldNPCAttack(npc) {
     if (!npc) return false;
     ensureNPCRelationshipState(npc);
@@ -2372,7 +2441,6 @@ function decayNPCAffect(npc, steps = 1) {
 
     const amount = Math.max(1, Math.floor(steps || 1));
     npc.memory.arousal = Math.max(0, (npc.memory.arousal || 0) - amount * 4);
-    npc.memory.disinhibition = Math.max(0, (npc.memory.disinhibition || 0) - amount * 3);
     return npc;
 }
 
