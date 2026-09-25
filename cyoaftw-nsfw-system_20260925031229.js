@@ -1369,7 +1369,13 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       console.log("[NSFW System] Query catalogue wrapper installed");
       return true;
     }
-    
+
+    // Close setupQueryWrapper: without this brace the retry/call block below
+    // becomes a recursive self-call inside its own body, initNSFWSystem never
+    // closes where it should, and the whole init path (teleportNPC exposure,
+    // meetup/follower option injection, query wrapper install) never runs.
+    }
+
     // Try to setup the wrapper, retry if not ready
     const wrapperSuccess = setupQueryWrapper();
     if (!wrapperSuccess) {
@@ -2178,7 +2184,6 @@ stateInstr,
   };
 
   initNSFWSystem();
-}
 })();
 } catch (e) {
   console.error("[BODY-DEBUG] nsfw-system.js IIFE THREW:", e.message, e.stack);
