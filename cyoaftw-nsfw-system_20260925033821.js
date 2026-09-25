@@ -1460,10 +1460,14 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       })
     ));
 
-    // Oral group — player must have a penis; mouth accessible (not face-down)
+    // Oral group — player must have a penis; mouth accessible (not face-down).
+    // Once entered, the button becomes a continuation thrust so the entry
+    // narration is not repeated.
     if (nsfwPlayerHasPenis() && nsfwRegionExposed(item, "mouth")) {
       window.appendCombatGroup(el, "Oral", [
-        window.createCombatButton("Fuck mouth", () => fuckUnconsciousMouth(item))
+        item.mouthUsed
+          ? window.createCombatButton("Thrust into mouth", () => thrustBody(item, "mouth"))
+          : window.createCombatButton("Fuck mouth", () => fuckUnconsciousMouth(item))
       ]);
     }
 
@@ -1485,20 +1489,49 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       penButtons.push(window.createCombatButton("Finger anus", () => fingerBody(item, "anus")));
     }
 
-    // Penis insertion (player must have penis)
+    // Penis insertion (player must have penis). Once a hole is entered, its
+    // button becomes a continuation thrust so the entry narration is told
+    // once per hole instead of on every click.
     if (nsfwPlayerHasPenis()) {
       if (genitalType === "vagina" && nsfwRegionExposed(item, "genitals")) {
-        penButtons.push(window.createCombatButton("Penetrate vagina", () => penetrateBody(item, "vagina")));
+        penButtons.push(item.penetratedTarget === "vagina"
+          ? window.createCombatButton("Thrust into vagina", () => thrustBody(item, "vagina"))
+          : window.createCombatButton("Penetrate vagina", () => penetrateBody(item, "vagina")));
       } else if (isCloaca && nsfwRegionExposed(item, "genitals")) {
-        penButtons.push(window.createCombatButton("Penetrate cloaca", () => penetrateBody(item, "cloaca")));
+        penButtons.push(item.penetratedTarget === "cloaca"
+          ? window.createCombatButton("Thrust into cloaca", () => thrustBody(item, "cloaca"))
+          : window.createCombatButton("Penetrate cloaca", () => penetrateBody(item, "cloaca")));
       }
       if (hasAnus && nsfwRegionExposed(item, "anus")) {
-        penButtons.push(window.createCombatButton("Penetrate anus", () => penetrateBody(item, "anus")));
+        penButtons.push(item.penetratedTarget === "anus"
+          ? window.createCombatButton("Thrust into anus", () => thrustBody(item, "anus"))
+          : window.createCombatButton("Penetrate anus", () => penetrateBody(item, "anus")));
       }
     }
 
     if (penButtons.length) {
       window.appendCombatGroup(el, "Penetrate", penButtons);
+    }
+
+    // Climax group — surfaced once the player is inside one or more holes.
+    // Lists a finish button for every hole currently in use and still
+    // accessible in this pose.
+    if (nsfwPlayerHasPenis()) {
+      var climaxButtons = [];
+      if (item.penetratedTarget === "vagina" && nsfwRegionExposed(item, "genitals")) {
+        climaxButtons.push(window.createCombatButton("Finish inside (vagina)", () => climaxBody(item, "vagina")));
+      } else if (item.penetratedTarget === "cloaca" && nsfwRegionExposed(item, "genitals")) {
+        climaxButtons.push(window.createCombatButton("Finish inside (" + (nsfwGenitalLabel(item) || "cloaca") + ")", () => climaxBody(item, "cloaca")));
+      }
+      if (item.penetratedTarget === "anus" && nsfwRegionExposed(item, "anus")) {
+        climaxButtons.push(window.createCombatButton("Finish inside (anus)", () => climaxBody(item, "anus")));
+      }
+      if (item.mouthUsed && nsfwRegionExposed(item, "mouth")) {
+        climaxButtons.push(window.createCombatButton("Finish inside (mouth)", () => climaxBody(item, "mouth")));
+      }
+      if (climaxButtons.length) {
+        window.appendCombatGroup(el, "Climax", climaxButtons);
+      }
     }
 
     // Spit group — target-dependent exposure gating
@@ -1578,6 +1611,36 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       involuntary: "Reflexive only: a sphincter clench, body tension, a flinch. No awareness, no conscious reaction.",
       anatomyKeys: ["anus"]
     },
+    "thrust mouth": {
+      label: "continued oral sex (unconscious)",
+      difficulty: "The player is already inside the NPC's mouth. The jaw stays slack; the player controls depth and pace entirely, holding the head. Without a swallow reflex, drool runs freely.",
+      involuntary: "Reflexive only: gagging when pushed deep, drooling, an occasional involuntary swallow, shallow nasal breathing. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals"]
+    },
+    "thrust vagina": {
+      label: "continued vaginal sex (unconscious)",
+      difficulty: "The player is already inside. The limp hips rock passively with each drive; the body offers no rhythm of its own and must be held in place.",
+      involuntary: "Reflexive only: irregular flutters and clenches around the shaft, a faint hip twitch, possible involuntary lubrication from prolonged stimulation. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "vagina", "pubicHair"]
+    },
+    "thrust cloaca": {
+      label: "continued cloacal sex (unconscious)",
+      difficulty: "The player is already inside the vent. The muscular opening grips passively; the player sets the whole pace against the limp body.",
+      involuntary: "Reflexive only: vent flutters and clenches around the shaft, a faint hip twitch. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "anus"]
+    },
+    "thrust anus": {
+      label: "continued anal sex (unconscious)",
+      difficulty: "The player is already inside. The loosened ring offers little resistance now; the body jolts forward with each thrust, entirely passive.",
+      involuntary: "Reflexive only: weak sphincter flutters, body tension, a flinch on deep strokes. No awareness, no conscious reaction.",
+      anatomyKeys: ["anus"]
+    },
+    "climax inside": {
+      label: "climax inside an unconscious body",
+      difficulty: "The player is buried in an unresisting hole and finishes. The body stays slack throughout; release meets no participation at all.",
+      involuntary: "Reflexive only: one last clench or flutter around the shaft, a faint hip twitch, an involuntary swallow if in the mouth. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "anus"]
+    },
     "spit": {
       label: "spitting / degradation (unconscious)",
       difficulty: "The NPC cannot react. The spit lands on unmoving, unresponsive flesh.",
@@ -1602,6 +1665,14 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   // "finger vagina", "penetrate anus", "spit on face", "kiss cheek", etc.)
   function buildBodyActContext(actionDesc) {
     var d = String(actionDesc || "").toLowerCase();
+    if (d.indexOf("thrust") !== -1) {
+      if (d.indexOf("mouth") !== -1) return BODY_ACT_CONTEXT["thrust mouth"];
+      if (d.indexOf("cloaca") !== -1) return BODY_ACT_CONTEXT["thrust cloaca"];
+      if (d.indexOf("anus") !== -1) return BODY_ACT_CONTEXT["thrust anus"];
+      return BODY_ACT_CONTEXT["thrust vagina"];
+    }
+    if (d.indexOf("climax") !== -1 || d.indexOf("ejaculat") !== -1)
+      return BODY_ACT_CONTEXT["climax inside"];
     if (d.indexOf("fuck") !== -1) return BODY_ACT_CONTEXT["fuck mouth"];
     if (d.indexOf("finger") !== -1) {
       if (d.indexOf("cloaca") !== -1) return BODY_ACT_CONTEXT["finger cloacal vent"];
@@ -1984,6 +2055,92 @@ anatomyNote,
     const actionDesc = "penetrate " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} penetrated ${name}'s ${label} with their cock while they were unconscious.`, 8);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Continuation thrusting after the initial penetration, so the entry
+  // narration is told once per hole and repeated clicks read as ongoing sex
+  // instead of re-entering. target: "vagina" | "cloaca" | "anus" | "mouth"
+  function thrustBody(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwPlayerHasPenis()) return;
+    const name = nsfwGetEntityName(item);
+
+    var label;
+    var baseText;
+
+    if (target === "mouth") {
+      if (!item.mouthUsed) return;
+      if (!nsfwRegionExposed(item, "mouth")) return;
+      label = "mouth";
+      baseText = pickFrom([
+        `You hold ${name}'s slack head and fuck their limp mouth with steady strokes, sinking a little deeper with each push. Their jaw hangs loose around you; drool runs steadily from the corner of their lips.`,
+        `You pump into ${name}'s unresisting mouth, their head rocking in your grip with every drive. Their throat flutters in a reflexive gag each time you push deep.`
+      ]);
+    } else if (target === "vagina" || target === "cloaca") {
+      if (item.penetratedTarget !== target) return;
+      if (!nsfwRegionExposed(item, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina";
+      baseText = pickFrom([
+        `You thrust into ${name}'s unresisting ${label}, their limp hips rocking with each drive as you set your pace. Their hole clenches around you in irregular, involuntary flutters.`,
+        `You pump into ${name}'s slack ${label}, the unconscious body shifting beneath you with every push. The only answer from the body is a reflexive grip.`
+      ]);
+    } else if (target === "anus") {
+      if (item.penetratedTarget !== "anus") return;
+      if (!nsfwRegionExposed(item, "anus")) return;
+      label = "anus";
+      baseText = pickFrom([
+        `You drive into ${name}'s loosened anus with even strokes, their limp body jarring forward with each thrust. The ring flutters weakly around you, purely reflexive.`,
+        `You fuck ${name}'s unresisting anus, bottoming out again and again. Their cheeks flex faintly each time you push home; the body gives nothing but reflex.`
+      ]);
+    } else return;
+
+    item.thrustCount = (item.thrustCount || 0) + 1;
+    item.thrustTarget = target;
+    const actionDesc = "thrust " + label;
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} continued thrusting into ${name}'s ${label} while they were unconscious.`, 6);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Ejaculate into a hole the player is currently inside.
+  // target: "vagina" | "cloaca" | "anus" | "mouth"
+  function climaxBody(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwPlayerHasPenis()) return;
+    const name = nsfwGetEntityName(item);
+
+    var label = null;
+    if (target === "vagina" || target === "cloaca") {
+      if (item.penetratedTarget !== target) return;
+      if (!nsfwRegionExposed(item, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloaca") : "vagina";
+    } else if (target === "anus") {
+      if (item.penetratedTarget !== "anus") return;
+      if (!nsfwRegionExposed(item, "anus")) return;
+      label = "anus";
+    } else if (target === "mouth") {
+      if (!item.mouthUsed) return;
+      if (!nsfwRegionExposed(item, "mouth")) return;
+      label = "mouth";
+    } else return;
+
+    var baseText;
+    if (label === "mouth") {
+      baseText = `You bury yourself to the hilt in ${name}'s slack mouth and come, spilling down their throat. It works one involuntary swallow around you; excess drains from the corner of their lips as you pull out.`;
+    } else if (label === "anus") {
+      baseText = `You sheathe yourself fully in ${name}'s anus and come, spilling deep inside the unresisting body. The ring gives one last reflexive clench around you as you empty yourself into them.`;
+    } else {
+      baseText = `You hilt yourself in ${name}'s ${label} and come, spilling your release deep inside the unconscious body. Their passage flutters weakly around you, purely reflex, as you drain yourself into them.`;
+    }
+
+    item.bodyClimaxCount = (item.bodyClimaxCount || 0) + 1;
+    item.bodyClimaxTarget = target;
+    const actionDesc = "climax inside " + label;
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} ejaculated into ${name}'s ${label} while they were unconscious.`, 8);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
   }
