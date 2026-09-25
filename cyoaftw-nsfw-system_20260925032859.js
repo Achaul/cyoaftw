@@ -151,8 +151,10 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
     if (isHumanoid && gender && gender !== "none" && gender !== "undefined") {
       const g = String(gender).toLowerCase();
-      anatomy.hips = { sizeCategory: pickFrom(["narrow", "average", "wide"]), description: anatomy.hips.sizeCategory, status: [], health: 100 };
-      anatomy.buttocks = { sizeCategory: pickFrom(["small", "medium", "large"]), description: anatomy.buttocks.sizeCategory, status: [], health: 100 };
+      const hipSize = pickFrom(["narrow", "average", "wide"]);
+      anatomy.hips = { sizeCategory: hipSize, description: hipSize, status: [], health: 100 };
+      const buttockSize = pickFrom(["small", "medium", "large"]);
+      anatomy.buttocks = { sizeCategory: buttockSize, description: buttockSize, status: [], health: 100 };
 
       let breastSize = "flat";
       let breastDescription = "a flat, toned chest";
@@ -1848,8 +1850,13 @@ anatomyNote,
   // bodies behave like freshly spawned ones.
   function nsfwEnsureBodyTraits(item) {
     if (!item || item.nsfwTraits) return;
-    var traits = generatePhysicalTraits(item);
-    if (traits) item.nsfwTraits = traits;
+    try {
+      var traits = generatePhysicalTraits(item);
+      if (traits) item.nsfwTraits = traits;
+    } catch (e) {
+      // A generation failure must not break the body menu or examine flow.
+      console.warn("[Body Actions] Physical trait generation failed for legacy body:", e);
+    }
   }
 
   function nsfwBodyGenitalType(item) {
