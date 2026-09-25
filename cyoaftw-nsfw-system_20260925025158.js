@@ -1053,7 +1053,10 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       const envMod = getEnvironmentalModifier(window.G.activeRoom);
       if (option.relationshipImpact.lust) applyLustImpact(npc, option.relationshipImpact.lust, envMod);
       if (option.relationshipImpact.attraction) applyAttractionImpact(npc, option.relationshipImpact.attraction);
-      if (option.action && typeof option.action === "function") {
+      // Skip if the engine already fired the action itself (it does this for
+      // options whose action is a function, e.g. ask-to-follow/stop-following,
+      // because the chat buttons bypass this wrapper on Perchance).
+      if (option.action && typeof option.action === "function" && !option.__actionFired) {
         console.log("[NSFW Wrapper] Firing action for option:", option.id, "with NPC:", npc.name);
         option.action(npc);
       }
