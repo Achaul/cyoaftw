@@ -1437,6 +1437,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
   function appendUnconsciousBodyGroups(item, el) {
     if (!item || !el) return;
+    nsfwEnsureBodyTraits(item);
 
     // Kiss group (always available — mouth/cheek are never clothing-gated)
     window.appendCombatGroup(el, "Kiss", [
@@ -1470,7 +1471,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     var hasAnus = nsfwBodyHasAnus(item);
     var isCloaca = genitalType === "cloaca-vent" || genitalType === "cloaca-penis";
 
-    // Finger: vagina or cloacal vent (exposed on back, lower garment gone)
+    // Finger: vagina or cloacal vent (exposed on back/side, lower garment gone)
     if (genitalType === "vagina" && nsfwRegionExposed(item, "genitals")) {
       penButtons.push(window.createCombatButton("Finger vagina", () => fingerBody(item, "vagina")));
     } else if (isCloaca && nsfwRegionExposed(item, "genitals")) {
@@ -1692,12 +1693,41 @@ anatomyNote,
     return prompt;
   }
 
+  // Print body-interaction narration to the chat panel (the same channel
+  // intimacy encounters use) instead of the narration bar. Falls back to
+  // setNarration when the engine exposure is missing.
+  function nsfwPrintBodyNarration(text) {
+    if (typeof window.addIntimacyNarration === "function") {
+      window.addIntimacyNarration(text);
+    } else {
+      window.setNarration(text);
+    }
+  }
+
+  // Replace the most recent body-interaction chat entry with the AI-polished
+  // version. The polished text re-enters via nsfwPrintBodyNarration so it
+  // gets the same typewriter presentation; removing the old entry avoids a
+  // base + polished duplicate in the chat log.
+  function nsfwReplaceLastBodyNarration(text) {
+    if (typeof window.addIntimacyNarration !== "function") {
+      window.setNarration(text);
+      return;
+    }
+    var chatLog = document.getElementById("chatLogEl");
+    var chatEntries = chatLog ? chatLog.querySelectorAll(".intimacy-narration") : [];
+    var lastEntry = chatEntries.length ? chatEntries[chatEntries.length - 1] : null;
+    if (lastEntry && lastEntry.parentNode) {
+      lastEntry.parentNode.removeChild(lastEntry);
+    }
+    window.addIntimacyNarration(text);
+  }
+
   // Show the plain narration immediately, then fire a background ai() call
-  // to polish it. When the result returns, update the narration element if
+  // to polish it. When the result returns, update the chat panel if
   // the player is still looking at this body. Non-blocking — same pattern as
   // the intimacy system's player-narrative prefetch.
   function polishBodyNarration(item, actionDesc, baseText) {
-    window.setNarration(baseText);
+    nsfwPrintBodyNarration(baseText);
 
     var _ai = typeof window.ai === "function" ? window.ai : null;
     if (!_ai) return;
@@ -1723,7 +1753,7 @@ anatomyNote,
 
         // Only update if the player is still looking at this body
         if (window.G && window.G.activeObject === item) {
-          window.setNarration(polished.trim());
+          nsfwReplaceLastBodyNarration(polished.trim());
         }
       } catch (e) {
         console.warn("[Body Actions] Narration polish failed for:", actionDesc, e);
@@ -1811,6 +1841,17 @@ anatomyNote,
 
   // Determine NPC genital type from nsfwTraits.anatomy.
   // Returns "vagina", "penis", "cloaca-vent", "cloaca-penis", or null.
+  // Bodies/NPCs spawned before initNSFWSystem ran (or while the createNPC
+  // wrapper was missing) have no nsfwTraits, which leaves genital/anus/breast
+  // gating dead — the Penetrate and Spit groups render empty and only Oral
+  // shows. Heal lazily: generate physical traits on first contact so legacy
+  // bodies behave like freshly spawned ones.
+  function nsfwEnsureBodyTraits(item) {
+    if (!item || item.nsfwTraits) return;
+    var traits = generatePhysicalTraits(item);
+    if (traits) item.nsfwTraits = traits;
+  }
+
   function nsfwBodyGenitalType(item) {
     var a = item && item.nsfwTraits && item.nsfwTraits.anatomy;
     if (!a || !a.genitals || !a.genitals.description) return null;
@@ -1850,6 +1891,10 @@ anatomyNote,
   // Check whether a body region is bare and accessible in the current pose.
   // Mirrors BODY_POSITION_VISIBLE / buildBodyExposureNote logic.
   // region: "mouth" | "breasts" | "genitals" | "anus"
+  // Pose access (garment for the region must also be gone):
+  //   back → mouth, chest/breasts, genitals
+  //   side → mouth, breasts, genitals, anus
+  //   face → anus only
   function nsfwRegionExposed(item, region) {
     if (!item) return false;
     var position = item.bodyPosition || "back";
@@ -1857,8 +1902,8 @@ anatomyNote,
     var lowerCovered = nsfwBodySlotPresent(item, "lower");
 
     if (region === "mouth") return position !== "face";
-    if (region === "breasts") return !upperCovered && position === "back";
-    if (region === "genitals") return !lowerCovered && position === "back";
+    if (region === "breasts") return !upperCovered && (position === "back" || position === "side");
+    if (region === "genitals") return !lowerCovered && (position === "back" || position === "side");
     if (region === "anus") return !lowerCovered && (position === "side" || position === "face");
     return false;
   }
@@ -1969,7 +2014,8 @@ anatomyNote,
   // === Unconscious body: examine narration (NSFW) ==========================
   // Exposed as window.describeUnconsciousBodyExamine so the SFW engine's
   // examineRoomObject() can call it behind a typeof guard when NSFW is
-  // enabled. Returns an immediate (SFW-safe) base string for setNarration,
+  // enabled. Returns an immediate (SFW-safe) base string for the chat panel
+  // (addIntimacyNarration, same channel intimacy encounters use),
   // then fires a background ai() call to polish it into a more intimate,
   // sensory description of the unconscious body. Mirrors polishBodyNarration
   // but is read-only (the player is just looking, not acting on the body).
@@ -1979,7 +2025,8 @@ anatomyNote,
   //   1. Which regions are covered, from item.equipped (upper → chest, lower →
   //      groin/rear). Looting via Search deletes these slots, so this stays live.
   //   2. Which of the *exposed* regions are actually visible in the current
-  //      bodyPosition (back → front; side → rear; face → rear + back).
+  //      bodyPosition (back → chest + groin; side → chest + groin + rear;
+  //      face → rear only).
   //   3. Anatomy descriptors for the visible+exposed parts, pulled from
   //      item.nsfwTraits.anatomy (and item.anatomy for build/skin context).
   // Returns a prompt note string. Empty string when nothing is exposed, so
@@ -2001,9 +2048,9 @@ anatomyNote,
       upper: ["breasts", "nipples"],
       lower: ["pubicHair", "vagina", "penis"]
     },
-    side: {   // profile; rear is visible
-      upper: [],            // chest is mostly hidden against the ground
-      lower: ["buttocks"]
+    side: {   // profile; front and rear both reachable
+      upper: ["breasts", "nipples"],
+      lower: ["pubicHair", "vagina", "penis", "buttocks"]
     },
     face: {   // face-down; back and rear visible
       upper: [],            // back is bare but has no anatomy descriptor key
@@ -2057,6 +2104,7 @@ anatomyNote,
   }
 
   function describeBodyExamineBase(item) {
+    nsfwEnsureBodyTraits(item);
     var name = nsfwGetEntityName(item);
     var isCorpse = item.bodyState === "corpse";
     var position = item.bodyPosition || "back";
@@ -2154,7 +2202,7 @@ stateInstr,
 
         // Only update if the player is still looking at this body
         if (window.G && window.G.activeObject === item) {
-          window.setNarration(polished.trim());
+          nsfwReplaceLastBodyNarration(polished.trim());
         }
       } catch (e) {
         console.warn("[Body Actions] Examine narration polish failed:", e);
