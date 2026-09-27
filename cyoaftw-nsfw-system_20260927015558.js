@@ -939,6 +939,11 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         },
         relationshipImpact: {},
         action: function(npc) {
+          // An earlier suggested-destination (follow-seduction-suggestion)
+          // is moot once the NPC follows the player instead; clear it so
+          // the query wrapper does not keep applying date-context filtering.
+          delete npc._pendingSeductionDestination;
+          delete npc._pendingSeductionOption;
           if (typeof window.addSessionFollower === "function") {
             window.addSessionFollower(npc);
           }
@@ -968,6 +973,11 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         action: function(npc) {
           if (typeof window.removeSessionFollower === "function") {
             window.removeSessionFollower(npc);
+          }
+          // No longer following — drop the follow-player marker so the
+          // meal options' followedToPrivate gate does not stay satisfied.
+          if (npc && npc._pendingSeductionOption === "follow-player") {
+            delete npc._pendingSeductionOption;
           }
           // Show confirmation message
           if (typeof window.addChatMessage === "function") {
@@ -1234,8 +1244,13 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
                           context.room.coords === npc._meetupLocation;
         
         // Check if there's a pending seduction/proposition that needs follow-up (show follow option only)
-        const hasPendingSeduction = npc && (npc._pendingSeductionDestination || npc._pendingSeductionOption) && 
-                                   !npc._meetupArrived;
+        // "follow-player" (set by ask-npc-to-follow) means the NPC already
+        // agreed and is actively following — it is not a pending decision.
+        // Counting it here would lock every later conversation with the NPC
+        // into date-only filtering (only Flirt/Say Goodbye survive).
+        const hasPendingSeduction = npc && !npc._meetupArrived &&
+                                   (npc._pendingSeductionDestination ||
+                                    (npc._pendingSeductionOption && npc._pendingSeductionOption !== "follow-player"));
         
         // Check if intimacy encounter is active
         const isIntimacyActive = npc && npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active;
