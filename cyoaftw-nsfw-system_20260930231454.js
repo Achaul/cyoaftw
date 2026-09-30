@@ -1365,8 +1365,13 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
             if (phase1NsfwIds.includes(option.id)) return true;
             // Exclude non-NSFW Phase 1 options
             if (option.phase === 1) return false;
-            // Exclude options without phase (base catalogue social options)
-            if (option.phase === undefined) return false;
+            // Keep base catalogue social options (no phase field) available in
+            // private contexts. Dropping them here removed every topic AND the
+            // greeting options, leaving only "goodbye" — and because the
+            // greeting gate in queryConversationCatalogue never cleared
+            // without a greeting option to click, topics stayed hidden for
+            // the entire session.
+            if (option.phase === undefined) return true;
             return false;
           });
           if (npc && npc.name) {
