@@ -3408,7 +3408,8 @@ ${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Ma
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
 ${_dialogueRule}
 ${_sampleModeLines}
-- Match the length of the BASE RESPONSE. A short one-liner stays 1-4 sentences. A staged multi-beat passage (slow entry told step by step: press, slip, reposition, stretch, pop inside, pause, slide) keeps EVERY beat — do not compress it, do not summarize it.
+- Your output is ONLY the NPC's immediate REACTION to the act: her body, her sounds, her face, her words. The player's action is described separately — do NOT re-narrate it. Cut any "as you push/slide/fill" clause that describes what the PLAYER does.
+- Keep it SHORT: one or two sentences, under 25 words total. This is a reaction beat, not a paragraph.
 - If the base response includes a sound (grunt, gasp, squeal), keep it.
 - If the base response mentions depth, pressure, or a specific body part, keep that detail.
 
@@ -3441,7 +3442,7 @@ ${(() => {
     var _arousal = (_intimacy.arousal && _intimacy.arousal.npc) || 0;
     var _isAroused = _arousal > 400;
     var _isWet = _arousal > 480;
-    var _flavor = (typeof buildHiddenFlavorContext === 'function') ? buildHiddenFlavorContext(npc, action.target, _intimacy, { isAroused: _isAroused, isWet: _isWet, hasLube: hasLube, tool: action.tool }) : "";
+    var _flavor = (typeof buildHiddenFlavorContext === 'function') ? buildHiddenFlavorContext(npc, action.target, _intimacy, { isAroused: _isAroused, isWet: _isWet, hasLube: hasLube, tool: action.tool, isInsertive: (action.type === "penetrate" || action.type === "continue" || (String(action.tool || "").toLowerCase() === "fingers" && ["finger", "enter"].includes(String(action.verb || "").toLowerCase())) || (["mouth", "tongue"].includes(String(action.tool || "").toLowerCase()) && String(action.verb || "").toLowerCase() === "penetrate")) }) : "";
     return _flavor ? "\n" + _flavor + "\n" : "";
 })()}
 RESPOND with only the polished text, nothing else:`;
@@ -3855,7 +3856,7 @@ function getSensoryToolWord(tool) {
  * @param {Object} npc - The NPC
  * @param {string} target - The body part being targeted
  * @param {Object} intimacy - The intimacy state (for anti-repetition)
- * @param {Object} options - { isAroused, isWet, hasLube, isPenetration, tool }
+ * @param {Object} options - { isAroused, isWet, hasLube, isPenetration, isInsertive, tool }
  */
 function getSensoryFragment(npc, target, intimacy, options) {
     if (!npc || !target) return "";
@@ -3864,6 +3865,12 @@ function getSensoryFragment(npc, target, intimacy, options) {
     var applyTool = function (frag) {
         return String(frag).replace(/\{yourTool\}/g, toolWord);
     };
+    // Whether the act actually puts the tool INSIDE the target. Friction and
+    // fluids pools describe the interior ("her depths gripping you", "the
+    // slick channel accepting you") — they read as penetration when the act
+    // is only external (press, rub, tease, spread). Callers compute this
+    // from act type + tool + verb.
+    var isInsertive = (options.isInsertive === undefined) ? options.isPenetration : options.isInsertive;
 
     var targetKey = "general";
     var targetLower = String(target).toLowerCase();
@@ -3873,18 +3880,25 @@ function getSensoryFragment(npc, target, intimacy, options) {
     else if (targetLower === "breasts" || targetLower === "nipples") targetKey = "breasts";
     else if (targetLower === "buttocks" || targetLower === "butt" || targetLower === "ass") targetKey = "buttocks";
 
-    var fragments = [];
+    // Two fragment kinds, spliced differently by the caller:
+    //  - clauses: ", ..." tails that slot in before the final period
+    //  - sentences: " You ..." full mini-narratives appended AFTER the
+    //    base text (partial withdrawal). Splicing sentences in front of
+    //    the period produced "…taking every bit of you You pull back…in.."
+    var clauses = [];
+    var sentences = [];
 
-    // Friction (30% chance)
-    if (Math.random() < 0.30) {
+    // Friction (30% chance, insertive acts only — the pool describes the interior)
+    if (isInsertive && Math.random() < 0.30) {
         var pool = SENSORY_FRAGMENTS.friction[targetKey] || SENSORY_FRAGMENTS.friction.general;
-        if (pool.length) fragments.push(applyTool(pickUnique(pool, intimacy, "friction")));
+        if (pool.length) clauses.push(applyTool(pickUnique(pool, intimacy, "friction")));
     }
 
-    // Fluids (25% chance, only when aroused/wet/lubed)
-    if (Math.random() < 0.25 && (options.isAroused || options.isWet || options.hasLube)) {
+    // Fluids (25% chance, only when aroused/wet/lubed AND insertive —
+    // "the slick channel accepting you smoothly" claims entry)
+    if (isInsertive && Math.random() < 0.25 && (options.isAroused || options.isWet || options.hasLube)) {
         var fluidPool = SENSORY_FRAGMENTS.fluids[targetKey] || SENSORY_FRAGMENTS.fluids.general;
-        if (fluidPool.length) fragments.push(applyTool(pickUnique(fluidPool, intimacy, "fluids")));
+        if (fluidPool.length) clauses.push(applyTool(pickUnique(fluidPool, intimacy, "fluids")));
     }
 
     // Skin/pigmentation (20% chance)
@@ -3899,7 +3913,7 @@ function getSensoryFragment(npc, target, intimacy, options) {
             var skinFrag = pickUnique(skinPool, intimacy, "skin");
             skinFrag = skinFrag.replace(/\{skinTone\}/g, skinTone || "flushed");
             skinFrag = skinFrag.replace(/\{interiorColor\}/g, interiorColor || "pink");
-            fragments.push(skinFrag);
+            clauses.push(skinFrag);
         }
     }
 
@@ -3910,14 +3924,15 @@ function getSensoryFragment(npc, target, intimacy, options) {
         if (pubicPool.length && pubicDesc) {
             var pubicFrag = applyTool(pickUnique(pubicPool, intimacy, "pubic"));
             pubicFrag = pubicFrag.replace(/\{pubicDesc\}/g, pubicDesc);
-            fragments.push(pubicFrag);
+            clauses.push(pubicFrag);
         }
     }
 
     // Partial withdrawal (10% chance, cock penetration only - the fragments
-    // say "tip"/"shaft", which reads wrong for finger and tongue acts)
+    // say "tip"/"shaft", which reads wrong for finger and tongue acts).
+    // Full sentences: appended after the base text, not spliced mid-sentence.
     if (Math.random() < 0.10 && options.isPenetration && toolWord === "shaft") {
-        fragments.push(pickUnique(SENSORY_FRAGMENTS.partialWithdrawal, intimacy, "withdrawal"));
+        sentences.push(pickUnique(SENSORY_FRAGMENTS.partialWithdrawal, intimacy, "withdrawal"));
     }
 
     // Size difference (25% chance, only when sizes differ)
@@ -3925,7 +3940,7 @@ function getSensoryFragment(npc, target, intimacy, options) {
         var rel = getRelativeSize(options.player, npc);
         if (rel && SENSORY_FRAGMENTS.sizeDifference[rel]) {
             if (Math.random() < 0.25) {
-                fragments.push(pickUnique(SENSORY_FRAGMENTS.sizeDifference[rel], intimacy, "size"));
+                clauses.push(pickUnique(SENSORY_FRAGMENTS.sizeDifference[rel], intimacy, "size"));
             }
         }
     }
@@ -3943,12 +3958,15 @@ function getSensoryFragment(npc, target, intimacy, options) {
             if (speciesPool && speciesPool.length) {
                 var speciesFrag = pickUnique(speciesPool, intimacy, "species");
                 speciesFrag = speciesFrag.replace(/\{skinDesc\}/g, skinDesc);
-                fragments.push(speciesFrag);
+                clauses.push(speciesFrag);
             }
         }
     }
 
-    return fragments.join("");
+    var result = {};
+    if (clauses.length) result.clauses = clauses.join("");
+    if (sentences.length) result.sentences = sentences.join(" ");
+    return (result.clauses || result.sentences) ? result : "";
 }
 
 /**
@@ -3971,6 +3989,10 @@ function buildHiddenFlavorContext(npc, target, intimacy, options) {
     var applyTool = function (frag) {
         return String(frag).replace(/\{yourTool\}/g, toolWord);
     };
+    // Interior-flavored lines (friction/fluids) only fit acts that actually
+    // put the tool inside; external acts default to TRUE only when the
+    // caller doesn't say — new callers pass isInsertive explicitly.
+    var isInsertive = (options.isInsertive === undefined) ? true : options.isInsertive;
     var skinTone = getSkinDescription(npc) || "";
     var pubicDesc = getPubicDescription(npc) || "";
     var interiorColor = "";
@@ -3978,11 +4000,13 @@ function buildHiddenFlavorContext(npc, target, intimacy, options) {
     else if (targetKey === "anus") interiorColor = getAnalInteriorColor(npc) || "";
 
     // Friction
-    var frictionPool = SENSORY_FRAGMENTS.friction[targetKey] || SENSORY_FRAGMENTS.friction.general;
+    var frictionPool = isInsertive
+        ? (SENSORY_FRAGMENTS.friction[targetKey] || SENSORY_FRAGMENTS.friction.general)
+        : [];
     if (frictionPool.length) flavors.push("Friction: " + applyTool(pickRandom(frictionPool)).replace(/^,\s*/, ""));
 
     // Fluids
-    if (options.isAroused || options.isWet || options.hasLube) {
+    if (isInsertive && (options.isAroused || options.isWet || options.hasLube)) {
         var fluidPool = SENSORY_FRAGMENTS.fluids[targetKey] || SENSORY_FRAGMENTS.fluids.general;
         if (fluidPool.length) flavors.push("Fluids: " + applyTool(pickRandom(fluidPool)).replace(/^,\s*/, ""));
     }
@@ -8154,17 +8178,38 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     // Inject sensory fragments (friction, fluids, skin, pubic hair, partial withdrawal)
     // These add variety and erotic detail to otherwise repetitive templates.
     if (finalNarrative) {
+        // Insertive acts put the tool inside: penetration/continue acts, finger
+        // entry, and tongue penetration. External acts (press, rub, tease,
+        // spread) never get interior-flavored fragments like "the slick
+        // channel accepting you smoothly" — that read as penetration during
+        // a press and confused the act being performed.
+        var _toolLc = String(act.tool || "").toLowerCase();
+        var _verbLc = String(act.verb || "").toLowerCase();
+        var _isInsertiveAct = act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE
+            || (_toolLc === "fingers" && (_verbLc === "finger" || _verbLc === "enter"))
+            || ((_toolLc === "mouth" || _toolLc === "tongue") && _verbLc === "penetrate");
         var sensory = getSensoryFragment(npc, act.target, intimacy, {
             player: player,
             isAroused: isAroused,
             isWet: isWet,
             hasLube: intimacy ? intimacy.hasLube : false,
             isPenetration: act.type === "penetrate" || act.type === "continue",
+            isInsertive: _isInsertiveAct,
             tool: act.tool
         });
         if (sensory) {
-            // Append sensory fragments before the final period
-            finalNarrative = finalNarrative.replace(/\.$/, sensory + ".");
+            // Clause fragments slot in before the final period.
+            if (sensory.clauses) {
+                finalNarrative = finalNarrative.replace(/\.$/, sensory.clauses + ".");
+            }
+            // Sentence fragments (partial withdrawal) are appended after the
+            // base text as their own sentences — splicing them in front of
+            // the final period produced "…bit of you You pull back…in..".
+            if (sensory.sentences) {
+                var _senBase = finalNarrative.replace(/\s+$/, "");
+                if (!/[.!?…]$/.test(_senBase)) _senBase += ".";
+                finalNarrative = _senBase + " " + sensory.sentences.trim();
+            }
         }
     }
 
