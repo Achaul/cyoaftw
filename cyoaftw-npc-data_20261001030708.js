@@ -1417,6 +1417,49 @@ const NPC_CONVERSATION_CATALOGUE = [
             excludedActionTags: ["push-for-answers"]
         }
     },
+    // -- Stat-gated options (minStats / maxStats conditions) --------------
+    // Examples of the stat thresholds: the player's live stat (base + status
+    // effects + gear/hygiene for charisma) must meet the threshold for the
+    // option to appear at all. Kept chaste - anything beyond a friendly
+    // charm belongs in the NSFW catalogue.
+    {
+        id: "steady-nerve",
+        priority: 187,
+        repeat: "session",
+        resetTimer: { turns: 6 },
+        label: "Hold their gaze and stay steady",
+        textVariants: [
+            "You hold their gaze without flinching and let the silence settle.",
+            "You don't give an inch. Your voice stays level and your eyes stay on theirs.",
+            "You stand your ground, calm and unhurried, and wait for them to blink first."
+        ],
+        intent: "bold",
+        relationshipImpact: { mood: 0, favor: 1, hostility: -2, intent: "bold", markMet: true, actionTag: "steady-nerve", statXP: { willpower: 1 } },
+        conditions: {
+            minHostility: 50,
+            minStats: { willpower: 5 },
+            excludedActionTags: ["steady-nerve"]
+        }
+    },
+    {
+        id: "win-them-over",
+        priority: 188,
+        repeat: "session",
+        resetTimer: { turns: 6 },
+        label: "Turn on the charm",
+        textVariants: [
+            "You lean on an easy smile and a few warm words, and watch them loosen up.",
+            "You turn on your most disarming charm and let it do the work.",
+            "You pitch your tone friendly and unforced, and they seem to soften."
+        ],
+        intent: "flattery",
+        relationshipImpact: { mood: 1, favor: 5, hostility: -1, intent: "flattery", markMet: true, actionTag: "win-them-over" },
+        conditions: {
+            maxHostility: 49,
+            minStats: { charisma: 5 },
+            excludedActionTags: ["win-them-over"]
+        }
+    },
     {
         id: "goodbye",
         priority: 190,
@@ -1437,6 +1480,19 @@ const NPC_CONVERSATION_CATALOGUE = [
 // Export catalogue to window immediately after definition for NSFW system access
 if (typeof window !== "undefined") {
     window.NPC_CONVERSATION_CATALOGUE = NPC_CONVERSATION_CATALOGUE;
+}
+
+// Player's live stat values (base + status effects + gear/hygiene for
+// charisma, via getSetupStat in cyoaftw-engine-CORE.js) for the minStats /
+// maxStats conditions. Guarded with typeof so this file keeps working when
+// loaded standalone or before the engine payload exposes getSetupStat.
+function _npcGetPlayerStats() {
+    var out = {};
+    if (typeof getSetupStat !== "function") return out;
+    ["physicalProwess", "flexibility", "willpower", "endurance", "charisma"].forEach(function (statKey) {
+        out[statKey] = getSetupStat(statKey, 3);
+    });
+    return out;
 }
 
 function getNPCConversationContext(npc, extraContext = {}) {
@@ -1517,7 +1573,9 @@ function getNPCConversationContext(npc, extraContext = {}) {
         playerTraits: typeof getPlayerTraitCounts === "function" ? getPlayerTraitCounts() : {},
         playerDominantTrait: typeof getPlayerDominantTrait === "function"
             ? String(getPlayerDominantTrait() || "").toLowerCase()
-            : ""
+            : "",
+        // Live player stat values for minStats/maxStats conditions.
+        playerStats: _npcGetPlayerStats()
     };
 }
 
@@ -1634,6 +1692,31 @@ function conversationConditionMatches(conditions, ctx) {
             return have >= need;
         });
         if (!meetsAll) return false;
+    }
+
+    // Player stat thresholds, e.g. { charisma: 5 } requires the player's
+    // current (gear/status-adjusted) Charisma to be at least 5. minStats and
+    // maxStats are checked independently, so both can be used together for a
+    // band. A stat missing from ctx.playerStats reads as the default 3.
+    if (conditions.minStats && typeof conditions.minStats === "object") {
+        const statsNow = ctx.playerStats || {};
+        const meetsMinStats = Object.keys(conditions.minStats).every(function (statKey) {
+            const need = conditions.minStats[statKey];
+            if (typeof need !== "number") return true;
+            const have = typeof statsNow[statKey] === "number" ? statsNow[statKey] : 3;
+            return have >= need;
+        });
+        if (!meetsMinStats) return false;
+    }
+    if (conditions.maxStats && typeof conditions.maxStats === "object") {
+        const statsNowMax = ctx.playerStats || {};
+        const meetsMaxStats = Object.keys(conditions.maxStats).every(function (statKey) {
+            const cap = conditions.maxStats[statKey];
+            if (typeof cap !== "number") return true;
+            const have = typeof statsNowMax[statKey] === "number" ? statsNowMax[statKey] : 3;
+            return have <= cap;
+        });
+        if (!meetsMaxStats) return false;
     }
 
     if (conditions.requiredActionTags && !_npcActionTagsInclude(ctx.actionTags, conditions.requiredActionTags)) return false;
@@ -2236,6 +2319,277 @@ function isAdultHumanoidNPC(npc) {
     );
 }
 
+// -- NPC "TYPE" (who an NPC is drawn to) -----------------------------------
+// Each adult humanoid NPC gets two stable preferences ("type") drawn from
+// things the game actually knows about the player: dominant personality
+// trait, outward bearing (stat impression), presentation (clothing/hygiene),
+// and the build/hair/eyes picked at character creation. How well the player
+// matches scales how much attraction their actions earn (see
+// getPlayerAppealMultiplier, applied in applyNPCRelationshipImpact) - a match
+// helps, a mismatch dampens, and the player's Charisma softens mismatches and
+// slightly boosts matches. It never blocks anything outright and never makes
+// attraction negative on its own. Cosmetic/SFW only: it is a multiplier on
+// existing attraction gains, not new content.
+const NPC_TYPE_AXES = ["trait", "bearing", "presentation", "build", "hairColor", "hairStyle", "eyeColor"];
+const NPC_TYPE_TRAIT_VALUES = ["curiosity", "empathy", "boldness"];
+const NPC_TYPE_BEARING_STAT = { imposing: "physicalProwess", nimble: "flexibility", steady: "willpower", hardy: "endurance" };
+const NPC_TYPE_PRESENTATION_VALUES = ["polished", "unfussy"];
+// Mirrors the character-creation <select> options in cyoaftw-engine-CORE.html.
+const NPC_TYPE_PHYSICAL_VALUES = {
+    build: ["lean", "athletic", "sturdy", "broad", "soft", "slight"],
+    hairColor: ["black", "dark brown", "brown", "auburn", "red", "blond", "gray", "white"],
+    hairStyle: ["cropped", "short", "loose", "long", "braided", "tied back", "curly", "messy"],
+    eyeColor: ["brown", "hazel", "green", "blue", "gray", "amber"]
+};
+const NPC_TYPE_SCORE_STEP = 0.15;       // multiplier change per point of match score
+const NPC_TYPE_MULTIPLIER_MIN = 0.6;
+const NPC_TYPE_MULTIPLIER_MAX = 1.4;
+const NPC_TYPE_CHARISMA_SOFTEN_PER_POINT = 0.1;  // mismatch reduction per CHA above 3
+const NPC_TYPE_CHARISMA_SOFTEN_MAX = 0.6;
+const NPC_TYPE_CHARISMA_BOOST_PER_POINT = 0.05;  // match boost per CHA above 3
+const NPC_TYPE_CHARISMA_BOOST_MAX = 0.5;
+
+function _npcTypeHash(text) {
+    var h = 2166136261;
+    var str = String(text || "");
+    for (var i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+}
+
+// Small seeded PRNG (mulberry32) so an NPC's type is stable across saves and
+// visits without needing to be rolled at creation time.
+function _npcTypeRng(seed) {
+    var a = seed >>> 0;
+    return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        var t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function _npcTypePick(list, rng) {
+    return list[Math.floor(rng() * list.length) % list.length];
+}
+
+function _npcTypeValuesForAxis(axis, rng) {
+    if (axis === "trait") return [_npcTypePick(NPC_TYPE_TRAIT_VALUES, rng)];
+    if (axis === "bearing") return [_npcTypePick(Object.keys(NPC_TYPE_BEARING_STAT), rng)];
+    if (axis === "presentation") return [_npcTypePick(NPC_TYPE_PRESENTATION_VALUES, rng)];
+    var pool = NPC_TYPE_PHYSICAL_VALUES[axis].slice();
+    var first = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+    var second = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+    return [first, second];
+}
+
+// A personality-driven lead preference: archetype first, then role, then
+// temperament. Returns an axis/value or null (then the lead is random).
+function _npcTypeLeadHint(npc, rng) {
+    var archetype = String(npc.archetype || "").toLowerCase();
+    var role = String(npc.role || "").toLowerCase();
+    var temperament = String(npc.temperament || "").toLowerCase();
+    var archetypeHints = {
+        hero: { axis: "trait", values: ["boldness"] },
+        destroyer: { axis: "trait", values: ["boldness"] },
+        scoundrel: { axis: "trait", values: ["boldness"] },
+        trickster: { axis: "trait", values: ["boldness"] },
+        sage: { axis: "trait", values: ["curiosity"] },
+        explorer: { axis: "trait", values: ["curiosity"] },
+        caretaker: { axis: "trait", values: ["empathy"] },
+        romantic: { axis: "trait", values: ["empathy"] },
+        martyr: { axis: "trait", values: ["empathy"] },
+        guardian: { axis: "bearing", values: ["steady"] },
+        schemer: { axis: "presentation", values: ["polished"] }
+    };
+    if (archetypeHints[archetype]) return archetypeHints[archetype];
+
+    var roleHints = [
+        { words: ["scholar", "sage", "mage", "wizard", "alchemist", "scribe", "librarian"], axis: "trait", values: ["curiosity"] },
+        { words: ["healer", "priest", "cleric", "herbalist", "innkeeper", "bartender"], axis: "trait", values: ["empathy"] },
+        { words: ["guard", "soldier", "mercenary", "raider", "bandit", "hunter", "scout", "blacksmith", "miner"], axis: "bearing", values: [_npcTypePick(["imposing", "steady", "hardy", "nimble"], rng)] }
+    ];
+    for (var i = 0; i < roleHints.length; i++) {
+        var hint = roleHints[i];
+        if (hint.words.some(function (word) { return role.indexOf(word) !== -1; })) return hint;
+    }
+
+    var temperamentHints = {
+        bold: { axis: "trait", values: ["boldness"] },
+        aggressive: { axis: "trait", values: ["boldness"] },
+        curious: { axis: "trait", values: ["curiosity"] },
+        friendly: { axis: "trait", values: ["empathy"] },
+        calm: { axis: "bearing", values: ["steady"] }
+    };
+    return temperamentHints[temperament] || null;
+}
+
+// Lazily seeds npc.typePrefs (so existing saves and already-spawned NPCs get
+// a type too). Two preferences on different axes; stable per NPC.
+function ensureNPCTypePreferences(npc) {
+    if (!npc) return [];
+    if (Array.isArray(npc.typePrefs)) return npc.typePrefs;
+
+    var rng = _npcTypeRng(_npcTypeHash((npc.id || "") + "|" + (npc.name || "") + "|" + (npc.role || "")));
+    var prefs = [];
+    var lead = _npcTypeLeadHint(npc, rng);
+    if (lead) {
+        prefs.push({ axis: lead.axis, values: lead.values.slice() });
+    } else {
+        var leadAxis = _npcTypePick(NPC_TYPE_AXES, rng);
+        prefs.push({ axis: leadAxis, values: _npcTypeValuesForAxis(leadAxis, rng) });
+    }
+    var remaining = NPC_TYPE_AXES.filter(function (axis) { return axis !== prefs[0].axis; });
+    var secondAxis = _npcTypePick(remaining, rng);
+    prefs.push({ axis: secondAxis, values: _npcTypeValuesForAxis(secondAxis, rng) });
+
+    npc.typePrefs = prefs;
+    return prefs;
+}
+
+// What the game knows about the player right now, for matching. Every source
+// is typeof-guarded so this file keeps working before the engine payload
+// exposes its helpers.
+function _npcGetPlayerTypeProfile() {
+    var trait = "";
+    if (typeof getPlayerDominantTrait === "function") {
+        trait = String(getPlayerDominantTrait() || "").toLowerCase();
+        if (trait && typeof getPlayerTraitValue === "function" && getPlayerTraitValue(trait) < 2) trait = "";
+    }
+    return {
+        trait: trait,
+        stats: _npcGetPlayerStats(),
+        presentation: typeof getPlayerPresentationScore === "function" ? getPlayerPresentationScore() : 0,
+        appearance: typeof getPlayerAppearance === "function" ? getPlayerAppearance() : null
+    };
+}
+
+// +1 match, 0 neutral, negative for a clear mismatch (see per-axis notes).
+function _npcEvaluateTypePref(pref, profile) {
+    if (!pref || !profile) return 0;
+    var values = Array.isArray(pref.values) ? pref.values : [];
+    if (pref.axis === "trait") {
+        if (!profile.trait) return 0;
+        return values.indexOf(profile.trait) !== -1 ? 1 : -0.5;
+    }
+    if (pref.axis === "bearing") {
+        var statKey = NPC_TYPE_BEARING_STAT[values[0]];
+        var statValue = statKey && typeof profile.stats[statKey] === "number" ? profile.stats[statKey] : 3;
+        if (statValue >= 5) return 1;
+        if (statValue <= 2) return -1;
+        return 0;
+    }
+    if (pref.axis === "presentation") {
+        if (values[0] === "polished") {
+            if (profile.presentation >= 2) return 1;
+            if (profile.presentation < 0) return -1;
+            return 0;
+        }
+        // "unfussy": at ease with plain, practical looks; put off by overdone ones.
+        if (profile.presentation >= 5) return -0.5;
+        if (profile.presentation >= -1 && profile.presentation <= 1) return 0.5;
+        return 0;
+    }
+    var appearance = profile.appearance;
+    if (!appearance || typeof appearance[pref.axis] !== "string") return 0;
+    return values.indexOf(appearance[pref.axis]) !== -1 ? 1 : -0.5;
+}
+
+// Raw match score (before charisma), summed over the NPC's preferences.
+function getNPCTypeMatchScore(npc) {
+    var prefs = ensureNPCTypePreferences(npc);
+    if (!prefs.length) return 0;
+    var profile = _npcGetPlayerTypeProfile();
+    return prefs.reduce(function (sum, pref) { return sum + _npcEvaluateTypePref(pref, profile); }, 0);
+}
+
+// Multiplier on the attraction an NPC gains from the player's actions.
+// Charisma (above 3) softens a mismatch and slightly boosts a match. Shared
+// helper, also exposed on window so the NSFW lust scaling can adopt it.
+function getPlayerAppealMultiplier(npc) {
+    if (!npc) return 1;
+    var score = getNPCTypeMatchScore(npc);
+    var charisma = typeof getSetupStat === "function" ? getSetupStat("charisma", 3) : 3;
+    var edge = Math.max(0, charisma - 3);
+    if (score < 0) {
+        score = score * (1 - Math.min(NPC_TYPE_CHARISMA_SOFTEN_MAX, edge * NPC_TYPE_CHARISMA_SOFTEN_PER_POINT));
+    } else if (score > 0) {
+        score = score * (1 + Math.min(NPC_TYPE_CHARISMA_BOOST_MAX, edge * NPC_TYPE_CHARISMA_BOOST_PER_POINT));
+    }
+    var multiplier = 1 + score * NPC_TYPE_SCORE_STEP;
+    return Math.max(NPC_TYPE_MULTIPLIER_MIN, Math.min(NPC_TYPE_MULTIPLIER_MAX, multiplier));
+}
+
+function _npcDescribeTypePref(pref) {
+    var values = Array.isArray(pref.values) ? pref.values : [];
+    var first = values[0] || "";
+    switch (pref.axis) {
+        case "trait":
+            return { curiosity: "curious, inquisitive people", empathy: "warm, caring people", boldness: "bold, direct people" }[first] || "";
+        case "bearing":
+            return { imposing: "an imposing, powerful presence", nimble: "light-footed, agile people", steady: "steady, unshakable people", hardy: "hardy, resilient people" }[first] || "";
+        case "presentation":
+            return first === "polished" ? "people who take care over their appearance" : "unfussy, down-to-earth people";
+        case "build":
+            return values.join(" or ") + " builds";
+        case "hairColor":
+            return values.join(" or ") + " hair";
+        case "hairStyle":
+            return values.join(" or ") + " hair";
+        case "eyeColor":
+            return values.join(" or ") + " eyes";
+        default:
+            return "";
+    }
+}
+
+// For the NPC prompt (adult humanoids only): what they are drawn to, and how
+// the player lines up. label is "" when the player is neither a clear match
+// nor a clear mismatch, so the prompt stays quiet for the middling case.
+function getNPCTypeSummary(npc) {
+    if (!isAdultHumanoidNPC(npc)) return { typeText: "", label: "" };
+    var prefs = ensureNPCTypePreferences(npc);
+    var typeText = prefs.map(_npcDescribeTypePref).filter(Boolean).join("; ");
+    var score = getNPCTypeMatchScore(npc);
+    var label = "";
+    if (score >= 1) label = "match";
+    else if (score <= -1) label = "mismatch";
+    return { typeText: typeText, label: label };
+}
+
+// How an NPC's type gets revealed to the player in the side panel: the lead
+// preference after a few conversations (or once they are curious about the
+// player), the second after more (or real interest). Purely derived from
+// existing counters, so it needs no saved state. Adult humanoids only.
+const NPC_TYPE_REVEAL_FIRST = { interactions: 3, attraction: 15 };
+const NPC_TYPE_REVEAL_SECOND = { interactions: 7, attraction: 35 };
+
+function getNPCRevealedTypeHints(npc) {
+    if (!isAdultHumanoidNPC(npc)) return [];
+    var prefs = ensureNPCTypePreferences(npc);
+    var convo = npc.memory && npc.memory.conversationState ? npc.memory.conversationState : null;
+    var interactions = convo && typeof convo.interactionCount === "number" ? convo.interactionCount : 0;
+    var memoryAttraction = npc.memory && typeof npc.memory.attraction === "number" ? npc.memory.attraction : 0;
+    var relationshipAttraction = npc.relationship && typeof npc.relationship.attraction === "number" ? npc.relationship.attraction : 0;
+    var attraction = Math.max(memoryAttraction, relationshipAttraction);
+
+    var revealed = 0;
+    if (interactions >= NPC_TYPE_REVEAL_FIRST.interactions || attraction >= NPC_TYPE_REVEAL_FIRST.attraction) revealed = 1;
+    if (interactions >= NPC_TYPE_REVEAL_SECOND.interactions || attraction >= NPC_TYPE_REVEAL_SECOND.attraction) revealed = 2;
+    return prefs.slice(0, revealed).map(_npcDescribeTypePref).filter(Boolean);
+}
+
+if (typeof window !== "undefined") {
+    window.getPlayerAppealMultiplier = getPlayerAppealMultiplier;
+    window.getNPCTypeMatchScore = getNPCTypeMatchScore;
+    window.ensureNPCTypePreferences = ensureNPCTypePreferences;
+    window.getNPCTypeSummary = getNPCTypeSummary;
+    window.getNPCRevealedTypeHints = getNPCRevealedTypeHints;
+}
+
 function getMoodScale() {
     return ["furious", "angry", "wary", "neutral", "friendly", "warm", "affectionate"];
 }
@@ -2410,7 +2764,13 @@ function applyNPCRelationshipImpact(npc, impact = {}) {
             const charismaMultiplier = typeof getSetupStat === "function"
                 ? (0.8 + (getSetupStat("charisma", 3) * 0.02))
                 : 1;
-            npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + Math.round(attraction * charismaMultiplier)));
+            // NPC "type": how well the player matches what this NPC is drawn
+            // to (see getPlayerAppealMultiplier). Only scales gains - a
+            // negative attraction change (an insult) is left as-is.
+            const appealMultiplier = attraction > 0
+                ? getPlayerAppealMultiplier(npc)
+                : 1;
+            npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + Math.round(attraction * charismaMultiplier * appealMultiplier)));
         }
         if (typeof arousal === "number" && arousal !== 0) {
             npc.memory.arousal = Math.max(0, Math.min(100, (npc.memory.arousal || 0) + arousal));

@@ -360,6 +360,48 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         ? PLAYER_TRAIT_DEMEANOR[playerDominantTrait]
         : "";
 
+    // How the player physically comes across, from their live stats (base +
+    // status effects + gear/hygiene for charisma, via getSetupStat). Only the
+    // two most extreme stats are mentioned, and only when clearly high (>= 6)
+    // or low (<= 2), so a middling character adds no prompt noise. Phrased as
+    // outward impressions an NPC could plausibly pick up on, not as numbers.
+    const PLAYER_STAT_PRESENCE = {
+        physicalProwess: { high: "powerfully built and physically imposing", low: "slight and unimposing" },
+        flexibility: { high: "light on their feet and quick in their movements", low: "stiff and awkward in their movements" },
+        willpower: { high: "steady and hard to rattle", low: "visibly easy to rattle" },
+        endurance: { high: "hardy, with the look of someone who rarely tires", low: "easily winded and frail-looking" },
+        charisma: { high: "magnetic and easy to warm to", low: "off-putting, with a presence that puts people ill at ease" }
+    };
+    const playerPresenceNotes = [];
+    if (typeof getSetupStat === "function") {
+        Object.keys(PLAYER_STAT_PRESENCE).forEach(function (statKey) {
+            const value = getSetupStat(statKey, 3);
+            if (value >= 6) {
+                playerPresenceNotes.push({ weight: value - 3, text: PLAYER_STAT_PRESENCE[statKey].high });
+            } else if (value <= 2) {
+                playerPresenceNotes.push({ weight: 3 - value, text: PLAYER_STAT_PRESENCE[statKey].low });
+            }
+        });
+    }
+    const playerPresenceLine = playerPresenceNotes
+        .sort(function (a, b) { return b.weight - a.weight; })
+        .slice(0, 2)
+        .map(function (note) { return note.text; })
+        .join("; ");
+
+    // The player's chosen looks (build/hair/eyes from character creation), so
+    // NPCs describe them consistently instead of the model inventing details.
+    // Absent on older saves; guarded so this file works without the engine.
+    const playerAppearanceText = typeof getPlayerAppearanceText === "function"
+        ? getPlayerAppearanceText()
+        : "";
+
+    // Who this NPC is drawn to and how the player lines up (adult humanoids
+    // only; empty otherwise). See getNPCTypeSummary in cyoaftw-npc-data.js.
+    const npcTypeSummary = typeof getNPCTypeSummary === "function"
+        ? getNPCTypeSummary(npc)
+        : { typeText: "", label: "" };
+
     const attraction = npc.memory && typeof npc.memory.attraction === "number"
         ? npc.memory.attraction : 0;
     const arousal = npc.memory && typeof npc.memory.arousal === "number"
@@ -493,11 +535,16 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         `- Familiarity with player: ${metPlayer ? "already acquainted; do not treat this as a first introduction" : "first meeting or not yet properly introduced"}`,
         `- Relationship to player: ${relationship}`,
         playerDemeanorLine ? `- Player's general demeanor: ${playerDemeanorLine}` : "",
+        playerAppearanceText ? `- Player's appearance: ${playerAppearanceText} (only mention if natural; stay consistent with these details)` : "",
+        playerPresenceLine ? `- How the player comes across: ${playerPresenceLine} (let this color your reaction only where natural; do not mention stats)` : "",
         relationshipGuidance ? `- Default attitude toward player: ${relationshipGuidance.baseline} (${relationshipGuidance.direction})` : "",
         relationshipGuidance ? `- Subtle reaction cue: ${relationshipGuidance.cue}` : "",
         recentPlayerActions.length ? `- Recent player actions toward you: ${recentPlayerActions.map(action => typeof formatNPCActionTag === "function" ? formatNPCActionTag(action) : action).join(", ")}` : "",
         `- Favorability toward player: ${favorability}/100 (${favorLabel(favorability)})`,
         `- Hostility toward player: ${hostility}/100 (${hostLabel(hostility)})`,
+        npcTypeSummary.typeText ? `- Who you are drawn to (your type): ${npcTypeSummary.typeText} (hint at this only through natural remarks; never state it as a rule)` : "",
+        npcTypeSummary.label === "match" ? "- The player fits what you are drawn to, so warmth comes a little more easily." : "",
+        npcTypeSummary.label === "mismatch" ? "- The player is not really your type; interest has to be earned slowly." : "",
         typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc)
             ? `- Attraction toward player: ${attraction}/100 (${attractionLabel})`
             : "",
