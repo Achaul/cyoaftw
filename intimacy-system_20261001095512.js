@@ -972,7 +972,7 @@ function buildLLMEnhancementPrompt(context, includeSpeech = false) {
     promptParts.push("");
     promptParts.push(`Base Narrative: "${context.baseNarrative}"`);
     promptParts.push("");
-    promptParts.push(`Output only the enhanced narrative text (1-3 sentences max). Do not add explanations, disclaimers, or formatting.`);
+    promptParts.push(`Output only the enhanced narrative text. Keep roughly the base length — 1-3 sentences for a short base; a staged multi-beat passage keeps every beat. Do not add explanations, disclaimers, or formatting.`);
     
     return promptParts.join("\n");
 }
@@ -2245,7 +2245,14 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     const intimacy = npc.intimacy || initializeIntimacyState(npc);
     const clothingState = intimacy.clothing;
     const currentPosition = positionId || intimacy.position.player;
-    
+
+    // Capture the previous act and depth BEFORE intimacy.lastAction and
+    // intimacy.penetration are updated further down, so the NPC-response
+    // gate can tell a fresh act (or act change) from plain continuation,
+    // and can detect bottoming out (depth reaching the 5 cap this turn).
+    var _prevActId = intimacy && intimacy.lastAction ? intimacy.lastAction.actId : null;
+    var _prevDepth = (intimacy && intimacy.penetration) ? (intimacy.penetration.depth || 0) : 0;
+
     // Validate action
     if (!isActionValid(actId, npc, player, currentPosition, clothingState)) {
         console.warn(`[Intimacy] Action ${actId} is not valid in current state`);
@@ -2449,6 +2456,27 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
                     response.responseText = (response.responseText || '') + " You reach a powerful orgasm.";
                 }
             }
+        }
+    }
+
+    // ── NPC RESPONSE GATE ─────────────────────────────────────────────
+    // The NPC shouldn't visibly react to every single click. Reactions land
+    // on act changes and first penetration; plain continuation of the same
+    // act (hammering the same button) only draws a reaction on notable
+    // beats — bottoming out this turn, a climax — or an occasional
+    // one-in-five filler. END/pull-out acts return before this point, and
+    // climax reactions are exempt, so withdrawal narratives and climax
+    // beats never get swallowed by the gate.
+    if (response.responseText && !climaxResult) {
+        var _isNewAct = _prevActId !== act.id;
+        var _isFirstPenetration = act.type === ACT_TYPES.PENETRATE;
+        var _bottomedOut = act.type === ACT_TYPES.CONTINUE
+            && (intimacy.penetration ? (intimacy.penetration.depth || 0) : 0) >= 5
+            && _prevDepth < 5;
+        var _respond = _isNewAct || _isFirstPenetration || _bottomedOut || Math.random() < 0.2;
+        if (!_respond) {
+            response.responseText = "";
+            response._npcResponseSuppressed = true;
         }
     }
 
@@ -3380,7 +3408,7 @@ ${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Ma
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
 ${_dialogueRule}
 ${_sampleModeLines}
-- Keep your response to 1-4 sentences. Match the length of the base response — do not compress a longer staged passage into fewer sentences.
+- Match the length of the BASE RESPONSE. A short one-liner stays 1-4 sentences. A staged multi-beat passage (slow entry told step by step: press, slip, reposition, stretch, pop inside, pause, slide) keeps EVERY beat — do not compress it, do not summarize it.
 - If the base response includes a sound (grunt, gasp, squeal), keep it.
 - If the base response mentions depth, pressure, or a specific body part, keep that detail.
 
@@ -3607,8 +3635,17 @@ function getWeightedReaction(reactions, arousalLevel, maxTier) {
         return pickRandom(reactions.mild || reactions);
     }
 
-    // Default to random from all
-    return pickRandom(reactions);
+    // Default (low arousal, or no tier matched): pick from any tier at or
+    // below the cap. reactions is usually a tiered object ({mild, moderate,
+    // high, intense}) here, and pickRandom on a non-array returns "" — which
+    // produced broken lines like "She  at the sensation." in output.
+    var pool = [];
+    for (var i = 0; i <= maxIndex; i++) {
+        var tier = reactions[tierOrder[i]];
+        if (Array.isArray(tier) && tier.length) pool = pool.concat(tier);
+    }
+    if (pool.length) return pickRandom(pool);
+    return "responds";
 }
 
 /**
@@ -9081,14 +9118,170 @@ function verbConjugation(verb, form) {
 }
 
 /**
+ * Staged, beat-by-beat narration for the first press of a cock against a
+ * vagina — the vaginal counterpart of buildStagedAnalEntry. Mode-keyed:
+ * "virgin" (maidenhead), "big" (player much larger), "easy" (open, slick
+ * or highly aroused) and "tight" (default first entry). Each passage walks
+ * the entry in stages — contact, slicking the head through her folds, the
+ * slow stretch, the crown popping past the entrance, the accommodation
+ * pause, the slide, and sometimes a fullness protest or a partial
+ * withdrawal — with random beat variants so repeat encounters read fresh.
+ */
+function buildStagedVaginalEntry(npc, o) {
+    var she = String(o.subjectPronoun || "She");
+    var sheLower = she.toLowerCase();
+    var her = String(o.posPronoun || "her");
+    var cockState = o.cockState || "hard";
+    var opening = pickRandom(["entrance", "opening", "little hole", "slit"]);
+    var mode = o.mode || "tight";
+    var beats = [];
+    var advanceTail = (o.getSound ? o.getSound() : "") + (o.scentDesc ? ", " + o.scentDesc : "") + ".";
+
+    if (mode === "virgin") {
+        beats.push(pickRandom([
+            `You guide the head of your ${cockState} cock to ${o.anatomyDesc}, pressing softly against ${her} untried entrance.`,
+            `You ease the tip of your ${cockState} cock into ${o.anatomyDesc}, finding ${her} untouched opening.`
+        ]));
+        beats.push(`The folds part around your tip, slick but snug, and ${she} tenses all over.`);
+        beats.push(pickRandom([
+            `You meet the thin resistance of ${her} maidenhead and push past it in one slow, deliberate stroke — an inch, then two.`,
+            `You press until you feel the fragile barrier give way, sinking the first careful inches into heat that has never known this.`
+        ]));
+        beats.push(pickRandom([
+            `${she} lets out a sharp cry, ${her} nails digging into you.`,
+            `${she} whimpers and grips you tight, ${her} breath coming in shudders.`
+        ]));
+        beats.push(pickRandom([
+            `You stop there, half inside, and let ${her} body learn your shape, murmuring against ${her} ear until the clenching eases.`,
+            `You hold still above ${her}, half-buried, waiting out the sting in slow, gentle rolls.`
+        ]));
+        beats.push(`You sink the rest of the way in by slow inches, ${her} rippling grip enveloping your shaft${advanceTail} ${she} clings to you, stretched and full for the first time.`);
+        return beats.join(" ");
+    }
+
+    if (mode === "big") {
+        beats.push(pickRandom([
+            `You notch the head of your ${cockState} cock at ${o.anatomyDesc} and push.`,
+            `You set the crown of your ${cockState} cock against ${o.anatomyDesc} and lean in with your hips.`
+        ]));
+        beats.push(`${she} exhales hard at the first stretch as the crown wedges into ${her} ${opening}.`);
+        beats.push(pickRandom([
+            `You feed it in by degrees, tiny rolls of your hips gaining a slow, straining inch.`,
+            `You work the head in with small, patient rocks, ${her} small frame pinned open around your girth.`
+        ]));
+        beats.push(pickRandom([
+            `Halfway in you stop and let ${her} adjust, stuffed open on you and breathing in shallow bursts.`,
+            `You pause at half your length, feeling ${her} walls flutter as they fight to make room.`
+        ]));
+        if (Math.random() < 0.6) {
+            beats.push(pickRandom([
+                `"I can't — you're too big," ${sheLower} pants, though ${her} hips keep tilting up for more.`,
+                `"It won't fit..." ${sheLower} whimpers, even as ${her} body swallows another inch.`
+            ]));
+        }
+        beats.push(`You rock the last inches home one at a time, until your hips finally meet ${her} skin${advanceTail}`);
+        return beats.join(" ");
+    }
+
+    if (mode === "easy") {
+        beats.push(pickRandom([
+            `You slide the head of your ${cockState} cock up along ${o.anatomyDesc} until it catches at ${her} entrance.`,
+            `You drag the head through ${o.anatomyDesc}, slicking the crown in ${her} wetness, then seat it at ${her} opening.`
+        ]));
+        beats.push(pickRandom([
+            `One smooth push and the crown slips in, the first inch swallowed easy.`,
+            `The entrance gives on the first press, parting around the crown like it was waiting for it.`
+        ]));
+        beats.push(pickRandom([
+            `${she} lets out a low, satisfied moan.`,
+            `${she} hums and settles around you, ${her} hips shifting to take more.`
+        ]));
+        beats.push(`The rest glides home in a single slow stroke, ${her} slick heat molding around every inch of you.`);
+        beats.push(`You settle deep and hold, ${her} walls rippling around your shaft${advanceTail}`);
+        if (Math.random() < 0.4) {
+            beats.push(`You draw back until only the crown stays inside, then slide home again, deeper and smoother than the first pass.`);
+        }
+        return beats.join(" ");
+    }
+
+    // "tight" — the default first-entry scene.
+    beats.push(pickRandom([
+        `You press the head of your ${cockState} cock against ${o.anatomyDesc} and apply pressure.`,
+        `You set the head of your ${cockState} cock at ${her} ${opening} and lean in with your hips.`,
+        `You nestle the head of your ${cockState} cock into ${o.anatomyDesc}, letting it rest hot against ${her} entrance.`
+    ]));
+    if (Math.random() < 0.7) {
+        beats.push(pickRandom([
+            `You drag the head up and down ${her} slit first, coating the crown in ${her} wetness.`,
+            `You work the head through ${her} outer lips, gathering slick before you try for more.`
+        ]));
+    }
+    beats.push(pickRandom([
+        `The folds part around your tip, slick but snug, and the first push only gains a fraction.`,
+        `You push, and ${her} lips dent inward around the crown, stubborn and hot.`,
+        `The entrance resists the first press, tight and clenching under the head.`
+    ]));
+    beats.push(pickRandom([
+        `${she} lets a sharp hiss out through clenched teeth.`,
+        `${she} sucks in a breath and holds it, ${her} thighs tightening.`,
+        `${she} tenses all over, a thin whimper escaping ${her} lips.`
+    ]));
+    beats.push(pickRandom([
+        `You keep steady pressure on, and ${her} entrance gives slowly, widening around the crown until the head pops past and the grip slides shut behind it.`,
+        `You keep the pressure on and feel ${her} body yield by degrees, the snug ring hugging the crown until it finally relaxes and lets the head in.`
+    ]));
+    if (Math.random() < 0.7) {
+        beats.push(pickRandom([
+            `"Fuck," ${sheLower} exhales.`,
+            `"Oh, fuck," ${sheLower} breathes.`,
+            `"Nngh—" ${sheLower} grinds out, ${her} knuckles going white.`
+        ]));
+    }
+    beats.push(pickRandom([
+        `You wait a moment for ${her} body to accommodate you, your ${cockState} shaft still entirely outside, ${her} lips sealed around your cockhead like a hot little kiss.`,
+        `You hold still and let ${her} adjust, ${her} entrance clamped just behind the crown while the rest of you waits.`
+    ]));
+    if (!o.hasLube && !o.isWet) {
+        beats.push(pickRandom([
+            `You spit on your fingers and work the wetness into ${her} folds, slicking the way.`,
+            `You gather spit on your fingertips and smear it over ${her} entrance, the only slickness on offer.`
+        ]));
+    } else if (o.isWet) {
+        beats.push(pickRandom([
+            `${she} is wet enough already — ${her} own slickness coats the crown where it rests inside ${her}.`,
+            `Slick already smears down your shaft where it waits against ${her}.`
+        ]));
+    }
+    beats.push(pickRandom([
+        `You press forward again and this time you gain traction, the first inches of shaft sinking into ${her} clenching heat.`,
+        `You lean in and start to gain ground, your shaft beginning to slide in, and ${sheLower} grunts.`,
+        `You rock forward and feel ${her} give way, inch after inch of you dragging through the snug grip.`
+    ]));
+    beats.push(`You keep the pressure steady, your cock disappearing into ${her} inch by inch, ${her} rippling heat enveloping your shaft as you press forward${advanceTail}`);
+    if (Math.random() < 0.45) {
+        beats.push(pickRandom([
+            `"Ugh... so full," ${sheLower} breathes, pressing a hand against your thigh to slow you.`,
+            `"No more — it's too much," ${sheLower} pants, ${her} palm flat on your thigh, though ${her} hips push back a little anyway.`
+        ]));
+    }
+    if (Math.random() < 0.5) {
+        beats.push(pickRandom([
+            `You draw back until ${her} entrance drags at your crown, then push home again a little deeper.`,
+            `You pull out until only the head remains caught in ${her}, then sink back in, smoother this time.`
+        ]));
+    }
+    return beats.join(" ");
+}
+
+/**
  * Build vagina/pussy action narratives
  */
 function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0, player = null, isOnCooldown = false, isContinueAction = false } = context;
+    const { arousalLevel = 0, player = null, isOnCooldown = false, isContinueAction = false, isWet = false } = context;
     const { tool = null } = act;
     const highArousal = arousalLevel > 70;
     const mediumArousal = arousalLevel > 40;
-    
+
     // Get player gender for tool-specific narratives
     const playerGender = player ? (player.gender || "").toLowerCase() : "male";
     const playerHasPenis = player && player.anatomy && (player.anatomy.penis || player.anatomy.cock);
@@ -9246,40 +9439,42 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         );
     }
     
-    // Penetration/enter - staged, inch-by-inch initial insertion.
-    // Each passage walks the entry in stages: positioning → the breach →
-    // sinking in → seated. Keyed on virginity, wetness/lube, and relative
-    // size so the same act reads differently on different NPCs.
+    // Penetration/enter - staged, beat-by-beat initial insertion via
+    // buildStagedVaginalEntry. Keyed on virginity, relative size, and
+    // wetness/lube/openness so the same act reads differently on different
+    // NPCs. The staged scene REPLACES the one-liner pool for entry acts —
+    // the first press should read as a full beat sequence, never "You
+    // enter her vagina."
     if (verbBase === 'enter' || verbBase === 'penetrate') {
         if (actualTool === 'penis' || actualTool === 'cock') {
             const _vIsVirgin = !!(npc.intimacy && npc.intimacy.virginity && npc.intimacy.virginity.vaginal);
             const _vRel = (typeof getRelativeSize === 'function' && player) ? getRelativeSize(player, npc) : "";
             const _vPlayerBig = (_vRel === "player-larger" || _vRel === "player-much-larger");
-            const _vScent = scentDesc ? ', ' + scentDesc : '';
             const _vOpen = isVaginaOpen;
 
-            if (_vIsVirgin) {
-                narratives.push(
-                    `You guide the head of your ${cockState} cock to ${cleanAnatomyDesc}, pressing softly against ${posPronoun} untried entrance. The folds part around your tip, slick but snug, and ${subjectPronoun.toLowerCase()} tenses as you meet the thin resistance of ${posPronoun} maidenhead. You push past it in one slow, deliberate stroke — an inch, then two — filling warmth that has never known this, while ${subjectPronoun.toLowerCase()} whimpers and grips you tight${_vScent}.`,
-                    `You ease the tip of your ${cockState} cock between ${posPronoun} ${pubicDesc ? pubicDesc + ', ' : ''}finding ${posPronoun} untouched opening. ${subjectPronoun} breathes in sharp and shallow as you work the head in with tiny rolls of your hips, letting ${posPronoun} body learn your shape inch by inch. When you finally sink the full length in, ${subjectPronoun.toLowerCase()} shudders beneath you, stretched and filled for the first time${_vScent}.`
-                );
-            } else if (_vPlayerBig) {
-                narratives.push(
-                    `You press the head of your ${cockState} cock against ${cleanAnatomyDesc}, and ${subjectPronoun.toLowerCase()} exhales hard at the first stretch. You feed it in by degrees — the crown, then a slow, straining inch, ${posPronoun} small frame struggling to take your girth. Halfway in you stop and let ${posPronoun} adjust, pinned open around you, before rocking the last inches home${_vScent}.`,
-                    `You notch yourself at ${cleanAnatomyDesc} and push, and even as worked up as ${subjectPronoun.toLowerCase()} is, the fit is a slow fight. The head wedges in with a lewd stretch and you advance one grudging inch at a time, ${posPronoun} opening rippling around you. ${subjectPronoun} can only hold still and take it, moaning when your hips finally meet ${posPronoun} skin${_vScent}.`
-                );
-            } else if (_vOpen || isSlick || highArousal) {
-                narratives.push(
-                    `You slide the head of your ${cockState} cock up along ${cleanAnatomyDesc} until it catches at ${posPronoun} entrance. One smooth push and the crown slips in, the first inch swallowed easy, then the rest gliding home in a single slow stroke. You settle deep, ${posPronoun} slick heat molding around every inch of you${getVaginalSound()}${_vScent}.`,
-                    `You push into ${cleanAnatomyDesc} and meet almost no resistance — just hot, slick folds parting around your ${cockState} length. An inch, then two, then all of it, until you're seated to the root and ${subjectPronoun.toLowerCase()} lets out a low, satisfied moan${_vScent}.`,
-                    `You nudge ${posPronoun} entrance with the head of your ${cockState} cock, smearing through ${posPronoun} wetness, then sink in with one unhurried stroke. The passage clutches you in rolling waves as you bury yourself, inch by inch, until you're flush against ${posPronoun}${_vScent}.`
-                );
-            } else {
-                narratives.push(
-                    `You push the head of your ${cockState} cock against ${cleanAnatomyDesc}, tight and resisting at first. You work yourself in with slow circles, barely gaining an inch before ${posPronoun} body starts to yield and slick heat seeps out around you. Bit by bit you sink in until you're rooted inside, ${posPronoun} passage clinging to every inch of you${_vScent}.`,
-                    `You press into ${cleanAnatomyDesc} slowly, letting the head stretch ${posPronoun} entrance around you. The first inch is the hardest — ${subjectPronoun.toLowerCase()} winces and tenses — but with each small push another inch follows, until your full length is wrapped in ${posPronoun} reluctant warmth${_vScent}.`
-                );
-            }
+            var _vMode = _vIsVirgin ? "virgin"
+                : (_vPlayerBig ? "big"
+                : ((_vOpen || isSlick || highArousal) ? "easy" : "tight"));
+            var _vOpts = {
+                mode: _vMode,
+                cockState: cockState,
+                posPronoun: posPronoun,
+                subjectPronoun: subjectPronoun,
+                anatomyDesc: cleanAnatomyDesc,
+                pubicDesc: pubicDesc,
+                scentDesc: scentDesc,
+                getSound: getVaginalSound,
+                isWet: isWet,
+                hasLube: hasLube,
+                highArousal: highArousal
+            };
+            narratives.length = 0;
+            narratives.push(buildStagedVaginalEntry(npc, _vOpts), buildStagedVaginalEntry(npc, _vOpts));
+            return narratives;
+        } else if (actualTool === 'mouth' || actualTool === 'tongue') {
+            narratives.push(
+                `Your tongue presses into ${cleanAnatomyDesc}, working past ${posPronoun} folds and into ${posPronoun} heat${scentDesc ? ', ' + scentDesc : ''}.`
+            );
         } else {
             narratives.push(
                 `You ${verbPresent} ${cleanAnatomyDesc}, feeling ${posPronoun} warmth close around your ${actualTool}${scentDesc ? ', ' + scentDesc : ''}.`
@@ -9478,8 +9673,150 @@ function buildBreastNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
 /**
  * Build anus action narratives
  */
+/**
+ * Staged, beat-by-beat narration for the first press of a cock against an
+ * anus — the slow-entry scene, assembled from random beat variants so
+ * repeat encounters read differently: contact, the failed first press,
+ * repositioning, working the head, her hiss, the slow stretch, the pop
+ * past the sphincter, the accommodation pause, improvised lube, the slide,
+ * and sometimes a fullness protest or a partial withdrawal. Blocked entries
+ * stop early and read as a failure. This mirrors the authored sample style:
+ * mechanical, physical, told one step at a time.
+ */
+function buildStagedAnalEntry(npc, o) {
+    var she = String(o.subjectPronoun || "She");
+    var sheLower = she.toLowerCase();
+    var her = String(o.posPronoun || "her");
+    var cockState = o.cockState || "hard";
+    var opening = pickRandom(["pucker", "little star", "tight ring", "small puckered entrance"]);
+    var isDifficult = o.canInsert === "difficult";
+    var beats = [];
+
+    // Blocked: press, slip, press again, failure. Short by design.
+    if (o.canInsert === "blocked") {
+        var blocked = `You press the head of your ${cockState} cock against ${o.anatomyDesc} and apply pressure, but your cockhead slides to the side — the tight entrance unyielding. You reposition, seating the crown squarely on ${her} ${opening}, and push until the wrinkled skin pulls taut, but the ring refuses to open. `;
+        blocked += o.playerLarger
+            ? `You're simply too big for ${her} small body — ${sheLower} pulls away with a sharp intake of breath.`
+            : `You push harder, but the muscle won't give, and you can't get it in.`;
+        if (o.scentDesc) {
+            var _scent = o.scentDesc.replace(/^and\s+/i, "").replace(/^./, function (c) { return c.toUpperCase(); });
+            blocked += " " + _scent + ".";
+        }
+        return blocked;
+    }
+
+    // Beat 1 — contact.
+    beats.push(pickRandom([
+        `You press the head of your ${cockState} cock against ${o.anatomyDesc} and apply pressure.`,
+        `You set the head of your ${cockState} cock against ${o.anatomyDesc} and lean into it with your hips.`,
+        `You nestle the head of your ${cockState} cock into the warm crease of ${her} ass, finding ${her} ${opening} and guiding the tip against it.`
+    ]));
+
+    // Beat 2 — the first press fails (always when difficult, usually otherwise).
+    if (isDifficult || Math.random() < 0.6) {
+        beats.push(pickRandom([
+            `Your cockhead slides to the side, the tight entrance unyielding.`,
+            `The crown skids off the clenched muscle instead of digging in — too dry, too tight.`,
+            `The ring dimples under you but won't part, and your cockhead slips loose.`
+        ]));
+        // Beat 3 — reposition and work the head.
+        beats.push(pickRandom([
+            `You reposition, seating the crown squarely on ${her} ${opening}, and push until the wrinkled skin pulls taut around it.`,
+            `You line yourself up again, pressing dead center on ${her} ${opening} until the wrinkled flesh goes smooth and taut under the head.`
+        ]));
+        beats.push(pickRandom([
+            `You grip your shaft and wiggle the cockhead against ${her} hole, smearing precum over the clenched muscle until it starts to give.`,
+            `You take your shaft in hand and work the head against the ring in slow circles, the smear of precum slicking ${her} pucker until the muscle flutters.`,
+            `You hold the crown against the resisting ring and rock your hips, working precum into ${her} pucker until it loosens a fraction.`
+        ]));
+    }
+
+    // Beat 4 — her reaction as the stretch begins.
+    beats.push(pickRandom([
+        `${she} lets a sharp hiss out through clenched teeth.`,
+        `${she} sucks in a breath and holds it, ${her} cheeks clenching under you.`,
+        `${she} tenses all over, a thin whimper escaping ${her} lips.`
+    ]));
+
+    // Beat 5 — the slow stretch.
+    beats.push(isDifficult
+        ? `You keep the pressure on and ${her} pucker gives only grudgingly, widening a millimeter at a time around your cockhead.`
+        : `You keep the pressure on, and ${her} pucker widens slowly, the ring dilating around your cockhead until it starts to slide into ${her} ass.`);
+
+    // Beat 6 — past the sphincter.
+    beats.push(isDifficult
+        ? `A final, straining push gets you past the sphincter — your cockhead lodges just inside ${her} asshole, the vise-like muscle clamping down behind the crown, the heat of ${her} insides startling against your glans.`
+        : `You get past the sphincter with one last push, your cockhead now lodged just inside ${her} asshole, the vise-like muscle sealed behind the crown, ${her} inner heat warm on your glans.`);
+
+    // Beat 7 — a short vocal, sometimes.
+    if (Math.random() < 0.7) {
+        beats.push(pickRandom([
+            `"Fuck," ${sheLower} exhales.`,
+            `"Oh, fuck," ${sheLower} breathes.`,
+            `"Nngh—" ${sheLower} grinds out, ${her} knuckles going white.`
+        ]));
+    }
+
+    // Beat 8 — the accommodation pause.
+    beats.push(pickRandom([
+        `You wait a moment for ${her} body to accommodate you, your ${cockState} shaft still entirely outside, ${her} ass impaled on nothing but your cockhead, the tight ring holding you in place like a suction cup.`,
+        `You hold still and let ${her} body adjust, ${her} sphincter clamped around your cockhead like a suction cup while the rest of you waits outside.`
+    ]));
+
+    // Beat 9 — improvised lube when none was applied.
+    if (!o.hasLube) {
+        if (o.isFemale && o.isWet) {
+            beats.push(pickRandom([
+                `You spit on ${her} asshole and rub the spit around with your fingers, then plunge a finger into ${her} hot folds and work it in and out a few strokes before pulling it out and smearing her juices along your shaft.`,
+                `You dribble spit onto ${her} pucker and massage it in with a fingertip, then dip the finger into ${her} wet heat a few times, painting your shaft with her slickness.`
+            ]));
+        } else {
+            beats.push(pickRandom([
+                `You spit into your palm and slick your shaft with it, working the moisture over the taut skin until it shines.`,
+                `You gather spit on your fingers and smear it over ${her} pucker and your shaft alike, the only lubricant on offer.`
+            ]));
+        }
+    }
+
+    // Beat 10 — the slide begins.
+    beats.push(pickRandom([
+        `You lean in and start to gain traction, your shaft beginning to slide in, and ${sheLower} grunts.`,
+        `You press forward again and this time you gain traction, the first inches of shaft sinking into ${her} clenching heat.`,
+        `You rock forward and feel the ring give way, inch after inch of you dragging through the snug grip.`
+    ]));
+
+    // Beat 11 — the slow advance, closing with sound and scent.
+    beats.push((isDifficult
+        ? `You keep the pressure steady and ${her} heat swallows you by grudging inches, every one hard-won as ${her} body clamps down on you`
+        : `You keep the pressure steady, your cock disappearing into ${her} ass inch by inch, ${her} burning heat enveloping your shaft as you press forward`)
+        + (o.getSound ? o.getSound() : "")
+        + (o.scentDesc ? ", " + o.scentDesc : "")
+        + ".");
+
+    // Beat 12 — a fullness protest, sometimes.
+    if (Math.random() < 0.45) {
+        beats.push(pickRandom([
+            `"Ugh... so full," ${sheLower} breathes, pressing a hand against your thigh to slow you.`,
+            `"No more — it's too much," ${sheLower} pants, ${her} palm flat on your thigh, though ${her} hips push back a little anyway.`
+        ]));
+    }
+
+    // Beat 13 — a partial withdrawal and re-entry, sometimes.
+    if (Math.random() < 0.5) {
+        beats.push(pickRandom([
+            `You draw back slowly, ${her} stretched pucker dragging along your shaft like a suction cup, then push back in.`,
+            `You pull out to the crown, drawing a ragged gasp from ${her} at the drag, then slide home again a little deeper than before.`
+        ]));
+    }
+
+    var text = beats.join(" ");
+    if (o.deterrenceDesc) text += " " + o.deterrenceDesc + ".";
+    return text;
+}
+
 function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, posPronoun, subjectPronoun, context, act = {}) {
-    const { arousalLevel = 0, player = null, isOnCooldown = false, isContinueAction = false } = context;
+    const { arousalLevel = 0, player = null, isOnCooldown = false, isContinueAction = false, isWet = false } = context;
+    const entryNpcFemale = String(npc.gender || "").toLowerCase() === "female" || String(npc.gender || "").toLowerCase().includes("female");
     const highArousal = arousalLevel > 70;
     const verbThird = verbConjugation(verbBase, 'third');
     
@@ -9616,7 +9953,40 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
     const penisState = isOnCooldown ? pickRandom(['limp', 'flaccid', 'soft', 'spent']) : pickRandom(['hard', 'rigid', 'throbbing', 'engorged']);
     const cockState = isOnCooldown ? pickRandom(['limp', 'flaccid', 'soft', 'spent']) : pickRandom(['hard', 'rigid', 'throbbing', 'engorged']);
     const shaftState = isOnCooldown ? pickRandom(['soft', 'limp', 'flaccid']) : pickRandom(['hard', 'rigid', 'throbbing']);
-    
+
+    // First entry with a cock: the staged scene (or the easy-entry variants)
+    // REPLACES the generic one-liner pool, so the first press into the ass
+    // always reads as a full staged beat sequence — never "You enter her
+    // anus." A dirty-blocked entry bails out with the deterrence line only.
+    if ((verbBase === 'enter' || verbBase === 'penetrate') && (actualTool === 'penis' || actualTool === 'cock')) {
+        if (isDirtyBlock) {
+            return [deterrenceDesc + "."];
+        }
+        if (analEasy) {
+            return [
+                `You push the head of your ${cockState} cock against ${anatomyDesc}, and the slickened ring gives on the first press. The crown pops past the clench, then the shaft follows inch by inch, ${posPronoun} heat swallowing you to the root in one slow glide. ${subjectPronoun} lets out a low, shaky breath as you settle deep${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
+                `You nudge ${anatomyDesc} with the head of your ${cockState} cock until the muscle slackens around you, then feed the length in by degrees — an inch, a pause, another inch — until your hips rest flush against ${posPronoun} skin. ${subjectPronoun} relaxes around you in slow ripples, taking every bit of you${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
+                `You slide into ${anatomyDesc} with one unhurried push, the prepared ring parting easy around your ${cockState} girth. You keep going until you're buried to the root, then hold there, letting ${subjectPronoun.toLowerCase()} adjust to the fullness before you draw back${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`
+            ];
+        }
+        var _entryRel = player ? getRelativeSize(player, npc) : "";
+        var _entryOpts = {
+            canInsert: canCompleteAnalInsertion(npc, player),
+            playerLarger: (_entryRel === "player-larger" || _entryRel === "player-much-larger"),
+            cockState: cockState,
+            posPronoun: posPronoun,
+            subjectPronoun: subjectPronoun,
+            anatomyDesc: anatomyDesc,
+            scentDesc: scentDesc,
+            deterrenceDesc: deterrenceDesc,
+            getSound: getAnalSound,
+            hasLube: hasLube,
+            isWet: isWet,
+            isFemale: entryNpcFemale
+        };
+        return [buildStagedAnalEntry(npc, _entryOpts), buildStagedAnalEntry(npc, _entryOpts)];
+    }
+
     // Determine preposition based on verb
     const getPreposition = () => {
         if (['fuck', 'thrust', 'pound', 'penetrate', 'enter', 'bury', 'slide', 'grind'].includes(verbBase)) {
@@ -9639,43 +10009,10 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             ? `Your tongue ${verbConjugation(verbBase, 'third')} ${anatomyDesc}${scentDesc ? ', ' + scentDesc : ''}.`
             : `Your ${actualTool} ${toolVerb}${prepositionText}${anatomyDesc}.`,
         // Penetration/fingering - first entry, with difficulty, scent, and deterrence
-        verbBase === 'penetrate' || verbBase === 'finger' || verbBase === 'enter' ?
-            actualTool === 'penis' || actualTool === 'cock' ?
-                isDirtyBlock ? deterrenceDesc + "."
-                : analEasy ? pickRandom([
-                    `You push the head of your ${cockState} cock against ${anatomyDesc}, and the slickened ring gives on the first press. The crown pops past the clench, then the shaft follows inch by inch, ${posPronoun} heat swallowing you to the root in one slow glide. ${subjectPronoun} lets out a low, shaky breath as you settle deep${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
-                    `You nudge ${anatomyDesc} with the head of your ${cockState} cock until the muscle slackens around you, then feed the length in by degrees — an inch, a pause, another inch — until your hips rest flush against ${posPronoun} skin. ${subjectPronoun} relaxes around you in slow ripples, taking every bit of you${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
-                    `You slide into ${anatomyDesc} with one unhurried push, the prepared ring parting easy around your ${cockState} girth. You keep going until you're buried to the root, then hold there, letting ${subjectPronoun.toLowerCase()} adjust to the fullness before you draw back${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`
-                ])
-                : (function() {
-                    var canInsert = canCompleteAnalInsertion(npc, player);
-                    var rel = player ? getRelativeSize(player, npc) : "";
-                    var playerLarger = (rel === "player-larger" || rel === "player-much-larger");
-                    // Visual descriptors for the sphincter and wrinkled skin
-                    var sphincterDesc = pickRandom([
-                        "the wrinkled sphincter clenching tight",
-                        "the tight ring of muscle, its folds pulled flat as you push",
-                        "the puckered sphincter resisting, the skin stretching taut around your cockhead",
-                        "the clenched ring of wrinkled flesh, slowly stretching open"
-                    ]);
-                    if (canInsert === "blocked") {
-                        var blockedLine = playerLarger
-                            ? `You press the head of your ${cockState} cock against ${posPronoun} anus, but ${sphincterDesc}. You're too big — ${posPronoun} small body can't take it, and ${posPronoun} pulls away with a sharp intake of breath`
-                            : `You press the head of your ${cockState} cock against ${posPronoun} anus, but ${sphincterDesc}. You push harder, but the muscle won't give, and you can't get it in`;
-                        return blockedLine + (scentDesc ? ' — ' + scentDesc : '') + "." + (deterrenceDesc ? ' ' + deterrenceDesc + '.' : '');
-                    }
-                    if (canInsert === "difficult") {
-                        return pickRandom([
-                            `You press the head of your ${cockState} cock against ${posPronoun} anus, ${sphincterDesc}. ${subjectPronoun} tenses and squirms, but you push slowly, firmly, stretching the wrinkled skin taut until the ring gives way and the crown slips inside. You gain a straining inch, then another, working deeper in small rocking strokes until ${posPronoun} heat grips your whole length` + (scentDesc ? ', ' + scentDesc : '') + "." + (deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''),
-                            `You grease nothing and rush nothing — you set the head of your ${cockState} cock against ${posPronoun} anus, ${sphincterDesc}, and lean in with patient pressure. The muscle fights you in slow motion, ${subjectPronoun.toLowerCase()} hissing as the ring widens around you, until finally it cinches behind the crown and you're in. You sink the shaft in inch by grudging inch, pausing to let ${posPronoun} body accept you` + (scentDesc ? ', ' + scentDesc : '') + "." + (deterrenceDesc ? ' ' + deterrenceDesc + '.' : '')
-                        ]);
-                    }
-                    return pickRandom([
-                        `You push the head of your ${cockState} cock against ${posPronoun} anus, ${sphincterDesc}, and lean into it with steady pressure. The muscle resists, then blooms open around the crown, and the first inch slides in with a pull that drags the breath out of ${posPronoun}. You advance slowly — an inch, a pause, another inch — feeding the shaft into ${posPronoun} clenching heat until you're seated deep${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
-                        `You set yourself at ${posPronoun} anus and push, watching the wrinkled pucker dimple under the head of your ${cockState} cock. It takes three tries — press, ease back, press deeper — before the ring surrenders and the crown pops in, ${subjectPronoun.toLowerCase()} jerking at the stretch. From there you work inward in short strokes, each one gaining a little more depth, until ${posPronoun} ass has swallowed you to the root${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`
-                    ]);
-                })()
-            : `You push your finger into ${anatomyDesc}, the tight sphincter gripping your digit${scentDesc ? ', ' + scentDesc : ''}.` : null,
+        verbBase === 'finger' ?
+            `You push your finger into ${anatomyDesc}, the tight sphincter gripping your digit${scentDesc ? ', ' + scentDesc : ''}.` : null,
+        (verbBase === 'penetrate' || verbBase === 'enter') && (actualTool === 'mouth' || actualTool === 'tongue') ?
+            `Your tongue presses into ${anatomyDesc}, working past the resistant ring${scentDesc ? ', ' + scentDesc : ''}.` : null,
         verbBase === 'tease' || verbBase === 'circle' ?
             `You ${verbPresent} ${anatomyDesc}, tracing the tight rim${scentDesc ? ', ' + scentDesc : ''}.` : null,
         verbBase === 'spread' ?
@@ -9688,15 +10025,20 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
                 var _ad = (intimacy.penetration && intimacy.penetration.depth) || 1;
                 if (_ad >= 5) return pickRandom([
                     `You ${verbPresent} into ${posPronoun} ass to the hilt, your hips hammering ${posPronoun} cheeks, the root of your ${shaftState} shaft ground by ${posPronoun} stretched ring${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
-                    `You pound the full length home with every stroke, bottoming out in ${posPronoun} bowels while ${subjectPronoun.toLowerCase()} grunts at each impact${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                    `You pound the full length home with every stroke, bottoming out in ${posPronoun} bowels while ${subjectPronoun.toLowerCase()} grunts at each impact${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You bottom out on every stroke and hold there a beat, marveling at the vise-like heat gripping your full length, ${posPronoun} sphincter slightly puffy where it drags at your root. ${subjectPronoun} lets out a squeal each time your hips slap home${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You hammer ${posPronoun} ass in full strokes, your thighs slapping ${posPronoun} cheeks with each drive, ${posPronoun} stretched pucker dragging along your shaft like a suction cup on every withdrawal${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
                 ]);
                 if (_ad >= 3) return pickRandom([
                     `You ${verbPresent} in long, deep strokes, withdrawing until only the head stays clamped in ${posPronoun} ring, then driving back in${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
-                    `You work deeper with each thrust, ${posPronoun} heat loosening around you as more of your ${shaftState} shaft slides in${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                    `You work deeper with each thrust, ${posPronoun} heat loosening around you as more of your ${shaftState} shaft slides in${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You take ${posPronoun} ass in slow, deliberate strokes, gaining a little more depth each time as ${posPronoun} inner walls give way and accept you. "So full..." ${subjectPronoun.toLowerCase()} breathes, planting a hand on your thigh to slow you${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You hold ${posPronoun} hips steady and ${verbPresent} with growing confidence, ${posPronoun} loosening ring easing open a fraction more with every pass${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
                 ]);
                 return pickRandom([
                     `You ${verbPresent} into ${posPronoun} ass, the tight heat gripping your ${shaftState} shaft${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
-                    `You keep to shallow strokes, just the first few inches moving in ${posPronoun} clenching passage, opening ${posPronoun} up bit by bit${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                    `You keep to shallow strokes, just the first few inches moving in ${posPronoun} clenching passage, opening ${posPronoun} up bit by bit${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You hold most of your length back and ${verbPresent} carefully, the freshly-stretched ring fluttering around your crown each time you press a little deeper${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
                 ]);
             })() : null,
         verbBase === 'ejaculate' || verbBase === 'ejaculate on' ?
