@@ -520,31 +520,10 @@ function _npcLowercaseFirst(value) {
     return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-// === Updated ensureNPCConversationState() ===
-function ensureNPCConversationState(npc) {
-  if (!npc.conversationState) {
-    npc.conversationState = {};
-  }
-  const state = npc.conversationState;
-
-  // Existing fields
-  if (!state.usedOptionIds) state.usedOptionIds = [];
-  if (!state.sessionUsedOptionIds) state.sessionUsedOptionIds = [];
-  if (!state.lastVariantByOption) state.lastVariantByOption = {};
-  if (!state.optionUsage) state.optionUsage = {};
-  if (!state.interactionCount) state.interactionCount = 0;
-  if (!state.sessionInteractionCount) state.sessionInteractionCount = 0;
-  if (!state.sessionNumber) state.sessionNumber = 0;
-  if (!state.lastOptionId) state.lastOptionId = null;
-
-  // New adult system fields
-  if (!npc.relationship) npc.relationship = {};
-  if (npc.relationship.lust === undefined) npc.relationship.lust = 0;
-  if (npc.relationship.attraction === undefined) npc.relationship.attraction = 0;
-  if (npc.relationship.orientation === undefined) {
-    npc.relationship.orientation = ["hetero", "bi", "homo"][Math.floor(Math.random() * 3)];
-  }
-}
+// ensureNPCConversationState: single canonical definition further below
+// (state lives at npc.memory.conversationState). An older duplicate that
+// wrote to npc.conversationState was removed — the later declaration always
+// overrode it, so it was dead code that split state across two paths.
 
 function _npcBuildPlayerConversationText(label, action) {
     const text = String(label || "").trim();
@@ -1829,6 +1808,15 @@ function conversationRepeatAvailable(entry, ctx) {
         ? ctx.optionUsage[optionId]
         : null;
 
+    // Greeting-gate self-heal: greet-intro is "never" repeatable on the
+    // assumption that using it sets metPlayer. If the NPC's memory lost that
+    // flag (old save, regenerated memory, impact that never landed), the
+    // intro must come back — otherwise the greeting gate leaves the player
+    // with nothing but "Say goodbye" for the rest of the game.
+    if (optionId === "greet-intro" && ctx && ctx.metPlayer === false) {
+        return true;
+    }
+
     if (repeat === "never") {
         if (!ctx.usedOptionIds.includes(optionId)) return true;
         return conversationOptionResetAvailable(entry, ctx, usage);
@@ -1890,13 +1878,22 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     console.log("[NPC Data] queryConversationCatalogue called with NPC:", npc ? npc.name || npc.id : "null");
     if (!npc) return [];
 
+    // Self-heal a half-updated state BEFORE the context snapshot: everGreeted
+    // implies metPlayer. If an old save or a failed impact left everGreeted
+    // true but metPlayer false, greet-known (conditions: metPlayer) would
+    // never show.
+    if (npc.memory && npc.memory.everGreeted === true && npc.memory.metPlayer !== true) {
+        npc.memory.metPlayer = true;
+    }
+
     const ctx = getNPCConversationContext(npc, extraContext);
     if (!ctx) return [];
 
     const everGreeted = npc.memory && npc.memory.everGreeted === true;
     const greetedThisSession = ctx.sessionUsedOptionIds && (
-        ctx.sessionUsedOptionIds.includes("greet-intro") || 
-        ctx.sessionUsedOptionIds.includes("greet-known")
+        ctx.sessionUsedOptionIds.includes("greet-intro") ||
+        ctx.sessionUsedOptionIds.includes("greet-known") ||
+        ctx.sessionUsedOptionIds.some(id => typeof id === "string" && id.indexOf("greet-") === 0)
     );
     
     // Merge local SFW catalogue with the NSFW catalogue (loaded by
@@ -1927,7 +1924,11 @@ function queryConversationCatalogue(npc, extraContext = {}) {
                 entry.id === "greet-intro" || 
                 entry.id === "greet-known";
             const isDisengage = entry.action === "disengage" || entry.id === "goodbye";
-            return isGreeting || isDisengage;
+            // "stop-following" is companion management, not small talk — an
+            // NPC who is actively following can always be dismissed, even
+            // before the session greeting.
+            const isCompanionManagement = entry.id === "stop-following";
+            return isGreeting || isDisengage || isCompanionManagement;
         });
     }
 
@@ -1950,6 +1951,25 @@ function queryConversationCatalogue(npc, extraContext = {}) {
         .filter(Boolean);
     
     console.log("[NPC Data] queryConversationCatalogue returning", result.length, "options:", result.map(o => o.id));
+
+    // Fallback invariant: while the greeting gate is closed, the menu MUST
+    // contain a greeting option — without one the player can only say
+    // goodbye and the conversation can never open. If every greet entry
+    // was filtered out (unexpected conditions, repeat state, catalogue
+    // changes), synthesize a plain greeting.
+    if (!greetedThisSession && !result.some(o => o && o.intent === "greeting")) {
+        console.warn("[NPC Data] Greeting gate closed with no greeting option — injecting fallback.");
+        const fallback = buildConversationOption({
+            id: "greet-fallback",
+            priority: 12,
+            label: "Greet them",
+            text: "You offer a simple greeting and wait to see how they answer.",
+            intent: "greeting",
+            relationshipImpact: { mood: 1, favor: 3, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" }
+        }, npc, ctx);
+        if (fallback) result.unshift(fallback);
+    }
+
     return result;
 }
 
