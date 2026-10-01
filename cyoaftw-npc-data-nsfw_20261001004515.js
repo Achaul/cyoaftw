@@ -19,6 +19,7 @@
     {
         id: "flirt",
         label: "Flirt",
+        intent: "flirt",
         text: "You flirt with them, running your fingers near their {groin} to test their interest...",
         priority: 10,
         repeat: "session",
@@ -31,6 +32,7 @@
     {
         id: "seduce",
         label: "Seduce",
+        intent: "seduce",
         text: "You suggest a romantic follow-up, like meeting for dinner or a private walk...",
         playerText: "You suggest a romantic follow-up, like meeting for dinner or a private walk...",
         priority: 20,
@@ -47,6 +49,7 @@
     {
         id: "proposition",
         label: "Proposition",
+        intent: "proposition",
         text: "You make a direct physical advance, testing if they're up for something quick and immediate...",
         playerText: "You make a direct physical advance, testing if they're up for something quick and immediate...",
         priority: 25,

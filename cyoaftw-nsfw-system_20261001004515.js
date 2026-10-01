@@ -708,7 +708,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
               window.NPC_CONVERSATION_CATALOGUE.push(followOption);
             }
 
-            return responseText + ` ${npc.name} looks around nervously. "I... I don't see anywhere suitable here. Perhaps you could lead the way?"`;
+            return responseText + ` ${npc.name} glances around without spotting anywhere suitable nearby - perhaps you should lead the way.`;
           } else {
             // For seduce: NPC agrees to meet later at a specific location
             const meetupRoom = findNearestRoomOfTypes(startCoords, ["Tavern", "Inn", "Inn Common"]);
@@ -731,10 +731,10 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
               // Set return trigger: if not met after 12 more turns, return to home
               npc._meetupReturnTurn = npc._meetupTriggerTurn + 12;
               
-              return responseText + ` ${npc.name} smiles warmly. "I would enjoy that. Meet me at the ${meetupRoom.displayName || meetupRoom.type} in a little while."`;
+              return responseText + ` ${npc.name} agrees - you will meet at the ${meetupRoom.displayName || meetupRoom.type} in a little while.`;
             } else {
               // No meetup location found at all
-              return responseText + ` ${npc.name} smiles warmly. "I would enjoy that. Let's find a good spot later."`;
+              return responseText + ` ${npc.name} agrees, and the two of you settle on finding a good spot later.`;
             }
           }
         }

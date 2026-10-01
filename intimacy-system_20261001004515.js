@@ -115,6 +115,34 @@ function isSexualAct(act) {
 }
 
 /**
+ * Detect the "unnatural act with an uncivilized species" cases that have
+ * canned species verbiage (watersports, or anal penetration with a
+ * non-reptilian uncivilized species — mirrors the gating in
+ * buildWatersportResponse and the uncivilized block of
+ * buildPenetrationResponse). For these acts the canned template text is a
+ * SAMPLE for the AI to rewrite in the NPC's own voice, not a script to
+ * polish verbatim (see the sample mode in buildIntimacyPrompt).
+ */
+function isUnnaturalUncivilizedAct(npc, act) {
+    if (!npc || !act) return false;
+    var species = String(npc.species || "");
+    if (!species || typeof isCivilizedSpecies !== "function" || isCivilizedSpecies(species)) return false;
+    var type = act.type;
+    var isWatersport = type === "watersport" || (typeof ACT_TYPES !== "undefined" && type === ACT_TYPES.WATERSPORT);
+    var targetLower = String(act.target || "").toLowerCase();
+    var actIdLower = String(act.id || "").toLowerCase();
+    var isAnalPenetration = (targetLower === "anus" || targetLower === "ass" || targetLower === "butthole" || actIdLower.indexOf("anal") >= 0)
+        && (type === "penetrate" || type === "continue"
+            || (typeof ACT_TYPES !== "undefined" && (type === ACT_TYPES.PENETRATE || type === ACT_TYPES.CONTINUE)));
+    // Reptilian species have a cloaca — anal isn't unusual to them and the
+    // canned verbiage skips them, so AI sample mode should too.
+    if (isAnalPenetration && typeof getNPCAnatomyType === "function" && getNPCAnatomyType(npc) === "reptilian") {
+        isAnalPenetration = false;
+    }
+    return isWatersport || isAnalPenetration;
+}
+
+/**
  * Initialize LLM enhancement cache and queue for an intimacy state
  * @param {Object} intimacy - The intimacy state object
  */
@@ -3007,7 +3035,41 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // and conflicting responses.
     var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
 
-    if (_ai && isSexualAct(act) && intimacy) {
+    // ── UNNATURAL-ACT BLOCKING GENERATION ──────────────────────────
+    // For uncivilized species + watersports/anal penetration, the canned
+    // template text is a SAMPLE, not the final output. Ask the AI to rewrite
+    // it live in this NPC's voice (short timeout; fall back to the canned
+    // sample if the AI is slow or unavailable). The result is cached so
+    // repeat acts at the same position/depth reuse it.
+    if (_ai && isSexualAct(act) && intimacy && isUnnaturalUncivilizedAct(npc, act)) {
+        try {
+            var _uPrompt = buildIntimacyPrompt(context);
+            var _uTimeout = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 8000); });
+            var _uResult = await Promise.race([
+                _ai({ instruction: _uPrompt, startWith: "", endButtons: "none", generatorName: "cyoaftw-engine-core" }),
+                _uTimeout
+            ]);
+            var _uText = _uResult && (_uResult.text || _uResult);
+            var _uTrimmed = _uText ? String(_uText).trim() : "";
+            var _uMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the polished/i.test(_uTrimmed);
+            if (_uTrimmed && !_uMeta) {
+                finalResponse = _uTrimmed;
+                initializeLLMEnhancement(intimacy);
+                if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
+                    var _uDepth = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
+                    cachePenetrationResponse(intimacy, act.id, currentPosition, _uDepth, _uTrimmed);
+                } else {
+                    cacheLLMEnhancement(intimacy, act.id, currentPosition, _uTrimmed);
+                }
+            } else {
+                console.log("[Intimacy AI] Unnatural-act generation unavailable, using canned sample");
+            }
+        } catch (e) {
+            console.warn("[Intimacy AI] Unnatural-act generation failed, using canned sample:", e);
+        }
+    }
+
+    if (_ai && isSexualAct(act) && intimacy && finalResponse === templateResponse) {
         (async function() {
             try {
                 var prompt = buildIntimacyPrompt(context);
@@ -3218,6 +3280,21 @@ function buildIntimacyPrompt(context) {
         ? "- This action is performed OVER clothing. Do NOT describe or imply the bare appearance, size, shape, or other hidden physical characteristics of the covered body part. Describe only sensations felt through the fabric."
         : "";
 
+    // Sample mode: for uncivilized species + watersports/anal penetration the
+    // canned template text is a species-flavored SAMPLE, not a script. The AI
+    // rewrites it in this NPC's own voice instead of polishing it verbatim.
+    var _sampleMode = typeof isUnnaturalUncivilizedAct === "function"
+        && isUnnaturalUncivilizedAct(npc, action);
+    var _baseLabel = _sampleMode
+        ? "SAMPLE REACTION (a canned example of how this species might react - treat it as an IDEA for tone and content, not a script to preserve)"
+        : "BASE RESPONSE (polish this — fix grammar, refine the language, make it more erotic, but keep the same meaning and details)";
+    var _dialogueRule = _sampleMode
+        ? "- Rewrite the sample entirely in THIS NPC's own voice: apply the SPECIES NOTE, SPEECH STYLE, and temperament above. Keep the same underlying reaction (confused, uncertain, disgusted, or curious-but-consenting - whatever the sample conveys) and the same physical facts, but the wording and any dialogue must be freshly written for this character. You may replace the sample's dialogue with lines that fit better. Keep speech simple, direct, possibly broken - do not make an uncivilized NPC speak eloquently."
+        : "- Do NOT invent new dialogue or speech. Keep existing speech if present, do not add new lines of dialogue.";
+    var _sampleModeLines = _sampleMode
+        ? "- Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them, so the engine can tell speech from narration.\n- Base the reaction on this NPC's actual temperament and arousal, not just the sample: a shy one hesitates, a bold one is direct, a lustful one may enjoy it."
+        : "";
+
     // Build template response context — feed the system-generated response
     // to the AI so it can enhance it rather than generating from scratch.
     const templateContext = templateResponse
@@ -3278,12 +3355,13 @@ You are polishing a sentence from a sex scene in a text adventure game.
 The NPC is ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}.${npc.temperament ? ` Temperament: ${npc.temperament}.` : ""}${npc.personalityTraits && npc.personalityTraits.length ? ` Traits: ${npc.personalityTraits.join(", ")}.` : ""}${_speciesContext}${_speechContext}${_temperamentInflection}
 
 INSTRUCTIONS:
-- Fix grammar, polish sentence structure, and refine the BASE RESPONSE below. Make it read like a clean, well-written sentence in a published novel — not a rough draft.
+${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Make it read like a clean, well-written sentence in a published novel — not a rough draft." : "- Fix grammar, polish sentence structure, and refine the BASE RESPONSE below. Make it read like a clean, well-written sentence in a published novel — not a rough draft."}
 - Make the language more vivid and erotic, but keep the same meaning, the same act, and the same details. Do NOT invent anything new.
 - The act: ${action.tool} ${action.verb} ${action.target} (${actTypeName}).${actDescription.includes("NOT about vaginal sex") ? " Do NOT describe penetration or vaginal sex unless the base response describes it." : ""}
 - Do NOT invent new body parts, actions, or context not in the base response.
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
-- Do NOT invent new dialogue or speech. Keep existing speech if present, do not add new lines of dialogue.
+${_dialogueRule}
+${_sampleModeLines}
 - Keep your response to 1-3 sentences. Match the length of the base response.
 - If the base response includes a sound (grunt, gasp, squeal), keep it.
 - If the base response mentions depth, pressure, or a specific body part, keep that detail.
@@ -3306,7 +3384,7 @@ ${positionContext} | ${clothingContext} | ${arousalContext} | ${penetrationConte
 ${anatomyContext ? "\n" + anatomyContext : ""}
 ${getSizeContext(player, npc) ? "\n" + getSizeContext(player, npc) : ""}
 
-BASE RESPONSE (polish this — fix grammar, refine the language, make it more erotic, but keep the same meaning and details):
+${_baseLabel}:
 "${templateResponse || ""}"
 
 IMPORTANT: Output ONLY the polished response text. No explanations, no commentary, no meta-discussion. If the base response is a fragment, complete it into a full sentence. Just output the final polished text.
@@ -5104,7 +5182,11 @@ function buildWatersportResponse(npc, player, act, intimacy, subjectPronoun, pos
     const target = act.target || "body";
     const temperament = String(npc.temperament || "").toLowerCase();
     const isBold = temperament === "forward" || temperament === "bold";
-    const isUncivilized = npc.civilizationLevel === "uncivilized" || npc.civilizationLevel === "feral";
+    // Species-based check (same gate the anal-penetration verbiage block
+    // uses). npc.civilizationLevel is never populated, so the old gate never
+    // fired and uncivilized species got the fluent civilized-disgust lines.
+    const isUncivilized = npc.civilizationLevel === "uncivilized" || npc.civilizationLevel === "feral"
+        || (npc.species && typeof isCivilizedSpecies === "function" && !isCivilizedSpecies(npc.species));
     const isVeryAroused = arousalLevel >= 80;
 
     // Very bold NPCs at very high arousal: 25% chance of a (reluctantly)
