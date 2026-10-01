@@ -2483,7 +2483,7 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
             const loadKey = (consequence === "internal_semen" || consequence === "oral_semen")
                 ? "semen"
                 : (consequence === "urine" ? "urine" : null);
-            recordBodyUse(npc, bodyPart, { loadKey: loadKey });
+            recordBodyUse(npc, bodyPart, { loadKey: loadKey, useKind: getIntimacyUseKind(act) });
         }
     }
 
@@ -3413,7 +3413,7 @@ ${(() => {
     var _arousal = (_intimacy.arousal && _intimacy.arousal.npc) || 0;
     var _isAroused = _arousal > 400;
     var _isWet = _arousal > 480;
-    var _flavor = (typeof buildHiddenFlavorContext === 'function') ? buildHiddenFlavorContext(npc, action.target, _intimacy, { isAroused: _isAroused, isWet: _isWet, hasLube: hasLube }) : "";
+    var _flavor = (typeof buildHiddenFlavorContext === 'function') ? buildHiddenFlavorContext(npc, action.target, _intimacy, { isAroused: _isAroused, isWet: _isWet, hasLube: hasLube, tool: action.tool }) : "";
     return _flavor ? "\n" + _flavor + "\n" : "";
 })()}
 RESPOND with only the polished text, nothing else:`;
@@ -3650,12 +3650,12 @@ var SENSORY_FRAGMENTS = {
         vagina: [
             ", the slick heat enveloping you",
             ", her inner walls clinging with each stroke",
-            ", the wet friction pulling at your shaft",
+            ", the wet friction pulling at your {yourTool}",
             ", her depths gripping you with each thrust",
             ", the soft wet flesh yielding around you"
         ],
         anus: [
-            ", the tight ring gripping your shaft",
+            ", the tight ring gripping your {yourTool}",
             ", the ribbed passage squeezing tight",
             ", the dry friction giving way to slickness",
             ", the muscular walls clamping hot and tight",
@@ -3688,7 +3688,7 @@ var SENSORY_FRAGMENTS = {
     // Fluid descriptors — only when aroused/lubricated
     fluids: {
         vagina: [
-            ", her arousal coating your shaft",
+            ", her arousal coating your {yourTool}",
             ", the slick sounds of her wetness filling the air",
             ", a thread of her juices stretching between you",
             ", her slick folds parting easily for you",
@@ -3739,7 +3739,7 @@ var SENSORY_FRAGMENTS = {
             ", her {pubicDesc} brushing against your skin"
         ],
         anus: [
-            ", the {pubicDesc} around her hole tickling your shaft",
+            ", the {pubicDesc} around her hole tickling your {yourTool}",
             ", the coarse hair dusting her cleft brushing against you"
         ],
         general: []
@@ -3800,16 +3800,33 @@ var SENSORY_FRAGMENTS = {
 };
 
 /**
+ * Body word for the acting tool, used to fill the {yourTool} placeholder in
+ * the sensory pools. Cock-driven acts keep the original "shaft" wording;
+ * finger and mouth/tongue acts read as fingers/tongue instead, so a rim job
+ * no longer "tickles your shaft".
+ */
+function getSensoryToolWord(tool) {
+    var t = String(tool || "").toLowerCase();
+    if (t === "fingers" || t === "finger" || t === "hand" || t === "hands") return "fingers";
+    if (t === "mouth" || t === "tongue") return "tongue";
+    return "shaft";
+}
+
+/**
  * Get a sensory fragment for the current act. Each fragment type has
  * an independent chance of appearing.
  * @param {Object} npc - The NPC
  * @param {string} target - The body part being targeted
  * @param {Object} intimacy - The intimacy state (for anti-repetition)
- * @param {Object} options - { isAroused, isWet, hasLube, isPenetration }
+ * @param {Object} options - { isAroused, isWet, hasLube, isPenetration, tool }
  */
 function getSensoryFragment(npc, target, intimacy, options) {
     if (!npc || !target) return "";
     options = options || {};
+    var toolWord = getSensoryToolWord(options.tool);
+    var applyTool = function (frag) {
+        return String(frag).replace(/\{yourTool\}/g, toolWord);
+    };
 
     var targetKey = "general";
     var targetLower = String(target).toLowerCase();
@@ -3824,13 +3841,13 @@ function getSensoryFragment(npc, target, intimacy, options) {
     // Friction (30% chance)
     if (Math.random() < 0.30) {
         var pool = SENSORY_FRAGMENTS.friction[targetKey] || SENSORY_FRAGMENTS.friction.general;
-        if (pool.length) fragments.push(pickUnique(pool, intimacy, "friction"));
+        if (pool.length) fragments.push(applyTool(pickUnique(pool, intimacy, "friction")));
     }
 
     // Fluids (25% chance, only when aroused/wet/lubed)
     if (Math.random() < 0.25 && (options.isAroused || options.isWet || options.hasLube)) {
         var fluidPool = SENSORY_FRAGMENTS.fluids[targetKey] || SENSORY_FRAGMENTS.fluids.general;
-        if (fluidPool.length) fragments.push(pickUnique(fluidPool, intimacy, "fluids"));
+        if (fluidPool.length) fragments.push(applyTool(pickUnique(fluidPool, intimacy, "fluids")));
     }
 
     // Skin/pigmentation (20% chance)
@@ -3854,14 +3871,15 @@ function getSensoryFragment(npc, target, intimacy, options) {
         var pubicDesc = getPubicDescription(npc) || "";
         var pubicPool = SENSORY_FRAGMENTS.pubic[targetKey] || [];
         if (pubicPool.length && pubicDesc) {
-            var pubicFrag = pickUnique(pubicPool, intimacy, "pubic");
+            var pubicFrag = applyTool(pickUnique(pubicPool, intimacy, "pubic"));
             pubicFrag = pubicFrag.replace(/\{pubicDesc\}/g, pubicDesc);
             fragments.push(pubicFrag);
         }
     }
 
-    // Partial withdrawal (10% chance, penetration only)
-    if (Math.random() < 0.10 && options.isPenetration) {
+    // Partial withdrawal (10% chance, cock penetration only - the fragments
+    // say "tip"/"shaft", which reads wrong for finger and tongue acts)
+    if (Math.random() < 0.10 && options.isPenetration && toolWord === "shaft") {
         fragments.push(pickUnique(SENSORY_FRAGMENTS.partialWithdrawal, intimacy, "withdrawal"));
     }
 
@@ -3912,6 +3930,10 @@ function buildHiddenFlavorContext(npc, target, intimacy, options) {
     else if (targetLower === "mouth" || targetLower === "lips") targetKey = "mouth";
 
     var flavors = [];
+    var toolWord = getSensoryToolWord(options.tool);
+    var applyTool = function (frag) {
+        return String(frag).replace(/\{yourTool\}/g, toolWord);
+    };
     var skinTone = getSkinDescription(npc) || "";
     var pubicDesc = getPubicDescription(npc) || "";
     var interiorColor = "";
@@ -3920,12 +3942,12 @@ function buildHiddenFlavorContext(npc, target, intimacy, options) {
 
     // Friction
     var frictionPool = SENSORY_FRAGMENTS.friction[targetKey] || SENSORY_FRAGMENTS.friction.general;
-    if (frictionPool.length) flavors.push("Friction: " + pickRandom(frictionPool).replace(/^,\s*/, ""));
+    if (frictionPool.length) flavors.push("Friction: " + applyTool(pickRandom(frictionPool)).replace(/^,\s*/, ""));
 
     // Fluids
     if (options.isAroused || options.isWet || options.hasLube) {
         var fluidPool = SENSORY_FRAGMENTS.fluids[targetKey] || SENSORY_FRAGMENTS.fluids.general;
-        if (fluidPool.length) flavors.push("Fluids: " + pickRandom(fluidPool).replace(/^,\s*/, ""));
+        if (fluidPool.length) flavors.push("Fluids: " + applyTool(pickRandom(fluidPool)).replace(/^,\s*/, ""));
     }
 
     // Skin
@@ -3943,7 +3965,7 @@ function buildHiddenFlavorContext(npc, target, intimacy, options) {
     if (pubicDesc && (targetKey === "vagina" || targetKey === "anus")) {
         var pubicPool = SENSORY_FRAGMENTS.pubic[targetKey] || [];
         if (pubicPool.length) {
-            var pubicFrag = pickRandom(pubicPool).replace(/^,\s*/, "");
+            var pubicFrag = applyTool(pickRandom(pubicPool)).replace(/^,\s*/, "");
             pubicFrag = pubicFrag.replace(/\{pubicDesc\}/g, pubicDesc);
             flavors.push("Pubic hair: " + pubicFrag);
         }
@@ -7880,6 +7902,19 @@ function normalizeBodyUsePart(part) {
     return BODY_USE_PART_MAP[String(part || "").toLowerCase()] || null;
 }
 
+// What kind of use an act counts as, for descriptor wording. Cock
+// penetration is a "fucking"; fingers and mouth/tongue are softer use that
+// shouldn't read as "recently fucked" or "stretched" in later descriptors.
+function getIntimacyUseKind(act) {
+    if (!act) return null;
+    var tool = String(act.tool || "").toLowerCase();
+    var type = act.type;
+    if ((type === ACT_TYPES.PENETRATE || type === ACT_TYPES.CONTINUE) && tool === "penis") return "penetrate";
+    if (tool === "fingers" || tool === "finger" || tool === "hand" || tool === "hands") return "finger";
+    if (tool === "mouth" || tool === "tongue") return "mouth";
+    return null;
+}
+
 function recordBodyUse(entity, part, options) {
     part = normalizeBodyUsePart(part);
     if (!entity || !part) return;
@@ -7889,6 +7924,15 @@ function recordBodyUse(entity, part, options) {
     if (!state) state = entity.bodyUse[part] = {};
     state.usedTurn = turn;
     state.useCount = (state.useCount || 0) + 1;
+    var kind = options && options.useKind;
+    if (kind) {
+        // A recorded fucking outranks softer use: a later finger/lick on the
+        // same part refreshes recency but must not downgrade the descriptor
+        // from "recently fucked" to "recently touched".
+        if (!state.useKind || state.useKind === kind || kind === "penetrate" || state.useKind !== "penetrate") {
+            state.useKind = kind;
+        }
+    }
     if (options && options.loadKey) {
         state.loadKey = options.loadKey;
         state.loadTurn = turn;
@@ -7927,9 +7971,19 @@ function getBodyUseDescriptor(entity, part) {
             : "chafed and crusty, flakes of your long-dried load clinging around the stretched opening";
     }
     if (sinceUse <= BODY_USE_FRESH_TURNS) {
+        // Kind-aware wording: only cock penetration reads as "fucked".
+        // Finger and mouth/tongue use leaves the part slick and sensitive,
+        // not stretched - the AI polish prompt and the post-encounter notes
+        // both feed from this text.
+        var kind = state.useKind || "penetrate"; // legacy records predate useKind
+        if (kind === "finger") return "still slick and sensitive from your recent fingering";
+        if (kind === "mouth") return "wet and sensitive from your recent oral attention";
         return "stretched and slick from a recent fucking, easy to enter";
     }
     if (sinceUse <= BODY_USE_STALE_TURNS) {
+        var staleKind = state.useKind || "penetrate";
+        if (staleKind === "finger") return "faintly sensitive from your earlier fingering";
+        if (staleKind === "mouth") return "faintly sensitive from your earlier oral attention";
         return "noticeably loosened, though the recent use is fading";
     }
     return null;
@@ -8068,7 +8122,8 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
             isAroused: isAroused,
             isWet: isWet,
             hasLube: intimacy ? intimacy.hasLube : false,
-            isPenetration: act.type === "penetrate" || act.type === "continue"
+            isPenetration: act.type === "penetrate" || act.type === "continue",
+            tool: act.tool
         });
         if (sensory) {
             // Append sensory fragments before the final period

@@ -2111,7 +2111,7 @@ anatomyNote,
 
     item.fingered = true;
     item.fingerTarget = target;
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target);
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "finger" });
     const actionDesc = "finger " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} inserted a finger into ${name}'s ${label} while they were unconscious.`, 6);
@@ -2140,7 +2140,7 @@ anatomyNote,
 
     item.penetrated = true;
     item.penetratedTarget = target;
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target);
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
     const actionDesc = "penetrate " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} penetrated ${name}'s ${label} with their cock while they were unconscious.`, 8);
@@ -2187,7 +2187,7 @@ anatomyNote,
 
     item.thrustCount = (item.thrustCount || 0) + 1;
     item.thrustTarget = target;
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target);
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
     const actionDesc = "thrust " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} continued thrusting into ${name}'s ${label} while they were unconscious.`, 6);
@@ -2228,7 +2228,7 @@ anatomyNote,
 
     item.bodyClimaxCount = (item.bodyClimaxCount || 0) + 1;
     item.bodyClimaxTarget = target;
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { loadKey: "semen" });
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { loadKey: "semen", useKind: "penetrate" });
     const actionDesc = "climax inside " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} ejaculated into ${name}'s ${label} while they were unconscious.`, 8);
