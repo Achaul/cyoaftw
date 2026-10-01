@@ -675,7 +675,7 @@ function buildPlayerNarrativePrompt(context) {
 "- The act: " + action.tool + " " + action.verb + " " + action.target + " (" + actTypeName + ").",
 "- Write in second person (\"You press...\"). This is the player's perspective.",
 "- Use direct, literal language: \"press\", \"push\", \"slide\", \"grip\", \"clench\". No metaphors.",
-"- Keep it to 1-2 sentences. Match the length of the base text.",
+"- Match the length of the base text. If the base text is a multi-sentence staged passage (slow inch-by-inch insertion or withdrawal), keep every sentence and the progression intact — do not compress it into one sentence.",
 "- If the base text mentions sphincter, wrinkled skin, tight ring, scent, difficulty, or size — keep those details.",
 "- If the base text describes blocked/failed insertion — keep that. Do NOT make it succeed if the base says it failed.",
 "- Do NOT add NPC dialogue or speech. This is only the player's action description.",
@@ -2311,7 +2311,19 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         if (actId === "stop") {
             endIntimacyEncounter(npc);
         }
-        return generateEndResponse(npc, player, act);
+        var endResponse = generateEndResponse(npc, player, act);
+        // Pull-out end acts report penetrationEnded — actually clear the
+        // penetration state here. generateEndResponse only sets the flag;
+        // leaving intimacy.penetration active after a pull-out kept the
+        // menu offering pull-out/continue and made later acts (and the
+        // auto pull-out switch logic) think the player was still inside.
+        if (endResponse && endResponse.penetrationEnded && intimacy && intimacy.penetration) {
+            intimacy.penetration.active = false;
+            intimacy.penetration.tool = null;
+            intimacy.penetration.target = null;
+            intimacy.penetration.depth = 0;
+        }
+        return endResponse;
     }
 
     // Handle watersports actions
@@ -2992,6 +3004,12 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     let finalResponse = templateResponse;
     const currentPosition = (intimacy && intimacy.position && intimacy.position.player) || positionId || "Unknown";
 
+    // Consumed-cache flag: set when a cached AI response is used this turn.
+    // The prefetch block at the bottom uses it to re-arm the cache (the old
+    // code early-returned here and never re-prefetched, so polished text
+    // only appeared every OTHER time the player repeated the same act).
+    var _consumedCache = false;
+
     // ── PENETRATION CACHE CHECK ───────────────────────────────────
     // For penetration/continue acts, check the penetration response cache
     // first. The cache is keyed by actId||position||depth, so each depth
@@ -3004,13 +3022,8 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
             console.log("[Intimacy Cache] Using cached response for", act.id, "depth", depth);
             // Purge after use so it doesn't repeat
             purgeCachedPenetrationResponse(intimacy, act.id, currentPosition, depth);
-            return {
-                action: act.id,
-                type: act.type,
-                responseText: cached,
-                context: context,
-                _source: "cached-ai"
-            };
+            finalResponse = cached;
+            _consumedCache = true;
         }
     }
 
@@ -3018,12 +3031,13 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // Check LLM enhancement cache for non-penetration sexual acts.
     // Penetration acts already checked above (penetration cache).
     // Purge after use so responses don't repeat.
-    if (isSexualAct(act) && intimacy) {
+    if (isSexualAct(act) && intimacy && finalResponse === templateResponse) {
         initializeLLMEnhancement(intimacy);
         const cachedEnhancement = getCachedLLMEnhancement(intimacy, act.id, currentPosition);
         if (cachedEnhancement) {
             finalResponse = cachedEnhancement;
             purgeCachedLLMEnhancement(intimacy, act.id, currentPosition);
+            _consumedCache = true;
         }
     }
 
@@ -3041,7 +3055,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // it live in this NPC's voice (short timeout; fall back to the canned
     // sample if the AI is slow or unavailable). The result is cached so
     // repeat acts at the same position/depth reuse it.
-    if (_ai && isSexualAct(act) && intimacy && isUnnaturalUncivilizedAct(npc, act)) {
+    if (_ai && isSexualAct(act) && intimacy && finalResponse === templateResponse && isUnnaturalUncivilizedAct(npc, act)) {
         try {
             var _uPrompt = buildIntimacyPrompt(context);
             var _uTimeout = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 8000); });
@@ -3069,7 +3083,11 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         }
     }
 
-    if (_ai && isSexualAct(act) && intimacy && finalResponse === templateResponse) {
+    // Fire the prefetch both when we just showed a raw template (normal case)
+    // AND when we just consumed a cached AI response, so the cache is re-armed
+    // for the next occurrence instead of leaving the act to alternate between
+    // polished and raw output.
+    if (_ai && isSexualAct(act) && intimacy && (finalResponse === templateResponse || _consumedCache)) {
         (async function() {
             try {
                 var prompt = buildIntimacyPrompt(context);
@@ -3362,7 +3380,7 @@ ${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Ma
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
 ${_dialogueRule}
 ${_sampleModeLines}
-- Keep your response to 1-3 sentences. Match the length of the base response.
+- Keep your response to 1-4 sentences. Match the length of the base response — do not compress a longer staged passage into fewer sentences.
 - If the base response includes a sound (grunt, gasp, squeal), keep it.
 - If the base response mentions depth, pressure, or a specific body part, keep that detail.
 
@@ -5652,14 +5670,16 @@ function generateEndResponse(npc, player, act) {
         // Lead the response with an erotic description of the penis sliding out
         // of the orifice, before the NPC reaction and ejaculation/scent details.
         const analWithdrawalLead = pickRandom([
-            `You slide your ${tool} out of ${possessivePronoun} stretched ass, the swollen ring gripping your shaft the whole way out.`,
-            `You withdraw your ${tool} from ${possessivePronoun} depths, the tight ring dragging along your length with a wet suck.`,
-            `You ease your ${tool} free of ${possessivePronoun} ass, the muscle clenching behind the head until it pops free with a soft sound.`
+            `You slide your ${tool} out of ${possessivePronoun} stretched ass inch by inch, the swollen ring gripping your shaft the whole way out. The head tugs at the rim a moment, then pops free with a soft sound.`,
+            `You withdraw your ${tool} from ${possessivePronoun} depths one slow inch at a time, the tight ring dragging along your length with a wet suck. The muscle flutters as it tries to clench shut behind you.`,
+            `You ease your ${tool} free of ${possessivePronoun} ass, the heat peeling off you in layers until the crown stretches the rim wide and slips out. The loosened ring twitches in the open air.`,
+            `You pull back until only the head of your ${tool} remains clamped in ${possessivePronoun} ring, pausing there, then draw it out with one last stretch and a quiet pop.`
         ]);
         const vaginalWithdrawalLead = pickRandom([
-            `You slide your ${tool} out of ${possessivePronoun} pussy, the slick folds clinging to your shaft as you withdraw.`,
-            `You pull your ${tool} free from ${possessivePronoun} wet depths, a string of arousal briefly connecting you before it snaps.`,
-            `You withdraw your ${tool} from ${possessivePronoun} pussy, the swollen lips dragging along your length and slowly pressing back together.`
+            `You slide your ${tool} out of ${possessivePronoun} pussy inch by inch, the slick folds clinging to your shaft on the whole slow ride out. A string of arousal connects you to ${possessivePronoun} entrance before it snaps.`,
+            `You pull your ${tool} free from ${possessivePronoun} wet depths one careful inch at a time, letting ${objectPronoun} feel every ridge of the withdrawal. The swollen lips drag along your length and slowly press back together behind you.`,
+            `You withdraw your ${tool} from ${possessivePronoun} pussy in short pulls, the entrance gripping and releasing with each inch that clears it.`,
+            `You ease back until only the head of your ${tool} sits inside ${possessivePronoun}, then slip that out too, ${possessivePronoun} lips flushed and clinging wet as they close.`
         ]);
 
         // Set flag that pull-out just occurred and track what was penetrated
@@ -6534,9 +6554,11 @@ function endPenetrationWithNarration(npc, intimacy, reason = "transition") {
         // Player was the one penetrating — the player's tool pulls out of the NPC
         if (target === "vagina" || target === "pussy") {
             pullOutNarrative = pickRandom([
-                `You pull out from ${posPronoun} pussy, the wet folds clinging to your ${tool} as you withdraw.`,
-                `You slide your ${tool} free from ${posPronoun} slick depths, a string of arousal briefly connecting you.`,
-                `You withdraw from ${posPronoun} pussy, the swollen lips slowly pressing back together.`
+                `You pull out from ${posPronoun} pussy inch by inch, the wet folds clinging to your ${tool} the whole way. The rim of your crown drags at ${posPronoun} entrance on the way out, then slips free with a soft, wet sound, ${posPronoun} lips slowly pressing back together.`,
+                `You slide your ${tool} free from ${posPronoun} slick depths one slow inch at a time, letting ${posPronoun} feel every ridge of your withdrawal. A string of arousal briefly connects you to ${posPronoun} entrance before it snaps, and ${posPronoun} pussy flutters at the sudden emptiness.`,
+                depth >= 5
+                    ? `You ease your ${tool} out from where it was buried to the root, ${posPronoun} swollen lips hugging your shaft from base to tip on the long slide out. The head tugs free with a quiet squelch and ${posPronoun} well-stretched entrance slowly settles closed, flushed and slick.`
+                    : `You withdraw from ${posPronoun} pussy in slow strokes, out further with each pull until only the head remains. ${(typeof getSubjectPronoun === "function" ? getSubjectPronoun(npc) : "She") || "She"} whimpers when you finally slip that out too, the lips dragging and then closing behind you.`
             ]);
             // ── CUM DRIP: semen leaking out after an internal ejaculation ──
             var climaxState = intimacy.climax || {};
@@ -6551,10 +6573,11 @@ function endPenetrationWithNarration(npc, intimacy, reason = "transition") {
             }
         } else if (target === "anus" || target === "ass") {
             pullOutNarrative = pickRandom([
-                `You pull out from ${posPronoun} anus, the stretched ring slowly clenching shut behind you.`,
-                `You withdraw your ${tool} from ${posPronoun} depths, the loosened sphincter twitching in the open air.`,
-                depth >= 5 ? `You pull out from ${posPronoun} anus, leaving a gape that slowly puckers back.` :
-                `You slide free from ${posPronoun} anus, the ring of muscle fluttering as it tries to close.`
+                `You pull out from ${posPronoun} anus inch by inch, the stretched ring gripping your ${tool} on the whole slow ride out. The swollen rim clings to your crown, stretches, then releases it with a soft pop, the loosened sphincter twitching in the open air as it tries to close.`,
+                `You withdraw your ${tool} from ${posPronoun} depths one careful inch at a time, the heat sliding off you in layers. ${posPronoun[0].toUpperCase() + posPronoun.slice(1)} ring flutters and cinches as each inch clears it, and when the head finally tugs free, the muscle quivers shut behind you.`,
+                depth >= 5
+                    ? `You drag your ${tool} back out of the depths you'd reached, ${posPronoun} rim stretched wide and clinging the entire way. The crown pops loose at last and a round gape is left behind, slowly puckering back, fluttering as it tries to remember its shape.`
+                    : `You slide free from ${posPronoun} anus in short pulls, the ring of muscle dragging at your ${tool} and then fluttering as it tries to close, only to be stretched open again by the next inch.`
             ]);
             // ── CUM OVERFLOW: messy release when bowels are full ──
             var analCum = (intimacy.encounterFlags && intimacy.encounterFlags.analEjaculationCount) || 0;
@@ -8057,7 +8080,12 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     // the player narration. The transition already describes the action
     // (e.g. "You lean in and kiss her cheek"), so appending the action
     // narrative ("Your mouth kisses her cheek") produces redundant repetition.
-    if (transitionNarrative) {
+    // EXCEPTION: penetration entry acts. Their staged inch-by-inch entry
+    // narrative is far richer than the one-line contact description
+    // ("You position yourself, guiding your cock to her vagina"), so for
+    // those the entry narrative wins.
+    var _isEntryAct = act.type === "penetrate" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.PENETRATE);
+    if (transitionNarrative && !_isEntryAct) {
         var t = transitionNarrative.trim();
         if (!t.match(/[.!?]$/)) t += ".";
         finalNarrative = t;
@@ -8114,22 +8142,26 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
 
     // ── PLAYER NARRATIVE AI POLISH ────────────────────────────────
     // Check if we have a cached AI-polished player narrative for this
-    // act+position. If so, use it. If not, fire a background AI call
-    // to polish the template narrative and cache for next time.
+    // act+position. If so, use it AND re-arm the cache with a fresh
+    // background polish, so repeated acts show polished text every time
+    // instead of alternating between polished and raw template output.
     // Same non-blocking pattern as the NPC response cache.
     if (intimacy && !act.playerIsBottom) {
         var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
         var _currentPosition = (intimacy.position && intimacy.position.player) || "Unknown";
+        // Keep the raw template for the prefetch — polishing an
+        // already-polished cache hit compounds rewrites.
+        var _templateNarrative = finalNarrative;
 
         // Check player narrative cache first
         var cachedPlayerNarr = getCachedPlayerNarrative(intimacy, actionId, _currentPosition);
         if (cachedPlayerNarr) {
             console.log("[Intimacy AI] Using cached player narrative for", actionId);
             purgeCachedPlayerNarrative(intimacy, actionId, _currentPosition);
-            return cachedPlayerNarr;
+            finalNarrative = cachedPlayerNarr;
         }
 
-        // Fire background AI to polish the player narrative for next time
+        // Fire background AI to polish the template narrative for next time
         if (_ai && isSexualAct(act)) {
             (async function() {
                 try {
@@ -8139,7 +8171,7 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
                         player: player,
                         action: act,
                         position: posObj || { label: _currentPosition },
-                        templateResponse: finalNarrative
+                        templateResponse: _templateNarrative
                     };
                     var prompt = buildPlayerNarrativePrompt(playerContext);
                     console.log("[Intimacy AI] Background player narrative prefetch for", actionId);
@@ -8747,7 +8779,9 @@ function buildActionNarratives(npc, actionId, act, context) {
         return [
             "You release a stream of warm urine onto " + targetPhrase + ".",
             "You let go, the warm stream trickling down " + targetPhrase + ".",
-            "You aim and pee onto " + targetPhrase + ", the warmth spreading across " + whose + " skin."
+            "You aim and pee onto " + targetPhrase + ", the warmth spreading across " + whose + " skin.",
+            "You relax and let the stream flow, the warm wetness splashing over " + targetPhrase + ".",
+            "The pressure releases, your piss arcing out onto " + targetPhrase + " in a steady flow."
         ];
     }
 
@@ -8899,7 +8933,9 @@ function buildActionNarratives(npc, actionId, act, context) {
                 narratives.push(
                     `You ${continueVerbPresent} ${fullAnatomyDesc}.`,
                     `Your ${genericTool} ${genericToolVerb} ${fullAnatomyDesc}.`,
-                    `You reach out and ${continueVerbPresent} ${fullAnatomyDesc}.`
+                    `You reach out and ${continueVerbPresent} ${fullAnatomyDesc}.`,
+                    `You lean in close and ${continueVerbPresent} ${fullAnatomyDesc}, taking your time.`,
+                    `Your ${genericTool} ${genericToolVerb} ${fullAnatomyDesc} with slow, deliberate movements.`
                 );
             }
     }
@@ -9140,29 +9176,86 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
     // Teasing
     if (verbBase === 'tease') {
         narratives.push(
-            `You ${verbPresent} ${cleanAnatomyDesc}, drawing ${highArousal ? 'soft moans' : 'gentle gasps'} from ${posPronoun} lips.`
+            `You ${verbPresent} ${cleanAnatomyDesc}, drawing ${highArousal ? 'soft moans' : 'gentle gasps'} from ${posPronoun} lips.`,
+            `You ${verbPresent} ${cleanAnatomyDesc} in slow circles, ${posPronoun} hips shifting toward your touch.`,
+            `You ${verbPresent} ${cleanAnatomyDesc} with featherlight strokes, smiling as ${subjectPronoun.toLowerCase()} ${highArousal ? 'whimpers for more' : 'squirms at the contact'}.`
         );
     }
     
     // Rubbing
     if (verbBase === 'rub') {
         narratives.push(
-            `You ${verbPresent} ${cleanAnatomyDesc}, creating delicious friction against ${posPronoun} ${highArousal ? 'soaked' : 'dampening'} folds.`
+            `You ${verbPresent} ${cleanAnatomyDesc}, creating delicious friction against ${posPronoun} ${highArousal ? 'soaked' : 'dampening'} folds.`,
+            `You ${verbPresent} ${cleanAnatomyDesc} with the pad of your fingers, ${highArousal ? 'her slickness coating your skin' : 'warmth building under your touch'}.`,
+            `Your palm ${verbIng} ${cleanAnatomyDesc} in a steady rhythm, pressing ${highArousal ? 'firm and insistent' : 'gently at first'} against the heat.`
         );
     }
     
-    // Penetration/enter - explicit initial insertion descriptions
+    // Penetration/enter - staged, inch-by-inch initial insertion.
+    // Each passage walks the entry in stages: positioning → the breach →
+    // sinking in → seated. Keyed on virginity, wetness/lube, and relative
+    // size so the same act reads differently on different NPCs.
     if (verbBase === 'enter' || verbBase === 'penetrate') {
-        narratives.push(
-            `You ${verbPresent} ${cleanAnatomyDesc}, your ${cockState} cock sinking into ${posPronoun} ${highArousal ? 'slick, clenching channel as the warm folds envelop your shaft' : 'tight passage, the resistance giving way to your persistence'}${getVaginalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
-        );
+        if (actualTool === 'penis' || actualTool === 'cock') {
+            const _vIsVirgin = !!(npc.intimacy && npc.intimacy.virginity && npc.intimacy.virginity.vaginal);
+            const _vRel = (typeof getRelativeSize === 'function' && player) ? getRelativeSize(player, npc) : "";
+            const _vPlayerBig = (_vRel === "player-larger" || _vRel === "player-much-larger");
+            const _vScent = scentDesc ? ', ' + scentDesc : '';
+            const _vOpen = isVaginaOpen;
+
+            if (_vIsVirgin) {
+                narratives.push(
+                    `You guide the head of your ${cockState} cock to ${cleanAnatomyDesc}, pressing softly against ${posPronoun} untried entrance. The folds part around your tip, slick but snug, and ${subjectPronoun.toLowerCase()} tenses as you meet the thin resistance of ${posPronoun} maidenhead. You push past it in one slow, deliberate stroke — an inch, then two — filling warmth that has never known this, while ${subjectPronoun.toLowerCase()} whimpers and grips you tight${_vScent}.`,
+                    `You ease the tip of your ${cockState} cock between ${posPronoun} ${pubicDesc ? pubicDesc + ', ' : ''}finding ${posPronoun} untouched opening. ${subjectPronoun} breathes in sharp and shallow as you work the head in with tiny rolls of your hips, letting ${posPronoun} body learn your shape inch by inch. When you finally sink the full length in, ${subjectPronoun.toLowerCase()} shudders beneath you, stretched and filled for the first time${_vScent}.`
+                );
+            } else if (_vPlayerBig) {
+                narratives.push(
+                    `You press the head of your ${cockState} cock against ${cleanAnatomyDesc}, and ${subjectPronoun.toLowerCase()} exhales hard at the first stretch. You feed it in by degrees — the crown, then a slow, straining inch, ${posPronoun} small frame struggling to take your girth. Halfway in you stop and let ${posPronoun} adjust, pinned open around you, before rocking the last inches home${_vScent}.`,
+                    `You notch yourself at ${cleanAnatomyDesc} and push, and even as worked up as ${subjectPronoun.toLowerCase()} is, the fit is a slow fight. The head wedges in with a lewd stretch and you advance one grudging inch at a time, ${posPronoun} opening rippling around you. ${subjectPronoun} can only hold still and take it, moaning when your hips finally meet ${posPronoun} skin${_vScent}.`
+                );
+            } else if (_vOpen || isSlick || highArousal) {
+                narratives.push(
+                    `You slide the head of your ${cockState} cock up along ${cleanAnatomyDesc} until it catches at ${posPronoun} entrance. One smooth push and the crown slips in, the first inch swallowed easy, then the rest gliding home in a single slow stroke. You settle deep, ${posPronoun} slick heat molding around every inch of you${getVaginalSound()}${_vScent}.`,
+                    `You push into ${cleanAnatomyDesc} and meet almost no resistance — just hot, slick folds parting around your ${cockState} length. An inch, then two, then all of it, until you're seated to the root and ${subjectPronoun.toLowerCase()} lets out a low, satisfied moan${_vScent}.`,
+                    `You nudge ${posPronoun} entrance with the head of your ${cockState} cock, smearing through ${posPronoun} wetness, then sink in with one unhurried stroke. The passage clutches you in rolling waves as you bury yourself, inch by inch, until you're flush against ${posPronoun}${_vScent}.`
+                );
+            } else {
+                narratives.push(
+                    `You push the head of your ${cockState} cock against ${cleanAnatomyDesc}, tight and resisting at first. You work yourself in with slow circles, barely gaining an inch before ${posPronoun} body starts to yield and slick heat seeps out around you. Bit by bit you sink in until you're rooted inside, ${posPronoun} passage clinging to every inch of you${_vScent}.`,
+                    `You press into ${cleanAnatomyDesc} slowly, letting the head stretch ${posPronoun} entrance around you. The first inch is the hardest — ${subjectPronoun.toLowerCase()} winces and tenses — but with each small push another inch follows, until your full length is wrapped in ${posPronoun} reluctant warmth${_vScent}.`
+                );
+            }
+        } else {
+            narratives.push(
+                `You ${verbPresent} ${cleanAnatomyDesc}, feeling ${posPronoun} warmth close around your ${actualTool}${scentDesc ? ', ' + scentDesc : ''}.`
+            );
+        }
     }
     
-    // Intercourse actions - already inside, describe the feeling
+    // Intercourse actions - already inside, describe the feeling.
+    // Depth-aware: shallow (1-2), half (3), deep (4), hilted (5) so
+    // repeated Continue clicks read as a progression, not a loop.
     if (verbBase === 'fuck' || verbBase === 'thrust' || verbBase === 'pound' || verbBase === 'grind' || verbBase === 'slide') {
         narratives.push(
             `You ${verbPresent} ${cleanAnatomyDesc}, ${posPronoun} slick channel ${highArousal ? 'clenching your shaft desperately' : 'gripping your shaft tightly'}${getVaginalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
         );
+        const _d = (intimacy.penetration && intimacy.penetration.depth) || 1;
+        if (_d >= 5) {
+            narratives.push(
+                `You ${verbPresent} into ${posPronoun} hilt, hips meeting ${posPronoun} skin with every stroke, the root of your shaft buried in ${posPronoun} clenching heat${getVaginalSound()}.`,
+                `You drive the full length home again and again, bottoming out inside ${posPronoun} depths while ${subjectPronoun.toLowerCase()} shakes with each impact${getVaginalSound()}.`
+            );
+        } else if (_d >= 3) {
+            narratives.push(
+                `You ${verbPresent} in long, deep strokes, half your length dragging out and pushing back in, ${posPronoun} walls clinging on every pull${getVaginalSound()}.`,
+                `You work deeper with each thrust, seating more of yourself inside ${cleanAnatomyDesc} until ${subjectPronoun.toLowerCase()} gasps at the fullness${getVaginalSound()}.`
+            );
+        } else {
+            narratives.push(
+                `You ${verbPresent} in shallow strokes, keeping just the first few inches moving inside ${posPronoun}, letting ${posPronoun} feel every ridge of you${getVaginalSound()}.`,
+                `You rock against ${cleanAnatomyDesc}, unhurried, barely pulling out before sinking back in${getVaginalSound()}.`
+            );
+        }
     }
     
     // Press verb - gender and tool aware
@@ -9213,6 +9306,9 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
             'lewd noises escaping with each movement',
             'the messy, wet sounds of your release'
         ]) : '';
+        // Sound suffix needs its own comma — splicing it in with a bare
+        // space produced "deep within , musky scent" style broken punctuation.
+        const soundSuffix = isMultipleEjaculation && sloshingSound ? ', ' + sloshingSound : '';
         
         // Check vagina state - if it's been well-used, describe it as such
         const vaginaAnatomy = (npc.anatomy && npc.anatomy.vagina) || {};
@@ -9223,12 +9319,12 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         const channelDesc = isVaginaOpen ? pickRandom(['well-used channel', 'stretched passage', 'yielding sheath', 'soaked depths']) : pickRandom(['tight channel', 'clenching sheath', 'snug passage', 'gripping depths']);
         
         narratives.push(
-            `You ejaculate into ${cleanAnatomyDesc}, filling ${posPronoun} ${channelDesc} with ${isMultipleEjaculation ? 'another thick deposit, mixing with the slick pool already there' : 'your hot cum, the warm fluid spreading deep within'} ${isMultipleEjaculation ? sloshingSound : ''}${scentDesc ? ', ' + scentDesc : ''}.`,
-            `You release deep inside ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'adding more to the growing pool of semen' : 'pumping your seed into '}${posPronoun} warm, welcoming ${channelDesc} with a wet sound${scentDesc ? ', ' + scentDesc : ''}.`,
-            `You climax inside ${cleanAnatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous load with a lewd squelch, her depths struggling to contain it all' : 'filling '}${posPronoun} ${channelDesc}, the slick walls clenching around your release${scentDesc ? ', ' + scentDesc : ''}.`,
-            `Your ${penisState} penis ejaculates into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'more semen joining the existing pool, dripping out around your shaft with each pulse' : 'thick spurts of cum coating '}${posPronoun} inner walls as they clench greedily${scentDesc ? ', ' + scentDesc : ''}.`,
+            `You ejaculate into ${cleanAnatomyDesc}, filling ${posPronoun} ${channelDesc} with ${isMultipleEjaculation ? 'another thick deposit, mixing with the slick pool already there' : 'your hot cum, the warm fluid spreading deep within'}${soundSuffix}${scentDesc ? ', ' + scentDesc : ''}.`,
+            `You release deep inside ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'adding more to the growing pool of semen in ' : 'pumping your seed into '}${posPronoun} warm, welcoming ${channelDesc} with a wet sound${scentDesc ? ', ' + scentDesc : ''}.`,
+            `You climax inside ${cleanAnatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous load with a lewd squelch, her depths struggling to contain it all' : 'filling ' + posPronoun + ' ' + channelDesc + ', the slick walls clenching around your release'}${scentDesc ? ', ' + scentDesc : ''}.`,
+            `Your ${penisState} penis ejaculates into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'more semen joining the existing pool, dripping out around your shaft with each pulse as ' : 'thick spurts of cum coating '}${posPronoun} inner walls${isMultipleEjaculation ? ' clench greedily' : ' as they clench greedily'}${scentDesc ? ', ' + scentDesc : ''}.`,
             `You fill ${cleanAnatomyDesc} with your seed, ${isVaginaOpen ? 'the relaxed folds accepting' : 'the slick folds greedily drawing in'} your ${isMultipleEjaculation ? 'additional' : 'hot'} release, the warmth spreading through her core${scentDesc ? ', ' + scentDesc : ''}.`,
-            `Your ${cockState} cock pulses into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'another load of cum adding to the mess, some squirting out with each thrust' : 'hot jets of semen flooding '}${posPronoun} ${channelDesc}${scentDesc ? ', ' + scentDesc : ''}.`
+            `Your ${cockState} cock pulses into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'another load of cum adding to the mess inside ' + posPronoun + ' ' + channelDesc + ', some squirting out around your shaft with each thrust' : 'hot jets of semen flooding ' + posPronoun + ' ' + channelDesc}${scentDesc ? ', ' + scentDesc : ''}.`
         );
     }
     
@@ -9270,7 +9366,7 @@ function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDe
     return [
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
-        verbBase === 'squeeze' ? `You gently ${verbPresent} ${anatomyDesc}, feeling ${posPronoun} ${highArousal ? 'tight draw' : 'warm weight'}.` : null,
+        verbBase === 'squeeze' ? `You gently ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling them draw up tight against her' : 'feeling their warm weight in your palm'}.` : null,
         verbBase === 'cupp' || verbBase === 'cup' ? `You cup ${anatomyDesc} in your palm, massaging the heavy orbs.` : null,
         verbBase === 'fondle' ? `You fondle ${anatomyDesc}, rolling them gently in your ${pickRandom(['hand', 'palm', 'fingers'])}.` : null,
         `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling them shift in your hand' : 'enjoying the texture'}.`
@@ -9443,17 +9539,21 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             'lewd sloshing noises escaping from within',
             'the slick, wet sounds filling the air'
         ]) : '';
+        // Sound suffix needs its own comma — splicing it in with a bare
+        // space produced "heavy with semen the cavity sloshing" and
+        // "unseen depths , musky scent" style broken punctuation.
+        const soundSuffix = isMultipleEjaculation && sloshingSound ? ', ' + sloshingSound : '';
         
         // Adjust cavity description based on whether it's been opened
         const cavityDesc = isAnusOpen ? pickRandom(['well-used passage', 'stretched channel', 'yielding depths', 'open bowels']) : pickRandom(['tight channel', 'gripping passage', 'snug depths', 'tight bowels']);
         
         return [
-            `You ejaculate into ${anatomyDesc}, filling ${posPronoun} ${cavityDesc} with ${isMultipleEjaculation ? 'another thick deposit, the cavity already swollen and heavy with semen' : 'your hot seed, the viscous fluid filling the unseen depths'} ${isMultipleEjaculation ? sloshingSound : ''}${scentDesc ? ', ' + scentDesc : ''}.`,
+            `You ejaculate into ${anatomyDesc}, filling ${posPronoun} ${cavityDesc} with ${isMultipleEjaculation ? 'another thick deposit, the cavity already swollen and heavy with semen' : 'your hot seed, the viscous fluid filling the unseen depths'}${soundSuffix}${scentDesc ? ', ' + scentDesc : ''}.`,
             `You release into ${anatomyDesc}, ${isMultipleEjaculation ? 'adding to the growing pool of semen already sloshing in ' : 'pumping your thick cum into '}${posPronoun} ${cavityDesc} with a wet squelch${scentDesc ? ', ' + scentDesc : ''}.`,
-            `You climax inside ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous deposits with a lewd gurgle, her bowels struggling to contain the growing volume' : 'filling '}${posPronoun} ${cavityDesc}, the slick sounds of release echoing from within${scentDesc ? ', ' + scentDesc : ''}.`,
+            `You climax inside ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous deposits with a lewd gurgle, her bowels struggling to contain the growing volume' : 'filling ' + posPronoun + ' ' + cavityDesc + ', the slick sounds of release echoing from within'}${scentDesc ? ', ' + scentDesc : ''}.`,
             `Your ${penisState} penis ejaculates into ${anatomyDesc}, ${isMultipleEjaculation ? 'more semen forcing its way into the already-full cavity, a wet squelch escaping with each pulse, filling ' : 'releasing deep into '}${posPronoun} hot, clenching ${cavityDesc}${scentDesc ? ', ' + scentDesc : ''}.`,
             `You fill ${anatomyDesc} with your seed, ${isAnusOpen ? 'the relaxed ring accepting' : 'the tight ring milking'} your ${isMultipleEjaculation ? 'remaining' : 'thick'} cum into ${posPronoun} depths as the cavity makes wet, obscene sounds${scentDesc ? ', ' + scentDesc : ''}.`,
-            `Your ${penisState} cock pumps into ${anatomyDesc}, ${isMultipleEjaculation ? 'another load of semen adding to the slick, sloshing mess inside, her bowels gurgling with the overflow' : 'hot spurt after spurt coating '}${posPronoun} ${cavityDesc} with glistening warmth${scentDesc ? ', ' + scentDesc : ''}.`
+            `Your ${penisState} cock pumps into ${anatomyDesc}, ${isMultipleEjaculation ? 'another load of semen adding to the slick, sloshing mess inside, her bowels gurgling with the overflow' : 'hot spurt after spurt coating ' + posPronoun + ' ' + cavityDesc + ' with glistening warmth'}${scentDesc ? ', ' + scentDesc : ''}.`
         ];
     }
     
@@ -9487,7 +9587,11 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
         verbBase === 'penetrate' || verbBase === 'finger' || verbBase === 'enter' ?
             actualTool === 'penis' || actualTool === 'cock' ?
                 isDirtyBlock ? deterrenceDesc + "."
-                : analEasy ? `You push your ${cockState} cock into ${anatomyDesc}, the slick passage yielding around you${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`
+                : analEasy ? pickRandom([
+                    `You push the head of your ${cockState} cock against ${anatomyDesc}, and the slickened ring gives on the first press. The crown pops past the clench, then the shaft follows inch by inch, ${posPronoun} heat swallowing you to the root in one slow glide. ${subjectPronoun} lets out a low, shaky breath as you settle deep${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
+                    `You nudge ${anatomyDesc} with the head of your ${cockState} cock until the muscle slackens around you, then feed the length in by degrees — an inch, a pause, another inch — until your hips rest flush against ${posPronoun} skin. ${subjectPronoun} relaxes around you in slow ripples, taking every bit of you${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
+                    `You slide into ${anatomyDesc} with one unhurried push, the prepared ring parting easy around your ${cockState} girth. You keep going until you're buried to the root, then hold there, letting ${subjectPronoun.toLowerCase()} adjust to the fullness before you draw back${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`
+                ])
                 : (function() {
                     var canInsert = canCompleteAnalInsertion(npc, player);
                     var rel = player ? getRelativeSize(player, npc) : "";
@@ -9506,12 +9610,15 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
                         return blockedLine + (scentDesc ? ' — ' + scentDesc : '') + "." + (deterrenceDesc ? ' ' + deterrenceDesc + '.' : '');
                     }
                     if (canInsert === "difficult") {
-                        var diffLine = playerLarger
-                            ? `You press the head of your ${cockState} cock against ${posPronoun} anus, ${sphincterDesc}. ${subjectPronoun} tenses and squirms, but you push slowly, firmly, stretching the wrinkled skin taut until the ring gives way and you sink into ${posPronoun} tight ass`
-                            : `You press the head of your ${cockState} cock against ${posPronoun} anus, ${sphincterDesc}. You push slowly, the wrinkled flesh pulling taut as you force the ring open, gradually sinking into ${posPronoun} ass`;
-                        return diffLine + (scentDesc ? ', ' + scentDesc : '') + "." + (deterrenceDesc ? ' ' + deterrenceDesc + '.' : '');
+                        return pickRandom([
+                            `You press the head of your ${cockState} cock against ${posPronoun} anus, ${sphincterDesc}. ${subjectPronoun} tenses and squirms, but you push slowly, firmly, stretching the wrinkled skin taut until the ring gives way and the crown slips inside. You gain a straining inch, then another, working deeper in small rocking strokes until ${posPronoun} heat grips your whole length` + (scentDesc ? ', ' + scentDesc : '') + "." + (deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''),
+                            `You grease nothing and rush nothing — you set the head of your ${cockState} cock against ${posPronoun} anus, ${sphincterDesc}, and lean in with patient pressure. The muscle fights you in slow motion, ${subjectPronoun.toLowerCase()} hissing as the ring widens around you, until finally it cinches behind the crown and you're in. You sink the shaft in inch by grudging inch, pausing to let ${posPronoun} body accept you` + (scentDesc ? ', ' + scentDesc : '') + "." + (deterrenceDesc ? ' ' + deterrenceDesc + '.' : '')
+                        ]);
                     }
-                    return `You push the head of your ${cockState} cock against ${posPronoun} anus, ${sphincterDesc}, then slowly push into ${posPronoun} ass${scentDesc ? ', ' + scentDesc : ''}${getAnalSound()}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`;
+                    return pickRandom([
+                        `You push the head of your ${cockState} cock against ${posPronoun} anus, ${sphincterDesc}, and lean into it with steady pressure. The muscle resists, then blooms open around the crown, and the first inch slides in with a pull that drags the breath out of ${posPronoun}. You advance slowly — an inch, a pause, another inch — feeding the shaft into ${posPronoun} clenching heat until you're seated deep${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
+                        `You set yourself at ${posPronoun} anus and push, watching the wrinkled pucker dimple under the head of your ${cockState} cock. It takes three tries — press, ease back, press deeper — before the ring surrenders and the crown pops in, ${subjectPronoun.toLowerCase()} jerking at the stretch. From there you work inward in short strokes, each one gaining a little more depth, until ${posPronoun} ass has swallowed you to the root${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`
+                    ]);
                 })()
             : `You push your finger into ${anatomyDesc}, the tight sphincter gripping your digit${scentDesc ? ', ' + scentDesc : ''}.` : null,
         verbBase === 'tease' || verbBase === 'circle' ?
@@ -9522,7 +9629,21 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             `Your tongue ${verbConjugation(verbBase, 'third')} ${anatomyDesc}, wetting the sensitive skin with slow strokes${scentDesc ? ', ' + scentDesc : ''}.` : null,
         // Intercourse - already inside, keep it simple
         verbBase === 'fuck' || verbBase === 'thrust' || verbBase === 'pound' || verbBase === 'grind' || verbBase === 'slide' ?
-            `You ${verbPresent} into ${posPronoun} ass, the tight heat gripping your ${shaftState} shaft${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.` : null,
+            (function() {
+                var _ad = (intimacy.penetration && intimacy.penetration.depth) || 1;
+                if (_ad >= 5) return pickRandom([
+                    `You ${verbPresent} into ${posPronoun} ass to the hilt, your hips hammering ${posPronoun} cheeks, the root of your ${shaftState} shaft ground by ${posPronoun} stretched ring${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You pound the full length home with every stroke, bottoming out in ${posPronoun} bowels while ${subjectPronoun.toLowerCase()} grunts at each impact${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                ]);
+                if (_ad >= 3) return pickRandom([
+                    `You ${verbPresent} in long, deep strokes, withdrawing until only the head stays clamped in ${posPronoun} ring, then driving back in${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You work deeper with each thrust, ${posPronoun} heat loosening around you as more of your ${shaftState} shaft slides in${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                ]);
+                return pickRandom([
+                    `You ${verbPresent} into ${posPronoun} ass, the tight heat gripping your ${shaftState} shaft${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You keep to shallow strokes, just the first few inches moving in ${posPronoun} clenching passage, opening ${posPronoun} up bit by bit${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                ]);
+            })() : null,
         verbBase === 'ejaculate' || verbBase === 'ejaculate on' ?
             `You ${verbPresent} into ${anatomyDesc}, filling ${posPronoun} ass with your cum.` : null,
         // Generic fallback

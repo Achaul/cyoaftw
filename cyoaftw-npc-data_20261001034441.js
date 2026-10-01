@@ -1453,7 +1453,16 @@ const NPC_CONVERSATION_CATALOGUE = [
             "You pitch your tone friendly and unforced, and they seem to soften."
         ],
         intent: "flattery",
-        relationshipImpact: { mood: 1, favor: 5, hostility: -1, intent: "flattery", markMet: true, actionTag: "win-them-over" },
+        relationshipImpact: { mood: 1, favor: 5, hostility: -1, attraction: 4, intent: "flattery", markMet: true, actionTag: "win-them-over" },
+        // Rolled at click time (see classifyConversationChoice). Average or
+        // low Charisma, a grubby appearance, or not being their type all make
+        // this land less often.
+        socialCheck: {
+            baseDC: 12,
+            success: { mood: 1, favor: 5, hostility: -1, attraction: 4, intent: "flattery", markMet: true, actionTag: "win-them-over" },
+            failure: { mood: 0, favor: 0, intent: "flattery", markMet: true, actionTag: "charm-fell-flat" },
+            critFail: { mood: -1, favor: -2, hostility: 1, intent: "awkward", markMet: true, actionTag: "charm-backfired" }
+        },
         conditions: {
             maxHostility: 49,
             minStats: { charisma: 5 },
@@ -1868,6 +1877,8 @@ function buildConversationOption(entry, npc, ctx) {
         onAccept: entry.onAccept,
         onReject: entry.onReject,
         resetTimer: entry.resetTimer,
+        // Resolved at click time by classifyConversationChoice (engine).
+        socialCheck: entry.socialCheck,
         // Intimacy system additions
         intimacyAction: entry.intimacyAction,
         startEncounter: entry.startEncounter,
@@ -2582,8 +2593,60 @@ function getNPCRevealedTypeHints(npc) {
     return prefs.slice(0, revealed).map(_npcDescribeTypePref).filter(Boolean);
 }
 
+// -- FIRST IMPRESSION + TYPE-ALIGNED ACTIONS -----------------------------------
+// First encounter: an adult humanoid NPC starts with some attraction (or none)
+// based on how well the player fits their type and the player's CURRENT
+// Charisma - which already folds in clothing quality and hygiene/grime, so
+// meeting someone while filthy genuinely starts you behind. One-time per NPC
+// (npc.memory.firstImpressionDone). Hostile NPCs start at 0, and the result is
+// capped so nobody begins past "curious".
+const NPC_FIRST_IMPRESSION = { base: 6, perMatchPoint: 6, perCharisma: 1.5, max: 22, hostilityCutoff: 60 };
+
+function applyNPCFirstImpression(npc) {
+    if (!isAdultHumanoidNPC(npc)) return npc;
+    npc.memory = npc.memory || {};
+    if (npc.memory.firstImpressionDone) return npc;
+    npc.memory.firstImpressionDone = true;
+
+    var hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
+    if (hostility >= NPC_FIRST_IMPRESSION.hostilityCutoff) return npc;
+
+    var charisma = typeof getSetupStat === "function" ? getSetupStat("charisma", 3) : 3;
+    var raw = NPC_FIRST_IMPRESSION.base +
+        getNPCTypeMatchScore(npc) * NPC_FIRST_IMPRESSION.perMatchPoint +
+        (charisma - 3) * NPC_FIRST_IMPRESSION.perCharisma;
+    var gain = Math.max(0, Math.min(NPC_FIRST_IMPRESSION.max, Math.round(raw)));
+    npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + gain));
+    return npc;
+}
+
+// Acting in line with what an NPC is drawn to earns a small attraction bump:
+// a curious question for someone who likes curious people, a bold stand for
+// someone who likes bold ones, kindness for someone who likes empathy. Only
+// for non-hostile actions, and capped per NPC so repeating an option cannot
+// farm it. Returns the bonus to add to this impact's attraction.
+const NPC_INTENT_TRAIT = { curious: "curiosity", help: "empathy", empathy: "empathy", comfort: "empathy", bold: "boldness" };
+const NPC_TYPE_ALIGNMENT_GAIN = 1;
+const NPC_TYPE_ALIGNMENT_CAP = 10;
+
+function getNPCTypeAlignmentBonus(npc, impact) {
+    if (!isAdultHumanoidNPC(npc) || !impact) return 0;
+    var trait = NPC_INTENT_TRAIT[String(impact.intent || "").toLowerCase()];
+    if (!trait) return 0;
+    if ((impact.hostility || 0) > 0 || (impact.favor || 0) < 0) return 0;
+    if ((npc.memory.typeAlignmentGain || 0) >= NPC_TYPE_ALIGNMENT_CAP) return 0;
+    var prefs = ensureNPCTypePreferences(npc);
+    var aligned = prefs.some(function (pref) {
+        return pref.axis === "trait" && Array.isArray(pref.values) && pref.values[0] === trait;
+    });
+    if (!aligned) return 0;
+    npc.memory.typeAlignmentGain = (npc.memory.typeAlignmentGain || 0) + NPC_TYPE_ALIGNMENT_GAIN;
+    return NPC_TYPE_ALIGNMENT_GAIN;
+}
+
 if (typeof window !== "undefined") {
     window.getPlayerAppealMultiplier = getPlayerAppealMultiplier;
+    window.applyNPCFirstImpression = applyNPCFirstImpression;
     window.getNPCTypeMatchScore = getNPCTypeMatchScore;
     window.ensureNPCTypePreferences = ensureNPCTypePreferences;
     window.getNPCTypeSummary = getNPCTypeSummary;
@@ -2732,6 +2795,8 @@ function adjustNPCMood(npc, delta = 0, favorDelta = 0, intent = null) {
 function applyNPCRelationshipImpact(npc, impact = {}) {
     ensureNPCRelationshipState(npc);
     if (!npc) return npc;
+    // Idempotent: normally already applied when the NPC was first opened.
+    applyNPCFirstImpression(npc);
 
     const {
         mood = 0,
@@ -2756,7 +2821,10 @@ function applyNPCRelationshipImpact(npc, impact = {}) {
         npc.memory.aggressionCount = Math.max(0, (npc.memory.aggressionCount || 0) + aggression);
     }
     if (isAdultHumanoidNPC(npc)) {
-        if (typeof attraction === "number" && attraction !== 0) {
+        // A small bonus when the action fits what this NPC is drawn to.
+        const attractionDelta = (typeof attraction === "number" ? attraction : 0) +
+            getNPCTypeAlignmentBonus(npc, impact);
+        if (attractionDelta !== 0) {
             // Player charisma scales how attractive the NPC finds them -
             // same multiplier shape as the lust scaling in the NSFW system
             // (0.8 + CHA * 0.02), so both pipelines agree. Worn-clothing
@@ -2767,10 +2835,10 @@ function applyNPCRelationshipImpact(npc, impact = {}) {
             // NPC "type": how well the player matches what this NPC is drawn
             // to (see getPlayerAppealMultiplier). Only scales gains - a
             // negative attraction change (an insult) is left as-is.
-            const appealMultiplier = attraction > 0
+            const appealMultiplier = attractionDelta > 0
                 ? getPlayerAppealMultiplier(npc)
                 : 1;
-            npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + Math.round(attraction * charismaMultiplier * appealMultiplier)));
+            npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + Math.round(attractionDelta * charismaMultiplier * appealMultiplier)));
         }
         if (typeof arousal === "number" && arousal !== 0) {
             npc.memory.arousal = Math.max(0, Math.min(100, (npc.memory.arousal || 0) + arousal));

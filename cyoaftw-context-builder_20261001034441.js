@@ -383,6 +383,17 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
             }
         });
     }
+    // Hygiene is part of Charisma already, but an unwashed player is something
+    // an NPC would notice directly, so it gets its own (high-priority) note.
+    if (typeof getPlayerHygienePenalty === "function") {
+        const hygienePenalty = getPlayerHygienePenalty();
+        if (hygienePenalty < 0) {
+            playerPresenceNotes.push({
+                weight: 1 - hygienePenalty,
+                text: hygienePenalty <= -2 ? "visibly filthy and unwashed" : "a bit grimy and unwashed"
+            });
+        }
+    }
     const playerPresenceLine = playerPresenceNotes
         .sort(function (a, b) { return b.weight - a.weight; })
         .slice(0, 2)
