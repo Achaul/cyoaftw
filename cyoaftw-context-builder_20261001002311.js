@@ -438,6 +438,25 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         : (Array.isArray(enrichment.tabooTopics) ? enrichment.tabooTopics : []);
     const reactionNotes = Array.isArray(enrichment.reactionNotes) ? enrichment.reactionNotes : [];
 
+    // Lingering scent notes (set NSFW-side by addSmellMark on whoever
+    // received; the display text is authored there and only passed through
+    // here). Surfaced on ~half of prompt builds so it colors reactions
+    // occasionally instead of dominating every reply.
+    const smellLines = [];
+    if (Math.random() < 0.5 && typeof window.getActiveSmellNotes === "function") {
+        const npcSmellNotes = window.getActiveSmellNotes(npc);
+        if (npcSmellNotes.length) {
+            smellLines.push(`- Your own unwashed scent: ${npcSmellNotes.map(note => note.text).join("; ")} (others may notice; only bring it up when natural)`);
+        }
+        const playerSmellNotes = window.G && window.G.player
+            ? window.getActiveSmellNotes(window.G.player)
+            : [];
+        if (playerSmellNotes.length) {
+            smellLines.push(`- The player's noticeable scent: ${playerSmellNotes.map(note => note.text).join("; ")} (react naturally; only bring it up when it fits)`);
+        }
+    }
+
+
     const lines = [
         `${title}:`,
         `- Name: ${npc.name || "Unknown"}`,
@@ -491,6 +510,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc) && actDisinhibitionLine
             ? actDisinhibitionLine
             : "",
+        ...smellLines,
         "- Conversation rules: answer the player directly, stay conversational, and do not volunteer atmospheric description unless it matters.",
         npc.backstory ? `- Backstory: ${String(npc.backstory).slice(0, 200)}` : "",
         (currentState && currentState.gesture) || npc.action

@@ -25,9 +25,17 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   }
 
   function getPlayerCharismaModifier() {
-    const player = window.G.player;
+    const player = window.G && window.G.player;
     if (!player || !player.stats) return 1.0;
-    const charisma = player.stats.charisma || 10;
+    // Route through the engine accessor so worn-clothing quality, carried
+    // trinkets and potion bonuses all count (the engine exposes getSetupStat
+    // on window - without that exposure this falls back to raw stats).
+    // Fallback 3 matches the setup baseline - the old "|| 10" default sat
+    // above the design range (base 3 -> 0.86x, 12 -> 1.04x) whenever stats
+    // were missing.
+    const charisma = typeof window.getSetupStat === "function"
+      ? window.getSetupStat("charisma", 3)
+      : (player.stats.charisma || 3);
     return 0.8 + (charisma * 0.02);
   }
 
@@ -35,7 +43,10 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     if (!npc.relationship) npc.relationship = {};
     const temperamentMod = window.getTemperamentModifier ? window.getTemperamentModifier(npc.temperament) : 0;
     const multiplier = 1.0 + (temperamentMod * 0.1);
-    npc.relationship.attraction = (npc.relationship.attraction || 0) + Math.round(impact * multiplier);
+    // Charisma scales attractiveness gains the same way lust gains are
+    // scaled below - part of making charisma matter across the board.
+    const charismaMultiplier = getPlayerCharismaModifier();
+    npc.relationship.attraction = (npc.relationship.attraction || 0) + Math.round(impact * multiplier * charismaMultiplier);
     npc.relationship.attraction = Math.max(0, Math.min(100, npc.relationship.attraction));
   }
 
@@ -1572,6 +1583,35 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     if (spitButtons.length) {
       window.appendCombatGroup(el, "Spit", spitButtons);
     }
+
+    // Care group — dried loads (bodyUse) and smell notes NEVER fade on their
+    // own (see getBodyUseDescriptor in intimacy-system.js: wet -> tacky ->
+    // crusted, permanent), so wiping the body down is the only reset.
+    var hasDriedLoads = !!(item.bodyUse && Object.keys(item.bodyUse).some(function (part) {
+      return item.bodyUse[part] && item.bodyUse[part].loadKey;
+    }));
+    var hasSmellNotes = !!(Array.isArray(item.smellNotes) && item.smellNotes.length);
+    if (hasDriedLoads || hasSmellNotes) {
+      window.appendCombatGroup(el, "Care", [
+        window.createCombatButton("Clean them up", () => cleanUpBody(item))
+      ]);
+    }
+  }
+
+  // Wipe the body down with water and a rag: clears dried bodyUse loads and
+  // lingering smell notes. This is the only way those reset - time alone
+  // just dries them crusty.
+  function cleanUpBody(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+    const name = nsfwGetEntityName(item);
+    delete item.bodyUse;
+    delete item.smellNotes;
+    const baseText = `You fetch water and a rag and wipe ${name}'s limp body down, scrubbing off every dried, crusted trace of what was done to them. By the time you finish they lie clean and unmarked, as if none of it had ever happened.`;
+    const actionDesc = "clean up";
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("care", `${window.G.player.name} cleaned and wiped down ${name}'s unconscious body.`, 2);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
   }
 
   // ── AI narration polish ─────────────────────────────────────────
@@ -1724,6 +1764,32 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     return "\nACT-RELEVANT ANATOMY:\n" + parts.join("\n");
   }
 
+  // Sentence describing a body part's lingering use-state (recorded by
+  // recordBodyUse in intimacy-system.js on finger/penetrate/thrust/climax),
+  // or "" when the part reads unused/faded. Used for insertion narration.
+  function nsfwBodyUseClause(item, target) {
+    if (typeof window.getBodyUseDescriptor !== "function") return "";
+    var desc = window.getBodyUseDescriptor(item, target);
+    if (!desc) return "";
+    var label = (target === "cloaca")
+      ? (nsfwGenitalLabel(item) || "cloacal vent")
+      : (target === "vagina" ? "vagina" : "anus");
+    return " Their " + label + " is " + desc + ".";
+  }
+
+  // Lingering body-state note for the AI polish prompts: recent use of the
+  // part this act targets should read in the polished narration (a used hole
+  // is wetter/looser than a fresh one).
+  function nsfwBodyUsePromptNote(item, actionDesc) {
+    if (typeof window.getBodyUseDescriptor !== "function") return "";
+    var match = String(actionDesc || "").match(/\b(vagina|cloaca|anus|mouth)\b/i);
+    if (!match) return "";
+    var desc = window.getBodyUseDescriptor(item, match[1].toLowerCase());
+    if (!desc) return "";
+    return "\nBODY STATE: The NPC's " + match[1].toLowerCase() + " is " + desc +
+      ". Weave this into the polish where relevant - an already-used hole reads wetter, looser, easier to enter than a fresh one.";
+  }
+
   function buildBodyActionPrompt(item, actionDesc, baseText) {
     const name = nsfwGetEntityName(item);
     const species = (item.species || "human").toLowerCase();
@@ -1755,10 +1821,11 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     var anatomyNote = actCtx
       ? buildBodyAnatomyNote(item, actCtx.anatomyKeys)
       : "";
+    var bodyUseNote = nsfwBodyUsePromptNote(item, actionDesc);
 
     var prompt = [
 "You are polishing a player action description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine,
+"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote,
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and sensory.",
@@ -2044,6 +2111,7 @@ anatomyNote,
 
     item.fingered = true;
     item.fingerTarget = target;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target);
     const actionDesc = "finger " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} inserted a finger into ${name}'s ${label} while they were unconscious.`, 6);
@@ -2063,15 +2131,16 @@ anatomyNote,
     if (target === "vagina" || target === "cloaca") {
       if (!nsfwRegionExposed(item, "genitals")) return;
       label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina";
-      baseText = `You spread ${name}'s limp legs apart and guide your cock into their exposed ${label}. The body offers no cooperation — you hold the hips still and push against the unresisting opening, working your way in.`;
+      baseText = `You spread ${name}'s limp legs apart and guide your cock into their exposed ${label}. The body offers no cooperation — you hold the hips still and push against the unresisting opening, working your way in.` + nsfwBodyUseClause(item, target);
     } else if (target === "anus") {
       if (!nsfwRegionExposed(item, "anus")) return;
       label = "anus";
-      baseText = `You press your cock against ${name}'s tight, unresisting anus. The sphincter clenches reflexively against the intrusion; you work it open slowly, forcing past the resistant ring as the unconscious body tenses beneath you.`;
+      baseText = `You press your cock against ${name}'s tight, unresisting anus. The sphincter clenches reflexively against the intrusion; you work it open slowly, forcing past the resistant ring as the unconscious body tenses beneath you.` + nsfwBodyUseClause(item, target);
     } else return;
 
     item.penetrated = true;
     item.penetratedTarget = target;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target);
     const actionDesc = "penetrate " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} penetrated ${name}'s ${label} with their cock while they were unconscious.`, 8);
@@ -2118,6 +2187,7 @@ anatomyNote,
 
     item.thrustCount = (item.thrustCount || 0) + 1;
     item.thrustTarget = target;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target);
     const actionDesc = "thrust " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} continued thrusting into ${name}'s ${label} while they were unconscious.`, 6);
@@ -2158,6 +2228,7 @@ anatomyNote,
 
     item.bodyClimaxCount = (item.bodyClimaxCount || 0) + 1;
     item.bodyClimaxTarget = target;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { loadKey: "semen" });
     const actionDesc = "climax inside " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} ejaculated into ${name}'s ${label} while they were unconscious.`, 8);
@@ -2328,6 +2399,20 @@ anatomyNote,
       : "";
     var exposureNote = buildBodyExposureNote(item);
 
+    // Lingering body-state from recent use (recordBodyUse): every part with
+    // an active descriptor gets mentioned, so examine reflects what has
+    // been done to the body - not just what it looks like fresh.
+    var bodyUseLines = [];
+    if (typeof window.getBodyUseDescriptor === "function") {
+      ["vagina", "anus", "mouth", "breasts"].forEach(function (part) {
+        var d = window.getBodyUseDescriptor(item, part);
+        if (d) bodyUseLines.push("their " + part + " " + d);
+      });
+    }
+    var bodyUseNote = bodyUseLines.length
+      ? "\nBODY STATE (from recent use - reference subtly, only where visible/relevant): " + bodyUseLines.join("; ") + "."
+      : "";
+
     var stateLine = isCorpse
       ? "currently dead — a lifeless corpse lying " + (position === "face" ? "face-down" : "on their " + position) + ", completely at the player's mercy."
       : "currently unconscious and lying " + (position === "face" ? "face-down" : "on their " + position) + ", completely at the player's mercy.";
@@ -2338,7 +2423,7 @@ anatomyNote,
 
     return [
 "You are polishing a player 'examine' description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", " + stateLine + speciesNote + woundNote + exposureNote,
+"The NPC is " + name + ", a " + species + " " + gender + ", " + stateLine + speciesNote + woundNote + exposureNote + bodyUseNote,
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Make it vivid, sensory, and intimate — the player is taking in the body.",

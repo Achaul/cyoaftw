@@ -2403,7 +2403,14 @@ function applyNPCRelationshipImpact(npc, impact = {}) {
     }
     if (isAdultHumanoidNPC(npc)) {
         if (typeof attraction === "number" && attraction !== 0) {
-            npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + attraction));
+            // Player charisma scales how attractive the NPC finds them -
+            // same multiplier shape as the lust scaling in the NSFW system
+            // (0.8 + CHA * 0.02), so both pipelines agree. Worn-clothing
+            // bonuses flow in through getSetupStat/getEntityStatValue.
+            const charismaMultiplier = typeof getSetupStat === "function"
+                ? (0.8 + (getSetupStat("charisma", 3) * 0.02))
+                : 1;
+            npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + Math.round(attraction * charismaMultiplier)));
         }
         if (typeof arousal === "number" && arousal !== 0) {
             npc.memory.arousal = Math.max(0, Math.min(100, (npc.memory.arousal || 0) + arousal));

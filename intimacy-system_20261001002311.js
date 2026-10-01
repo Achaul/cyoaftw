@@ -664,6 +664,9 @@ function buildPlayerNarrativePrompt(context) {
 _speciesNote ? _speciesNote : "",
 _skinDesc ? "NPC skin: " + _skinDesc : "",
 _sizeContext ? _sizeContext : "",
+getBodyUseDescriptor(npc, action.target)
+    ? "NPC's " + action.target + " state: " + getBodyUseDescriptor(npc, action.target) + " (reflect this in the polish where relevant - an already-used hole should read wetter, looser, easier to enter than a fresh one)"
+    : "",
 "",
 "BASE TEXT (polish this — fix grammar, refine, make more erotic, keep same meaning and details):",
 "\"" + (templateResponse || "") + "\"",
@@ -2413,6 +2416,36 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // category disinhibition so this act counts toward unlocking more
     // advanced acts in the same category. See _grantIntimacyProgression.
     _grantIntimacyProgression(npc, player, act);
+
+    // Grime + smell for the messy acts. Ejaculation, watersports and anal
+    // penetration add a HIGH tier of grime (see the GRIME/HYGIENE block in
+    // cyoaftw-engine-CORE.js), and mark whoever RECEIVED - the NPC for
+    // regular acts, the player for playerIsBottom "Receive" acts - with a
+    // lingering smell note (addSmellMark below) that surfaces in the AI
+    // conversation context and the NPC detail panel until it fades or is
+    // washed off. typeof-guarded no-op if the engine hook is absent.
+    const smellKey = getIntimacySmellKey(act);
+    if (typeof window.addIntimacyActGrime === "function") {
+        window.addIntimacyActGrime(player, { highTier: smellKey !== null });
+    }
+    if (smellKey) {
+        addSmellMark(act.playerIsBottom === true ? player : npc, smellKey);
+    }
+
+    // Per-part body-use record for the receiving NPC: a hole that was
+    // recently fucked reads differently in later insertion descriptors
+    // (see getBodyUseDescriptor/recordBodyUse above). Internal/oral semen
+    // and urine count as a lingering load on the part.
+    if (act.playerIsBottom !== true) {
+        const bodyPart = normalizeBodyUsePart(act.target);
+        if (bodyPart) {
+            const consequence = String(act.consequence || "");
+            const loadKey = (consequence === "internal_semen" || consequence === "oral_semen")
+                ? "semen"
+                : (consequence === "urine" ? "urine" : null);
+            recordBodyUse(npc, bodyPart, { loadKey: loadKey });
+        }
+    }
 
     return response;
 }
@@ -7664,9 +7697,148 @@ if (typeof module !== 'undefined' && module.exports) {
     };
 }
 
+// ── SMELL NOTES ──────────────────────────────────────────────────────────
+// Lingering scent marks for the messy acts (ejaculation / watersports / anal
+// - see getIntimacySmellKey). Whoever RECEIVED gets stamped with a note; the
+// note's display text is authored here (NSFW side) and only passed through by
+// the SFW files (context builder prompt lines, NPC detail panel). Notes fade
+// after SMELL_NOTE_TURNS story turns, refresh on a repeat mark, and wash off
+// at water/hygiene room objects (washAtRoomObject clears the player's).
+var SMELL_NOTE_TEXTS = {
+    semen: "the unmistakable musk of fresh semen",
+    urine: "the sharp ammonia sting of urine",
+    anal: "the raw, lingering musk of anal sex"
+};
+var SMELL_NOTE_TURNS = 50;
+
+function addSmellMark(entity, key) {
+    if (!entity || !Object.prototype.hasOwnProperty.call(SMELL_NOTE_TEXTS, key)) return;
+    if (!Array.isArray(entity.smellNotes)) entity.smellNotes = [];
+    var turn = (typeof window.getCurrentStoryTurn === "function") ? window.getCurrentStoryTurn() : 0;
+    for (var i = 0; i < entity.smellNotes.length; i++) {
+        if (entity.smellNotes[i] && entity.smellNotes[i].key === key) {
+            entity.smellNotes[i].turn = turn; // repeat mark refreshes the clock
+            return;
+        }
+    }
+    entity.smellNotes.push({ key: key, text: SMELL_NOTE_TEXTS[key], turn: turn });
+}
+
+// Prune expired notes on read so the expiry needs no tick loop of its own.
+function getActiveSmellNotes(entity) {
+    if (!entity || !Array.isArray(entity.smellNotes) || !entity.smellNotes.length) return [];
+    var now = (typeof window.getCurrentStoryTurn === "function") ? window.getCurrentStoryTurn() : 0;
+    var active = entity.smellNotes.filter(function (note) {
+        return note && (now - (note.turn || 0)) < SMELL_NOTE_TURNS;
+    });
+    if (active.length !== entity.smellNotes.length) entity.smellNotes = active;
+    return active.slice();
+}
+
+// Which lingering smell (if any) an act leaves on its receiver. Returns null
+// for ordinary acts. Semen takes precedence over anal (ejaculate_in_anus is
+// both - the semen is the dominant note).
+function getIntimacySmellKey(act) {
+    if (!act) return null;
+    var consequence = String(act.consequence || "");
+    if (consequence === "internal_semen" || consequence === "oral_semen" || consequence === "external_semen") return "semen";
+    if (consequence === "urine") return "urine";
+    // Anal penetration with a penis, either direction: the bottom carries the
+    // telltale musk afterwards. Fingers/tongue don't mark the same way.
+    if ((act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) &&
+        ((String(act.tool) === "penis" && String(act.target) === "anus") ||
+         (String(act.tool) === "anus" && String(act.target) === "penis"))) {
+        return "anal";
+    }
+    return null;
+}
+
+// ── BODY-USE STATE ────────────────────────────────────────────────────────
+// Per-part recent-use record for the receiving character (live NPC or
+// unconscious body object), so a recently-used hole reads differently from a
+// fresh one in part descriptors - insertion narrations especially. Recorded
+// by the encounter path (executeIntimacyAction) and the unconscious-body
+// path (nsfw-system.js); read back by getBodyUseDescriptor wherever part
+// descriptions are built or polished. Turn-stamped; recency tiers decide
+// how strong the descriptor reads, and it fades to null on its own.
+var BODY_USE_FRESH_TURNS = 40;
+var BODY_USE_STALE_TURNS = 80;
+
+var BODY_USE_PART_MAP = {
+    vagina: "vagina", pussy: "vagina", cloaca: "vagina",
+    anus: "anus", butthole: "anus",
+    mouth: "mouth", lips: "mouth", face: "mouth",
+    breasts: "breasts", chest: "breasts"
+};
+
+function normalizeBodyUsePart(part) {
+    return BODY_USE_PART_MAP[String(part || "").toLowerCase()] || null;
+}
+
+function recordBodyUse(entity, part, options) {
+    part = normalizeBodyUsePart(part);
+    if (!entity || !part) return;
+    var turn = (typeof window.getCurrentStoryTurn === "function") ? window.getCurrentStoryTurn() : 0;
+    if (!entity.bodyUse || typeof entity.bodyUse !== "object") entity.bodyUse = {};
+    var state = entity.bodyUse[part];
+    if (!state) state = entity.bodyUse[part] = {};
+    state.usedTurn = turn;
+    state.useCount = (state.useCount || 0) + 1;
+    if (options && options.loadKey) {
+        state.loadKey = options.loadKey;
+        state.loadTurn = turn;
+    }
+}
+
+// Recency-tiered descriptor for a part, or null when it reads unused.
+// Loads (semen/urine) DRY over time but never disappear on their own - the
+// ladder is wet -> tacky -> crusted/flaky, and only a wash resets it (the
+// unconscious-body "Clean them up" action, or the player washing at a
+// basin/fountain for their own state). Use-only records (no load) still
+// fade out entirely, since muscle tone recovers. Display text is authored
+// here (NSFW side); callers only pass it through.
+function getBodyUseDescriptor(entity, part) {
+    part = normalizeBodyUsePart(part);
+    var state = entity && entity.bodyUse && entity.bodyUse[part];
+    if (!state) return null;
+    var now = (typeof window.getCurrentStoryTurn === "function") ? window.getCurrentStoryTurn() : 0;
+    var sinceUse = now - (state.usedTurn || 0);
+    var sinceLoad = now - (state.loadTurn || 0);
+
+    if (state.loadKey) {
+        if (sinceLoad <= BODY_USE_FRESH_TURNS) {
+            return state.loadKey === "urine"
+                ? "still slick and wet with urine from earlier"
+                : "stretched open and sloppy, your earlier load still drooling back out of it";
+        }
+        if (sinceLoad <= BODY_USE_STALE_TURNS) {
+            return state.loadKey === "urine"
+                ? "damp and clammy, the piss slowly drying on it"
+                : "stretched and tacky, your earlier load gone thick and clumpy inside it";
+        }
+        // Dried loads persist indefinitely until washed off.
+        return state.loadKey === "urine"
+            ? "marked with a faint dried crust of old urine"
+            : "chafed and crusty, flakes of your long-dried load clinging around the stretched opening";
+    }
+    if (sinceUse <= BODY_USE_FRESH_TURNS) {
+        return "stretched and slick from a recent fucking, easy to enter";
+    }
+    if (sinceUse <= BODY_USE_STALE_TURNS) {
+        return "noticeably loosened, though the recent use is fading";
+    }
+    return null;
+}
+
 // Assign to window for browser use
 if (typeof window !== 'undefined') {
     window.initializeIntimacyState = initializeIntimacyState;
+    window.addSmellMark = addSmellMark;
+    window.getActiveSmellNotes = getActiveSmellNotes;
+    window.getIntimacySmellKey = getIntimacySmellKey;
+    window.normalizeBodyUsePart = normalizeBodyUsePart;
+    window.recordBodyUse = recordBodyUse;
+    window.getBodyUseDescriptor = getBodyUseDescriptor;
     window.resetIntimacyState = resetIntimacyState;
     window.startIntimacyEncounter = startIntimacyEncounter;
     window.endIntimacyEncounter = endIntimacyEncounter;
