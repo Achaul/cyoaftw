@@ -1330,12 +1330,19 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
           if (hasPendingSeduction) console.log(`[DEBUG] Has pending seduction: ${npc._pendingSeductionOption}`);
         }
         
-        // If intimacy encounter is active, only show intimacy-related options
+        // If intimacy encounter is active, only show intimacy-related options.
+        // Keep the greeting options as well: the greeting gate in the
+        // original query only opens after a greeting is picked, so dropping
+        // them here left "Say goodbye" as the ONLY option and locked the NPC
+        // out of all conversation for the rest of the session.
         if (isIntimacyActive) {
           const intimacyOptionIds = ["goodbye"]; // Only allow exiting
           return filteredOptions.filter(option => 
             intimacyOptionIds.includes(option.id) ||
-            option.action === "intimacy"
+            option.action === "intimacy" ||
+            option.intent === "greeting" ||
+            option.id === "greet-intro" ||
+            option.id === "greet-known"
           );
         }
         
