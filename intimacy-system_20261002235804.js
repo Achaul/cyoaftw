@@ -1338,8 +1338,18 @@ function endIntimacyEncounter(npc) {
     // Clear sensory fragment anti-repetition tracker
     if (npc.intimacy._recentNarratives) delete npc.intimacy._recentNarratives;
     
-    // Clear penetration cache
-    if (npc.intimacy.penetrationCache) npc.intimacy.penetrationCache.clear();
+    // Clear penetration cache. After a save/load cycle this can be a plain
+    // object (JSON has no Map representation), so migrate it instead of
+    // calling .clear() — the raw call threw "penetrationCache.clear is not
+    // a function" and aborted the rest of the encounter teardown (mode
+    // reset and UI restore never ran).
+    if (npc.intimacy.penetrationCache) {
+        if (npc.intimacy.penetrationCache instanceof Map) {
+            npc.intimacy.penetrationCache.clear();
+        } else {
+            npc.intimacy.penetrationCache = new Map();
+        }
+    }
     
     // Clear LLM enhancement cache
     clearLLMEnhancementCache(npc.intimacy);
