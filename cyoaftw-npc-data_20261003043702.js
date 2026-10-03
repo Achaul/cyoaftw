@@ -1,4 +1,4 @@
-// ── cyoaftw-npc-data.js v2026-10-03-0002 ── Event-aware topics + NPC story awareness
+// ── cyoaftw-npc-data.js v2026-10-03-0003 ── responseNeeded replies: Respond option + canned replies
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.NPC_DATA_VERSION = "2026-09-11-001";
@@ -577,6 +577,7 @@ function resetNPCConversationSession(npc) {
     if (!state) return null;
 
     state.sessionUsedOptionIds = [];
+    if (npc && npc.memory) npc.memory.pendingResponse = null;
     state.sessionInteractionCount = 0;
     state.sessionNumber += 1;
     state.lastOptionId = "";
@@ -589,7 +590,13 @@ function recordNPCConversationChoice(npc, choice) {
     if (!state) return null;
 
     const optionId = String(choice.id || "").trim();
-    if (optionId) {
+    // Typed / canned replies ("respond-...") are free-form: keep them out of
+    // the used-option lists so they cannot push real option ids (like the
+    // session greeting) out of the capped history. lastOptionId still moves,
+    // so "right after X" follow-ups (press-topic) do not linger after a reply.
+    if (optionId && optionId.indexOf("respond-") === 0) {
+        state.lastOptionId = optionId;
+    } else if (optionId) {
         state.usedOptionIds.push(optionId);
         state.usedOptionIds = state.usedOptionIds.slice(-60);
         state.sessionUsedOptionIds.push(optionId);
@@ -901,6 +908,13 @@ function _npcEventTopic(npc, ctx) {
     return topic;
 }
 
+// True when the NPC's last reply said it expects an answer (the reply JSON's
+// "responseNeeded" flag, stored by npcRespond in the engine).
+function _npcResponseIsPending(npc) {
+    const pending = npc && npc.memory ? npc.memory.pendingResponse : null;
+    return !!(pending && pending.needed === true);
+}
+
 // ── RELEVANCE HELPERS ───────────────────────────────────────────
 // Used by catalogue conditions below so reactive options (apologize, comfort)
 // only show when there is something to react to.
@@ -962,7 +976,7 @@ function _npcMakeTopicCap(npc, ctx) {
     let kept = 0;
     return function (entry) {
         if (!_npcEntryIsBase(entry)) return true;
-        const kind = _npcDeriveOptionKind(entry, _npcResolveConversationValue(entry.intent, npc, ctx));
+        const kind = _npcDeriveOptionKind(entry, _npcResolveConversationValue(entry.intent, npc, ctx), npc, ctx);
         if (kind !== "topic") return true;
         kept += 1;
         return kept <= NPC_MAX_TOPIC_OPTIONS;
@@ -1790,6 +1804,20 @@ const NPC_CONVERSATION_CATALOGUE = [
             excludedActionTags: ["win-them-over"]
         }
     },
+    // Free-text bridge. When the NPC's last line expects an answer the engine
+    // shows this as "Respond..." (kind "reply", with any canned replies from the
+    // reply JSON next to it); otherwise it stays available as a quiet
+    // "Say something..." action. The engine handles action "respond" by
+    // swapping the menu for a text box. Not subject to the topic cap.
+    {
+        id: "respond-free",
+        priority: 5,
+        repeat: "always",
+        kind: (npc, ctx) => _npcResponseIsPending(npc) ? "reply" : "action",
+        label: (npc, ctx) => _npcResponseIsPending(npc) ? "Respond..." : "Say something...",
+        action: "respond",
+        conditions: { metPlayer: true }
+    },
     {
         id: "goodbye",
         priority: 190,
@@ -2193,7 +2221,11 @@ const NPC_SOCIAL_INTENTS = [
 ];
 const NPC_HOSTILE_INTENTS = ["aggression", "insult", "bold"];
 
-function _npcDeriveOptionKind(entry, intent) {
+function _npcDeriveOptionKind(entry, intent, npc, ctx) {
+    if (entry && typeof entry.kind === "function") {
+        const resolved = entry.kind(npc, ctx);
+        if (typeof resolved === "string" && resolved) return resolved;
+    }
     if (entry && typeof entry.kind === "string" && entry.kind) return entry.kind;
     if (!entry) return "topic";
     if (entry.action === "disengage" || entry.id === "goodbye") return "exit";
@@ -2244,7 +2276,7 @@ function buildConversationOption(entry, npc, ctx) {
     const resolvedIntent = _npcResolveConversationValue(entry.intent, npc, ctx);
     return {
         id: entry.id,
-        kind: _npcDeriveOptionKind(entry, resolvedIntent),
+        kind: _npcDeriveOptionKind(entry, resolvedIntent, npc, ctx),
         tone: _npcDeriveOptionTone(entry, resolvedIntent),
         label,
         text: playerText,
