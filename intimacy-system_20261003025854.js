@@ -9033,12 +9033,17 @@ function buildReceiveNarrative(npc, act, context) {
 
     // First action: the player asks/tells the NPC what to do
     var shortDesc = (act.desc || act.label || "").replace(/^Ask them to\s+/i, "").replace(/^Ask them\s+/i, "");
+    // The act descriptions are gender-neutral ("...with their hand") — swap
+    // the neutral pronouns for this NPC's so the ask line reads grammatically
+    // ("asking her to stroke your penis with her hand", not "...with their
+    // hand", and never "asking she to").
+    shortDesc = shortDesc.replace(/\btheir\b/gi, posPronoun).replace(/\bthem\b/gi, objPronoun);
 
     return [
-        `You ask ${subjLower} to ${shortDesc}.`,
+        `You ask ${objPronoun} to ${shortDesc}.`,
         `You tell ${subjLower} you want ${objPronoun} to ${shortDesc}.`,
-        `You lean close and murmur your request — you want ${subjLower} to ${shortDesc}.`,
-        `You make your desires clear, asking ${subjLower} to ${shortDesc}.`
+        `You lean close and murmur your request — you want ${objPronoun} to ${shortDesc}.`,
+        `You make your desires clear, asking ${objPronoun} to ${shortDesc}.`
     ];
 }
 
@@ -9308,8 +9313,11 @@ async function generateReceiveAgreement(npc, act, player, accepted, template) {
         if (/^you(r|rs)?\s/i.test(trimmed)) return fallback;
         if (trimmed.length > 400) return fallback;
         // Convert angle-bracket speech markers to quotes (the narration
-        // convention elsewhere); strip stray brackets.
-        trimmed = trimmed.replace(/<([^>]*)>/g, '"$1"').replace(/<|>/g, "").trim();
+        // convention elsewhere); strip stray brackets; collapse doubled
+        // quote artifacts ("" or mixed smart-quote pairs) from the AI output.
+        trimmed = trimmed.replace(/<([^>]*)>/g, '"$1"').replace(/<|>/g, "");
+        trimmed = trimmed.replace(/["\u201C\u201D\u201E\u201F\u00AB\u00BB]{2,}/g, '"');
+        trimmed = trimmed.trim();
         return trimmed || fallback;
     } catch (e) {
         console.warn("[Intimacy] Receive agreement generation failed, using template:", e);
