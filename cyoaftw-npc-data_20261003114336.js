@@ -1,4 +1,4 @@
-// ── cyoaftw-npc-data.js v2026-10-03-0003 ── responseNeeded replies: Respond option + canned replies
+// ── cyoaftw-npc-data.js v2026-10-03-0004 ── Typed replies carry relationship effects (playerTone)
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.NPC_DATA_VERSION = "2026-09-11-001";
@@ -278,6 +278,9 @@ const NPC_ACTION_RELATION_WEIGHTS = {
     "ask-seen-who": 0,
     "press-topic": 0,
     "ask-event": 0,
+    "typed-warm": 1,
+    "typed-rude": -2,
+    "typed-threat": -3,
     question: 0,
     calm: 2,
     "keep-calm": 2,
@@ -915,6 +918,65 @@ function _npcResponseIsPending(npc) {
     return !!(pending && pending.needed === true);
 }
 
+// ── TYPED REPLY TONE ────────────────────────────────────────────
+// Free-typed replies ("Respond..." in the engine) have no catalogue entry, so
+// their relationship effect comes from the tone of the words. The AI judges it
+// in the NPC's reply JSON (playerTone: warm | neutral | rude | threatening,
+// "how the words land on this speaker"); when it is missing, a small keyword
+// pass supplies a fallback so typed text is never consequence-free.
+const NPC_TYPED_TONES = ["warm", "neutral", "rude", "threatening"];
+
+const NPC_TYPED_TONE_IMPACTS = {
+    // intent matters: canImproveMood() makes warm words land far weaker on an
+    // NPC at hostility 70+ ("calm"), and a refusal to be won over is the same
+    // rule every other friendly option already follows.
+    warm:        { mood: 1,  favor: 3,  hostility: -1, aggression: 0, intent: "calm",       actionTag: "typed-warm" },
+    rude:        { mood: -1, favor: -4, hostility: 3,  aggression: 0, intent: "insult",     actionTag: "typed-rude" },
+    threatening: { mood: -1, favor: -6, hostility: 7,  aggression: 1, intent: "aggression", actionTag: "typed-threat" }
+};
+
+function classifyTypedTone(text) {
+    const t = " " + String(text || "").toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ") + " ";
+    const has = function (list) { return list.some(function (w) { return t.indexOf(w) >= 0; }); };
+    if (has([" kill you", " gut you", " cut you", " hurt you", " break your", " burn this", " or else", " you'll regret", " you will regret", " you're dead", " you are dead", " make you bleed", " draw my", " end you"])) return "threatening";
+    if (has([" shut up", " idiot", " stupid", " moron", " fool ", " useless", " pathetic", " piss off", " get lost", " out of my way", " don't care", " who cares", " go away", " waste of"])) return "rude";
+    if (has([" thank", " please", " sorry", " apolog", " appreciate", " my friend", " kind of you", " much obliged", " no offense", " no offence", " forgive"])) return "warm";
+    return "neutral";
+}
+
+// Builds the impact for a typed reply, or null for a neutral one. Warm words
+// have diminishing returns (two warm replies in the last three halve the
+// gain) so a stream of flattery cannot farm favor; rude and threatening
+// words are never dampened.
+function buildTypedToneImpact(npc, tone, text) {
+    const key = NPC_TYPED_TONES.indexOf(String(tone || "").toLowerCase()) >= 0
+        ? String(tone).toLowerCase()
+        : classifyTypedTone(text);
+
+    if (npc && npc.memory) {
+        if (!Array.isArray(npc.memory.typedTones)) npc.memory.typedTones = [];
+    }
+    const recent = npc && npc.memory ? npc.memory.typedTones.slice(-3) : [];
+    if (npc && npc.memory) {
+        npc.memory.typedTones.push(key);
+        npc.memory.typedTones = npc.memory.typedTones.slice(-6);
+    }
+
+    const base = NPC_TYPED_TONE_IMPACTS[key];
+    if (!base) return null;
+    const impact = Object.assign({ markMet: true }, base);
+    if (key === "warm" && recent.filter(function (x) { return x === "warm"; }).length >= 2) {
+        impact.mood = 0;
+        impact.favor = Math.max(1, Math.round(impact.favor / 2));
+        impact.hostility = 0;
+    }
+    return impact;
+}
+if (typeof window !== "undefined") {
+    window.classifyTypedTone = classifyTypedTone;
+    window.buildTypedToneImpact = buildTypedToneImpact;
+}
+
 // ── RELEVANCE HELPERS ───────────────────────────────────────────
 // Used by catalogue conditions below so reactive options (apologize, comfort)
 // only show when there is something to react to.
@@ -983,6 +1045,17 @@ function _npcMakeTopicCap(npc, ctx) {
     };
 }
 
+// A warm, unthreatened NPC introduces themselves by name when greeted,
+// without being asked. Used by the greeting entries (contextNote + reveal).
+function _npcWillIntroduce(npc, ctx) {
+    if (!npc || !ctx || ctx.nameKnown) return false;
+    return ctx.favor >= 25 && ctx.hostility <= 35;
+}
+function _npcIntroNote(npc, ctx) {
+    if (!_npcWillIntroduce(npc, ctx)) return "";
+    return "You have warmed to the player. Introduce yourself by name in this reply, naturally and in your own voice: your name is " + getNPCSelfName(npc) + ". Do not invent a different name.";
+}
+
 const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "greet-intro",
@@ -996,6 +1069,9 @@ const NPC_CONVERSATION_CATALOGUE = [
         ],
         intent: "greeting",
         relationshipImpact: { mood: 1, favor: 4, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" },
+        contextNote: _npcIntroNote,
+        revealsName: _npcWillIntroduce,
+        cacheSig: (npc, ctx) => _npcWillIntroduce(npc, ctx) ? "intro" : "",
         conditions: { metPlayer: false }
     },
     {
@@ -1026,6 +1102,9 @@ const NPC_CONVERSATION_CATALOGUE = [
         relationshipImpact: (npc, ctx) => ctx.hostility >= 70
             ? { mood: 0, favor: 1, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" }
             : { mood: 1, favor: 2, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" },
+        contextNote: _npcIntroNote,
+        revealsName: _npcWillIntroduce,
+        cacheSig: (npc, ctx) => _npcWillIntroduce(npc, ctx) ? "intro" : "",
         conditions: { metPlayer: true }
     },
     {
@@ -1045,7 +1124,8 @@ const NPC_CONVERSATION_CATALOGUE = [
         // condition meant this option could never be shown. Offer it until the
         // name has been asked once (repeat: "never" tracks that), unless the
         // NPC is too hostile to bother introducing themselves.
-        conditions: { maxHostility: 70 }
+        conditions: { maxHostility: 70, nameKnown: false },
+        contextNote: (npc, ctx) => "Your name is " + getNPCSelfName(npc) + ". Tell the player your name in this reply, in your own voice (you may grudgingly or warmly, depending on your mood). Do not invent a different name."
     },
     {
         id: "ask-place",
@@ -1885,6 +1965,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
         orientation: String((npc.memory && npc.memory.orientation) || "bi").toLowerCase(),
         actDisinhibition: (npc.memory && npc.memory.actDisinhibition && typeof npc.memory.actDisinhibition === "object" ? npc.memory.actDisinhibition : {}),
         metPlayer: !!(npc.memory && npc.memory.metPlayer),
+        nameKnown: !!(npc.memory && npc.memory.nameKnown),
         everGreeted: !!(npc.memory && npc.memory.everGreeted),
         mood: String(npc.memory && npc.memory.lastMood || "neutral").toLowerCase(),
         disposition: typeof getCurrentNPCDisposition === "function"
@@ -1962,6 +2043,7 @@ function conversationConditionMatches(conditions, ctx) {
     }
 
     if (typeof conditions.metPlayer === "boolean" && ctx.metPlayer !== conditions.metPlayer) return false;
+    if (typeof conditions.nameKnown === "boolean" && ctx.nameKnown !== conditions.nameKnown) return false;
     if (typeof conditions.isHumanoid === "boolean" && ctx.isHumanoid !== conditions.isHumanoid) return false;
     if (typeof conditions.romanceEligible === "boolean" && ctx.romanceEligible !== conditions.romanceEligible) return false;
     if (typeof conditions.hasOwnDeity === "boolean" && ctx.hasOwnDeity !== conditions.hasOwnDeity) return false;
@@ -2282,6 +2364,7 @@ function buildConversationOption(entry, npc, ctx) {
         text: playerText,
         promptText: promptText || playerText,
         contextNote: String(_npcResolveConversationValue(entry.contextNote, npc, ctx) || ""),
+        revealsName: entry.revealsName !== undefined ? _npcResolveConversationValue(entry.revealsName, npc, ctx) === true : false,
         action,
         intent: resolvedIntent,
         className: _npcResolveConversationValue(entry.className, npc, ctx),
@@ -2726,10 +2809,115 @@ function getBaseFavorabilityForTemperament(temperament) {
     return 0;
 }
 
+// ── GIVEN NAMES ─────────────────────────────────────────────────────
+// Every NPC is named at creation (npc.givenName) but the player does not
+// know it yet: npc.name stays the descriptor ("a female Elf") until the name
+// is learned (asked, or revealNPCName called), at which point npc.name
+// becomes the given name and the descriptor is kept in npc.descriptorName.
+const NPC_GIVEN_NAME_POOLS = {
+    Human: {
+        male: ["Aldric", "Bram", "Corwin", "Dunstan", "Edmund", "Garrick", "Hale", "Osric", "Tobias", "Wystan", "Marcus", "Perrin"],
+        female: ["Adela", "Brenna", "Cecily", "Edda", "Isolde", "Maren", "Nessa", "Rowena", "Tamsin", "Wilma", "Lyra", "Hester"],
+        surnames: ["Thatcher", "Marsh", "Fletcher", "Holloway", "Crane", "Ashby", "Penn", "Redd"]
+    },
+    Elf: {
+        male: ["Aelar", "Caelith", "Erevan", "Faelen", "Ilyan", "Lorien", "Sylvar", "Thalion", "Varis"],
+        female: ["Aelira", "Caelyn", "Elowen", "Ilaria", "Liriel", "Nyssa", "Sariel", "Thessaly", "Vaelis"]
+    },
+    Dwarf: {
+        male: ["Baldrek", "Dorin", "Gorm", "Hargrim", "Korgan", "Thrain", "Orsik", "Brogar", "Dural"],
+        female: ["Bruna", "Dagny", "Gunnhild", "Helga", "Kathra", "Morda", "Sigrun", "Torvi", "Vilma"],
+        surnames: ["Ironbrow", "Stonefist", "Deepdelver", "Coalbeard", "Anvilhand", "Rockbiter"]
+    },
+    Halfling: {
+        male: ["Perry", "Milo", "Garret", "Finnan", "Cade", "Osborn", "Wendel", "Tolly"],
+        female: ["Rosie", "Lidda", "Merry", "Poppy", "Sunny", "Tilda", "Wren", "Bessie"],
+        surnames: ["Goodbarrel", "Brushgather", "Underbough", "Tealeaf", "Greenbottle"]
+    },
+    Dragonborn: {
+        male: ["Arjhan", "Balasar", "Donaar", "Kriv", "Medrash", "Torinn", "Rhogar"],
+        female: ["Akra", "Biri", "Daar", "Harann", "Kava", "Sora", "Thava", "Nala"]
+    },
+    Goblin: {
+        any: ["Snik", "Grizzle", "Nob", "Krag", "Mizzit", "Zug", "Blotch", "Skritch", "Wazzle", "Pogg"]
+    },
+    Orc: {
+        male: ["Grukk", "Dorag", "Mogrash", "Thokk", "Urzul", "Vargo", "Kargath"],
+        female: ["Baggi", "Shagra", "Ulgra", "Yagra", "Mogra", "Volen", "Draka"]
+    },
+    Skeleton: {
+        any: ["Old Marrow", "Rattle", "Tibia", "Clavicus", "Grim", "Femur", "Sorrel", "Brittle", "Oswin"]
+    },
+    Rat: {
+        any: ["Nibbles", "Whisker", "Scratch", "Gnaw", "Squeak", "Mange", "Tatter"]
+    },
+    Ghost: {
+        any: ["Edith", "Alaric", "Mourne", "Veyra", "Cormac", "Isabeau", "Hollis", "Wren"]
+    },
+    Lizardfolk: {
+        any: ["Ssaren", "Thessik", "Kuruss", "Vessa", "Zhiss", "Rasskel", "Ixtli", "Sethra"]
+    },
+    Kobold: {
+        any: ["Yip", "Dink", "Rik", "Skrib", "Tamp", "Zik", "Nubb", "Pip"]
+    }
+};
+
+function generateNPCGivenName(species, gender) {
+    const pool = NPC_GIVEN_NAME_POOLS[species] || NPC_GIVEN_NAME_POOLS[String(species || "")];
+    if (!pool) return "Stranger";
+    var list = null;
+    if (gender === "male" && pool.male) list = pool.male;
+    else if (gender === "female" && pool.female) list = pool.female;
+    else if (pool.any) list = pool.any;
+    else list = (pool.male || []).concat(pool.female || []);
+    if (!list.length) return "Stranger";
+    var name = list[Math.floor(Math.random() * list.length)];
+    if (pool.surnames && Math.random() < 0.5) {
+        name += " " + pool.surnames[Math.floor(Math.random() * pool.surnames.length)];
+    }
+    return name;
+}
+
+// Gives the NPC a hidden given name if it has none (new NPCs and old saves).
+function ensureNPCGivenName(npc) {
+    if (!npc || npc.givenName) return npc;
+    if (npc.dead || npc.objectType === "body") return npc;
+    npc.descriptorName = npc.descriptorName || npc.name || "";
+    npc.givenName = generateNPCGivenName(npc.species, npc.gender);
+    if (!npc.memory) npc.memory = {};
+    if (typeof npc.memory.nameKnown !== "boolean") npc.memory.nameKnown = false;
+    return npc;
+}
+
+function npcNameIsKnown(npc) {
+    return !!(npc && npc.memory && npc.memory.nameKnown === true);
+}
+
+// What the NPC calls itself - used in prompts. Always the real name.
+function getNPCSelfName(npc) {
+    if (!npc) return "someone";
+    return npc.givenName || npc.name || "someone";
+}
+
+// Player learns the name: the displayed name switches from the descriptor to
+// the given name everywhere (chat labels, narration, story events).
+function revealNPCName(npc) {
+    if (!npc) return npc;
+    ensureNPCGivenName(npc);
+    if (!npc.givenName) return npc;
+    if (!npc.memory) npc.memory = {};
+    npc.memory.nameKnown = true;
+    npc.descriptorName = npc.descriptorName || npc.name || "";
+    npc.name = npc.givenName;
+    return npc;
+}
+
 function ensureNPCRelationshipState(npc) {
     if (!npc) return npc;
 
     npc.memory = npc.memory || {};
+    if (typeof npc.memory.nameKnown !== "boolean") npc.memory.nameKnown = false;
+    ensureNPCGivenName(npc);
     if (!Array.isArray(npc.memory.playerActions)) npc.memory.playerActions = [];
     if (!Array.isArray(npc.memory.playerActionTags)) npc.memory.playerActionTags = [];
     if (!Array.isArray(npc.memory.recentLines)) npc.memory.recentLines = [];

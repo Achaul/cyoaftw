@@ -537,7 +537,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
 
     const lines = [
         `${title}:`,
-        `- Name: ${npc.name || "Unknown"}`,
+        `- Name: ${npc.givenName || npc.name || "Unknown"}${npc.givenName && !(npc.memory && npc.memory.nameKnown) ? " (the player does not know this name yet - do not say it unless asked)" : ""}`,
         `- Role: ${npc.role || "unknown"}`,
         `- Species: ${npc.species || "unknown"}, ${gender} (pronoun: ${pronoun})`,
         npc.age ? `- Age: ${npc.age} (${npc.ageCategory || ""})` : "",
