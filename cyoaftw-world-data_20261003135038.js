@@ -1292,7 +1292,30 @@ const ROOM_IMAGE_MAP = {
     "Cavern": "https://iili.io/qFXn4g1.jpg",
     "Vault": "https://iili.io/qFXoaEB.jpg",
     "Underground Hallway": "https://iili.io/qFXxz6N.jpg",
-    "Underground Gate": "https://iili.io/qFXzdxf.jpg"
+    "Underground Gate": "https://iili.io/qFXzdxf.jpg",
+
+    // Stand-in art: approximate re-use of the closest existing image until
+    // dedicated art exists. Swap a URL here when real art is made.
+    "Smithy": "https://iili.io/qFX3ScJ.jpg",
+    "Deep Forge": "https://iili.io/qFX3ScJ.jpg",
+    "Mine Shaft": "https://iili.io/qFXn4g1.jpg",
+    "Collapsed Gallery": "https://iili.io/qFW2jMg.jpg",
+    "Old Mine Tunnel": "https://iili.io/qFW2jMg.jpg",
+    "Stairwell": "https://iili.io/qFVVGi7.jpg",
+    "Lift Shaft": "https://iili.io/qFXxz6N.jpg",
+    "Old Road": "https://iili.io/qFWPsNR.jpg",
+    "Causeway": "https://iili.io/qFXBghQ.jpg",
+    "Borderlands": "https://iili.io/qFXBghQ.jpg",
+    "Fringe Path": "https://iili.io/qFXBghQ.jpg",
+    "Town Hall": "https://iili.io/qFVGWL7.jpg",
+    "Throne Room": "https://iili.io/qFVGWL7.jpg",
+    "Chieftain's Hall": "https://iili.io/qFVGWL7.jpg",
+    "Inner Sanctum": "https://iili.io/qFVik8J.jpg",
+    "Witch's Lair": "https://iili.io/qFXdHt1.jpg",
+    "Marsh": "https://iili.io/qFXBghQ.jpg",
+    "Broken Ground": "https://iili.io/qFWJLss.jpg",
+    "Swamp Camp": "https://iili.io/qFXBghQ.jpg",
+    "Submerged Ruin": "https://iili.io/qFWJLss.jpg"
 
     // Swamp room types (Marsh, Broken Ground, Swamp Camp, Submerged Ruin) have
     // no art yet - getRoomImage() falls back to null for them, which the
