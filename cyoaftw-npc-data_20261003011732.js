@@ -2389,7 +2389,12 @@ function migrateNPCRelationshipPool(npc) {
     ensureNPCOrientation(npc);
     if (relOrientation && !memory.orientation) memory.orientation = relOrientation;
 
-    memory.attractionEarned = Math.max(0, memory.attraction - computeNPCAttractionBase(npc));
+    // Seed earned from whatever attraction history exists above the computed
+    // base — but never overwrite an existing earned history (e.g. a save that
+    // already tracks it).
+    if (typeof memory.attractionEarned !== "number") {
+        memory.attractionEarned = Math.max(0, memory.attraction - computeNPCAttractionBase(npc));
+    }
     return npc;
 }
 
@@ -2427,8 +2432,45 @@ function _npcGetOrientationFactor(npc) {
 }
 
 // The computed half of attraction: live Charisma (gear, hygiene and potions
-// included via getSetupStat), type match, and orientation. Re-derived on every
-// interaction start so equipping better clothes or cleaning up shifts it.
+// included via getSetupStat), type match, orientation, and — when the player
+// is unclothed — a situational term. Re-derived on every interaction start
+// so equipping better clothes or cleaning up shifts it.
+
+// Unclothed term: the player wearing nothing registers with the NPC either
+// as enticing or as off-putting. It is only a POSITIVE contribution when the
+// NPC has enough disinhibition, matches the player's type, matches their
+// orientation, and the player's Charisma is above a floor; otherwise it is
+// a small penalty (embarrassment/discomfort).
+const NPC_UNCLOTHED_BONUS = 8;
+const NPC_UNCLOTHED_PENALTY = 5;
+const NPC_UNCLOTHED_MIN_DISINHIBITION = 20;
+const NPC_UNCLOTHED_MIN_CHARISMA = 5;
+
+// Player unclothed = no top AND no bottom coverage, using the same slot
+// mapping as getClothingStateForCharacter in the intimacy system
+// (upper/head/chest = top, lower/feet/legs = bottom).
+function _npcIsPlayerUnclothed() {
+    const player = (typeof G === "object" && G && G.player) ? G.player : null;
+    if (!player || !player.equipped) return false;
+    const eq = player.equipped;
+    const hasTop = !!(eq.upper || eq.head || eq.chest);
+    const hasBottom = !!(eq.lower || eq.feet || eq.legs);
+    return !hasTop && !hasBottom;
+}
+
+function _npcGetUnclothedAttractionTerm(npc, charisma) {
+    if (!_npcIsPlayerUnclothed()) return 0;
+    const disinhibition = npc.memory && typeof npc.memory.disinhibition === "number"
+        ? npc.memory.disinhibition : 0;
+    const typeMatch = typeof getNPCTypeMatchScore === "function" ? getNPCTypeMatchScore(npc) : 0;
+    const orientationMatch = _npcGetOrientationFactor(npc) === 1;
+    const receptive = disinhibition >= NPC_UNCLOTHED_MIN_DISINHIBITION &&
+        typeMatch > 0 &&
+        orientationMatch &&
+        charisma >= NPC_UNCLOTHED_MIN_CHARISMA;
+    return receptive ? NPC_UNCLOTHED_BONUS : -NPC_UNCLOTHED_PENALTY;
+}
+
 function computeNPCAttractionBase(npc) {
     if (!isAdultHumanoidNPC(npc)) return 0;
     const hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
@@ -2439,18 +2481,48 @@ function computeNPCAttractionBase(npc) {
     const raw = NPC_FIRST_IMPRESSION.base +
         (typeScore * NPC_FIRST_IMPRESSION.perMatchPoint * orientationFactor) +
         ((charisma - 3) * NPC_FIRST_IMPRESSION.perCharisma);
-    return Math.max(0, Math.min(NPC_FIRST_IMPRESSION.max, Math.round(raw)));
+    const capped = Math.max(0, Math.min(NPC_FIRST_IMPRESSION.max, Math.round(raw)));
+    // Situational unclothed term rides on top of the capped base (a naked
+    // charmer can exceed the normal first-impression ceiling).
+    return capped + _npcGetUnclothedAttractionTerm(npc, charisma);
+}
+
+// Fresh per-engagement variance, rolled every time the player clicks the
+// NPC: a d20 (the engine's own dice when available) mapped to roughly
+// -4..+5, plus the NPC's current mood on the engine mood scale (-3..+3,
+// furious to affectionate). Represents how receptive they happen to feel
+// right now; the deterministic base and the earned history are unchanged.
+function _npcRollEngagementSwing(npc) {
+    let roll;
+    if (typeof G === "object" && G && typeof rollD20 === "function") {
+        roll = rollD20(G.player);
+    } else {
+        roll = 1 + Math.floor(Math.random() * 20);
+    }
+    let moodMod = 0;
+    const mood = String((npc.memory && npc.memory.lastMood) || "neutral").toLowerCase();
+    if (typeof getMoodScale === "function") {
+        const scale = getMoodScale();
+        const idx = scale.indexOf(mood);
+        if (idx >= 0) moodMod = idx - 3;
+    }
+    return Math.round((roll - 10) / 2) + moodMod;
 }
 
 // Recompute attraction at interaction start: attraction = computed base +
-// action-earned history. Run from selectNPC in the engine.
+// action-earned history + a fresh engagement swing. Run from selectNPC in
+// the engine.
 function recomputeNPCAttraction(npc) {
     if (!npc || !isAdultHumanoidNPC(npc)) return npc;
     migrateNPCRelationshipPool(npc);
     const memory = npc.memory;
     if (typeof memory.attractionEarned !== "number") memory.attractionEarned = 0;
     const base = computeNPCAttractionBase(npc);
-    memory.attraction = Math.max(0, Math.min(100, base + memory.attractionEarned));
+    // A hostile NPC (base 0) gets no swing - a lucky roll must not warm
+    // someone up who currently can't stand the player.
+    const swing = base > 0 ? _npcRollEngagementSwing(npc) : 0;
+    memory.attractionSwing = swing;
+    memory.attraction = Math.max(0, Math.min(100, base + memory.attractionEarned + swing));
     return npc;
 }
 
