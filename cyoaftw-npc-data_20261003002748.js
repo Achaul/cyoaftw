@@ -1505,10 +1505,14 @@ function getNPCConversationContext(npc, extraContext = {}) {
         temperament: String(npc.temperament || "").toLowerCase(),
         favor: npc.memory && typeof npc.memory.favorability === "number" ? npc.memory.favorability : 0,
         hostility: typeof npc.hostility === "number" ? npc.hostility : 0,
-        attraction: (npc.relationship && typeof npc.relationship.attraction === "number" ? npc.relationship.attraction : (npc.memory && typeof npc.memory.attraction === "number" ? npc.memory.attraction : 0)),
-        lust: (npc.relationship && typeof npc.relationship.lust === "number" ? npc.relationship.lust : (npc.memory && typeof npc.memory.lust === "number" ? npc.memory.lust : 0)),
-        arousal: (npc.relationship && typeof npc.relationship.arousal === "number" ? npc.relationship.arousal : (npc.memory && typeof npc.memory.arousal === "number" ? npc.memory.arousal : 0)),
-        disinhibition: (npc.relationship && typeof npc.relationship.disinhibition === "number" ? npc.relationship.disinhibition : (npc.memory && typeof npc.memory.disinhibition === "number" ? npc.memory.disinhibition : 0)),
+        // Single stat pool: npc.memory.* (see migrateNPCRelationshipPool —
+        // the old NSFW-side npc.relationship.* values are folded in once,
+        // and every writer now targets memory.*).
+        attraction: (npc.memory && typeof npc.memory.attraction === "number" ? npc.memory.attraction : 0),
+        lust: (npc.memory && typeof npc.memory.lust === "number" ? npc.memory.lust : 0),
+        arousal: (npc.memory && typeof npc.memory.arousal === "number" ? npc.memory.arousal : 0),
+        disinhibition: (npc.memory && typeof npc.memory.disinhibition === "number" ? npc.memory.disinhibition : 0),
+        orientation: String((npc.memory && npc.memory.orientation) || "bi").toLowerCase(),
         actDisinhibition: (npc.memory && npc.memory.actDisinhibition && typeof npc.memory.actDisinhibition === "object" ? npc.memory.actDisinhibition : {}),
         metPlayer: !!(npc.memory && npc.memory.metPlayer),
         everGreeted: !!(npc.memory && npc.memory.everGreeted),
@@ -2314,6 +2318,7 @@ function ensureNPCRelationshipState(npc) {
 
     if (!npc.memory.lastMood) npc.memory.lastMood = "neutral";
     if (typeof npc.memory.attraction !== "number") npc.memory.attraction = 0;
+    if (typeof npc.memory.lust !== "number") npc.memory.lust = 0;
     if (typeof npc.memory.arousal !== "number") npc.memory.arousal = 0;
     if (typeof npc.memory.disinhibition !== "number") npc.memory.disinhibition = 0;
     if (!npc.memory.actDisinhibition || typeof npc.memory.actDisinhibition !== "object") {
@@ -2338,6 +2343,9 @@ function ensureNPCRelationshipState(npc) {
         npc.memory.actDisinhibition = {};
     }
 
+    // Fold the legacy NSFW-side npc.relationship.* pool into memory.* once.
+    migrateNPCRelationshipPool(npc);
+
     return npc;
 }
 
@@ -2348,6 +2356,102 @@ function isAdultHumanoidNPC(npc) {
         typeof npc.age === "number" &&
         npc.age >= 18
     );
+}
+
+// -- STAT POOL MERGE + ATTRACTION RECOMPUTE -----------------------------------
+// Historically the SFW engine tracked romance stats on npc.memory.* while the
+// NSFW system tracked them on npc.relationship.* — and the condition reader
+// preferred relationship.*, which masked every SFW gain (first impression,
+// compliments, charm) once the NSFW system had initialized an NPC. The pools
+// are now merged: memory.* is the single source of truth, relationship.* is a
+// legacy object that nothing reads or writes anymore.
+
+// One-time merge of the old NSFW pool into the memory pool (sum — each side
+// only accumulated from its own sources). Also seeds attractionEarned from
+// whatever attraction history exists above the currently computed base, so
+// the next recompute preserves it.
+function migrateNPCRelationshipPool(npc) {
+    if (!npc) return npc;
+    const memory = npc.memory = npc.memory || {};
+    if (memory._relationshipPoolMerged) return npc;
+    memory._relationshipPoolMerged = true;
+
+    const rel = npc.relationship;
+    const relAttraction = (rel && typeof rel.attraction === "number") ? rel.attraction : 0;
+    const relLust = (rel && typeof rel.lust === "number") ? rel.lust : 0;
+    const relOrientation = (rel && rel.orientation) ? String(rel.orientation) : "";
+
+    if (typeof memory.attraction !== "number") memory.attraction = 0;
+    if (typeof memory.lust !== "number") memory.lust = 0;
+    memory.attraction = Math.max(0, Math.min(100, memory.attraction + relAttraction));
+    memory.lust = Math.max(0, Math.min(100, memory.lust + relLust));
+
+    ensureNPCOrientation(npc);
+    if (relOrientation && !memory.orientation) memory.orientation = relOrientation;
+
+    memory.attractionEarned = Math.max(0, memory.attraction - computeNPCAttractionBase(npc));
+    return npc;
+}
+
+// Sexual orientation: seeded deterministically from the NPC's id so it is
+// stable across saves and sessions (~70% straight / 20% bi / 10% gay).
+function ensureNPCOrientation(npc) {
+    if (!npc) return "bi";
+    const memory = npc.memory = npc.memory || {};
+    if (memory.orientation) return memory.orientation;
+    const seedSource = String(npc.id || npc.name || npc.type || "npc");
+    let hash = 0;
+    for (let i = 0; i < seedSource.length; i++) {
+        hash = (hash * 31 + seedSource.charCodeAt(i)) >>> 0;
+    }
+    const roll = hash % 100;
+    memory.orientation = roll < 70 ? "straight" : (roll < 90 ? "bi" : "gay");
+    return memory.orientation;
+}
+
+// Orientation mismatch is a heavy penalty on the computed base, not a block:
+// flirts and other actions still earn attraction on top (see design notes).
+const NPC_ORIENTATION_MISMATCH_FACTOR = 0.25;
+
+function _npcGetOrientationFactor(npc) {
+    const orientation = String(ensureNPCOrientation(npc) || "bi").toLowerCase();
+    if (orientation === "bi") return 1;
+    const npcGender = String(npc.gender || "").toLowerCase();
+    const playerGender = (typeof G === "object" && G && G.player && G.player.stats && G.player.stats.gender)
+        ? String(G.player.stats.gender).toLowerCase()
+        : "male";
+    const npcLikes = orientation === "straight"
+        ? (npcGender === "female" ? "male" : "female")
+        : (npcGender === "female" ? "female" : "male");
+    return npcLikes === playerGender ? 1 : NPC_ORIENTATION_MISMATCH_FACTOR;
+}
+
+// The computed half of attraction: live Charisma (gear, hygiene and potions
+// included via getSetupStat), type match, and orientation. Re-derived on every
+// interaction start so equipping better clothes or cleaning up shifts it.
+function computeNPCAttractionBase(npc) {
+    if (!isAdultHumanoidNPC(npc)) return 0;
+    const hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
+    if (hostility >= NPC_FIRST_IMPRESSION.hostilityCutoff) return 0;
+    const charisma = typeof getSetupStat === "function" ? getSetupStat("charisma", 3) : 3;
+    const typeScore = typeof getNPCTypeMatchScore === "function" ? getNPCTypeMatchScore(npc) : 0;
+    const orientationFactor = _npcGetOrientationFactor(npc);
+    const raw = NPC_FIRST_IMPRESSION.base +
+        (typeScore * NPC_FIRST_IMPRESSION.perMatchPoint * orientationFactor) +
+        ((charisma - 3) * NPC_FIRST_IMPRESSION.perCharisma);
+    return Math.max(0, Math.min(NPC_FIRST_IMPRESSION.max, Math.round(raw)));
+}
+
+// Recompute attraction at interaction start: attraction = computed base +
+// action-earned history. Run from selectNPC in the engine.
+function recomputeNPCAttraction(npc) {
+    if (!npc || !isAdultHumanoidNPC(npc)) return npc;
+    migrateNPCRelationshipPool(npc);
+    const memory = npc.memory;
+    if (typeof memory.attractionEarned !== "number") memory.attractionEarned = 0;
+    const base = computeNPCAttractionBase(npc);
+    memory.attraction = Math.max(0, Math.min(100, base + memory.attractionEarned));
+    return npc;
 }
 
 // -- NPC "TYPE" (who an NPC is drawn to) -----------------------------------
@@ -2603,9 +2707,7 @@ function getNPCRevealedTypeHints(npc) {
     var prefs = ensureNPCTypePreferences(npc);
     var convo = npc.memory && npc.memory.conversationState ? npc.memory.conversationState : null;
     var interactions = convo && typeof convo.interactionCount === "number" ? convo.interactionCount : 0;
-    var memoryAttraction = npc.memory && typeof npc.memory.attraction === "number" ? npc.memory.attraction : 0;
-    var relationshipAttraction = npc.relationship && typeof npc.relationship.attraction === "number" ? npc.relationship.attraction : 0;
-    var attraction = Math.max(memoryAttraction, relationshipAttraction);
+    var attraction = npc.memory && typeof npc.memory.attraction === "number" ? npc.memory.attraction : 0;
 
     var revealed = 0;
     if (interactions >= NPC_TYPE_REVEAL_FIRST.interactions || attraction >= NPC_TYPE_REVEAL_FIRST.attraction) revealed = 1;
@@ -2671,6 +2773,10 @@ if (typeof window !== "undefined") {
     window.ensureNPCTypePreferences = ensureNPCTypePreferences;
     window.getNPCTypeSummary = getNPCTypeSummary;
     window.getNPCRevealedTypeHints = getNPCRevealedTypeHints;
+    window.migrateNPCRelationshipPool = migrateNPCRelationshipPool;
+    window.ensureNPCOrientation = ensureNPCOrientation;
+    window.computeNPCAttractionBase = computeNPCAttractionBase;
+    window.recomputeNPCAttraction = recomputeNPCAttraction;
 }
 
 function getMoodScale() {
@@ -2858,7 +2964,12 @@ function applyNPCRelationshipImpact(npc, impact = {}) {
             const appealMultiplier = attractionDelta > 0
                 ? getPlayerAppealMultiplier(npc)
                 : 1;
-            npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + Math.round(attractionDelta * charismaMultiplier * appealMultiplier)));
+            const attractionGain = Math.round(attractionDelta * charismaMultiplier * appealMultiplier);
+            // Track the action-earned share separately from the computed
+            // base so recomputeNPCAttraction (interaction start) preserves
+            // it while re-deriving the base from live stats.
+            npc.memory.attractionEarned = (typeof npc.memory.attractionEarned === "number" ? npc.memory.attractionEarned : 0) + attractionGain;
+            npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + attractionGain));
         }
         if (typeof arousal === "number" && arousal !== 0) {
             npc.memory.arousal = Math.max(0, Math.min(100, (npc.memory.arousal || 0) + arousal));

@@ -1893,8 +1893,8 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     
     // Check consent
     if (act.requiresConsent) {
-        const npcAttraction = (npc.relationship && npc.relationship.attraction) || 0;
-        const npcLust = (npc.relationship && npc.relationship.lust) || 0;
+        const npcAttraction = (npc.memory && npc.memory.attraction) || 0;
+        const npcLust = (npc.memory && npc.memory.lust) || 0;
         if (npcAttraction < 50 || npcLust < 30) {
             return { valid: false, reason: "no consent" };
         }
@@ -10219,8 +10219,8 @@ function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
     
     // Get favorability and attraction for mood-aware kiss narration
     var _favor = (npc.memory && typeof npc.memory.favorability === "number") ? npc.memory.favorability : 0;
-    var _attraction = (npc.relationship && typeof npc.relationship.attraction === "number") ? npc.relationship.attraction : 0;
-    var _lust = (npc.relationship && typeof npc.relationship.lust === "number") ? npc.relationship.lust : 0;
+    var _attraction = (npc.memory && typeof npc.memory.attraction === "number") ? npc.memory.attraction : 0;
+    var _lust = (npc.memory && typeof npc.memory.lust === "number") ? npc.memory.lust : 0;
     var highFavor = _favor >= 60;
     var highAttraction = _attraction >= 30;
 

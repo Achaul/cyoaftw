@@ -40,24 +40,28 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   }
 
   function applyAttractionImpact(npc, impact) {
-    if (!npc.relationship) npc.relationship = {};
+    // Single stat pool: memory.* (the legacy npc.relationship.* pool is
+    // folded in once by migrateNPCRelationshipPool in cyoaftw-npc-data.js).
+    npc.memory = npc.memory || {};
     const temperamentMod = window.getTemperamentModifier ? window.getTemperamentModifier(npc.temperament) : 0;
     const multiplier = 1.0 + (temperamentMod * 0.1);
     // Charisma scales attractiveness gains the same way lust gains are
     // scaled below - part of making charisma matter across the board.
     const charismaMultiplier = getPlayerCharismaModifier();
-    npc.relationship.attraction = (npc.relationship.attraction || 0) + Math.round(impact * multiplier * charismaMultiplier);
-    npc.relationship.attraction = Math.max(0, Math.min(100, npc.relationship.attraction));
+    const gain = Math.round(impact * multiplier * charismaMultiplier);
+    // Track the action-earned share so recomputeNPCAttraction (interaction
+    // start) keeps it on top of the freshly computed base.
+    npc.memory.attractionEarned = (typeof npc.memory.attractionEarned === "number" ? npc.memory.attractionEarned : 0) + gain;
+    npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + gain));
   }
 
   function applyLustImpact(npc, impact, envModifier = 1.0) {
-    if (!npc.relationship) npc.relationship = {};
+    npc.memory = npc.memory || {};
     const temperamentMod = window.getTemperamentModifier ? window.getTemperamentModifier(npc.temperament) : 0;
     const temperamentMultiplier = 1.0 + (temperamentMod * 0.1);
     const charismaMultiplier = getPlayerCharismaModifier();
     const totalModifier = envModifier * temperamentMultiplier * charismaMultiplier;
-    npc.relationship.lust = (npc.relationship.lust || 0) + Math.round(impact * totalModifier);
-    npc.relationship.lust = Math.max(0, Math.min(100, npc.relationship.lust));
+    npc.memory.lust = Math.max(0, Math.min(100, (npc.memory.lust || 0) + Math.round(impact * totalModifier)));
   }
 
   // Note: NSFW_CONVERSATION_CATALOGUE is already defined at the top of this file
@@ -65,10 +69,16 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
   function ensureNPCRelationshipState(npc) {
     if (!npc) return;
-    if (!npc.relationship) npc.relationship = { lust: 0, attraction: 0, orientation: "bi" };
-    if (typeof npc.relationship.lust !== "number") npc.relationship.lust = 0;
-    if (typeof npc.relationship.attraction !== "number") npc.relationship.attraction = 0;
-    if (!npc.relationship.orientation) npc.relationship.orientation = "bi";
+    // Memory.* is the single stat pool; run the one-time legacy-merge first.
+    if (typeof window.migrateNPCRelationshipPool === "function") {
+      window.migrateNPCRelationshipPool(npc);
+    }
+    npc.memory = npc.memory || {};
+    if (typeof npc.memory.lust !== "number") npc.memory.lust = 0;
+    if (typeof npc.memory.attraction !== "number") npc.memory.attraction = 0;
+    if (typeof npc.memory.arousal !== "number") npc.memory.arousal = 0;
+    if (typeof npc.memory.disinhibition !== "number") npc.memory.disinhibition = 0;
+    if (!npc.memory.orientation) npc.memory.orientation = "bi";
   }
 
   function getCreatureTemplate(type) {
@@ -517,10 +527,8 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     if (!isAccepted && !isRejected && affirmativeFromCache === undefined &&
         (option.id === "seduce" || option.id === "proposition")) {
         var _favor = (npc.memory && typeof npc.memory.favorability === "number") ? npc.memory.favorability : 0;
-        var _attraction = (npc.relationship && typeof npc.relationship.attraction === "number") ? npc.relationship.attraction :
-                          (npc.memory && typeof npc.memory.attraction === "number") ? npc.memory.attraction : 0;
-        var _lust = (npc.relationship && typeof npc.relationship.lust === "number") ? npc.relationship.lust :
-                    (npc.memory && typeof npc.memory.lust === "number") ? npc.memory.lust : 0;
+        var _attraction = (npc.memory && typeof npc.memory.attraction === "number") ? npc.memory.attraction : 0;
+        var _lust = (npc.memory && typeof npc.memory.lust === "number") ? npc.memory.lust : 0;
         var _temperament = String(npc.temperament || "").toLowerCase();
         var _isBold = _temperament === "forward" || _temperament === "bold" || _temperament === "lustful";
 
@@ -760,12 +768,11 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
   function applyRelationshipImpacts(npc, impacts) {
     if (!npc || !impacts) return;
-    if (!npc.relationship) npc.relationship = {};
     if (impacts.lust) applyLustImpact(npc, impacts.lust);
     if (impacts.attraction) applyAttractionImpact(npc, impacts.attraction);
     if (impacts.hostility) {
-      npc.relationship.hostility = (npc.relationship.hostility || 0) + impacts.hostility;
-      npc.relationship.hostility = Math.max(0, Math.min(100, npc.relationship.hostility));
+      // Hostility lives directly on the NPC (the engine's own pipeline).
+      npc.hostility = Math.max(0, Math.min(100, (npc.hostility || 0) + impacts.hostility));
     }
   }
 
@@ -1120,10 +1127,13 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       const result = orig.apply(this, arguments);
       if (window.G.story && window.G.story.turnCounter % 10 === 0) {
         Object.values(window.G.roomMap || {}).flatMap(function(r) { return r.creatures || []; }).forEach(function(npc) {
-          if (npc && npc.relationship) {
-            npc.relationship.lust = Math.max(0, (npc.relationship.lust || 0) - 1);
+          if (npc && npc.memory) {
+            npc.memory.lust = Math.max(0, (npc.memory.lust || 0) - 1);
             if (window.G.story.turnCounter % 20 === 0) {
-              npc.relationship.attraction = Math.max(0, (npc.relationship.attraction || 0) - 0.5);
+              // Decay the earned share (not just the total) so the next
+              // recomputeNPCAttraction doesn't restore what decayed away.
+              npc.memory.attractionEarned = Math.max(0, (npc.memory.attractionEarned || 0) - 0.5);
+              npc.memory.attraction = Math.max(0, (npc.memory.attraction || 0) - 0.5);
             }
             
             // Handle delayed seduction meetups

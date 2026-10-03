@@ -36,7 +36,13 @@
         text: "You suggest a romantic follow-up, like meeting for dinner or a private walk...",
         playerText: "You suggest a romantic follow-up, like meeting for dinner or a private walk...",
         priority: 20,
-        conditions: { minAttraction: 15 },
+        // Cheat/testing only: seduce and proposition are the debug paths into
+        // an encounter (normal play builds attraction and uses the phase-2
+        // options), so they only appear while G.intimacyDebugMode is on.
+        conditions: {
+            minAttraction: 15,
+            custom: function(npc, ctx) { return !!(window.G && window.G.intimacyDebugMode); }
+        },
         isInquiry: true,
         startEncounter: true,
         relationshipImpact: { lust: +3, attraction: +5 },
@@ -53,7 +59,12 @@
         text: "You make a direct physical advance, testing if they're up for something quick and immediate...",
         playerText: "You make a direct physical advance, testing if they're up for something quick and immediate...",
         priority: 25,
-        conditions: { minAttraction: 10, minLust: 15 },
+        // Cheat/testing only (see seduce above).
+        conditions: {
+            minAttraction: 10,
+            minLust: 15,
+            custom: function(npc, ctx) { return !!(window.G && window.G.intimacyDebugMode); }
+        },
         isInquiry: true,
         startEncounter: true,
         relationshipImpact: { lust: +8, attraction: +2 },
@@ -71,8 +82,7 @@
         priority: 30,
         repeat: "encounter",
         conditions: {
-            minAttraction: 35,
-            minDisinhibition: 10,
+            minAttraction: 15,
             locationCheck: "private",
             aloneWithTarget: true,
             custom: function(npc, ctx) {
@@ -96,9 +106,8 @@
         priority: 35,
         repeat: "encounter",
         conditions: {
-            minAttraction: 45,
+            minAttraction: 25,
             minLust: 25,
-            minDisinhibition: 20,
             locationCheck: "private",
             aloneWithTarget: true,
             custom: function(npc, ctx) {
