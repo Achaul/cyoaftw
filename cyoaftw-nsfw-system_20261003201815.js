@@ -2544,6 +2544,571 @@ stateInstr,
     console.log("[BODY-DEBUG] NSFW appendUnconsciousBodyGroups done, child count:", el.children.length);
   };
 
+  // === Bound captive interactions ====================================
+  // A surrendered NPC the player has roped (npc.bound, see the SFW engine's
+  // captor menu / renderCaptorMenu) gets NSFW action groups on that menu once
+  // the player has examined them (captiveExamined — the engine gates the hook
+  // call the same way unconscious bodies reveal theirs). The key difference
+  // from the unconscious-body groups: the captive is AWAKE. Narration frames
+  // coercion — fear, reluctance, resignation — not limp unresponsiveness.
+
+  function nsfwIsBoundCaptive(npc) {
+    if (!npc || !npc.bound || npc.dead || npc.unconscious) return false;
+    if (typeof window.isHeldCaptive === "function") return window.isHeldCaptive(npc);
+    return !!npc.surrendered;
+  }
+
+  // Region access for a bound captive: mouth is always reachable; chest and
+  // groin once the covering garment is gone (Search their gear can take it);
+  // the rear/anus likewise, since a bound captive can simply be turned around.
+  function nsfwCaptiveRegionExposed(npc, region) {
+    if (!npc) return false;
+    var upperCovered = nsfwBodySlotPresent(npc, "upper");
+    var lowerCovered = nsfwBodySlotPresent(npc, "lower");
+    if (region === "mouth") return true;
+    if (region === "breasts") return !upperCovered;
+    if (region === "genitals") return !lowerCovered;
+    if (region === "anus") return !lowerCovered;
+    return false;
+  }
+
+  function nsfwRenderCaptiveMenu(npc) {
+    if (typeof window.renderCaptorMenu === "function") {
+      window.renderCaptorMenu(npc);
+    }
+  }
+
+  // Exposure note for the AI prompts: what the player can currently see of
+  // the roped captive. Mirrors buildBodyExposureNote's garment logic but with
+  // captive accessibility (mouth always; rear reachable by turning them).
+  function buildCaptiveExposureNote(npc) {
+    if (!npc) return "";
+    var upperCovered = nsfwBodySlotPresent(npc, "upper");
+    var lowerCovered = nsfwBodySlotPresent(npc, "lower");
+    var exposed = [];
+    exposed.push("mouth (always accessible — their face is right there)");
+    if (!upperCovered) {
+      exposed.push("bare chest (upper garment taken)");
+    }
+    if (!lowerCovered) {
+      exposed.push("bare groin (lower garment taken)");
+      exposed.push("bare rear and anus (lower garment taken — they can be turned around)");
+    }
+    return "\nEXPOSURE (what the player can currently see/reach — do not describe anything else as bare): " + exposed.join("; ") + ".";
+  }
+
+  function buildCaptiveActionPrompt(npc, actionDesc, baseText) {
+    const name = nsfwGetEntityName(npc);
+    const species = (npc.species || "human").toLowerCase();
+    const gender = npc.gender || "unknown";
+    const wounds = typeof window.describeCombatWounds === "function"
+      ? window.describeCombatWounds(npc) : "";
+
+    var speciesNote = species !== "human"
+      ? "\nThe NPC is a " + species + ". Include species-appropriate physical details (skin, texture, features)."
+      : "";
+    var woundNote = wounds
+      ? "\nThe NPC has visible wounds: " + wounds + ". Reference them subtly if relevant — they lost this fight."
+      : "";
+    var exposureNote = buildCaptiveExposureNote(npc);
+    var bodyUseNote = nsfwBodyUsePromptNote(npc, actionDesc);
+
+    var prompt = [
+"You are polishing a player action description from a text adventure game.",
+"The NPC is " + name + ", a " + species + " " + gender + ", currently the player's BOUND CAPTIVE — wrists lashed with rope, forced to comply. They are awake, aware, and unwilling." + speciesNote + woundNote + exposureNote + bodyUseNote,
+"",
+"INSTRUCTIONS:",
+"- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and sensory.",
+"- Keep the same meaning and the same act. Do NOT invent new actions or body parts.",
+"- The action: " + actionDesc + ".",
+"- Write in second person (\"You ...\"). This is the player's perspective.",
+"- This act is COERCED, not consensual: the NPC submits because they are bound and defeated, not because they want it. Show fear, reluctance, averted eyes, held breath, trembling, stiff unresponsiveness of forced compliance.",
+"- The NPC may show small involuntary reactions (flinching, clenching, a shaky breath, stifled sounds) but NO enthusiastic participation, NO arousal framing, and NO dialogue beyond a stifled word.",
+"- Use direct, physical language. No metaphors, no purple prose.",
+"- Keep it to 1-2 sentences. Match the length of the base text.",
+"- Use the exposure context above: only reference anatomy that is listed as accessible. Do not describe what is covered.",
+"",
+"BASE TEXT (polish this — refine, make more vivid, keep same meaning and details):",
+"\"" + baseText + "\"",
+"",
+"IMPORTANT: Output ONLY the polished text. No explanations, no meta-discussion. Just the polished sentence.",
+"",
+"RESPOND with only the polished text, nothing else:"
+    ].filter(function(l) { return l !== ""; }).join("\n");
+
+    return prompt;
+  }
+
+  // Captive mirror of polishBodyNarration: placeholder in the log, print only
+  // the polished text once the ai() call returns, fall back to the base text
+  // on failure or if the player has moved on to another view.
+  function polishCaptiveNarration(npc, actionDesc, baseText) {
+    var _ai = typeof window.ai === "function" ? window.ai : null;
+    if (!_ai) { nsfwPrintBodyNarration(baseText); return; }
+
+    var pendingEntry = nsfwShowBodyPendingNarration("...");
+    (async function() {
+      var polished = null;
+      try {
+        var prompt = buildCaptiveActionPrompt(npc, actionDesc, baseText);
+        var result = await _ai({
+          instruction: prompt,
+          startWith: "",
+          endButtons: "none",
+          generatorName: "cyoaftw-engine-core"
+        });
+        polished = result && (result.text || result);
+        if (polished && polished.trim()) {
+          var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(polished.trim());
+          if (isMeta) {
+            console.log("[Captive Actions] Narration rejected (meta-commentary) for:", actionDesc);
+            polished = null;
+          }
+        } else {
+          polished = null;
+        }
+      } catch (e) {
+        console.warn("[Captive Actions] Narration polish failed for:", actionDesc, e);
+      }
+
+      if (window.G && window.G.activeNPC !== npc) polished = null;
+      nsfwRemoveBodyPendingNarration(pendingEntry);
+      nsfwPrintBodyNarration(polished ? polished.trim() : baseText);
+    })();
+  }
+
+  function appendBoundCaptiveGroups(npc, el) {
+    if (!npc || !el) return;
+    nsfwEnsureBodyTraits(npc);
+
+    // Kiss group — the face is always accessible on a standing bound captive.
+    window.appendCombatGroup(el, "Kiss", [
+      window.createCombatButton("Kiss mouth", () => kissBoundCaptive(npc, "mouth")),
+      window.createCombatButton("Kiss cheek", () => kissBoundCaptive(npc, "cheek"))
+    ]);
+
+    // Touch group — grope, gated by anatomy + garment exposure.
+    var touchButtons = [];
+    if (nsfwBodyHasBreasts(npc) && nsfwCaptiveRegionExposed(npc, "breasts")) {
+      touchButtons.push(window.createCombatButton("Grope chest", () => touchBoundCaptive(npc, "breasts")));
+    }
+    var genitalType = nsfwBodyGenitalType(npc);
+    if (genitalType && nsfwCaptiveRegionExposed(npc, "genitals")) {
+      touchButtons.push(window.createCombatButton("Stroke genitals", () => touchBoundCaptive(npc, "genitals")));
+    }
+    if (nsfwCaptiveRegionExposed(npc, "anus")) {
+      touchButtons.push(window.createCombatButton("Grope rear", () => touchBoundCaptive(npc, "rear")));
+    }
+    if (touchButtons.length) {
+      window.appendCombatGroup(el, "Touch", touchButtons);
+    }
+
+    // Oral group — player must have a penis. Once forced, the button becomes
+    // a continuation thrust so the entry narration is not repeated.
+    if (nsfwPlayerHasPenis()) {
+      window.appendCombatGroup(el, "Oral", [
+        npc.captiveMouthUsed
+          ? window.createCombatButton("Thrust into mouth", () => thrustCaptive(npc, "mouth"))
+          : window.createCombatButton("Force into mouth", () => forceOralCaptive(npc))
+      ]);
+    }
+
+    // Penetrate group — finger and/or penis, gated by anatomy + exposure.
+    var penButtons = [];
+    var hasAnus = nsfwBodyHasAnus(npc);
+    var isCloaca = genitalType === "cloaca-vent" || genitalType === "cloaca-penis";
+
+    if (genitalType === "vagina" && nsfwCaptiveRegionExposed(npc, "genitals")) {
+      penButtons.push(window.createCombatButton("Finger vagina", () => fingerCaptive(npc, "vagina")));
+    } else if (isCloaca && nsfwCaptiveRegionExposed(npc, "genitals")) {
+      penButtons.push(window.createCombatButton("Finger cloacal vent", () => fingerCaptive(npc, "cloaca")));
+    }
+    if (hasAnus && nsfwCaptiveRegionExposed(npc, "anus")) {
+      penButtons.push(window.createCombatButton("Finger anus", () => fingerCaptive(npc, "anus")));
+    }
+    if (nsfwPlayerHasPenis()) {
+      if (genitalType === "vagina" && nsfwCaptiveRegionExposed(npc, "genitals")) {
+        penButtons.push(npc.captivePenetratedTarget === "vagina"
+          ? window.createCombatButton("Thrust into vagina", () => thrustCaptive(npc, "vagina"))
+          : window.createCombatButton("Penetrate vagina", () => penetrateCaptive(npc, "vagina")));
+      } else if (isCloaca && nsfwCaptiveRegionExposed(npc, "genitals")) {
+        penButtons.push(npc.captivePenetratedTarget === "cloaca"
+          ? window.createCombatButton("Thrust into cloaca", () => thrustCaptive(npc, "cloaca"))
+          : window.createCombatButton("Penetrate cloaca", () => penetrateCaptive(npc, "cloaca")));
+      }
+      if (hasAnus && nsfwCaptiveRegionExposed(npc, "anus")) {
+        penButtons.push(npc.captivePenetratedTarget === "anus"
+          ? window.createCombatButton("Thrust into anus", () => thrustCaptive(npc, "anus"))
+          : window.createCombatButton("Penetrate anus", () => penetrateCaptive(npc, "anus")));
+      }
+    }
+    if (penButtons.length) {
+      window.appendCombatGroup(el, "Penetrate", penButtons);
+    }
+
+    // Climax group — finish inside every hole currently in use.
+    if (nsfwPlayerHasPenis()) {
+      var climaxButtons = [];
+      if (npc.captivePenetratedTarget === "vagina" && nsfwCaptiveRegionExposed(npc, "genitals")) {
+        climaxButtons.push(window.createCombatButton("Finish inside (vagina)", () => climaxCaptive(npc, "vagina")));
+      } else if (npc.captivePenetratedTarget === "cloaca" && nsfwCaptiveRegionExposed(npc, "genitals")) {
+        climaxButtons.push(window.createCombatButton("Finish inside (" + (nsfwGenitalLabel(npc) || "cloaca") + ")", () => climaxCaptive(npc, "cloaca")));
+      }
+      if (npc.captivePenetratedTarget === "anus" && nsfwCaptiveRegionExposed(npc, "anus")) {
+        climaxButtons.push(window.createCombatButton("Finish inside (anus)", () => climaxCaptive(npc, "anus")));
+      }
+      if (npc.captiveMouthUsed) {
+        climaxButtons.push(window.createCombatButton("Finish inside (mouth)", () => climaxCaptive(npc, "mouth")));
+      }
+      if (climaxButtons.length) {
+        window.appendCombatGroup(el, "Climax", climaxButtons);
+      }
+    }
+
+    // Care group — wipes dried loads / smell notes off the captive (the only
+    // reset those have; see the unconscious-body Care group).
+    var hasDriedLoads = !!(npc.bodyUse && Object.keys(npc.bodyUse).some(function (part) {
+      return npc.bodyUse[part] && npc.bodyUse[part].loadKey;
+    }));
+    var hasSmellNotes = !!(Array.isArray(npc.smellNotes) && npc.smellNotes.length);
+    if (hasDriedLoads || hasSmellNotes) {
+      window.appendCombatGroup(el, "Care", [
+        window.createCombatButton("Clean them up", () => cleanUpCaptive(npc))
+      ]);
+    }
+  }
+
+  // ── Captive action functions ─────────────────────────────────
+  // Same pattern as the body actions: guard, set state flags, build base
+  // text, AI-polish (coercion-framed), remember event, save, re-render menu.
+
+  function kissBoundCaptive(npc, where) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (where !== "mouth" && where !== "cheek") return;
+
+    npc.captiveKissed = (npc.captiveKissed || 0) + 1;
+    npc.captiveLastKiss = where;
+
+    const name = nsfwGetEntityName(npc);
+    const baseText = where === "mouth"
+      ? `You grip ${name}'s jaw and kiss them full on the mouth. Their lips press flat and unyielding; a fine tremor runs through them, but they don't dare pull away.`
+      : `You press a slow kiss to ${name}'s ${where}. They flinch at the touch, then force themselves still, breath coming quick and shallow through their nose.`;
+    const actionDesc = "kiss " + where;
+    polishCaptiveNarration(npc, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} kissed ${name} on the ${where} while they were bound.`, 4);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // part: "breasts" | "genitals" | "rear"
+  function touchBoundCaptive(npc, part) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    const name = nsfwGetEntityName(npc);
+    var baseText;
+
+    if (part === "breasts") {
+      if (!nsfwBodyHasBreasts(npc) || !nsfwCaptiveRegionExposed(npc, "breasts")) return;
+      baseText = `You close a hand over ${name}'s bare chest, kneading without hurry. They turn their face away, jaw tight, a shaky breath escaping through their teeth.`;
+    } else if (part === "genitals") {
+      if (!nsfwBodyGenitalType(npc) || !nsfwCaptiveRegionExposed(npc, "genitals")) return;
+      var genLabel = nsfwGenitalLabel(npc) || "genitals";
+      baseText = `You stroke a hand over ${name}'s exposed ${genLabel}. Their hips jerk back from the touch, then settle — there is nowhere to go with their wrists tied.`;
+    } else if (part === "rear") {
+      if (!nsfwCaptiveRegionExposed(npc, "anus")) return;
+      baseText = `You grab a handful of ${name}'s rear, squeezing roughly. They stumble half a step from the pull of it, the rope biting into their wrists.`;
+    } else return;
+
+    npc.captiveTouched = (npc.captiveTouched || 0) + 1;
+    npc.captiveTouchedParts = npc.captiveTouchedParts || [];
+    if (npc.captiveTouchedParts.indexOf(part) < 0) npc.captiveTouchedParts.push(part);
+    const actionDesc = "touch " + (part === "breasts" ? "chest" : part);
+    polishCaptiveNarration(npc, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} groped ${name} while they were bound.`, 5);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  function forceOralCaptive(npc) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (!nsfwPlayerHasPenis()) return;
+
+    npc.captiveMouthUsed = true;
+    const name = nsfwGetEntityName(npc);
+    const baseText = `You fist a hand in ${name}'s hair and force your cock between their lips. They gag hard around the sudden fullness, eyes squeezed shut, throat fluttering around you.`;
+    const actionDesc = "force mouth";
+    polishCaptiveNarration(npc, actionDesc, baseText);
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, "mouth", { useKind: "penetrate" });
+    window.rememberStoryEvent("combat", `${window.G.player.name} forced their cock into ${name}'s mouth while they were bound.`, 7);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // target: "vagina" | "cloaca" | "anus"
+  function fingerCaptive(npc, target) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    const name = nsfwGetEntityName(npc);
+    var label;
+    var baseText;
+
+    if (target === "vagina" || target === "cloaca") {
+      if (!nsfwCaptiveRegionExposed(npc, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(npc) || "cloacal vent") : "vagina";
+      baseText = `You work a finger into ${name}'s dry, unaroused ${label}. They bite down on a sound, thighs trying to close against the intrusion, held open by nothing but fear of what you will do if they fight.`;
+    } else if (target === "anus") {
+      if (!nsfwCaptiveRegionExposed(npc, "anus")) return;
+      label = "anus";
+      baseText = `You press a finger against ${name}'s clenched anus, working it in slowly against the resistant ring. They go rigid, breath held, enduring it.`;
+    } else return;
+
+    npc.captiveFingered = true;
+    npc.captiveFingerTarget = target;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, target, { useKind: "finger" });
+    const actionDesc = "finger " + label;
+    polishCaptiveNarration(npc, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} inserted a finger into ${name}'s ${label} while they were bound.`, 6);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // target: "vagina" | "cloaca" | "anus" — requires player penis
+  function penetrateCaptive(npc, target) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (!nsfwPlayerHasPenis()) return;
+    const name = nsfwGetEntityName(npc);
+    var label;
+    var baseText;
+
+    if (target === "vagina" || target === "cloaca") {
+      if (!nsfwCaptiveRegionExposed(npc, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(npc) || "cloacal vent") : "vagina";
+      baseText = `You guide your cock into ${name}'s exposed ${label}. Their breath comes fast and panicked; they take it stiff and unready, bound hands flexing uselessly.` + nsfwBodyUseClause(npc, target);
+    } else if (target === "anus") {
+      if (!nsfwCaptiveRegionExposed(npc, "anus")) return;
+      label = "anus";
+      baseText = `You press your cock against ${name}'s tight anus and push in. They stifle a strained noise, muscles locked, forcing themselves to endure it.` + nsfwBodyUseClause(npc, target);
+    } else return;
+
+    npc.captivePenetrated = true;
+    npc.captivePenetratedTarget = target;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, target, { useKind: "penetrate" });
+    const actionDesc = "penetrate " + label;
+    polishCaptiveNarration(npc, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} penetrated ${name}'s ${label} with their cock while they were bound.`, 8);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // Continuation thrusting. target: "vagina" | "cloaca" | "anus" | "mouth"
+  function thrustCaptive(npc, target) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (!nsfwPlayerHasPenis()) return;
+    const name = nsfwGetEntityName(npc);
+    var label;
+    var baseText;
+
+    if (target === "mouth") {
+      if (!npc.captiveMouthUsed) return;
+      label = "mouth";
+      baseText = pickFrom([
+        `You fuck ${name}'s mouth with slow, deliberate strokes, holding their head right where you want it. Tears streak their cheeks; they take each thrust with a muffled, helpless sound.`,
+        `You pump into ${name}'s mouth, their bound hands tugging uselessly at the rope with every push. They struggle to breathe around you, throat working in quick swallows.`
+      ]);
+    } else if (target === "vagina" || target === "cloaca") {
+      if (npc.captivePenetratedTarget !== target) return;
+      if (!nsfwCaptiveRegionExposed(npc, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(npc) || "cloacal vent") : "vagina";
+      baseText = pickFrom([
+        `You drive into ${name}'s ${label} in steady strokes, their bound hands flexing behind them with every push. Their body clenches around you tight and unwilling.`,
+        `You fuck ${name}'s ${label} with even, unhurried strokes. They endure it with their eyes shut and their jaw clenched, breath hitching each time you fill them.`
+      ]);
+    } else if (target === "anus") {
+      if (npc.captivePenetratedTarget !== "anus") return;
+      if (!nsfwCaptiveRegionExposed(npc, "anus")) return;
+      label = "anus";
+      baseText = pickFrom([
+        `You bury yourself in ${name}'s anus again and again, their whole body jolting with each thrust. A strained, breathless noise escapes them each time you bottom out.`,
+        `You fuck ${name}'s anus in deep strokes. They stand it rigidly, every muscle locked, a thin whine held behind their teeth.`
+      ]);
+    } else return;
+
+    npc.captiveThrustCount = (npc.captiveThrustCount || 0) + 1;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, target, { useKind: "penetrate" });
+    const actionDesc = "thrust " + label;
+    polishCaptiveNarration(npc, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} continued thrusting into ${name}'s ${label} while they were bound.`, 6);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // Ejaculate into a hole the player is currently inside.
+  // target: "vagina" | "cloaca" | "anus" | "mouth"
+  function climaxCaptive(npc, target) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (!nsfwPlayerHasPenis()) return;
+    const name = nsfwGetEntityName(npc);
+
+    var label = null;
+    if (target === "vagina" || target === "cloaca") {
+      if (npc.captivePenetratedTarget !== target) return;
+      if (!nsfwCaptiveRegionExposed(npc, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(npc) || "cloaca") : "vagina";
+    } else if (target === "anus") {
+      if (npc.captivePenetratedTarget !== "anus") return;
+      if (!nsfwCaptiveRegionExposed(npc, "anus")) return;
+      label = "anus";
+    } else if (target === "mouth") {
+      if (!npc.captiveMouthUsed) return;
+      label = "mouth";
+    } else return;
+
+    var baseText;
+    if (label === "mouth") {
+      baseText = `You bury yourself to the hilt in ${name}'s mouth and come, spilling down their throat. They gag and swallow around you, eyes streaming, held in place until you are done.`;
+    } else if (label === "anus") {
+      baseText = `You sheathe yourself fully in ${name}'s anus and come, spilling deep inside them. They shudder once, all over, as you empty yourself into their bound body.`;
+    } else {
+      baseText = `You hilt yourself in ${name}'s ${label} and come, spilling your release deep inside them. A broken, shivering breath is all the sound they make as you drain yourself into your captive.`;
+    }
+
+    npc.captiveClimaxCount = (npc.captiveClimaxCount || 0) + 1;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, target, { loadKey: "semen", useKind: "penetrate" });
+    const actionDesc = "climax inside " + label;
+    polishCaptiveNarration(npc, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} ejaculated into ${name}'s ${label} while they were bound.`, 8);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  function cleanUpCaptive(npc) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    const name = nsfwGetEntityName(npc);
+    delete npc.bodyUse;
+    delete npc.smellNotes;
+    const baseText = `You fetch water and a rag and wipe ${name} down under the rope, scrubbing off every dried, crusted trace of what you did to them. They hold statue-still through it, watching your face.`;
+    const actionDesc = "clean up";
+    polishCaptiveNarration(npc, actionDesc, baseText);
+    window.rememberStoryEvent("care", `${window.G.player.name} cleaned and wiped down their bound captive ${name}.`, 2);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // ── Captive examine ───────────────────────────────────────────
+
+  function describeCaptiveExamineBase(npc) {
+    nsfwEnsureBodyTraits(npc);
+    var name = nsfwGetEntityName(npc);
+    var wounds = typeof window.describeCombatWounds === "function"
+      ? window.describeCombatWounds(npc) : "";
+    var base = name + " stands roped at the wrists, " +
+      (wounds ? "wincing against their wounds" : "shaking with exhaustion") +
+      ", eyes down but never leaving you for long. Whatever they see in your face makes them go very still.";
+    return base;
+  }
+
+  function buildCaptiveExaminePrompt(npc, baseText) {
+    var name = nsfwGetEntityName(npc);
+    var species = (npc.species || "human").toLowerCase();
+    var gender = npc.gender || "unknown";
+    var wounds = typeof window.describeCombatWounds === "function"
+      ? window.describeCombatWounds(npc) : "";
+
+    var speciesNote = species !== "human"
+      ? "\nThe NPC is a " + species + ". Include species-appropriate physical details (skin, texture, features)."
+      : "";
+    var woundNote = wounds
+      ? "\nThe NPC has visible wounds: " + wounds + ". Reference them subtly if relevant."
+      : "";
+    var exposureNote = buildCaptiveExposureNote(npc);
+
+    var bodyUseLines = [];
+    if (typeof window.getBodyUseDescriptor === "function") {
+      ["vagina", "anus", "mouth", "breasts"].forEach(function (part) {
+        var d = window.getBodyUseDescriptor(npc, part);
+        if (d) bodyUseLines.push("their " + part + " " + d);
+      });
+    }
+    var bodyUseNote = bodyUseLines.length
+      ? "\nBODY STATE (from recent use - reference subtly, only where visible/relevant): " + bodyUseLines.join("; ") + "."
+      : "";
+
+    return [
+"You are polishing a player 'examine' description from a text adventure game.",
+"The NPC is " + name + ", a " + species + " " + gender + ", currently the player's BOUND CAPTIVE — wrists lashed with rope, defeated, forced to wait on the player's mercy. They are awake, aware, and afraid." + speciesNote + woundNote + exposureNote + bodyUseNote,
+"",
+"INSTRUCTIONS:",
+"- Polish the BASE TEXT below. Make it vivid, sensory, and intimate — the player is looking their captive over.",
+"- Keep the same meaning and details. Do NOT invent new actions or body parts.",
+"- Write in second person (\"You ...\"). This is the player's perspective.",
+"- The NPC is conscious: show fear, tension, wary tracking eyes, small involuntary tells (swallowing, trembling, held breath).",
+"- Use the exposure context above: only reference anatomy that is listed as accessible. Do not describe what is covered.",
+"- Keep it to 1-2 sentences. Match the length of the base text.",
+"- Do NOT add dialogue.",
+"",
+"BASE TEXT (polish this — refine, make more vivid, keep same meaning and details):",
+"\"" + baseText + "\"",
+"",
+"IMPORTANT: Output ONLY the polished text. No explanations, no meta-discussion. Just the polished sentence.",
+"",
+"RESPOND with only the polished text, nothing else:"
+    ].filter(function(l) { return l !== ""; }).join("\n");
+  }
+
+  // Captive mirror of polishBodyExamine: placeholder ("Looking them over..."),
+  // print only the polished text, fall back to the base on failure or if the
+  // player has moved on to another view.
+  function polishCaptiveExamine(npc, baseText) {
+    var _ai = typeof window.ai === "function" ? window.ai : null;
+    if (!_ai) { nsfwPrintBodyNarration(baseText); return; }
+
+    var pendingEntry = nsfwShowBodyPendingNarration("Looking them over...");
+    (async function() {
+      var polished = null;
+      try {
+        var prompt = buildCaptiveExaminePrompt(npc, baseText);
+        var result = await _ai({
+          instruction: prompt,
+          startWith: "",
+          endButtons: "none",
+          generatorName: "cyoaftw-engine-core"
+        });
+        polished = result && (result.text || result);
+        if (polished && polished.trim()) {
+          var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(polished.trim());
+          if (isMeta) {
+            console.log("[Captive Actions] Examine narration rejected (meta-commentary).");
+            polished = null;
+          }
+        } else {
+          polished = null;
+        }
+      } catch (e) {
+        console.warn("[Captive Actions] Examine narration polish failed:", e);
+      }
+
+      if (window.G && window.G.activeNPC !== npc) polished = null;
+      nsfwRemoveBodyPendingNarration(pendingEntry);
+      nsfwPrintBodyNarration(polished ? polished.trim() : baseText);
+    })();
+  }
+
+  // Claims the SFW engine's captive Examine (truthy return): the narration is
+  // printed here once the AI polish returns — the base text is never shown
+  // first. Mirrors describeUnconsciousBodyExamine's contract.
+  window.describeBoundCaptiveExamine = function(npc) {
+    if (!nsfwIsBoundCaptive(npc)) return null;
+    polishCaptiveExamine(npc, describeCaptiveExamineBase(npc));
+    return true;
+  };
+
+  // Append-only hook called by the SFW engine's renderCaptorMenu after the
+  // standard captor buttons. The engine only calls this once the player has
+  // examined the captive (captiveExamined), mirroring the unconscious-body
+  // reveal pattern.
+  window.appendBoundCaptiveActions = function(npc, el) {
+    if (!nsfwIsBoundCaptive(npc) || !el) return;
+    appendBoundCaptiveGroups(npc, el);
+  };
+
   initNSFWSystem();
 })();
 } catch (e) {
