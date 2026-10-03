@@ -1393,3 +1393,305 @@ function buildRoomInstance(roomType, zoneName) {
         exits: {}
     };
 }
+
+// ── WORLD LORE ("world bible") ───────────────────────────────────
+// One shared history the NPCs draw on, so rumors, topics and replies point
+// at the same real people, places and events instead of being improvised.
+//
+// BACKBONE (fixed): the Long War between the Crown of Aldermere and the Free
+// Banners. The capital, Aldermere, is the Ruins. Town is what survives. The
+// Dungeon and the Underground City are where people went to be out of it; the
+// Swamp is just habitat that swallowed some of the war's wreckage. Both sides
+// have faded into remnants: the Ashen Court (Crown loyalists) and the
+// Tattered Banners (unpaid sellswords). Neither is a hero faction, and the
+// player can drift toward either (see getWorldStanding / shiftWorldStanding).
+//
+// SEEDED DETAILS (varied per new game, stored in G.worldLore.seed): a few
+// "who really did it" questions are answered once, and fact text reads the
+// answers, so the history is concrete but not identical every run.
+//
+// FACT SHAPE (WORLD_LORE_FACTS):
+//   id        unique key
+//   tiers     who can know it: common | local | trade | military | faith |
+//             scholar | deep | swamp | secret  (see getNPCLoreTiers in
+//             cyoaftw-npc-data.js; NPCs know the tiers their role/species allow)
+//   zones     zones the fact is about (distance from the NPC's zone lowers
+//             how likely they are to know it; "common" ignores distance)
+//   topic     short phrase for the menu: "Ask about <topic>"
+//   text      what is true (string or function(seed))
+//   distorted optional garbled version told by hearsay-only NPCs
+//   know      0-100 base chance an eligible NPC actually knows it
+//   rumor     true = also offered by "Ask for a rumor"
+
+const WORLD_LORE_SEED_OPTIONS = {
+    burner: ["crown", "banners", "unknown"],       // who burned Aldermere
+    damBreaker: ["crown", "banners"],              // who broke the Greywater dam
+    ending: ["plague", "ruin", "truce"],           // why the war stopped
+    regentFate: ["entombed", "fled", "fell"],      // what became of the Regent
+    townOrigin: ["crown", "banners"]               // what the town grew from
+};
+
+const WORLD_LORE_SIDES = {
+    crown: { name: "the Crown", full: "the Crown of Aldermere", short: "Crown" },
+    banners: { name: "the Free Banners", full: "the Free Banners", short: "Banners" }
+};
+
+function _wlSide(seed, key) {
+    return WORLD_LORE_SIDES[seed[key]] || null;
+}
+function _wlOther(side) {
+    return side === "crown" ? "banners" : "crown";
+}
+
+const WORLD_LORE_FACTS = [
+    // ── common: what everyone has heard ──────────────────────────
+    {
+        id: "war-basics", tiers: ["common"], zones: ["Town", "Ruins"], know: 95, rumor: false,
+        topic: "the Long War",
+        text: "Eleven winters ago the Crown of Aldermere and the Free Banners went to war over the Crown's grain levy. It ruined both sides, and most of the land with them.",
+        distorted: "The Long War was over some king's grain tax, and it went on for as long as anyone can remember."
+    },
+    {
+        id: "aldermere-fell", tiers: ["common"], zones: ["Ruins"], know: 90, rumor: true,
+        topic: "what happened to Aldermere",
+        text: function (s) {
+            if (s.burner === "crown") return "Aldermere, the old capital, burned in the last winter of the war. The Crown set the fires itself rather than hand the city to the Free Banners.";
+            if (s.burner === "banners") return "Aldermere, the old capital, was sacked and burned by the Free Banners in the last winter of the war.";
+            return "Aldermere, the old capital, burned in the last winter of the war. Each side blames the other, and nobody living can say who lit it.";
+        },
+        distorted: "Aldermere burned, and folk say its ghosts still walk the streets."
+    },
+    {
+        id: "town-survives", tiers: ["common", "local"], zones: ["Town"], know: 85, rumor: false,
+        topic: "how the town survived",
+        text: function (s) {
+            return s.townOrigin === "crown"
+                ? "The town began as a Crown grain depot. It outlived the war by feeding both armies when it suited it, and by looking too poor to be worth burning."
+                : "The town began as a Free Banner muster camp. It outlived the war by feeding both armies when it suited it, and by looking too poor to be worth burning.";
+        }
+    },
+    {
+        id: "ruins-haunted", tiers: ["common"], zones: ["Ruins"], know: 80, rumor: true,
+        topic: "the old capital",
+        text: "Folk avoid the ruins of Aldermere after dark. Soldiers who never left their posts are said to still keep them, and scavengers who go in do not always come back.",
+        distorted: "Something in the old capital eats anyone who goes in after dark."
+    },
+    {
+        id: "ashen-court", tiers: ["common", "military"], zones: ["Dungeon", "Ruins"], know: 60, rumor: true,
+        topic: "the Ashen Court",
+        text: "The Ashen Court is what is left of the Crown: loyalists who swear the war was never lost and keep a pretender's court somewhere below the town. Few have seen it, and fewer laugh at it.",
+        distorted: "A dead king holds court under the town, and his courtiers take the living."
+    },
+    {
+        id: "tattered-banners", tiers: ["common", "military", "trade"], zones: ["Dungeon", "Underground City"], know: 65, rumor: true,
+        topic: "the Tattered Banners",
+        text: "The Tattered Banners are Free Banner sellswords the new peace never paid. They now sell their swords to anyone, charge tolls on the lower roads, and are loyal to nobody.",
+        distorted: "Bandits wearing old rebel colors hold the lower roads and rob anyone who passes."
+    },
+    {
+        id: "plague-winter", tiers: ["common"], zones: ["Town"], know: 70, rumor: false,
+        topic: "how the war ended",
+        text: function (s) {
+            if (s.ending === "plague") return "The war ended because a plague winter killed more soldiers than any battle. Both armies simply stopped marching, and nobody signed a peace.";
+            if (s.ending === "ruin") return "The war ended because both treasuries ran dry. After the fight at the Greywater Ford neither side could pay for another season.";
+            return "The war ended in a truce at the Greywater Ford. Both sides swore to it and neither honored it. They just ran out of strength to break it.";
+        },
+        distorted: "The war ended when the gods grew tired of it and sent a winter to end it."
+    },
+    {
+        id: "closed-gates", tiers: ["common", "deep"], zones: ["Underground City"], know: 70, rumor: true,
+        topic: "the Closed Gates",
+        text: "Dwarves and others who wanted no part of the war went below and shut the gates behind them. The Underground City still lets in anyone who leaves their sworn side at the gate and swears no banner while inside.",
+        distorted: "The dwarves below sealed the gates and will not open them for anyone, not even for gold."
+    },
+    // ── local: Town gossip ────────────────────────────────────────
+    {
+        id: "town-watch", tiers: ["local", "military"], zones: ["Town"], know: 65, rumor: true,
+        topic: "the town watch",
+        text: "The town watch answers to the Town Hall, not to either old side. They are paid in grain and goodwill, and they are told to keep the road to the ruins quiet.",
+        distorted: "The watch is bought, and by whoever pays more than the Town Hall."
+    },
+    {
+        id: "ruins-scavengers", tiers: ["local", "trade"], zones: ["Town", "Ruins"], know: 75, rumor: true,
+        topic: "scavengers in the ruins",
+        text: "Scavengers sell what they find in Aldermere to the town's merchants: coins, old arms, and the odd Crown seal. The smart ones stay out of the Throne District.",
+        distorted: "A scavenger found a hoard of Crown gold in the ruins and was never seen again."
+    },
+    {
+        id: "tavern-talk", tiers: ["local", "trade"], zones: ["Town"], know: 70, rumor: true,
+        topic: "who drinks here",
+        text: "Old soldiers from both sides drink in the same taverns now. They keep to separate corners and the fights are mostly polite, but nobody has yet agreed on whose war it was."
+    },
+    {
+        id: "grain-road", tiers: ["trade", "local"], zones: ["Town", "Swamp"], know: 60, rumor: true,
+        topic: "the grain road",
+        text: "The old grain road through the Swamp is the town's cheapest trade route, and the one the Tattered Banners prey on most. Merchants pay for guards or take the long way."
+    },
+    // ── trade: prices, supply, who pays ───────────────────────────
+    {
+        id: "war-surplus", tiers: ["trade", "military"], zones: ["Town", "Dungeon"], know: 65, rumor: false,
+        topic: "war surplus",
+        text: "Swords, shields and mail from the war still turn up in the market. A good share comes from caches in the lower works that nobody has ever fully counted."
+    },
+    {
+        id: "ore-prices", tiers: ["trade", "deep"], zones: ["Underground City", "Town"], know: 60, rumor: false,
+        topic: "ore and iron prices",
+        text: "Iron has been dear ever since the dwarves stopped selling openly. The Underground City sells through go-betweens now, and the Tattered Banners tax every cart that comes up."
+    },
+    // ── military: soldiers, guards, sellswords ────────────────────
+    {
+        id: "greywater-ford", tiers: ["military", "swamp"], zones: ["Swamp"], know: 60, rumor: true,
+        topic: "the Greywater Ford",
+        text: function (s) {
+            const who = s.damBreaker === "crown" ? "the Crown" : "the Free Banners";
+            const target = s.damBreaker === "crown" ? "the Free Banner column" : "the Crown relief column";
+            return "The Greywater Ford was where the war broke. " + who + " broke the dam upstream to drown " + target + ", and the flood buried the ford, the dead and half the old road under what is now the swamp.";
+        },
+        distorted: "A whole army drowned in the swamp when the river flooded, and you can still hear the drums."
+    },
+    {
+        id: "oathbound-dead", tiers: ["military", "faith"], zones: ["Ruins"], know: 45, rumor: false,
+        topic: "the oathbound dead",
+        text: "The skeletons in Aldermere are Crownguard who swore to hold the palace and were never released from the oath. They do not hunt the living. They hold their posts and strike whoever comes near.",
+        distorted: "The dead of Aldermere hunt anyone who enters the city."
+    },
+    {
+        id: "dungeon-assize", tiers: ["military", "scholar", "local"], zones: ["Dungeon", "Town"], know: 40, rumor: false,
+        topic: "the cellars below the town",
+        text: "The dungeon under the town was the Crown's assize cellar and prison. After the war deserters, debtors and every sort of person who did not wish to be found moved into it. The goblins, kobolds and rats came later."
+    },
+    {
+        id: "sellsword-debt", tiers: ["military"], zones: ["Dungeon", "Underground City"], know: 45, rumor: false,
+        topic: "unpaid soldiers",
+        text: "The Free Banners promised their sellswords a share of the Aldermere treasury. It was burned, or looted, or never existed, and eleven winters on they are still waiting for the pay.",
+        distorted: "The rebels hid the Aldermere treasury and will kill anyone who looks for it."
+    },
+    // ── deep: miners, dwarves, smiths ─────────────────────────────
+    {
+        id: "mine-works", tiers: ["deep"], zones: ["Underground City", "Dungeon"], know: 70, rumor: true,
+        topic: "the old mine works",
+        text: "The mines under the town were the Crown's, worked to make arms for the war. The galleries still hold good ore and old collapses, and the lift down to the deep forge is older than the Underground City itself."
+    },
+    {
+        id: "deep-forge", tiers: ["deep", "trade"], zones: ["Underground City"], know: 50, rumor: false,
+        topic: "the deep forge",
+        text: "The deep forge made the Crown's best blades. The Underground City's smiths keep it lit and decline commissions from either old side, which is why a Crown-forged blade fetches such a price."
+    },
+    {
+        id: "gate-oath", tiers: ["deep", "scholar"], zones: ["Underground City"], know: 55, rumor: false,
+        topic: "the gate oath",
+        text: "Whoever enters the Closed Gates must set down their banner, their rank and their quarrel at the threshold. Several Free Banner captains and Crown officers live there under plain names, and everyone below pretends not to notice."
+    },
+    // ── swamp ─────────────────────────────────────────────────────
+    {
+        id: "swamp-wreck", tiers: ["swamp", "local"], zones: ["Swamp"], know: 65, rumor: true,
+        topic: "what the swamp swallowed",
+        text: "The swamp is mostly the flooded valley of the Greywater. Wagons, banners, bones and armor are still being found in the mud, and the swamp folk claim whatever the water gives up."
+    },
+    {
+        id: "swamp-neutral", tiers: ["swamp"], zones: ["Swamp"], know: 60, rumor: false,
+        topic: "the swamp folk and the war",
+        text: "The swamp folk want no side. The flood did not ask them either, and they take payment from whichever side comes first with something worth having, and remember who kept their word."
+    },
+    // ── faith ─────────────────────────────────────────────────────
+    {
+        id: "shrines-both-sides", tiers: ["faith", "scholar"], zones: ["Town", "Ruins", "Dungeon"], know: 55, rumor: false,
+        topic: "the old shrines",
+        text: "Both sides kept the same shrines and prayed to the same old gods for victory. The shrines that survived are neutral ground by custom, and nobody has drawn a weapon in one since the war."
+    },
+    {
+        id: "dead-gods-silent", tiers: ["faith"], zones: ["Ruins", "Town"], know: 40, rumor: false,
+        topic: "the silence of the gods",
+        text: "Priests on both sides prayed for victory and neither received an answer. Some call that the real reason the war ended, and prefer not to say so in front of the faithful."
+    },
+    // ── scholar ───────────────────────────────────────────────────
+    {
+        id: "grain-levy", tiers: ["scholar"], zones: ["Ruins", "Town"], know: 50, rumor: false,
+        topic: "why the war began",
+        text: "The war started over the grain levy, but the records in Aldermere show the Crown had been emptying the granaries to pay its debts for years. The Free Banners were not wrong about the cause. They were wrong about the cure."
+    },
+    {
+        id: "ruins-archive", tiers: ["scholar"], zones: ["Ruins"], know: 40, rumor: false,
+        topic: "the lost archive",
+        text: "Aldermere's archive was only half burned. What survived the fire lies in the deeper rooms of the ruins, and both sides would pay well for the ledgers that show who ordered what."
+    },
+    // ── secret ────────────────────────────────────────────────────
+    {
+        id: "regent-fate", tiers: ["secret", "military", "scholar"], zones: ["Dungeon", "Underground City", "Ruins"], know: 35, rumor: false,
+        topic: "what became of the Regent",
+        text: function (s) {
+            if (s.regentFate === "entombed") return "The Regent never left the war. The Ashen Court sealed the body in the throne hall beneath the town and still guards it, and the Court's authority rests on the claim that the Regent is only sleeping.";
+            if (s.regentFate === "fled") return "The Regent escaped Aldermere and lives in the Underground City under a plain name. The Ashen Court does not know, and some who do would sooner it stayed so.";
+            return "The Regent died at the Greywater Ford and the body was never recovered. The Ashen Court's loyalty rests on a missing corpse, and everyone who knows that keeps quiet.";
+        },
+        distorted: "The Regent is alive, and the Crown will rise again."
+    },
+    {
+        id: "treasury-truth", tiers: ["secret", "military"], zones: ["Ruins", "Dungeon"], know: 30, rumor: false,
+        topic: "the Aldermere treasury",
+        text: function (s) {
+            return s.burner === "banners"
+                ? "The treasury was real, and the Free Banners looted it before they burned the city. The captains kept it. The rank and file got nothing, which is why the Tattered Banners still hold a grudge against their own officers."
+                : "There was little left of the treasury. The Crown had spent it on the war long before the fires, and the sellswords' pay was gone before the last winter.";
+        },
+        distorted: "A fortune in Crown gold is buried under Aldermere, and the ghosts guard it."
+    }
+];
+
+// ── SEEDED STATE (G.worldLore) ───────────────────────────────────
+// { seed: {...}, heard: { factId: true }, standing: { crown: 0, banners: 0 } }
+// Created lazily on first use and saved with the game; reset when a new
+// adventure starts (updateStoryOnAdventureStart in the engine).
+function _wlPick(list) {
+    return list[Math.floor(Math.random() * list.length)];
+}
+
+function createWorldLoreState() {
+    const seed = {};
+    Object.keys(WORLD_LORE_SEED_OPTIONS).forEach(function (key) {
+        seed[key] = _wlPick(WORLD_LORE_SEED_OPTIONS[key]);
+    });
+    return { seed: seed, heard: {}, standing: { crown: 0, banners: 0 } };
+}
+
+function ensureWorldLore() {
+    if (typeof G !== "object" || !G) return createWorldLoreState();
+    if (!G.worldLore || typeof G.worldLore !== "object" || !G.worldLore.seed) {
+        G.worldLore = createWorldLoreState();
+    }
+    const lore = G.worldLore;
+    if (!lore.heard || typeof lore.heard !== "object") lore.heard = {};
+    if (!lore.standing || typeof lore.standing !== "object") lore.standing = { crown: 0, banners: 0 };
+    Object.keys(WORLD_LORE_SEED_OPTIONS).forEach(function (key) {
+        if (WORLD_LORE_SEED_OPTIONS[key].indexOf(lore.seed[key]) < 0) {
+            lore.seed[key] = _wlPick(WORLD_LORE_SEED_OPTIONS[key]);
+        }
+    });
+    return lore;
+}
+
+function getWorldLoreFactText(fact, seed, distorted) {
+    if (!fact) return "";
+    const src = distorted && fact.distorted ? fact.distorted : fact.text;
+    return typeof src === "function" ? String(src(seed || {})) : String(src || "");
+}
+
+// How the player has sided in the war so far. Positive = favors that side.
+function getWorldStanding() {
+    const lore = ensureWorldLore();
+    return { crown: lore.standing.crown || 0, banners: lore.standing.banners || 0 };
+}
+function shiftWorldStanding(side, amount) {
+    if (side !== "crown" && side !== "banners") return;
+    const lore = ensureWorldLore();
+    const next = (lore.standing[side] || 0) + (typeof amount === "number" ? amount : 1);
+    lore.standing[side] = Math.max(-10, Math.min(10, next));
+}
+
+if (typeof window !== "undefined") {
+    window.WORLD_LORE_FACTS = WORLD_LORE_FACTS;
+    window.ensureWorldLore = ensureWorldLore;
+    window.getWorldLoreFactText = getWorldLoreFactText;
+    window.getWorldStanding = getWorldStanding;
+    window.shiftWorldStanding = shiftWorldStanding;
+}

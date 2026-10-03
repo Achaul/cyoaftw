@@ -544,7 +544,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         `- Temperament: ${temperament}`,
         temperamentInflection ? `- ${temperamentInflection}` : "",
         persona && persona.summary ? `- Persona: ${persona.summary}` : "",
-        persona && persona.verbalFingerprint ? `- Verbal fingerprint: ${persona.verbalFingerprint}` : "",
+        persona && persona.verbalFingerprint ? `- Verbal fingerprint (occasional, never every line): ${persona.verbalFingerprint}` : "",
         persona && persona.topicPull ? `- Conversational pull: ${persona.topicPull}` : "",
         persona && persona.voiceDescriptor ? `- Voice descriptor: ${persona.voiceDescriptor}` : "",
         archetype ? `- Archetype: ${archetype}` : "",
@@ -553,8 +553,8 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         background ? `- Background: ${background}${dialectFlavor ? ` - ${dialectFlavor}` : ""}` : "",
         speechStyle ? `- Speech style: ${speechStyle}` : "",
         speechProfile ? `- Speech guide: ${speechProfile.sentenceLength} sentences, ${speechProfile.vocabulary}, ${speechProfile.cadence}` : "",
-        speechProfile ? `- Speech sample: "${speechProfile.sample}"` : "",
-        speechTics.length ? `- Speech cues: ${speechTics.join("; ")}` : "",
+        speechProfile ? `- Speech sample (style only, never copy its words): "${speechProfile.sample}"` : "",
+        speechTics.length ? `- Speech cues (use rarely, not in most lines): ${speechTics.join("; ")}` : "",
         speechAvoid.length ? `- Avoid in speech: ${speechAvoid.join("; ")}` : "",
         voice ? `- Voice: ${voice}` : "",
         articulation ? `- Articulation: ${articulation}` : "",
@@ -608,8 +608,12 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
 function buildPrompt(room, npc, instruction, options = {}) {
     const locCtx = buildLocationNarrativeContext(room);
     const sceneBlock = serializeSceneBlock(locCtx);
-    const storyBlock = serializeStoryDirectorBlock(window.G ? window.G.story : null);
-    const awarenessBlock = npc ? serializeNPCAwarenessBlock(npc) : "";
+    // Conversation replies stay on the player's question: the story block and
+    // recent-news block pull unrelated events into answers, so they are only
+    // included when an option carries its own fact (keepAwareness).
+    const convoOnly = !!(options && options.conversation);
+    const storyBlock = convoOnly ? "" : serializeStoryDirectorBlock(window.G ? window.G.story : null);
+    const awarenessBlock = npc && (!convoOnly || options.keepAwareness) ? serializeNPCAwarenessBlock(npc) : "";
     const npcBlock = npc ? buildNPCPersonaBlock(npc, "SPEAKER CONTEXT", options) : "";
     const recentExchangeBlock = npc ? buildNPCRecentExchangeBlock(npc) : "";
     const overheardBlock = npc ? buildNPCOverheardBlock(npc) : "";

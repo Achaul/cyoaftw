@@ -570,6 +570,7 @@ function ensureNPCConversationState(npc) {
     if (typeof state.sessionNumber !== "number") state.sessionNumber = 0;
     if (typeof state.lastOptionId !== "string") state.lastOptionId = "";
     if (typeof state.lastTopic !== "string") state.lastTopic = "";
+    if (typeof state.lastLoreFactId !== "string") state.lastLoreFactId = "";
 
     npc.memory.conversationState = state;
     return state;
@@ -605,6 +606,15 @@ function recordNPCConversationChoice(npc, choice) {
         state.sessionUsedOptionIds.push(optionId);
         state.sessionUsedOptionIds = state.sessionUsedOptionIds.slice(-30);
         state.lastOptionId = optionId;
+        // A lore option: this NPC has now told that fact (never repeats it),
+        // the world's "heard" count rises, and a follow-up can refer to it.
+        if (choice.loreFactId && typeof ensureWorldLore === "function") {
+            const loreState = ensureWorldLore();
+            loreState.heard[choice.loreFactId] = (loreState.heard[choice.loreFactId] || 0) + 1;
+            if (!npc.memory.loreTold || typeof npc.memory.loreTold !== "object") npc.memory.loreTold = {};
+            npc.memory.loreTold[choice.loreFactId] = true;
+            state.lastLoreFactId = choice.loreFactId;
+        }
         // ask-about-topic labels read "Ask about <topic>"; remember the topic
         // so a follow-up ("press-topic") can refer to it.
         if (optionId === "ask-about-topic" && typeof choice.label === "string") {
@@ -915,6 +925,209 @@ function _npcEventTopic(npc, ctx) {
     return topic;
 }
 
+// ── WORLD LORE: WHAT THIS NPC KNOWS ─────────────────────────────
+// Facts live in WORLD_LORE_FACTS (cyoaftw-world-data.js). Which of them an
+// NPC knows is decided here from role, species and place, with a stable
+// per-NPC dice roll so the same NPC always knows (and slants) the same things.
+// No AI calls: the chosen fact reaches the prompt only as an option's
+// contextNote, so it costs a couple of lines for one reply.
+
+function _loreHash(text) {
+    let h = 2166136261;
+    const s = String(text || "");
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0) % 100;
+}
+
+function _loreNpcKey(npc) {
+    return String((npc && (npc.id || npc.givenName || npc.name)) || "npc");
+}
+
+// Knowledge tiers an NPC can draw on, from role and species.
+const NPC_LORE_ROLE_TIERS = [
+    { match: ["guard", "scout", "watch", "raider", "adventurer", "soldier", "mercenary"], tiers: ["military", "local"] },
+    { match: ["priest", "pilgrim", "cultist"], tiers: ["faith", "local"] },
+    { match: ["archivist", "scholar", "librarian"], tiers: ["scholar", "faith"] },
+    { match: ["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "cook", "servant"], tiers: ["trade", "local"] },
+    { match: ["blacksmith", "smith", "miner", "stone guard"], tiers: ["deep", "trade"] },
+    { match: ["townsfolk", "villager", "guest", "patron", "wanderer", "healer"], tiers: ["local"] },
+    { match: ["scavenger", "tomb robber"], tiers: ["deep", "military"] }
+];
+
+const NPC_LORE_SPECIES_TIERS = {
+    "dwarf": ["deep"],
+    "elf": ["scholar"],
+    "human": ["local"],
+    "halfling": ["local", "trade"],
+    "dragonborn": ["military"],
+    "goblin": ["military", "deep"],
+    "orc": ["military"],
+    "kobold": ["deep", "military"],
+    "lizardfolk": ["swamp"],
+    "skeleton": ["military"],
+    "ghost": ["military", "faith", "secret"]
+};
+
+function getNPCLoreTiers(npc, ctx) {
+    const role = String((ctx && ctx.role) || (npc && npc.role) || "").toLowerCase();
+    const species = String((ctx && ctx.species) || (npc && npc.species) || "").toLowerCase();
+    const tiers = { common: true };
+    NPC_LORE_ROLE_TIERS.forEach(function (row) {
+        if (_npcTextIncludesAny(role, row.match)) row.tiers.forEach(function (t) { tiers[t] = true; });
+    });
+    (NPC_LORE_SPECIES_TIERS[species] || []).forEach(function (t) { tiers[t] = true; });
+    // Secrets are for the trusted, the faithful and the dead.
+    const favor = ctx && typeof ctx.favor === "number" ? ctx.favor : 0;
+    const hostility = ctx && typeof ctx.hostility === "number" ? ctx.hostility : 0;
+    if ((favor >= 20 && hostility < 40) || species === "ghost") tiers.secret = true;
+    else delete tiers.secret;
+    return tiers;
+}
+
+// Zone distance over the zone-link graph (ZONE_LINKS, engine). Unknown -> 1.
+function _loreZoneDistance(fromZone, toZone) {
+    const a = String(fromZone || "").toLowerCase();
+    const b = String(toZone || "").toLowerCase();
+    if (!a || !b) return 1;
+    if (a === b) return 0;
+    if (typeof ZONE_LINKS === "undefined" || !Array.isArray(ZONE_LINKS)) return 1;
+    const seen = {};
+    seen[a] = 0;
+    const queue = [a];
+    while (queue.length) {
+        const cur = queue.shift();
+        for (let i = 0; i < ZONE_LINKS.length; i++) {
+            const link = ZONE_LINKS[i];
+            if (!link) continue;
+            const from = String(link.from || "").toLowerCase();
+            const to = String(link.to || "").toLowerCase();
+            let next = "";
+            if (from === cur) next = to;
+            else if (to === cur) next = from;
+            if (next && seen[next] === undefined) {
+                seen[next] = seen[cur] + 1;
+                if (next === b) return seen[next];
+                queue.push(next);
+            }
+        }
+    }
+    return 3;
+}
+
+// Which side an NPC leans toward: "crown", "banners" or "neutral". Stable.
+function getNPCLoreLeaning(npc, ctx) {
+    const species = String((ctx && ctx.species) || (npc && npc.species) || "").toLowerCase();
+    const role = String((ctx && ctx.role) || (npc && npc.role) || "").toLowerCase();
+    if (species === "skeleton") return "crown";
+    if (species === "ghost") return "neutral";
+    const seed = ensureWorldLore().seed;
+    let crown = 20, banners = 20;
+    if (seed.townOrigin === "crown") crown += 12; else banners += 12;
+    if (species === "goblin" || species === "orc" || species === "kobold") banners += 30;
+    if (species === "dwarf" || species === "lizardfolk") { crown -= 15; banners -= 15; }
+    if (_npcTextIncludesAny(role, ["guard", "town hall"])) crown += 10;
+    if (_npcTextIncludesAny(role, ["raider", "scavenger", "tomb robber"])) banners += 15;
+    if (_npcTextIncludesAny(role, ["priest", "pilgrim"])) { crown -= 10; banners -= 10; }
+    const roll = _loreHash(_loreNpcKey(npc) + ":lean");
+    if (roll < crown) return "crown";
+    if (roll >= 100 - banners) return "banners";
+    return "neutral";
+}
+
+// Every fact this NPC knows: [{ fact, firsthand, distorted }]. Memoized on ctx.
+function getNPCKnownLoreFacts(npc, ctx) {
+    if (!npc || typeof WORLD_LORE_FACTS === "undefined") return [];
+    if (ctx && ctx.__loreKnown) return ctx.__loreKnown;
+    const tiers = getNPCLoreTiers(npc, ctx);
+    const key = _loreNpcKey(npc);
+    const zone = ctx && ctx.zoneName ? ctx.zoneName : "";
+    const out = [];
+    WORLD_LORE_FACTS.forEach(function (fact) {
+        const own = fact.tiers.filter(function (t) { return tiers[t] && t !== "common"; });
+        const firsthand = own.length > 0;
+        const commonOnly = fact.tiers.indexOf("common") >= 0;
+        if (!firsthand && !commonOnly) return;
+        if (fact.tiers.indexOf("secret") >= 0 && !tiers.secret) return;
+        let chance = typeof fact.know === "number" ? fact.know : 50;
+        // Distance only matters for things that are not common knowledge.
+        let dist = 0;
+        if (!commonOnly || firsthand) {
+            dist = 3;
+            (fact.zones || []).forEach(function (z) { dist = Math.min(dist, _loreZoneDistance(zone, z)); });
+            if ((fact.zones || []).length === 0) dist = 0;
+        }
+        if (!commonOnly) chance = chance * (dist === 0 ? 1 : (dist === 1 ? 0.7 : 0.35));
+        if (!firsthand) chance = Math.min(chance, 70); // hearsay only
+        if (_loreHash(key + ":" + fact.id) >= chance) return;
+        const garbled = !firsthand && !!fact.distorted && _loreHash(key + ":" + fact.id + ":garble") < 45;
+        out.push({ fact: fact, firsthand: firsthand, distorted: garbled });
+    });
+    if (ctx) ctx.__loreKnown = out;
+    return out;
+}
+
+// Picks the fact to offer now: facts this NPC has not told yet, least-heard first, filtered by purpose ("rumor"
+// keeps rumor-flagged facts), nearest to this NPC's place first, with a stable
+// per-NPC tiebreak so the same menu keeps the same fact until it is heard.
+function pickNPCLoreFact(npc, ctx, purpose) {
+    const memoKey = "__lorePick:" + (purpose || "topic");
+    if (ctx && ctx[memoKey] !== undefined) return ctx[memoKey];
+    const lore = ensureWorldLore();
+    const zone = ctx && ctx.zoneName ? ctx.zoneName : "";
+    const key = _loreNpcKey(npc);
+    // The rumor option and the topic option must not offer the same fact.
+    const topicPick = purpose === "rumor" ? pickNPCLoreFact(npc, ctx, "topic") : null;
+    let pool = getNPCKnownLoreFacts(npc, ctx).filter(function (entry) {
+        if (topicPick && topicPick.fact.id === entry.fact.id) return false;
+        if (npc.memory && npc.memory.loreTold && npc.memory.loreTold[entry.fact.id]) return false;
+        if (purpose === "rumor" && !entry.fact.rumor) return false;
+        return true;
+    });
+    pool = pool.map(function (entry) {
+        let dist = 3;
+        (entry.fact.zones || []).forEach(function (z) { dist = Math.min(dist, _loreZoneDistance(zone, z)); });
+        return { entry: entry, score: (entry.firsthand ? 0 : 2) + dist + (lore.heard[entry.fact.id] || 0) * 1.5 + _loreHash(key + ":pick:" + entry.fact.id) / 100 };
+    }).sort(function (a, b) { return a.score - b.score; });
+    const pick = pool.length ? pool[0].entry : null;
+    if (ctx) ctx[memoKey] = pick;
+    return pick;
+}
+
+function _loreLeaningLine(leaning) {
+    if (leaning === "crown") return " The speaker sympathizes with the Crown and tells it with that slant, without lying outright.";
+    if (leaning === "banners") return " The speaker sympathizes with the Free Banners and tells it with that slant, without lying outright.";
+    return " The speaker takes no side in the war.";
+}
+
+function buildNPCLoreNote(npc, ctx, entry, mode) {
+    if (!entry) return "";
+    const seed = ensureWorldLore().seed;
+    const text = getWorldLoreFactText(entry.fact, seed, entry.distorted);
+    if (mode === "source") {
+        return "Something the speaker told the player: \"" + text + "\" Now the player asks how they know it. " +
+            (entry.firsthand
+                ? "Say it comes from their own work or experience, and how sure they are."
+                : "Say plainly it is only what they heard from others, and they cannot vouch for it.") +
+            " Do not add new events or names.";
+    }
+    return "Local history the speaker " + (entry.firsthand ? "knows firsthand" : "has only heard secondhand") + ": \"" + text + "\"" +
+        (entry.distorted ? " (They believe this version.)" : "") +
+        " Answer from the speaker's own point of view in their own words, and do not invent other events or names." +
+        _loreLeaningLine(getNPCLoreLeaning(npc, ctx));
+}
+
+function _loreLastHeardEntry(npc, ctx) {
+    const state = npc && npc.memory && npc.memory.conversationState ? npc.memory.conversationState : null;
+    const id = ctx && ctx.lastLoreFactId ? ctx.lastLoreFactId : (state ? state.lastLoreFactId : "");
+    if (!id) return null;
+    const known = getNPCKnownLoreFacts(npc, ctx);
+    for (let i = 0; i < known.length; i++) if (known[i].fact.id === id) return known[i];
+    return null;
+}
+
 // True when the NPC's last reply said it expects an answer (the reply JSON's
 // "responseNeeded" flag, stored by npcRespond in the engine).
 function _npcResponseIsPending(npc) {
@@ -1194,6 +1407,51 @@ const NPC_CONVERSATION_CATALOGUE = [
             custom: (npc, ctx) => !!_npcEventTopic(npc, ctx)
         }
     },
+    {
+        id: "ask-about-lore",
+        priority: 44,
+        rankBoost: 18,
+        repeat: "session",
+        resetTimer: { turns: 5 },
+        label: (npc, ctx) => { const e = pickNPCLoreFact(npc, ctx, "topic"); return e ? `Ask about ${e.fact.topic}` : ""; },
+        textVariants: [
+            (npc, ctx) => { const e = pickNPCLoreFact(npc, ctx, "topic"); return e ? `You ask what they know about ${e.fact.topic}.` : ""; },
+            (npc, ctx) => { const e = pickNPCLoreFact(npc, ctx, "topic"); return e ? `You bring up ${e.fact.topic} and let them tell it their way.` : ""; },
+            (npc, ctx) => { const e = pickNPCLoreFact(npc, ctx, "topic"); return e ? `You ask what people around here say about ${e.fact.topic}.` : ""; }
+        ],
+        loreFact: (npc, ctx) => { const e = pickNPCLoreFact(npc, ctx, "topic"); return e ? e.fact.id : ""; },
+        contextNote: (npc, ctx) => buildNPCLoreNote(npc, ctx, pickNPCLoreFact(npc, ctx, "topic"), "tell"),
+        cacheSig: (npc, ctx) => { const e = pickNPCLoreFact(npc, ctx, "topic"); return e ? e.fact.id + (e.distorted ? "d" : "") : ""; },
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-world-lore" },
+        conditions: {
+            metPlayer: true,
+            maxHostility: 60,
+            minFavor: -20,
+            custom: (npc, ctx) => ctx.isHumanoid && !!pickNPCLoreFact(npc, ctx, "topic")
+        }
+    },
+    {
+        id: "ask-lore-source",
+        priority: 43,
+        rankBoost: 40,
+        repeat: "session",
+        label: "Ask how they know that",
+        textVariants: [
+            "You ask how they came to know that.",
+            "You ask whether that is something they saw or only heard.",
+            "You ask who told them, and whether they trust it."
+        ],
+        contextNote: (npc, ctx) => buildNPCLoreNote(npc, ctx, _loreLastHeardEntry(npc, ctx), "source"),
+        cacheSig: (npc, ctx) => ctx.lastLoreFactId || "",
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-lore-source" },
+        replaces: ["ask-about-lore", "ask-rumor"],
+        conditions: {
+            maxHostility: 59,
+            custom: (npc, ctx) => (ctx.lastOptionId === "ask-about-lore" || ctx.lastOptionId === "ask-rumor") && !!_loreLastHeardEntry(npc, ctx)
+        }
+    },
     // ===== FOLLOW-UP CHAINS =====
     // A follow-up appears only after its parent was used this conversation
     // (requiredSessionOptionIds) and, via `replaces`, takes the parent's slot
@@ -1398,6 +1656,10 @@ const NPC_CONVERSATION_CATALOGUE = [
             "You invite them to share whispers, gossip, or anything people are not saying openly."
         ],
         intent: "rumor",
+        // A real piece of local history this NPC would plausibly have heard.
+        loreFact: (npc, ctx) => { const e = pickNPCLoreFact(npc, ctx, "rumor"); return e ? e.fact.id : ""; },
+        contextNote: (npc, ctx) => buildNPCLoreNote(npc, ctx, pickNPCLoreFact(npc, ctx, "rumor"), "tell"),
+        cacheSig: (npc, ctx) => { const e = pickNPCLoreFact(npc, ctx, "rumor"); return e ? e.fact.id + (e.distorted ? "d" : "") : ""; },
         relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-rumor" },
         rankBoost: 25,
         conditions: {
@@ -2008,6 +2270,9 @@ function getNPCConversationContext(npc, extraContext = {}) {
         lastTopic: conversationState && typeof conversationState.lastTopic === "string"
             ? conversationState.lastTopic
             : "",
+        lastLoreFactId: conversationState && typeof conversationState.lastLoreFactId === "string"
+            ? conversationState.lastLoreFactId
+            : "",
         optionUsage: conversationState && conversationState.optionUsage && typeof conversationState.optionUsage === "object"
             ? { ...conversationState.optionUsage }
             : {},
@@ -2368,6 +2633,8 @@ function buildConversationOption(entry, npc, ctx) {
         text: playerText,
         promptText: promptText || playerText,
         contextNote: String(_npcResolveConversationValue(entry.contextNote, npc, ctx) || ""),
+        // World-lore fact this option tells (recorded once chosen, see recordNPCConversationChoice).
+        loreFactId: entry.loreFact ? String(_npcResolveConversationValue(entry.loreFact, npc, ctx) || "") : "",
         revealsName: entry.revealsName !== undefined ? _npcResolveConversationValue(entry.revealsName, npc, ctx) === true : false,
         action,
         intent: resolvedIntent,
