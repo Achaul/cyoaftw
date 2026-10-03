@@ -155,7 +155,11 @@ function buildLocationNarrativeContext(room) {
     const doors = room.doors && typeof room.doors === "object"
         ? Object.keys(room.doors)
             .filter(dir => room.exits && room.exits[dir] && doorNames[room.doors[dir]])
-            .map(dir => `${doorNames[room.doors[dir]]} to the ${dirWords[dir] || dir}`)
+            .map(dir => {
+                const lock = room.locks && room.locks[dir];
+                const locked = !!(lock && lock.state === "locked");
+                return `${locked ? "a locked door" : doorNames[room.doors[dir]]} to the ${dirWords[dir] || dir}`;
+            })
         : [];
 
     return {

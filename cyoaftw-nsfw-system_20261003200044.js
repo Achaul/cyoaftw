@@ -1465,8 +1465,11 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   // Penetrate / Spit groups. nsfwRenderBodyMenu() (below) re-renders the whole
   // menu after an NSFW action by delegating back to renderRoomObjectActionMenu.
   // Narration is AI-polished via the same ai() path the intimacy system uses:
-  // the plain template is shown immediately, then a background ai() call
-  // refines it and updates the narration element when it returns.
+  // a background ai() call refines the plain template, and only the polished
+  // text is printed — a dimmed placeholder ("Looking closer..." / "...")
+  // stands in the log while the polish is in flight (see
+  // polishBodyNarration / polishBodyExamine, which fall back to the plain
+  // template if the polish fails).
 
   function nsfwGetEntityName(item) {
     return typeof window.getEntityName === "function"
@@ -1881,35 +1884,44 @@ anatomyNote,
     }
   }
 
-  // Replace the most recent body-interaction chat entry with the AI-polished
-  // version. The polished text re-enters via nsfwPrintBodyNarration so it
-  // gets the same typewriter presentation; removing the old entry avoids a
-  // base + polished duplicate in the chat log.
-  function nsfwReplaceLastBodyNarration(text) {
-    if (typeof window.addIntimacyNarration !== "function") {
-      window.setNarration(text);
-      return;
+  // Placeholder line shown in the chat log while an AI polish is in flight
+  // ("Looking closer..." for examines, "..." for actions). Printed through
+  // addIntimacyNarration with a distinct dimmed class and no typewriter,
+  // and returned so the caller can remove it (nsfwRemoveBodyPendingNarration)
+  // once the polished narration prints — the placeholder never stays in the
+  // log alongside the real text.
+  function nsfwShowBodyPendingNarration(text) {
+    if (typeof window.addIntimacyNarration === "function") {
+      return window.addIntimacyNarration(text, {
+        className: "intimacy-narration body-narration-pending",
+        animate: false
+      }) || null;
     }
-    var chatLog = document.getElementById("chatLogEl");
-    var chatEntries = chatLog ? chatLog.querySelectorAll(".intimacy-narration") : [];
-    var lastEntry = chatEntries.length ? chatEntries[chatEntries.length - 1] : null;
-    if (lastEntry && lastEntry.parentNode) {
-      lastEntry.parentNode.removeChild(lastEntry);
-    }
-    window.addIntimacyNarration(text);
+    window.setNarration(text);
+    return null;
   }
 
-  // Show the plain narration immediately, then fire a background ai() call
-  // to polish it. When the result returns, update the chat panel if
-  // the player is still looking at this body. Non-blocking — same pattern as
-  // the intimacy system's player-narrative prefetch.
+  function nsfwRemoveBodyPendingNarration(entry) {
+    if (entry && entry.parentNode) entry.parentNode.removeChild(entry);
+  }
+
+  // Fire a background ai() call to polish the action narration, and print
+  // only once the polished text returns — the plain base text is never
+  // written first and then overwritten. A dimmed "..." placeholder sits in
+  // the log while the polish is in flight and is removed when the real text
+  // prints. If the polish fails (ai() missing, error, empty or
+  // meta-commentary reply) the base text is printed instead, so the action
+  // is never left silent. If the player has moved on to another view before
+  // the polish lands, the base text is printed so the event still reads in
+  // the log. Non-blocking — same pattern as the intimacy system's
+  // player-narrative prefetch.
   function polishBodyNarration(item, actionDesc, baseText) {
-    nsfwPrintBodyNarration(baseText);
-
     var _ai = typeof window.ai === "function" ? window.ai : null;
-    if (!_ai) return;
+    if (!_ai) { nsfwPrintBodyNarration(baseText); return; }
 
+    var pendingEntry = nsfwShowBodyPendingNarration("...");
     (async function() {
+      var polished = null;
       try {
         var prompt = buildBodyActionPrompt(item, actionDesc, baseText);
         var result = await _ai({
@@ -1918,23 +1930,26 @@ anatomyNote,
           endButtons: "none",
           generatorName: "cyoaftw-engine-core"
         });
-        var polished = result && (result.text || result);
-        if (!polished || !polished.trim()) return;
-
-        // Reject meta-commentary (same guard as intimacy system)
-        var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(polished.trim());
-        if (isMeta) {
-          console.log("[Body Actions] Narration rejected (meta-commentary) for:", actionDesc);
-          return;
-        }
-
-        // Only update if the player is still looking at this body
-        if (window.G && window.G.activeObject === item) {
-          nsfwReplaceLastBodyNarration(polished.trim());
+        polished = result && (result.text || result);
+        if (polished && polished.trim()) {
+          // Reject meta-commentary (same guard as intimacy system)
+          var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(polished.trim());
+          if (isMeta) {
+            console.log("[Body Actions] Narration rejected (meta-commentary) for:", actionDesc);
+            polished = null;
+          }
+        } else {
+          polished = null;
         }
       } catch (e) {
         console.warn("[Body Actions] Narration polish failed for:", actionDesc, e);
       }
+
+      // Only the polished text is bound to the body being viewed; anything
+      // else (polish failed, or the player left this body) records the base.
+      if (window.G && window.G.activeObject !== item) polished = null;
+      nsfwRemoveBodyPendingNarration(pendingEntry);
+      nsfwPrintBodyNarration(polished ? polished.trim() : baseText);
     })();
   }
 
@@ -2286,11 +2301,12 @@ anatomyNote,
   // === Unconscious body: examine narration (NSFW) ==========================
   // Exposed as window.describeUnconsciousBodyExamine so the SFW engine's
   // examineRoomObject() can call it behind a typeof guard when NSFW is
-  // enabled. Returns an immediate (SFW-safe) base string for the chat panel
-  // (addIntimacyNarration, same channel intimacy encounters use),
-  // then fires a background ai() call to polish it into a more intimate,
-  // sensory description of the unconscious body. Mirrors polishBodyNarration
-  // but is read-only (the player is just looking, not acting on the body).
+  // enabled. Claims the examine with a truthy return; the narration is
+  // printed by polishBodyExamine once the background ai() call has polished
+  // the base description into a more intimate, sensory account of the
+  // unconscious body — the base text is never shown first. Mirrors
+  // polishBodyNarration but is read-only (the player is just looking, not
+  // acting on the body).
 
   // ── Clothing + position exposure context ──────────────────────
   // Derives, at call time, what the player can see of an unconscious body:
@@ -2463,11 +2479,19 @@ stateInstr,
     ].join("\n");
   }
 
+  // Fire a background ai() call to polish the examine narration and print
+  // only once the polished text returns — the base text is never written
+  // first and then overwritten. A dimmed "Looking closer..." placeholder sits
+  // in the log while the polish is in flight and is removed when the real
+  // text prints. Falls back to the base text when the polish fails, or when
+  // the player has moved on to another view.
   function polishBodyExamine(item, baseText) {
     var _ai = typeof window.ai === "function" ? window.ai : null;
-    if (!_ai) return;
+    if (!_ai) { nsfwPrintBodyNarration(baseText); return; }
 
+    var pendingEntry = nsfwShowBodyPendingNarration("Looking closer...");
     (async function() {
+      var polished = null;
       try {
         var prompt = buildBodyExaminePrompt(item, baseText);
         var result = await _ai({
@@ -2476,32 +2500,35 @@ stateInstr,
           endButtons: "none",
           generatorName: "cyoaftw-engine-core"
         });
-        var polished = result && (result.text || result);
-        if (!polished || !polished.trim()) return;
-
-        // Reject meta-commentary (same guard as the intimacy / body-action paths)
-        var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(polished.trim());
-        if (isMeta) {
-          console.log("[Body Actions] Examine narration rejected (meta-commentary).");
-          return;
-        }
-
-        // Only update if the player is still looking at this body
-        if (window.G && window.G.activeObject === item) {
-          nsfwReplaceLastBodyNarration(polished.trim());
+        polished = result && (result.text || result);
+        if (polished && polished.trim()) {
+          // Reject meta-commentary (same guard as the intimacy / body-action paths)
+          var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(polished.trim());
+          if (isMeta) {
+            console.log("[Body Actions] Examine narration rejected (meta-commentary).");
+            polished = null;
+          }
+        } else {
+          polished = null;
         }
       } catch (e) {
         console.warn("[Body Actions] Examine narration polish failed:", e);
       }
+
+      if (window.G && window.G.activeObject !== item) polished = null;
+      nsfwRemoveBodyPendingNarration(pendingEntry);
+      nsfwPrintBodyNarration(polished ? polished.trim() : baseText);
     })();
   }
 
   console.log("[BODY-DEBUG] IIFE reached line ~2153 (about to assign describeUnconsciousBodyExamine)");
   window.describeUnconsciousBodyExamine = function(item) {
     if (!item || item.bodyState !== "unconscious") return null;
-    var base = describeBodyExamineBase(item);
-    polishBodyExamine(item, base);
-    return base;
+    // Claims the examine for the SFW engine (truthy return). The narration
+    // is printed by polishBodyExamine once the AI polish returns — the base
+    // text is never written first.
+    polishBodyExamine(item, describeBodyExamineBase(item));
+    return true;
   };
 
   // Append-only hook called by the SFW engine's renderRoomObjectActionMenu

@@ -1045,13 +1045,21 @@ function getNPCKnownLoreFacts(npc, ctx) {
     const key = _loreNpcKey(npc);
     const zone = ctx && ctx.zoneName ? ctx.zoneName : "";
     const out = [];
-    WORLD_LORE_FACTS.forEach(function (fact) {
+    // Named buildings of the town (see getPlaceLoreFacts in
+    // cyoaftw-world-data.js) join the fixed facts.
+    const allFacts = typeof getPlaceLoreFacts === "function"
+        ? WORLD_LORE_FACTS.concat(getPlaceLoreFacts())
+        : WORLD_LORE_FACTS;
+    const here = ctx && ctx.room && ctx.room.buildingId ? ctx.room.buildingId : null;
+    allFacts.forEach(function (fact) {
+        // Someone working inside a building knows it firsthand.
+        const ownBuilding = !!(here && fact.buildingId === here);
         const own = fact.tiers.filter(function (t) { return tiers[t] && t !== "common"; });
-        const firsthand = own.length > 0;
+        const firsthand = own.length > 0 || ownBuilding;
         const commonOnly = fact.tiers.indexOf("common") >= 0;
         if (!firsthand && !commonOnly) return;
         if (fact.tiers.indexOf("secret") >= 0 && !tiers.secret) return;
-        let chance = typeof fact.know === "number" ? fact.know : 50;
+        let chance = ownBuilding ? 100 : (typeof fact.know === "number" ? fact.know : 50);
         // Distance only matters for things that are not common knowledge.
         let dist = 0;
         if (!commonOnly || firsthand) {

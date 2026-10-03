@@ -1617,10 +1617,14 @@ const BUILDING_BLUEPRINTS = {
               anchorFor: ["dungeon-to-town"], verticalLinks: ["town-to-dungeon"] },
             { key: "shrine",       type: "Cellar Shrine", floor: -1, at: [1, 0] }
         ],
+        // The alley side of the back door is barred; it lifts freely from inside.
+        // The cellar door is often kept locked (freely opened from the stair
+        // side, so a way in from the dungeon never traps anyone).
+        backLock: { chance: 1, level: [2, 3] },
         links: [
             ["taproom", "kitchen", "door"],
             ["kitchen", "backdoor", "door"],
-            ["taproom", "cellarstairs", "door"],
+            ["taproom", "cellarstairs", "door", { chance: 0.5, level: 2 }],
             ["cellarstairs", "cellar"],
             ["cellar", "shrine", "door"]
         ]
@@ -1646,11 +1650,11 @@ const BUILDING_BLUEPRINTS = {
             ["common", "stairs", "arch"],
             ["stairs", "hall1"],
             ["hall1", "hall2"],
-            ["hall1", "guest1", "door"],
-            ["hall1", "guest2", "door"],
-            ["hall2", "guest3", "door"],
-            ["hall2", "guest4", "door"],
-            ["hall2", "guest5", "door"]
+            ["hall1", "guest1", "door", { chance: 1, level: 2, keyId: "room-token" }],
+            ["hall1", "guest2", "door", { chance: 1, level: 2, keyId: "room-token" }],
+            ["hall2", "guest3", "door", { chance: 1, level: 2, keyId: "room-token" }],
+            ["hall2", "guest4", "door", { chance: 1, level: 2, keyId: "room-token" }],
+            ["hall2", "guest5", "door", { chance: 1, level: 2, keyId: "room-token" }]
         ]
     },
     // The forge floor is open-fronted to the street (an archway, not a door).
@@ -1671,8 +1675,9 @@ const BUILDING_BLUEPRINTS = {
             { key: "quarters",  type: "Smith's Quarters", floor: 0, at: [1, 0] }
         ],
         links: [
-            ["storeroom", "quarters", "door"]
-        ]
+            ["storeroom", "quarters", "door", { chance: 0.6, level: 2 }]
+        ],
+        backLock: { chance: 1, level: 2 }
     },
     // An ordinary home: front room onto the street, a bedroom behind a door.
     // One door in or out. Fills out larger towns.
@@ -1681,6 +1686,9 @@ const BUILDING_BLUEPRINTS = {
         entrance: "Townhouse",
         front: "bedroom",
         frontDoor: "door",
+        // Homes are often locked up; the bedroom door less so.
+        streetLock: { chance: 0.45, level: [1, 2] },
+        frontLock: { chance: 0.35, level: 2 },
         back: null,
         names: [],
         rooms: [
@@ -1705,7 +1713,7 @@ const BUILDING_BLUEPRINTS = {
         ],
         links: [
             ["corridor", "chamber", "door"],
-            ["corridor", "records", "door"]
+            ["corridor", "records", "door", { chance: 0.7, level: 3 }]
         ]
     }
 };
@@ -1741,7 +1749,7 @@ function _planShuffle(list, rng) {
 function _planAddRoom(plan, coords, type, zone, extra) {
     const desc = Object.assign({
         coords: coords, type: type, zone: zone,
-        exits: {}, portals: {}, doors: {}
+        exits: {}, portals: {}, doors: {}, locks: {}
     }, extra || {});
     plan.rooms[coords] = desc;
     return desc;
@@ -1751,14 +1759,35 @@ function _planAddRoom(plan, coords, type, zone, extra) {
 // portal=true for links between cells that are not neighbours on the grid
 // (a street door into an interior plane, a back door into an alley). doorKind
 // puts a visible door (or archway) on both sides of the link.
-function _planLink(plan, aCoords, bCoords, dirFromA, doorKind, portal) {
+function _planLink(plan, aCoords, bCoords, dirFromA, doorKind, portal, lock) {
     const a = plan.rooms[aCoords];
     const b = plan.rooms[bCoords];
     const back = _DIR_OPP[dirFromA];
     a.exits[dirFromA] = bCoords;
     b.exits[back] = aCoords;
     if (portal) { a.portals[dirFromA] = true; b.portals[back] = true; }
+    // A lock needs a door to sit in.
+    if (lock && !doorKind) doorKind = "door";
     if (doorKind) { a.doors[dirFromA] = doorKind; b.doors[back] = doorKind; }
+    if (lock) {
+        // Both sides share one lock. freeFrom says which side can open it
+        // without a roll (lift the bar, turn the latch): "A" is aCoords' side,
+        // "B" the other. Doors are always openable from the private side, so
+        // nobody can be locked inside a building (or out of the way they came
+        // in by stairs or lift).
+        a.locks[dirFromA] = { state: "locked", level: lock.level, keyId: lock.keyId || null, freeOpen: lock.freeFrom === "A" };
+        b.locks[back]     = { state: "locked", level: lock.level, keyId: lock.keyId || null, freeOpen: lock.freeFrom !== "A" };
+    }
+}
+
+// Rolls a blueprint lock spec: { chance?, level: n | [lo, hi], keyId?, freeFrom? }.
+// Returns null when the chance roll says this door is simply unlocked.
+function _planRollLock(spec, rng, defaultFreeFrom) {
+    if (!spec) return null;
+    if (typeof spec.chance === "number" && rng() >= spec.chance) return null;
+    let level = spec.level || 1;
+    if (Array.isArray(level)) level = level[0] + Math.floor(rng() * (level[1] - level[0] + 1));
+    return { level: level, keyId: spec.keyId || null, freeFrom: spec.freeFrom || defaultFreeFrom || "B" };
 }
 
 function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alleyCoords) {
@@ -1795,14 +1824,15 @@ function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alle
         const b = byKey[link[1]];
         if (!a || !b) return; // an optional room that did not roll
         const kind = link[2] || null;
+        const lock = _planRollLock(link[3], rng, "B");
         if (a.floor === b.floor) {
             const pa = a.coords.split(","), pb = b.coords.split(",");
             const dir = _dirFromDelta(Number(pb[0]) - Number(pa[0]), Number(pb[1]) - Number(pa[1]));
             if (!dir) throw new Error("Blueprint " + bpKey + ": " + link[0] + " and " + link[1] + " are not adjacent");
-            _planLink(plan, a.coords, b.coords, dir, kind, false);
+            _planLink(plan, a.coords, b.coords, dir, kind, false, lock);
         } else {
             const upDir = b.floor > a.floor ? "U" : "D";
-            _planLink(plan, a.coords, b.coords, upDir, kind, false);
+            _planLink(plan, a.coords, b.coords, upDir, kind, false, lock);
         }
     });
 
@@ -1811,11 +1841,12 @@ function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alle
     // street, south for one on the south side.
     const inward = side > 0 ? "N" : "S";
     if (bp.front && byKey[bp.front]) {
-        _planLink(plan, entranceDesc.coords, byKey[bp.front].coords, inward, bp.frontDoor || "door", true);
+        _planLink(plan, entranceDesc.coords, byKey[bp.front].coords, inward, bp.frontDoor || "door", true, _planRollLock(bp.frontLock, rng, "B"));
     }
     // The back door, if the blueprint has one: interior -> alley.
     if (bp.back && byKey[bp.back] && alleyCoords) {
-        _planLink(plan, byKey[bp.back].coords, alleyCoords, inward, "door", true);
+        // The back door is barred from inside: the inside (A) side opens freely.
+        _planLink(plan, byKey[bp.back].coords, alleyCoords, inward, "door", true, _planRollLock(bp.backLock, rng, "A"));
     }
     return { buildingId: buildingId, name: name, type: bpKey };
 }
@@ -1881,7 +1912,7 @@ function planTownLayout(rngIn) {
         const bp = BUILDING_BLUEPRINTS[entry.type];
         const entranceCoords = slot.x + "," + slot.side;
         const entrance = _planAddRoom(plan, entranceCoords, bp.entrance, zone, {});
-        _planLink(plan, slot.x + ",0", entranceCoords, slot.side > 0 ? "N" : "S", bp.streetDoor || "door", false);
+        _planLink(plan, slot.x + ",0", entranceCoords, slot.side > 0 ? "N" : "S", bp.streetDoor || "door", false, _planRollLock(bp.streetLock, rng, "B"));
 
         let alleyCoords = null;
         if (bp.back) {
@@ -2136,6 +2167,13 @@ const WORLD_LORE_FACTS = [
         topic: "the lost archive",
         text: "Aldermere's archive was only half burned. What survived the fire lies in the deeper rooms of the ruins, and both sides would pay well for the ledgers that show who ordered what."
     },
+    // ── doors, locks and trespass ─────────────────────────────────
+    {
+        id: "locked-doors", tiers: ["common", "local", "trade"], zones: ["Town"], know: 75, rumor: false,
+        topic: "locked doors in town",
+        text: "People here lock what is theirs. Guest rooms at the inn open to a room token from the innkeeper, a barred back door lifts from the inside only, and a house with its shutters closed is not an invitation. Anyone can knock. Picking a lock in front of witnesses ends badly, and walking into someone's room uninvited ends worse.",
+        distorted: "Every door in town is locked at night, and the guards will take you in for even trying one."
+    },
     // ── secret ────────────────────────────────────────────────────
     {
         id: "regent-fate", tiers: ["secret", "military", "scholar"], zones: ["Dungeon", "Underground City", "Ruins"], know: 35, rumor: false,
@@ -2163,6 +2201,90 @@ const WORLD_LORE_FACTS = [
 // { seed: {...}, heard: { factId: true }, standing: { crown: 0, banners: 0 } }
 // Created lazily on first use and saved with the game; reset when a new
 // adventure starts (updateStoryOnAdventureStart in the engine).
+
+// ── PLACE LORE (building names) ──────────────────────────────────
+// Every named building of a planned town becomes a few lore facts NPCs can
+// share: where it is, what it does, and, for those who know, what is hidden
+// in it. Built fresh from the room map on each lookup (so it always matches
+// the town that actually exists, and nothing needs saving).
+// Fact shape is the same as WORLD_LORE_FACTS plus `buildingId`: an NPC
+// standing in that building knows its facts firsthand (see
+// getNPCKnownLoreFacts in cyoaftw-npc-data.js).
+function _placeWhere(entrance) {
+    const rooms = typeof G !== "undefined" && G && G.roomMap ? G.roomMap : {};
+    const parts = String(entrance.coords || "0,0").split(",").map(Number);
+    const x = parts[0], y = parts[1];
+    let gateX = null;
+    Object.keys(rooms).forEach(function (key) {
+        const r = rooms[key];
+        if (r && r.type === "Gate" && r.zone === "Town") gateX = Number(key.split(",")[0]);
+    });
+    const side = y > 0 ? "north" : "south";
+    let where;
+    if (x === 0) where = "facing the Square on the " + side + " side of the main street";
+    else if (gateX !== null && Math.abs(x - gateX) <= 3) where = "on the " + side + " side of the street, near the Gate";
+    else where = "on the " + side + " side of the main street, " + (x < 0 ? "west" : "east") + " of the Square";
+    return where;
+}
+
+function getPlaceLoreFacts() {
+    const out = [];
+    const rooms = typeof G !== "undefined" && G && G.roomMap ? G.roomMap : null;
+    if (!rooms) return out;
+    Object.keys(rooms).forEach(function (key) {
+        const r = rooms[key];
+        if (!r || !r.isEntrance || !r.buildingId || r.zone !== "Town") return;
+        const id = r.buildingId;
+        const type = r.buildingType;
+        const name = r.buildingName || (type === "Town Hall" ? "the Town Hall" : null);
+        if (!name) return;
+        const where = _placeWhere(r);
+        const base = { buildingId: id, zones: ["Town"] };
+
+        if (type === "Tavern") {
+            out.push(Object.assign({}, base, {
+                id: "place-" + id, tiers: ["local", "trade"], know: 85, rumor: true, topic: name,
+                text: name + " is the town's tavern, " + where + ". The taproom is its busy heart, the kitchen runs behind it, and deliveries come in by a barred back door onto the alley. The cellar below is older than the rest of the building.",
+                distorted: name + " is where the town drinks, and the cellar is said to go down further than any cellar should."
+            }));
+            out.push(Object.assign({}, base, {
+                id: "place-" + id + "-secret", tiers: ["secret", "deep"], know: 60, rumor: false, topic: "what lies beneath " + name,
+                text: "Past " + name + "'s cellar a hidden hollow holds a small shrine someone keeps tidy, and behind a loose panel in the cellar wall worn stone steps lead down into the old works under the town.",
+                distorted: "Folk say there is a way down from " + name + "'s cellar, and that something answers if you knock on the right stone."
+            }));
+        } else if (type === "Inn") {
+            out.push(Object.assign({}, base, {
+                id: "place-" + id, tiers: ["local", "trade"], know: 85, rumor: true, topic: name,
+                text: name + " is an inn, " + where + ". The common room is downstairs and the guest rooms are upstairs, each behind its own door. The innkeeper sells a room token that opens one for the night. A room with someone already in it stays shut.",
+                distorted: name + " is where travellers sleep, if the innkeeper likes the look of you."
+            }));
+        } else if (type === "Smithy") {
+            out.push(Object.assign({}, base, {
+                id: "place-" + id, tiers: ["local", "trade", "deep"], know: 80, rumor: true, topic: name,
+                text: name + " is the town's forge, " + where + ". The smith works the open front, ore and ingots are stored behind it, and the yard door onto the alley is where deliveries come in.",
+                distorted: name + " is where the town's blades come from, and the smith asks no questions."
+            }));
+            out.push(Object.assign({}, base, {
+                id: "place-" + id + "-lift", tiers: ["deep", "trade"], zones: ["Town", "Underground City"], know: 55, rumor: true, topic: "the lift behind " + name,
+                text: "In the storeroom behind " + name + " stands a dwarven cargo lift on thick chains. It is how ore comes up from the Underground City and steel goes down, and the dwarves below know its schedule better than the smith does.",
+                distorted: "There is a way under the town through the smithy, and only dwarves are let use it."
+            }));
+        } else if (type === "Town Hall") {
+            out.push(Object.assign({}, base, {
+                id: "place-" + id, tiers: ["local", "military"], know: 80, rumor: false, topic: "the Town Hall",
+                text: function (seed) {
+                    const origin = seed && seed.townOrigin === "crown"
+                        ? "It began as the Crown grain depot's counting house."
+                        : "It began as the Free Banners' muster hall.";
+                    return "The Town Hall stands " + where + ". " + origin + " The guards keep the front hall, the council sits in the chamber at the back, and the records office off the corridor is kept locked when the clerk is out.";
+                },
+                distorted: "The Town Hall is where the council meets, and the council answers to whoever pays the guards."
+            }));
+        }
+    });
+    return out;
+}
+
 function _wlPick(list) {
     return list[Math.floor(Math.random() * list.length)];
 }
@@ -2211,6 +2333,7 @@ function shiftWorldStanding(side, amount) {
 
 if (typeof window !== "undefined") {
     window.WORLD_LORE_FACTS = WORLD_LORE_FACTS;
+    window.getPlaceLoreFacts = getPlaceLoreFacts;
     window.ensureWorldLore = ensureWorldLore;
     window.getWorldLoreFactText = getWorldLoreFactText;
     window.getWorldStanding = getWorldStanding;
