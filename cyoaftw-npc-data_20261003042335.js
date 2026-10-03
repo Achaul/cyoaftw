@@ -1,4 +1,4 @@
-// ── cyoaftw-npc-data.js v2026-08-16-0004 ── Added Receive category + position fixes
+// ── cyoaftw-npc-data.js v2026-10-03-0002 ── Event-aware topics + NPC story awareness
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.NPC_DATA_VERSION = "2026-09-11-001";
@@ -271,6 +271,13 @@ const NPC_ACTION_RELATION_WEIGHTS = {
     "ask-need": 2,
     "ask-people": 1,
     "ask-rumor": 0,
+    "ask-rumor-source": 0,
+    "ask-rumor-proof": 1,
+    "ask-family": 1,
+    "ask-work-hardest": 1,
+    "ask-seen-who": 0,
+    "press-topic": 0,
+    "ask-event": 0,
     question: 0,
     calm: 2,
     "keep-calm": 2,
@@ -559,6 +566,7 @@ function ensureNPCConversationState(npc) {
     if (typeof state.sessionInteractionCount !== "number") state.sessionInteractionCount = 0;
     if (typeof state.sessionNumber !== "number") state.sessionNumber = 0;
     if (typeof state.lastOptionId !== "string") state.lastOptionId = "";
+    if (typeof state.lastTopic !== "string") state.lastTopic = "";
 
     npc.memory.conversationState = state;
     return state;
@@ -587,6 +595,11 @@ function recordNPCConversationChoice(npc, choice) {
         state.sessionUsedOptionIds.push(optionId);
         state.sessionUsedOptionIds = state.sessionUsedOptionIds.slice(-30);
         state.lastOptionId = optionId;
+        // ask-about-topic labels read "Ask about <topic>"; remember the topic
+        // so a follow-up ("press-topic") can refer to it.
+        if (optionId === "ask-about-topic" && typeof choice.label === "string") {
+            state.lastTopic = choice.label.replace(/^Ask about\s+/i, "").trim();
+        }
 
         const usage = state.optionUsage[optionId] && typeof state.optionUsage[optionId] === "object"
             ? state.optionUsage[optionId]
@@ -798,6 +811,164 @@ function _npcPickAskAboutTopic(npc, ctx) {
     return topic;
 }
 
+// ── STORY AWARENESS ─────────────────────────────────────────────
+// G.story.recentEvents is dominated by "movement" and "conversation" noise, so
+// anything that wants to react to what has actually happened has to skip
+// those. An NPC is treated as aware of an event when it happened in their
+// room, mentions them by name, or (for civilised NPCs) is recent news of the
+// kind that travels (trouble, deaths, rising tension).
+const NPC_NOISE_EVENT_TYPES = ["movement", "conversation", "start"];
+const NPC_NEWS_EVENT_TYPES = ["combat", "death", "act-shift"];
+const NPC_EVENT_LOCAL_WINDOW = 20;   // story turns an in-room / involving-them event stays relevant
+const NPC_EVENT_NEWS_WINDOW = 8;     // story turns recent news keeps travelling
+
+// Newest first (rememberStoryEvent unshifts). Each entry is the raw story
+// event plus `here` (happened in this room) and `age` (story turns ago).
+function getNPCAwareStoryEvents(npc, opts) {
+    if (!npc) return [];
+    const options = opts || {};
+    const story = typeof G === "object" && G && G.story ? G.story : null;
+    if (!story || !Array.isArray(story.recentEvents)) return [];
+
+    const turnNow = typeof story.turnCounter === "number" ? story.turnCounter : 0;
+    const room = options.room || (typeof G === "object" && G ? G.activeRoom : null);
+    const roomName = room ? String(room.displayName || room.name || "") : "";
+    const npcName = String(npc.name || "").toLowerCase();
+    const civilised = npc.isHumanoid === true;
+
+    const out = [];
+    story.recentEvents.forEach(function (ev) {
+        if (!ev) return;
+        const type = String(ev.type || "").toLowerCase();
+        if (NPC_NOISE_EVENT_TYPES.indexOf(type) >= 0) return;
+        if (_npcNormalizeList(ev.tags).indexOf("item-discovery") >= 0) return; // private to the player
+        const age = turnNow - (typeof ev.turn === "number" ? ev.turn : turnNow);
+        const here = !!roomName && ev.room === roomName;
+        const involvesNpc = !!npcName && String(ev.text || "").toLowerCase().indexOf(npcName) >= 0;
+
+        let aware = false;
+        if (here || involvesNpc) aware = age <= NPC_EVENT_LOCAL_WINDOW;
+        else if (civilised && NPC_NEWS_EVENT_TYPES.indexOf(type) >= 0) aware = age <= NPC_EVENT_NEWS_WINDOW;
+        if (aware) out.push(Object.assign({}, ev, { here: here, age: age }));
+    });
+    return out;
+}
+if (typeof window !== "undefined") window.getNPCAwareStoryEvents = getNPCAwareStoryEvents;
+
+// Picks the newest aware event we can turn into a menu topic and describes it:
+// { event, label, phrase, note, sig } or null. Memoized on ctx so the label,
+// text and note of one menu build all agree.
+function _npcEventTopic(npc, ctx) {
+    if (ctx && ctx.__eventTopic !== undefined) return ctx.__eventTopic;
+    let topic = null;
+    const events = getNPCAwareStoryEvents(npc, { room: ctx && ctx.room });
+    for (let i = 0; i < events.length && !topic; i++) {
+        const ev = events[i];
+        const type = String(ev.type || "").toLowerCase();
+        const tags = _npcNormalizeList(ev.tags);
+        let label = "";
+        let phrase = "";
+        if (type === "combat") {
+            label = ev.here ? "Ask about the trouble here" : "Ask about the recent trouble";
+            phrase = ev.here ? "the trouble that just happened here" : "the trouble people have been talking about";
+        } else if (type === "death") {
+            label = "Ask about what just happened";
+            phrase = "what just happened";
+        } else if (type === "lore" || type === "faith") {
+            label = "Ask about the gods";
+            phrase = tags.indexOf("deity-lore") >= 0 ? "what you have been learning of the gods" : "faith and the gods";
+        } else if (type === "exploration") {
+            if (!ev.here) continue;
+            label = "Ask about what turned up";
+            phrase = "what turned up when you searched around here";
+        } else if (type === "act-shift") {
+            label = "Ask about the mood lately";
+            phrase = "the mood around here lately";
+        } else {
+            continue;
+        }
+        topic = {
+            event: ev,
+            label: label,
+            phrase: phrase,
+            sig: String(ev.eventCounter || 0),
+            note: "Something the speaker knows about (" + (ev.here ? "it happened here" : "word has reached them") +
+                "): " + String(ev.text || "").slice(0, 200) +
+                " Answer from the speaker's own point of view and do not invent details that contradict this."
+        };
+    }
+    if (ctx) ctx.__eventTopic = topic;
+    return topic;
+}
+
+// ── RELEVANCE HELPERS ───────────────────────────────────────────
+// Used by catalogue conditions below so reactive options (apologize, comfort)
+// only show when there is something to react to.
+const NPC_FRICTION_OPTION_IDS = ["insult", "sharp-question", "push-for-answers"];
+const NPC_FRICTION_ACTION_TAGS = [
+    "threat", "sharp-question", "tease-backfire", "misread-flirt", "flirt-rejected",
+    "comfort-rebuffed", "hard-bargain", "refused-trade", "attacked-by-player", "mercy-refused"
+];
+
+// True when the player has recently given this NPC a reason to be upset.
+function _npcPlayerCausedFriction(ctx) {
+    if (!ctx) return false;
+    if (ctx.favor < 0 || ctx.hostility >= 35) return true;
+    const session = Array.isArray(ctx.sessionUsedOptionIds) ? ctx.sessionUsedOptionIds : [];
+    if (NPC_FRICTION_OPTION_IDS.some(function (id) { return session.indexOf(id) >= 0; })) return true;
+    const tags = Array.isArray(ctx.actionTags) ? ctx.actionTags.slice(-6) : [];
+    return NPC_FRICTION_ACTION_TAGS.some(function (tag) { return tags.indexOf(tag) >= 0; });
+}
+
+// True when the NPC looks like they could use comforting: hurt, rattled by
+// something recent, surrendered, or in a sour mood.
+function _npcNeedsComfort(npc, ctx) {
+    if (!npc || !ctx) return false;
+    if (npc.surrendered) return true;
+    const hpMax = npc.hpMax || 0;
+    if (hpMax > 0 && typeof npc.hp === "number" && npc.hp > 0 && npc.hp < hpMax * 0.6) return true;
+    if (["wary", "angry", "furious"].indexOf(ctx.mood) >= 0) return true;
+    if (_npcPlayerCausedFriction(ctx)) return true;
+    return _npcRecentEventMatches(ctx.storyRecentEvents, { types: ["combat", "danger", "death"] });
+}
+
+// Menu ranking + cap. Only entries from the base catalogue are re-ranked or
+// capped; entries merged in from window.NPC_NSFW_CONVERSATION_CATALOGUE are
+// passed through untouched so that half of the menu behaves exactly as before.
+const NPC_MAX_TOPIC_OPTIONS = 7;
+
+function _npcEntryIsBase(entry) {
+    return NPC_CONVERSATION_CATALOGUE.indexOf(entry) >= 0;
+}
+
+// Lower rank sorts first. Follow-ups to something just said, role-specific
+// topics and story-driven topics float above generic ones.
+function _npcEntryRank(entry) {
+    let rank = entry && typeof entry.priority === "number" ? entry.priority : 0;
+    if (!_npcEntryIsBase(entry)) return rank;
+    const c = entry.conditions || {};
+    if (typeof entry.rankBoost === "number") rank -= entry.rankBoost;
+    if (c.requiredSessionOptionIds) rank -= 60;
+    if (c.roleIncludes) rank -= 15;
+    if (c.requiredStoryFlags || c.requiredStoryEventTypes || c.requiredStoryEventTags) rank -= 20;
+    if (c.hasOwnDeity) rank -= 10;
+    return rank;
+}
+
+// Returns a filter that keeps at most NPC_MAX_TOPIC_OPTIONS base-catalogue
+// topic entries (call AFTER sorting by rank). Hidden topics surface later as
+// the shown ones are used up (most are repeat: "session").
+function _npcMakeTopicCap(npc, ctx) {
+    let kept = 0;
+    return function (entry) {
+        if (!_npcEntryIsBase(entry)) return true;
+        const kind = _npcDeriveOptionKind(entry, _npcResolveConversationValue(entry.intent, npc, ctx));
+        if (kind !== "topic") return true;
+        kept += 1;
+        return kept <= NPC_MAX_TOPIC_OPTIONS;
+    };
+}
+
 const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "greet-intro",
@@ -855,13 +1026,20 @@ const NPC_CONVERSATION_CATALOGUE = [
         ],
         intent: "introduction",
         relationshipImpact: { mood: 0, favor: 2, hostility: -1, intent: "introduction", markMet: true, actionTag: "ask-name" },
-        conditions: { metPlayer: false }
+        // The greeting gate hides everything but greetings until the session
+        // greeting, and greeting sets metPlayer, so the old "metPlayer: false"
+        // condition meant this option could never be shown. Offer it until the
+        // name has been asked once (repeat: "never" tracks that), unless the
+        // NPC is too hostile to bother introducing themselves.
+        conditions: { maxHostility: 70 }
     },
     {
         id: "ask-place",
         priority: 20,
         repeat: "session",
-        label: "Ask about this place",
+        label: (npc, ctx) => (ctx && ctx.roomType && ctx.roomType.length <= 22)
+            ? "Ask about the " + ctx.roomType
+            : "Ask about this place",
         textVariants: [
             "You ask about the area and let them frame it in their own terms.",
             "You invite them to tell you what matters about this place.",
@@ -882,7 +1060,63 @@ const NPC_CONVERSATION_CATALOGUE = [
             "You ask whether anything around here has seemed out of place."
         ],
         intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-seen" }
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-seen" },
+        // Only worth asking when something noteworthy happened that the NPC
+        // knows about (movement/conversation chatter does not count - see
+        // getNPCAwareStoryEvents), or the NPC watches the place for a living.
+        conditions: {
+            custom: (npc, ctx) =>
+                getNPCAwareStoryEvents(npc, { room: ctx.room }).length > 0 ||
+                _npcTextIncludesAny(ctx.role, ["guard", "scout", "keeper", "bartender", "watch"])
+        }
+    },
+    {
+        id: "ask-about-event",
+        priority: 28,
+        rankBoost: 20,
+        repeat: "session",
+        // A new noteworthy event reopens it; the same event is only asked once.
+        resetOnStoryEventTypes: ["combat", "death", "lore", "faith", "exploration", "act-shift"],
+        label: (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? t.label : ""; },
+        textVariants: [
+            (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? `You ask what they make of ${t.phrase}.` : ""; },
+            (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? `You bring up ${t.phrase} and let them tell it their way.` : ""; },
+            (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? `You ask what they saw or heard about ${t.phrase}.` : ""; }
+        ],
+        // Facts passed to the AI so the reply is about the real event.
+        contextNote: (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? t.note : ""; },
+        // Cached replies for this option are dropped when this changes.
+        cacheSig: (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? t.sig : ""; },
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-event" },
+        replaces: ["ask-seen"],
+        conditions: {
+            metPlayer: true,
+            maxHostility: 70,
+            custom: (npc, ctx) => !!_npcEventTopic(npc, ctx)
+        }
+    },
+    // ===== FOLLOW-UP CHAINS =====
+    // A follow-up appears only after its parent was used this conversation
+    // (requiredSessionOptionIds) and, via `replaces`, takes the parent's slot
+    // so the menu does not grow. Follow-ups rank above generic topics.
+    {
+        id: "ask-seen-who",
+        priority: 31,
+        repeat: "session",
+        label: "Ask who else was around",
+        textVariants: [
+            "You ask who else was nearby when they noticed it.",
+            "You ask whether anyone else might have seen the same thing.",
+            "You ask who they would trust to back up what they saw."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-seen-who" },
+        replaces: ["ask-seen"],
+        conditions: {
+            requiredSessionOptionIds: ["ask-seen"],
+            maxHostility: 65
+        }
     },
     {
         id: "ask-background",
@@ -899,7 +1133,31 @@ const NPC_CONVERSATION_CATALOGUE = [
         conditions: {
             metPlayer: true,
             maxHostility: 75,
+            // Personal question: needs some rapport or a few exchanges first.
+            any: [
+                { minFavor: 10 },
+                { minInteractionCount: 4 }
+            ],
             excludedActionTags: ["ask-background"]
+        }
+    },
+    {
+        id: "ask-family",
+        priority: 41,
+        repeat: "session",
+        label: "Ask about home and family",
+        textVariants: [
+            "You ask whether they have family or anyone waiting for them somewhere.",
+            "You ask about the home they came from and who they left there.",
+            "You ask who they think of when they think of home."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-family" },
+        replaces: ["ask-background"],
+        conditions: {
+            requiredSessionOptionIds: ["ask-background"],
+            minFavor: 8,
+            maxHostility: 65
         }
     },
     {
@@ -924,6 +1182,25 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
     {
+        id: "press-topic",
+        priority: 46,
+        repeat: "always",
+        label: (npc, ctx) => ctx && ctx.lastTopic ? `Press for more on ${ctx.lastTopic}` : "Press for more",
+        textVariants: [
+            (npc, ctx) => `You press for more detail on ${ctx && ctx.lastTopic ? ctx.lastTopic : "that"}.`,
+            (npc, ctx) => `You ask them to say more about ${ctx && ctx.lastTopic ? ctx.lastTopic : "that"}.`,
+            (npc, ctx) => `You stay on ${ctx && ctx.lastTopic ? ctx.lastTopic : "the subject"} and ask what they have not said yet.`
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "press-topic" },
+        rankBoost: 60,
+        // Only right after asking about a topic, so it never piles up.
+        conditions: {
+            maxHostility: 65,
+            custom: (npc, ctx) => ctx.lastOptionId === "ask-about-topic" && !!ctx.lastTopic
+        }
+    },
+    {
         id: "offer-help",
         priority: 50,
         repeat: "session",
@@ -935,6 +1212,44 @@ const NPC_CONVERSATION_CATALOGUE = [
         ],
         intent: "help",
         relationshipImpact: { mood: 1, favor: 5, hostility: -1, intent: "help", markMet: true, actionTag: "offer-help" }
+    },
+    {
+        id: "rumor-source",
+        priority: 71,
+        repeat: "session",
+        label: "Ask who is behind it",
+        textVariants: [
+            "You ask who they think is behind it, and how much they actually know.",
+            "You ask where the talk started and who keeps it going.",
+            "You ask who stands to gain from people believing it."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-rumor-source" },
+        replaces: ["ask-rumor"],
+        conditions: {
+            requiredSessionOptionIds: ["ask-rumor"],
+            maxHostility: 59,
+            minFavor: -20
+        }
+    },
+    {
+        id: "rumor-proof",
+        priority: 72,
+        repeat: "session",
+        label: "Ask where you could learn more",
+        textVariants: [
+            "You ask where someone could confirm any of this for themselves.",
+            "You ask who else might be willing to talk about it.",
+            "You ask where you would start if you wanted proof."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-rumor-proof" },
+        replaces: ["rumor-source"],
+        conditions: {
+            requiredSessionOptionIds: ["rumor-source"],
+            maxHostility: 55,
+            minFavor: 5
+        }
     },
     {
         id: "keep-calm",
@@ -986,6 +1301,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         ],
         intent: "rumor",
         relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-rumor" },
+        rankBoost: 25,
         conditions: {
             maxHostility: 59,
             minFavor: -20
@@ -1013,6 +1329,24 @@ const NPC_CONVERSATION_CATALOGUE = [
             metPlayer: true,
             roleIncludes: ["guard", "keeper", "merchant", "trader", "bartender", "vendor", "healer", "priest", "archivist", "smith", "cook", "miner", "scout"],
             excludedActionTags: ["ask-work"]
+        }
+    },
+    {
+        id: "ask-work-hardest",
+        priority: 81,
+        repeat: "session",
+        label: "Ask what the hardest part is",
+        textVariants: [
+            "You ask what the hardest part of the work is that outsiders never see.",
+            "You ask what makes the job worse than it looks.",
+            "You ask what they would change about the work if they could."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-work-hardest" },
+        replaces: ["ask-work"],
+        conditions: {
+            requiredSessionOptionIds: ["ask-work"],
+            maxHostility: 65
         }
     },
     {
@@ -1141,6 +1475,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-their-deity" },
         conditions: {
             hasOwnDeity: true,
+            minFavor: 10,
             maxHostility: 70,
             excludedActionTags: ["ask-their-deity"]
         }
@@ -1220,7 +1555,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         conditions: {
             metPlayer: true,
             excludeSpecies: ["human"],
-            minFavor: 0,
+            minFavor: 8,
             maxHostility: 65,
             excludedActionTags: ["ask-people"]
         }
@@ -1248,7 +1583,11 @@ const NPC_CONVERSATION_CATALOGUE = [
             "You own your part in the tension and try to ease it.",
             "You offer a simple apology and let them decide what to do with it."
         ],
-        intent: "apology"
+        intent: "apology",
+        // Only offered when there is something to apologize for.
+        conditions: {
+            custom: (npc, ctx) => _npcPlayerCausedFriction(ctx)
+        }
     },
     {
         id: "comfort",
@@ -1261,11 +1600,14 @@ const NPC_CONVERSATION_CATALOGUE = [
             "You speak gently and try to give them something steady to hold onto."
         ],
         intent: "comfort",
+        // Needs both a reason (hurt, rattled, sour mood, recent trouble) and
+        // an NPC who is not too hostile to accept it.
         conditions: {
             any: [
                 { minFavor: 5 },
                 { maxHostility: 55 }
-            ]
+            ],
+            custom: (npc, ctx) => _npcNeedsComfort(npc, ctx)
         }
     },
 
@@ -1549,6 +1891,9 @@ function getNPCConversationContext(npc, extraContext = {}) {
             : 0,
         lastOptionId: conversationState && typeof conversationState.lastOptionId === "string"
             ? conversationState.lastOptionId
+            : "",
+        lastTopic: conversationState && typeof conversationState.lastTopic === "string"
+            ? conversationState.lastTopic
             : "",
         optionUsage: conversationState && conversationState.optionUsage && typeof conversationState.optionUsage === "object"
             ? { ...conversationState.optionUsage }
@@ -1834,6 +2179,34 @@ function conversationRepeatAvailable(entry, ctx) {
     return true;
 }
 
+// Menu grouping for the chat UI. Entries may set `kind` explicitly
+// ("topic" | "social" | "action" | "exit"); otherwise it is derived:
+//   exit   - disengage actions (goodbye)
+//   action - anything that does something mechanical (trade, follow, intimacy
+//            passthroughs, function actions)
+//   social - tone options aimed at the NPC's feelings (compliment, apologize...)
+//   topic  - everything else (questions / conversation subjects)
+// `tone` ("hostile" | "friendly") only matters for social options.
+const NPC_SOCIAL_INTENTS = [
+    "flattery", "apology", "comfort", "calm", "empathy", "help", "tease",
+    "flirt", "aggression", "insult", "bold", "awkward", "greeting"
+];
+const NPC_HOSTILE_INTENTS = ["aggression", "insult", "bold"];
+
+function _npcDeriveOptionKind(entry, intent) {
+    if (entry && typeof entry.kind === "string" && entry.kind) return entry.kind;
+    if (!entry) return "topic";
+    if (entry.action === "disengage" || entry.id === "goodbye") return "exit";
+    if (entry.action || entry.intimacyAction || entry.startEncounter) return "action";
+    if (NPC_SOCIAL_INTENTS.indexOf(String(intent || "").toLowerCase()) >= 0) return "social";
+    return "topic";
+}
+
+function _npcDeriveOptionTone(entry, intent) {
+    if (entry && typeof entry.tone === "string" && entry.tone) return entry.tone;
+    return NPC_HOSTILE_INTENTS.indexOf(String(intent || "").toLowerCase()) >= 0 ? "hostile" : "friendly";
+}
+
 function buildConversationOption(entry, npc, ctx) {
     const optionId = String(entry.id || "").trim();
     const label = _npcPickConversationVariant(npc, `${optionId}:label`, entry.labelVariants, entry.label, ctx);
@@ -1856,13 +2229,29 @@ function buildConversationOption(entry, npc, ctx) {
 
     const impact = _npcResolveConversationValue(entry.relationshipImpact, npc, ctx);
     const isInquiry = entry.isInquiry === true;
+    // Options whose content depends on live state (e.g. a specific story
+    // event) can set cacheSig; when it changes, any reply cached for this
+    // option id belongs to the old state and is discarded before the menu's
+    // prefetch check runs.
+    if (entry.cacheSig !== undefined && npc && npc.memory) {
+        const sig = String(_npcResolveConversationValue(entry.cacheSig, npc, ctx));
+        if (!npc.memory.cachedReplySigs || typeof npc.memory.cachedReplySigs !== "object") npc.memory.cachedReplySigs = {};
+        if (npc.memory.cachedReplySigs[optionId] !== sig) {
+            if (typeof removeCachedConversationReply === "function") removeCachedConversationReply(npc, optionId);
+            npc.memory.cachedReplySigs[optionId] = sig;
+        }
+    }
+    const resolvedIntent = _npcResolveConversationValue(entry.intent, npc, ctx);
     return {
         id: entry.id,
+        kind: _npcDeriveOptionKind(entry, resolvedIntent),
+        tone: _npcDeriveOptionTone(entry, resolvedIntent),
         label,
         text: playerText,
         promptText: promptText || playerText,
+        contextNote: String(_npcResolveConversationValue(entry.contextNote, npc, ctx) || ""),
         action,
-        intent: _npcResolveConversationValue(entry.intent, npc, ctx),
+        intent: resolvedIntent,
         className: _npcResolveConversationValue(entry.className, npc, ctx),
         relationshipImpact: impact && typeof impact === "object" ? { ...impact } : impact,
         isInquiry: isInquiry,
@@ -1950,7 +2339,15 @@ function queryConversationCatalogue(npc, extraContext = {}) {
           }
           return true;
         })
-        .sort((a, b) => (a.priority || 0) - (b.priority || 0))
+        // `replaces`: a follow-up that is currently available hides the
+        // parent(s) it lists, so a chain swaps one button for the next.
+        .filter((entry, idx, list) => {
+            const entryId = String(entry.id || "").toLowerCase();
+            return !list.some(other => other !== entry && other.replaces &&
+                _npcNormalizeList(other.replaces).indexOf(entryId) >= 0);
+        })
+        .sort((a, b) => _npcEntryRank(a) - _npcEntryRank(b))
+        .filter(_npcMakeTopicCap(npc, ctx))
         .map(entry => buildConversationOption(entry, npc, ctx))
         .filter(Boolean);
     

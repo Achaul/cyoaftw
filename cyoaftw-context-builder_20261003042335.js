@@ -98,8 +98,11 @@ function buildLocationNarrativeContext(room) {
         ? room.creatures.filter(n => n && !n.unconscious)
         : [];
 
+    if (typeof ensureRoomFixtureState === "function") ensureRoomFixtureState(room);
+    // Concealed fixtures (see FIXTURE_CONCEALMENT_RULES in the engine) stay
+    // out of the AI scene until a search reveals them.
     const structural = Array.isArray(room.structural)
-        ? room.structural
+        ? room.structural.filter(s => s && (!s.concealed || s.revealed === true))
         : [];
 
     const items = Array.isArray(room.items)
@@ -229,14 +232,36 @@ function serializeStoryDirectorBlock(story) {
         lines.push(`UNRESOLVED QUESTIONS: ${questions.join("; ")}`);
     }
 
-    const events = Array.isArray(story.recentEvents)
-        ? story.recentEvents.slice(0, 5)
-        : [];
+    // recentEvents is mostly "movement" / "conversation" chatter; lead with
+    // the events that actually matter and only pad with chatter when there
+    // is almost nothing else, so the prompt is not spent on room-hopping.
+    const NOISE_TYPES = ["movement", "conversation", "start"];
+    const allEvents = Array.isArray(story.recentEvents) ? story.recentEvents : [];
+    const meaningful = allEvents.filter(e => e && NOISE_TYPES.indexOf(String(e.type || "").toLowerCase()) < 0).slice(0, 5);
+    const events = meaningful.length >= 2
+        ? meaningful
+        : meaningful.concat(allEvents.filter(e => e && meaningful.indexOf(e) < 0).slice(0, 2 - meaningful.length));
     if (events.length) {
         lines.push("RECENT EVENTS:");
         events.forEach(event => lines.push(`- ${event.text}`));
     }
 
+    return lines.join("\n");
+}
+
+// ── NPC AWARENESS BLOCK ─────────────────────────────────────────
+// Story events this particular NPC plausibly saw or heard about (see
+// getNPCAwareStoryEvents in cyoaftw-npc-data.js). Gives the model something
+// real to draw on instead of improvising what "has been happening".
+function serializeNPCAwarenessBlock(npc) {
+    if (!npc || typeof window.getNPCAwareStoryEvents !== "function") return "";
+    const events = window.getNPCAwareStoryEvents(npc, {}).slice(0, 3);
+    if (!events.length) return "";
+    const lines = ["WHAT THE SPEAKER KNOWS ABOUT RECENT EVENTS (mention only if it fits what the player says; never contradict it):"];
+    events.forEach(ev => {
+        const where = ev.here ? "happened here" : "word has reached them";
+        lines.push(`- ${ev.text} (${where})`);
+    });
     return lines.join("\n");
 }
 
@@ -584,6 +609,7 @@ function buildPrompt(room, npc, instruction, options = {}) {
     const locCtx = buildLocationNarrativeContext(room);
     const sceneBlock = serializeSceneBlock(locCtx);
     const storyBlock = serializeStoryDirectorBlock(window.G ? window.G.story : null);
+    const awarenessBlock = npc ? serializeNPCAwarenessBlock(npc) : "";
     const npcBlock = npc ? buildNPCPersonaBlock(npc, "SPEAKER CONTEXT", options) : "";
     const recentExchangeBlock = npc ? buildNPCRecentExchangeBlock(npc) : "";
     const overheardBlock = npc ? buildNPCOverheardBlock(npc) : "";
@@ -591,6 +617,7 @@ function buildPrompt(room, npc, instruction, options = {}) {
     return [
         sceneBlock,
         storyBlock,
+        awarenessBlock,
         npcBlock,
         recentExchangeBlock,
         overheardBlock,
