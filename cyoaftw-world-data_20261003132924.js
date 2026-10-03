@@ -10,7 +10,7 @@ const ZONE_TEMPLATES = [
         // list like any other room type, not specially weighted. "Cellar
         // Shrine" is this zone's guaranteed shrine room (ZONE_SHRINE_ROOMS)
         // in the same style - odd for a Town, tucked away below a tavern.
-        roomTypes: ["Tavern", "Inn", "Street", "Alleyway", "Square", "Avenue", "Gate", "Town Hall", "Cellar Shrine"],
+        roomTypes: ["Tavern", "Taproom", "Inn", "Kitchen", "Cellar", "Smithy", "Street", "Alleyway", "Square", "Avenue", "Gate", "Town Hall", "Cellar Shrine"],
         allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling", "Dragonborn"],
         lightLevel: "bright",
         defaultDanger: "safe"
@@ -21,7 +21,7 @@ const ZONE_TEMPLATES = [
         ambiance: "The air is cold and stale. Distant sounds echo from unseen passages.",
         // "Buried Shrine" is this zone's guaranteed shrine room
         // (ZONE_SHRINE_ROOMS) - sealed behind a cave-in, easy to miss.
-        roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel", "Throne Room", "Buried Shrine"],
+        roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel", "Armory", "Collapsed Gallery", "Throne Room", "Buried Shrine"],
         allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat", "Kobold", "Lizardfolk"],
         lightLevel: "dark",
         defaultDanger: "hostile"
@@ -33,7 +33,7 @@ const ZONE_TEMPLATES = [
         // "Shrine" doubles as this zone's guaranteed shrine room
         // (ZONE_SHRINE_ROOMS) - "Altar" is a second, bonus prayer-capable
         // room type that can also turn up here at ordinary flat odds.
-        roomTypes: ["Hallway", "Altar", "Library", "Tower", "Shrine", "Inner Sanctum"],
+        roomTypes: ["Hallway", "Ruins Passage", "Altar", "Library", "Tower", "Shrine", "Inner Sanctum"],
         allowedSpecies: ["Skeleton", "Ghost", "Goblin", "Lizardfolk"],
         lightLevel: "dim",
         defaultDanger: "hostile"
@@ -45,7 +45,7 @@ const ZONE_TEMPLATES = [
         // "Deep Well Shrine" is this zone's guaranteed shrine room
         // (ZONE_SHRINE_ROOMS) - built around a dried-up well shaft, tucked
         // between otherwise mundane tunnels.
-        roomTypes: ["Cavern", "Vault", "Underground Hallway", "Underground Gate", "Chieftain's Hall", "Deep Well Shrine"],
+        roomTypes: ["Cavern", "Mine Shaft", "Vault", "Deep Forge", "Underground Hallway", "Underground Gate", "Chieftain's Hall", "Deep Well Shrine"],
         allowedSpecies: ["Dwarf", "Goblin", "Human", "Kobold", "Dragonborn"],
         lightLevel: "dim",
         defaultDanger: "tense"
@@ -441,6 +441,25 @@ const ROOM_TEMPLATES = [
         imageKey: "Avenue"
     },
     {
+        type: "Smithy",
+        zone: "Town",
+        role: "interior",
+        displayName: "Town Smithy",
+        baseDescription: "Heat rolls out of an open-fronted workshop. A forge glows orange against the back wall, and the ring of hammer on iron carries out into the street.",
+        allowedZones: ["town"],
+        parentCluster: ["market", "square"],
+        isConnector: false,
+        structural: [
+            { id: "forge-fire",    name: "forge fire",    tags: ["heat", "light", "forge"] },
+            { id: "anvil",         name: "anvil",         tags: ["work", "forge"] },
+            { id: "grindstone",    name: "grindstone",    tags: ["work", "forge"] },
+            { id: "quench-trough", name: "quench trough", tags: ["work", "forge"] },
+            { id: "ore-bin",       name: "ore bin",       tags: ["storage", "loot"] },
+            { id: "commission-board", name: "commission board", tags: ["information", "commerce"] }
+        ],
+        imageKey: "Smithy"
+    },
+    {
         type: "Alleyway",
         zone: "Town",
         role: "spine",
@@ -613,7 +632,8 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "stone-pillar", name: "stone pillar",     tags: ["structural", "cover"] },
             { id: "iron-gate",    name: "iron gate",        tags: ["barrier"] },
-            { id: "chest",        name: "chest",            tags: ["storage", "loot"] }
+            { id: "chest",        name: "chest",            tags: ["storage", "loot"] },
+            { id: "wall-tallies", name: "scratched tallies", tags: ["information"] }
         ],
         imageKey: "Chamber"
     },
@@ -701,6 +721,22 @@ const ROOM_TEMPLATES = [
             { id: "workbench",    name: "workbench",    tags: ["surface", "work"] }
         ],
         imageKey: "Armory"
+    },
+    {
+        type: "Collapsed Gallery",
+        zone: "Dungeon",
+        role: "interior",
+        displayName: "Collapsed Gallery",
+        baseDescription: "An old mine gallery that fell in on itself. Splintered timbers jut from heaps of broken rock, and a bright seam of ore still glints where the roof gave way.",
+        allowedZones: ["dungeon"],
+        parentCluster: ["chamber"],
+        isConnector: false,
+        structural: [
+            { id: "cave-in-rubble", name: "cave-in rubble",    tags: ["hazard", "cover"] },
+            { id: "ore-vein",       name: "exposed ore vein",  tags: ["resource", "landmark"] },
+            { id: "ore-cart",       name: "overturned ore cart", tags: ["storage", "loot"] }
+        ],
+        imageKey: "Collapsed Gallery"
     },
     {
         type: "Buried Shrine",
@@ -825,6 +861,41 @@ const ROOM_TEMPLATES = [
         imageKey: "Cavern"
     },
     {
+        type: "Mine Shaft",
+        zone: "Underground City",
+        role: "landmark",
+        displayName: "Mine Shaft",
+        baseDescription: "A braced shaft where the city's miners work the living rock. Lantern light shows glittering seams in the walls, and the steady ring of picks carries down the tunnel.",
+        allowedZones: ["underground city"],
+        parentCluster: ["cavern"],
+        isConnector: false,
+        structural: [
+            { id: "ore-vein",     name: "rich ore vein", tags: ["resource", "landmark"] },
+            { id: "ore-cart",     name: "ore cart",      tags: ["storage", "loot"] },
+            { id: "support-beam", name: "support beam",  tags: ["structural"] }
+        ],
+        imageKey: "Mine Shaft"
+    },
+    {
+        type: "Deep Forge",
+        zone: "Underground City",
+        role: "interior",
+        displayName: "Deep Forge",
+        baseDescription: "A smithy hewn straight into the rock, its forge fed by a channel of glowing heat from far below. The anvils here have rung for generations.",
+        allowedZones: ["underground city"],
+        parentCluster: ["cavern"],
+        isConnector: false,
+        structural: [
+            { id: "forge-fire",    name: "deep-fed forge", tags: ["heat", "light", "forge"] },
+            { id: "anvil",         name: "anvil",          tags: ["work", "forge"] },
+            { id: "grindstone",    name: "grindstone",     tags: ["work", "forge"] },
+            { id: "quench-trough", name: "quench trough",  tags: ["work", "forge"] },
+            { id: "ore-bin",       name: "ore bin",        tags: ["storage", "loot"] },
+            { id: "commission-board", name: "commission board", tags: ["information", "commerce"] }
+        ],
+        imageKey: "Deep Forge"
+    },
+    {
         type: "Vault",
         zone: "Underground City",
         role: "interior",
@@ -935,7 +1006,8 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "smoky-fire",      name: "smoky fire pit",  tags: ["heat", "light", "social"] },
             { id: "raised-platform", name: "raised platform", tags: ["rest", "storage"] },
-            { id: "drying-lines",    name: "drying lines",    tags: ["storage"] }
+            { id: "drying-lines",    name: "drying lines",    tags: ["storage"] },
+            { id: "waymarker-post",  name: "weathered waymarker post", tags: ["information"] }
         ],
         imageKey: "Swamp Camp"
     },
@@ -1011,6 +1083,76 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "boundary-stones", name: "boundary stones", tags: ["landmark"] },
             { id: "overgrown-trail", name: "overgrown trail", tags: ["passage"] }
+        ]
+    },
+    {
+        type: "Old Road",
+        zone: "Town",
+        role: "spine",
+        displayName: "Old Road",
+        baseDescription: "A once-paved road, now cracked flagstones and leaning milestones. Weeds push up between the stones, but the way is still plain.",
+        allowedZones: ["town", "ruins"],
+        parentCluster: [],
+        isConnector: true,
+        structural: [
+            { id: "milestone", name: "leaning milestone", tags: ["landmark"] },
+            { id: "rutted-road", name: "rutted road", tags: ["passage"] }
+        ]
+    },
+    {
+        type: "Causeway",
+        zone: "Swamp",
+        role: "spine",
+        displayName: "Causeway",
+        baseDescription: "A raised causeway of old stone and rotting planks threads between black water and reeds. Every step sounds loud over the quiet of the swamp.",
+        allowedZones: ["ruins", "swamp"],
+        parentCluster: [],
+        isConnector: true,
+        structural: [
+            { id: "causeway-posts", name: "mossy causeway posts", tags: ["landmark"] },
+            { id: "reed-beds", name: "reed beds", tags: ["cover"] }
+        ]
+    },
+    {
+        type: "Stairwell",
+        zone: "Dungeon",
+        role: "spine",
+        displayName: "Stairwell",
+        baseDescription: "Worn stone steps wind through the rock. Each tread is hollowed by feet that stopped coming long ago, and a stale draught moves up the shaft.",
+        allowedZones: ["town", "dungeon"],
+        parentCluster: [],
+        isConnector: true,
+        structural: [
+            { id: "stone-steps", name: "worn stone steps", tags: ["passage"] },
+            { id: "lamp-niche", name: "lamp niche", tags: ["light"] }
+        ]
+    },
+    {
+        type: "Old Mine Tunnel",
+        zone: "Dungeon",
+        role: "spine",
+        displayName: "Old Mine Tunnel",
+        baseDescription: "A timber-braced tunnel cut for ore carts. Rusted rails run along the floor, and the old props groan when the air shifts.",
+        allowedZones: ["dungeon", "underground city"],
+        parentCluster: [],
+        isConnector: true,
+        structural: [
+            { id: "rusted-rails", name: "rusted rails", tags: ["passage"] },
+            { id: "mine-props", name: "timber props", tags: ["structural"] }
+        ]
+    },
+    {
+        type: "Lift Shaft",
+        zone: "Underground City",
+        role: "spine",
+        displayName: "Lift Shaft",
+        baseDescription: "A wide shaft bored through the rock, with an oak-and-iron cargo lift on counterweighted chains. Dwarven runes along the rim mark the load limit.",
+        allowedZones: ["town", "underground city"],
+        parentCluster: [],
+        isConnector: true,
+        structural: [
+            { id: "cargo-lift", name: "cargo lift", tags: ["passage", "landmark"] },
+            { id: "lift-chains", name: "winch chains", tags: ["structural"] }
         ]
     },
 

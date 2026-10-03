@@ -102,7 +102,7 @@ function buildLocationNarrativeContext(room) {
     // Concealed fixtures (see FIXTURE_CONCEALMENT_RULES in the engine) stay
     // out of the AI scene until a search reveals them.
     const structural = Array.isArray(room.structural)
-        ? room.structural.filter(s => s && (!s.concealed || s.revealed === true))
+        ? room.structural.filter(s => s && (typeof isFixtureVisible === "function" ? isFixtureVisible(s, room) : (!s.concealed || s.revealed === true)))
         : [];
 
     const items = Array.isArray(room.items)
