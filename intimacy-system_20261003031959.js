@@ -2597,12 +2597,21 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // climax reactions are exempt, so withdrawal narratives and climax
     // beats never get swallowed by the gate.
     if (response.responseText && !climaxResult) {
+        // Receive acts and auto-continue beats ALWAYS narrate. The receive
+        // flow's performance beat IS the scene — a suppressed beat there is
+        // a silent no-op click (no ask, no lead-in, nothing printed). An
+        // auto-chained beat exists precisely to extend the scene. The
+        // anti-spam suppression below stays for manual repeats in the
+        // generic flow, where the player's action line still prints.
+        var _forceNarrate = act.playerIsBottom === true ||
+            (intimacy && intimacy._autoBeatNarrate);
+        if (intimacy && intimacy._autoBeatNarrate) delete intimacy._autoBeatNarrate;
         var _isNewAct = _prevActId !== act.id;
         var _isFirstPenetration = act.type === ACT_TYPES.PENETRATE;
         var _bottomedOut = act.type === ACT_TYPES.CONTINUE
             && (intimacy.penetration ? (intimacy.penetration.depth || 0) : 0) >= 5
             && _prevDepth < 5;
-        var _respond = _isNewAct || _isFirstPenetration || _bottomedOut || Math.random() < 0.2;
+        var _respond = _forceNarrate || _isNewAct || _isFirstPenetration || _bottomedOut || Math.random() < 0.2;
         if (!_respond) {
             response.responseText = "";
             response._npcResponseSuppressed = true;
@@ -9116,47 +9125,47 @@ function buildReceiveResponse(npc, player, act, intimacy) {
         actionDesc = `${verbIng} ${playerTarget}`;
     }
 
-    // Build response pools by temperament — combines compliance + action
+    // Build the performance beat: the ACT in progress, with temperament as
+    // flavor. The agreement/compliance is narrated separately now (the
+    // receive flow's AI lead-in beat), so these lines must not re-narrate
+    // her deciding to do it ("nods and moves to comply") — only her doing
+    // it, in her own rhythm.
     var responses;
-
     if (isShy) {
         responses = [
-            `${subjLower} hesitates for a moment, then nods slowly, ${actionDesc}.`,
-            `${subjPronoun} looks away, a flush creeping up ${posPronoun} neck, but ${posPronoun} hands are already moving. ${subjPronoun} ${verbThird} you, tentative but willing.`,
-            `${subjPronoun} bites ${posPronoun} lip, then quietly complies, ${actionDesc}.`,
-            `"I... okay," ${subjLower} murmurs, ${actionDesc}.`
+            `${subjPronoun} ${verbThird} ${playerTarget} with quiet focus, ${posPronoun} movements careful and unhurried.`,
+            `${subjPronoun} keeps ${posPronoun} eyes lowered, ${actionDesc}.`,
+            `${subjPronoun} works ${playerTarget} slowly, a soft flush creeping up ${posPronoun} neck.`
         ];
         if (highArousal) {
             responses.push(
-                `${subjPronoun} swallows hard, then leans in, ${actionDesc}, ${posPronoun} movements tentative at first but growing bolder.`,
-                `"Okay," ${subjLower} whispers, ${posPronoun} voice barely audible, ${actionDesc}.`
+                `${subjPronoun} ${verbThird} ${playerTarget} a little faster, ${posPronoun} shyness melting into focus.`,
+                `${subjPronoun} loses a little of ${posPronoun} hesitation, ${actionDesc} with quiet confidence.`
             );
         }
     } else if (isBold) {
         responses = [
-            `"Sure," ${subjLower} grins, ${actionDesc} without hesitation.`,
-            `${subjPronoun} doesn't need to be asked twice. ${subjPronoun} ${verbThird} you eagerly, bold and sure.`,
-            `${subjPronoun} smirks. "I was hoping you'd ask." ${subjPronoun} drops to ${posPronoun} knees, ${actionDesc}.`,
-            `"Mmm, finally," ${subjLower} murmurs, ${posPronoun} hands already on you, ${actionDesc}.`
+            `${subjPronoun} ${verbThird} ${playerTarget} with bold, shameless strokes of ${posPronoun} own rhythm.`,
+            `${subjPronoun} takes ${playerTarget} eagerly, ${actionDesc}, ${posPronoun} eyes locked on yours.`,
+            `${subjPronoun} works ${playerTarget} hard and hungry, ${posPronoun} pace set entirely by ${posPronoun} own need.`
         ];
         if (highArousal) {
             responses.push(
-                `${subjPronoun} grabs you and ${verbThird} you, ${posPronoun} enthusiasm obvious as ${subjLower} ${verbIng} you.`,
-                `${subjPronoun} doesn't hesitate — ${posPronoun} arousal has ${posPronoun} eager, ${actionDesc}.`
+                `${subjPronoun} ${verbThird} ${playerTarget} faster now, ${posPronoun} breath coming shorter against you.`,
+                `${subjPronoun} loses all restraint, ${actionDesc} with open hunger.`
             );
         }
     } else {
         // Neutral temperament
         responses = [
-            `${subjPronoun} nods and moves to comply, ${actionDesc}.`,
-            `"Alright," ${subjLower} says, ${actionDesc} with careful attention.`,
-            `${subjPronoun} smiles faintly and obeys, ${actionDesc}, ${posPronoun} touch gentle.`,
-            `${subjPronoun} considers for a moment, then leans in, ${actionDesc}.`
+            `${subjPronoun} ${verbThird} ${playerTarget} in a steady rhythm, ${posPronoun} attention fixed on your reaction.`,
+            `${subjPronoun} keeps going, ${actionDesc}.`,
+            `${subjPronoun} settles into ${posPronoun} rhythm, ${posPronoun} touch deliberate and warm.`
         ];
         if (highArousal) {
             responses.push(
-                `${subjPronoun} doesn't hesitate — ${posPronoun} arousal has ${posPronoun} eager to please, ${actionDesc}.`,
-                `${subjPronoun} responds with growing heat, ${actionDesc} more intensely.`
+                `${subjPronoun} ${verbThird} ${playerTarget} faster now, ${posPronoun} breath coming shorter against you.`,
+                `${subjPronoun} loses a little of ${posPronoun} composure, ${actionDesc} with growing hunger.`
             );
         }
     }
