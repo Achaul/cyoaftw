@@ -233,7 +233,6 @@ var NATURAL_LABELS = {
     undress_npc: "Undress them completely",
     move_top_aside: "Move your top aside",
     pull_down_bottom: "Pull down your bottom",
-    lift_skirt: "Lift your skirt",
     move_npc_top_aside: "Move their top aside",
     pull_down_npc_bottom: "Pull down their bottom",
     
@@ -323,6 +322,8 @@ var NATURAL_LABELS = {
     lick_player_pussy: "Ask them to pleasure you with their mouth on your {pussy}",
     eat_player_pussy: "Ask them to taste your {pussy}",
     suck_player_penis: "Ask them to please you with their mouth on your {penis}",
+    stroke_player_penis: "Ask them to stroke your {penis}",
+    titjob_player: "Ask them to wrap their breasts around your {penis}",
     deepthroat_player_penis: "Ask them to take your {penis} deep",
     lick_player_balls: "Ask them to lick your {balls}",
     suck_player_balls: "Ask them to suck your {balls}",

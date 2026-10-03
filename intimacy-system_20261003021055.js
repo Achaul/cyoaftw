@@ -1490,13 +1490,19 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
  *
  * Tease-type acts are not all equal — a kiss and oral sex share the TEASE
  * type — so tease thresholds escalate by target area and tool:
- *   0  — petting (hair/neck-face/body touching): always available
- *   5  — kissing (mouth/lips)
- *   10 — groping (hand on chest/butt/genitals)
+ *   0  — petting (hair/neck-face/body touching) and _clothed variants
+ *   5  — kissing (mouth/lips), chest/butt contact
+ *   10 — groping (hand on genitals)
  *   15 — fingering (fingers on genitals)
  *   20 — oral (mouth on genitals, or a genital tool on their face)
  * Penetration then escalates by target: deep oral 25, vaginal 30, anal 40.
  * Kink acts gate broadly: impact 50, watersports 60 (highest).
+ *
+ * Exposure discount (_effectiveActDisinhibitionThreshold): an act whose
+ * reqCloth proves the target zone is already bare (top_off/bottom_off/nude)
+ * gets EXPOSURE_DISCOUNT off its tier — undressing is itself escalation.
+ * Bare-zone kissing/touching becomes available immediately; oral and
+ * penetration rungs drop by the same credit.
  */
 const TEASE_INTIMATE_TARGETS = ["vagina", "pussy", "clitoris", "clit", "penis", "cock", "dick", "anus", "ass", "groin", "testicles", "balls"];
 const TEASE_CHEST_TARGETS = ["breasts", "breast", "nipples", "nipple", "chest", "butt", "buttocks", "rear"];
@@ -1505,6 +1511,9 @@ const TEASE_GENITAL_TOOLS = ["penis", "cock", "dick", "vagina", "pussy"];
 function _teaseDisinhibitionThreshold(act) {
     const target = String(act.target || "").toLowerCase();
     const tool = String(act.tool || "").toLowerCase();
+    // Over-clothes touching (_clothed variants) is petting-tier: a mild
+    // first move while still dressed.
+    if (act.id && String(act.id).indexOf("_clothed") !== -1) return 0;
     // A genital tool is intimate contact wherever it lands (e.g. rubbing a
     // cock on their face is not "petting") — tier it with oral.
     if (TEASE_GENITAL_TOOLS.indexOf(tool) !== -1 &&
@@ -1516,9 +1525,9 @@ function _teaseDisinhibitionThreshold(act) {
         if (tool === "fingers") return 15;                                       // fingering
         return 10;                                                              // groping
     }
-    if (TEASE_CHEST_TARGETS.indexOf(target) !== -1) return 10;                 // groping
-    if (target === "mouth" || target === "lips") return 5;                     // kissing
-    return 0;                                                                   // petting
+    if (TEASE_CHEST_TARGETS.indexOf(target) !== -1) return 5;                    // chest/butt contact
+    if (target === "mouth" || target === "lips") return 5;                        // kissing
+    return 0;                                                                    // petting
 }
 
 // Penetration ladder: deep oral < vaginal < anal.
@@ -1528,6 +1537,24 @@ function _penetrationDisinhibitionThreshold(act) {
     if (target === "anus" || target === "ass") return 40;
     if (target === "mouth" || target === "lips") return 25;
     return 35;
+}
+
+// Exposure discount: an act whose own clothing requirement proves its target
+// zone is already BARE (top_off / bottom_off / nude) has already banked the
+// escalation the player invested in undressing. Exposing a body part opens
+// its mild acts immediately (touching/kissing an exposed zone -> 0) and
+// lowers the sexual rungs (oral, penetration) by the same credit.
+const EXPOSURE_DISCOUNT = 10;
+
+function _effectiveActDisinhibitionThreshold(act) {
+    if (!act) return 0;
+    const tier = _actDisinhibitionThreshold(act);
+    if (tier <= 0 || !act.reqCloth) return tier;
+    const rc = String(act.reqCloth).toLowerCase();
+    if (rc === "top_off" || rc === "bottom_off" || rc === "nude") {
+        return Math.max(0, tier - EXPOSURE_DISCOUNT);
+    }
+    return tier;
 }
 
 function _actDisinhibitionThreshold(act) {
@@ -1991,7 +2018,10 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     // acts (TEASE) have threshold 0 and raise the score, so repeated teasing
     // in a category progressively unlocks penetration/impact there.
     if (isPlayerActor) {
-        var _disinhibThreshold = _actDisinhibitionThreshold(act);
+        // Exposure-aware tier (see _effectiveActDisinhibitionThreshold): acts
+        // on an already-bare zone get the undressing credited against the
+        // ladder.
+        var _disinhibThreshold = _effectiveActDisinhibitionThreshold(act);
         if (_disinhibThreshold > 0 && typeof window !== "undefined" &&
             typeof window.getActDisinhibition === "function" &&
             typeof window.getActionCategory === "function") {
@@ -6236,7 +6266,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         const act = getAct(entry.id) || {};
         let order = FLAT_TYPE_ORDER.hasOwnProperty(entry.type) ? FLAT_TYPE_ORDER[entry.type] : 4;
         if (act.playerIsBottom === true) order += 10;
-        const tier = _actDisinhibitionThreshold(act);
+        const tier = _effectiveActDisinhibitionThreshold(act);
         return order * 1000 + tier;
     };
 
@@ -8164,6 +8194,8 @@ if (typeof window !== 'undefined') {
     window.getArousalDescriptors = getArousalDescriptors;
     window.enhanceActionLabel = enhanceActionLabel;
     window.generateIntimacyNarrative = generateIntimacyNarrative;
+    window.buildReceiveLeadIn = buildReceiveLeadIn;
+    window.generateReceiveAgreement = generateReceiveAgreement;
     window.getSkinDescription = getSkinDescription;
     window.getVaginalInteriorColor = getVaginalInteriorColor;
     window.getAnalInteriorColor = getAnalInteriorColor;
@@ -8517,10 +8549,6 @@ function buildClothingNarration(act, npc, player) {
     if (clothingAction === "move_aside") {
         var asideRef = garment ? whose + " " + garment : (isPlayer ? "your top" : whose + " top");
         return "You pull " + asideRef + " aside, baring " + chestRef + ".";
-    }
-    if (clothingAction === "lift") {
-        var liftRef = garment ? whose + " " + garment : (isPlayer ? "your skirt" : whose + " skirt");
-        return "You lift " + liftRef + ", baring " + legsRef + " from the hips down.";
     }
     if (clothingAction === "pull_down") {
         var pullRef = garment ? whose + " " + garment : (isPlayer ? "your bottom" : whose + " bottoms");
@@ -9057,6 +9085,164 @@ function buildReceiveResponse(npc, player, act, intimacy) {
     }
 
     return pickRandom(responses);
+}
+
+/**
+ * Lead-in beat for a receive act the NPC agreed to: she takes the lead —
+ * agreement, positioning herself, ready to act. This is the beat BETWEEN the
+ * player's ask and the performance itself (buildReceiveResponse), so the
+ * sequence reads: ask -> she takes position -> she acts.
+ * Returns "" when nothing fits (caller falls back to the performance only).
+ */
+function buildReceiveLeadIn(npc, act, isRepeat) {
+    if (!npc || !act) return "";
+    var subj = (typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "She") || "She";
+    var lower = subj.toLowerCase();
+    var pos = (typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "her") || "her";
+    var target = String(act.target || "").toLowerCase();
+    var tool = String(act.tool || "").toLowerCase();
+    var temperament = String(npc.temperament || "").toLowerCase();
+    var isShy = temperament === "shy" || temperament === "timid" || temperament === "reserved";
+
+    var lines = [];
+    var agreement = isRepeat
+        ? [`${subj} keeps the lead, settling back into ${pos} rhythm.`]
+        : [
+            isShy ? `${subj} hesitates only a breath before agreeing, moving to take charge of you.` : `${subj} agrees with a slow smile, taking the lead from you.`,
+            isShy ? `"Okay,\" ${lower} breathes, gathering ${pos} nerve to take over.` : `${subj} doesn't wait to be told twice — ${lower} takes over.`
+        ];
+
+    var positioning = null;
+    if (target === "penis" || target === "cock") {
+        if (tool === "hand") {
+            positioning = [
+                `${subj} wraps ${pos} fingers around your cock, giving it one slow stroke as ${lower} decides the pace.`,
+                `${subj} takes your cock in hand and settles in close, setting ${pos} own tempo.`
+            ];
+        } else if (tool === "breasts") {
+            positioning = [
+                `${subj} cups ${pos} breasts and leans over you, pressing them snug around your cock.`,
+                `${subj} moves with a knowing look, trapping your cock between ${pos} soft breasts.`
+            ];
+        } else {
+            positioning = [
+                `${subj} eases you back and settles between your legs, ${pos} breath warm against your cock.`,
+                `${subj} sinks down on ${pos} own, lips parting around the head of your cock as ${lower} sets ${pos} pace.`
+            ];
+        }
+    } else if (target === "vagina" || target === "pussy") {
+        positioning = [
+            `${subj} guides you down and kneels between your thighs, pulling them apart with ${pos} hands.`,
+            `${subj} settles ${pos}self between your legs, ${pos} mouth hovering a breath away from your pussy.`
+        ];
+    } else if (target === "testicles" || target === "balls") {
+        positioning = [
+            `${subj} lowers ${pos}elf, ${pos} mouth finding your balls as ${lower} takes control of your pleasure.`
+        ];
+    } else if (target === "anus" || target === "ass") {
+        if (tool === "mouth") {
+            positioning = [
+                `${subj} guides you into position and spreads you gently, ${pos} tongue tracing a slow line.`
+            ];
+        } else {
+            positioning = [
+                `${subj} guides you into position and presses against you, letting you feel ${pos} readiness before ${lower} takes you.`,
+                `${subj} takes hold of you and backs onto you at ${pos} own pace, controlling every inch.`
+            ];
+        }
+    } else if (target === "mouth" || target === "lips") {
+        positioning = [
+            `${subj} leans in and claims your lips, tilting your chin up with ${pos} fingers.`
+        ];
+    } else if (target === "nipples") {
+        positioning = [
+            `${subj} bows ${pos} head to your chest, ${pos} lips closing around your nipple.`
+        ];
+    } else {
+        positioning = [
+            `${subj} moves to take charge of you, positioning ${pos}elf to please you ${pos} own way.`
+        ];
+    }
+
+    lines.push(pickRandom(agreement) + " " + pickRandom(positioning));
+    return lines[0];
+}
+
+/**
+ * Prompt for the AI-narrated agreement/refusal beat of a receive request.
+ * The DECISION is stat-based (engine); this only writes the NPC's answer in
+ * her own voice — personality, species and mood aware.
+ */
+function buildReceiveAgreementPrompt(npc, act, player, accepted, template) {
+    var npcName = (npc && npc.name) || "the NPC";
+    var species = (npc && npc.species) || "Human";
+    var gender = (npc && npc.gender) || "female";
+    var temperament = (npc && npc.temperament) || "neutral";
+    var mood = (npc && npc.memory && npc.memory.lastMood) || "neutral";
+    var traits = (Array.isArray(npc && npc.personalityTraits) && npc.personalityTraits.length)
+        ? npc.personalityTraits.join(", ") : "";
+    var subj = (typeof getSubjectPronoun === "function" ? getSubjectPronoun(npc) : "They") || "They";
+    var pos = (typeof getPossessivePronoun === "function" ? getPossessivePronoun(npc) : "their") || "their";
+    var shortDesc = String((act && (act.desc || act.label)) || "please you").replace(/^Ask them to\s+/i, "");
+
+    var _species = String(species).toLowerCase();
+    var speciesNote = _species && _species !== "human"
+        ? "The NPC is a " + species + " — let species-appropriate features and speech habits show."
+        : "";
+
+    return [
+        "You are writing an NPC's in-character reaction in a text adventure game.",
+        "The NPC is " + npcName + ", a " + species + " " + gender + ". Temperament: " + temperament + "." +
+            (traits ? " Personality: " + traits + "." : "") + " Current mood: " + mood + ".",
+        speciesNote,
+        "",
+        "INSTRUCTIONS:",
+        "- The player has just asked " + npcName + " to " + shortDesc + ".",
+        accepted
+            ? "- " + subj + " AGREES. Write " + subj.toLowerCase() + " agreeing in character — optionally one short line of dialogue in angle brackets <like this> — and clearly taking the lead."
+            : "- " + subj + " DECLINES. Write " + subj.toLowerCase() + " refusing in character — kind but firm, true to " + pos + " temperament.",
+        "- Third person, 1-2 sentences. No narration of the act itself — this is only " + (accepted ? "her answer and taking charge." : "her answer."),
+        "- Match personality, species and mood. A shy halfling speaks differently from a bold orc.",
+        "- Do NOT use words like: I cannot, I'm unable, as an AI.",
+        "",
+        "BASE TEXT (a plain template — enrich it into an in-character response):",
+        String(template || "")
+    ].filter(Boolean).join("\n");
+}
+
+/**
+ * AI-narrated agreement/refusal for a receive request. Falls back to the
+ * provided template when the AI is unavailable, slow (4s timeout), or
+ * returns unusable text (meta-commentary, player-perspective). Returns the
+ * enriched third-person response.
+ */
+async function generateReceiveAgreement(npc, act, player, accepted, template) {
+    var fallback = String(template || "");
+    try {
+        var _ai = typeof ai === "function" ? ai
+            : (typeof window !== "undefined" && typeof window.ai === "function" ? window.ai : null);
+        if (!_ai) return fallback;
+        var prompt = buildReceiveAgreementPrompt(npc, act, player, accepted, fallback);
+        var result = await Promise.race([
+            _ai({ instruction: prompt, startWith: "", endButtons: "none", generatorName: "cyoaftw-engine-core" }),
+            new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 4000); })
+        ]);
+        var text = result && (result.text || result);
+        if (!text || !String(text).trim()) return fallback;
+        var trimmed = String(text).trim();
+        var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(trimmed);
+        if (isMeta) return fallback;
+        // The response is the NPC reacting — reject player-perspective text.
+        if (/^you(r|rs)?\s/i.test(trimmed)) return fallback;
+        if (trimmed.length > 400) return fallback;
+        // Convert angle-bracket speech markers to quotes (the narration
+        // convention elsewhere); strip stray brackets.
+        trimmed = trimmed.replace(/<([^>]*)>/g, '"$1"').replace(/<|>/g, "").trim();
+        return trimmed || fallback;
+    } catch (e) {
+        console.warn("[Intimacy] Receive agreement generation failed, using template:", e);
+        return fallback;
+    }
 }
 
 /**

@@ -165,6 +165,7 @@ function getGenderedLabel(act, npc, player) {
     label = label.replace(/\{npcCock\}/gi, npcGenitals.penis);
     label = label.replace(/\{npcBalls\}/gi, npcGenitals.testicles);
     label = label.replace(/\{npcChest\}/gi, npcPronouns.chest);
+    label = label.replace(/\{npcBreasts\}/gi, npcPronouns.chest);
 
     // Replace player pronouns (player is assumed human / non-cloaca)
     label = label.replace(/\{playerPossessive\}/gi, playerPronouns.possessive);
@@ -201,6 +202,8 @@ function getGenderedLabel(act, npc, player) {
     label = label.replace(/\{groin\}/gi, "groin");
     label = label.replace(/\{thighs\}/gi, "thighs");
     label = label.replace(/\{thigh\}/gi, "thigh");
+    label = label.replace(/\{legs\}/gi, "legs");
+    label = label.replace(/\{feet\}/gi, "feet");
     label = label.replace(/\{stomach\}/gi, "stomach");
     label = label.replace(/\{hips\}/gi, "hips");
     label = label.replace(/\{waist\}/gi, "waist");
@@ -317,7 +320,6 @@ var SEX_ACTS = {
     
     move_top_aside: { id: "move_top_aside", type: ACT_TYPES.CLOTHING, label: "Move top aside", desc: "Move your top to the side", clothingAction: "move_aside", clothingItem: "top", target: "player", arousal: { p: 0, n: 10 }, pos: ["Standing", "Perched", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.TOP_ON },
     pull_down_bottom: { id: "pull_down_bottom", type: ACT_TYPES.CLOTHING, label: "Pull down bottom", desc: "Pull your bottom down", clothingAction: "pull_down", clothingItem: "bottom", target: "player", arousal: { p: 5, n: 15 }, pos: ["Standing", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_ON },
-    lift_skirt: { id: "lift_skirt", type: ACT_TYPES.CLOTHING, label: "Lift skirt", desc: "Lift your skirt", clothingAction: "lift", clothingItem: "bottom", target: "player", arousal: { p: 3, n: 10 }, pos: ["Standing", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_ON },
     
     move_npc_top_aside: { id: "move_npc_top_aside", type: ACT_TYPES.CLOTHING, label: "Move their top aside", desc: "Move their top to expose their chest", clothingAction: "move_aside", clothingItem: "top", target: "npc", arousal: { p: 10, n: 0 }, pos: ["Standing", "Perched", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.TOP_ON },
     pull_down_npc_bottom: { id: "pull_down_npc_bottom", type: ACT_TYPES.CLOTHING, label: "Pull down their bottom", desc: "Pull their bottom down", clothingAction: "pull_down", clothingItem: "bottom", target: "npc", arousal: { p: 15, n: 5 }, pos: ["Standing", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_ON },
@@ -481,6 +483,8 @@ var SEX_ACTS = {
     lick_player_pussy: { id: "lick_player_pussy", tool: "mouth", target: "vagina", verb: "lick", type: ACT_TYPES.TEASE, label: "Ask them to lick your pussy", desc: "Ask them to lick your pussy", arousal: { p: 50, n: 12 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerFemale: true },
     eat_player_pussy: { id: "eat_player_pussy", tool: "mouth", target: "vagina", verb: "eat", type: ACT_TYPES.TEASE, label: "Ask them to eat your pussy", desc: "Ask them to eat your pussy", arousal: { p: 60, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerFemale: true },
     suck_player_penis: { id: "suck_player_penis", tool: "mouth", target: "penis", verb: "suck", type: ACT_TYPES.TEASE, label: "Ask them to suck your cock", desc: "Ask them to suck your penis", arousal: { p: 40, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
+    stroke_player_penis: { id: "stroke_player_penis", tool: "hand", target: "penis", verb: "stroke", type: ACT_TYPES.TEASE, label: "Ask them to stroke your cock", desc: "Ask them to stroke your penis with their hand", arousal: { p: 25, n: 10 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Kneeling", "Kneeling By Face"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
+    titjob_player: { id: "titjob_player", tool: "breasts", target: "penis", verb: "stroke", type: ACT_TYPES.TEASE, label: "Ask them to wrap their breasts around your cock", desc: "Ask them to press their breasts around your penis", arousal: { p: 45, n: 25 }, pos: ["Missionary", "Astride Lap", "Kneeling Over", "Kneeling By Face", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true, requiresNpcFemale: true },
     deepthroat_player_penis: { id: "deepthroat_player_penis", tool: "mouth", target: "penis", verb: "deepthroat", type: ACT_TYPES.TEASE, label: "Ask them to deepthroat you", desc: "Ask them to deepthroat your penis", arousal: { p: 60, n: 20 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
     lick_player_balls: { id: "lick_player_balls", tool: "mouth", target: "testicles", verb: "lick", type: ACT_TYPES.TEASE, label: "Ask them to lick your balls", desc: "Ask them to lick your testicles", arousal: { p: 30, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
     suck_player_balls: { id: "suck_player_balls", tool: "mouth", target: "testicles", verb: "suck", type: ACT_TYPES.TEASE, label: "Ask them to suck your balls", desc: "Ask them to suck on your testicles", arousal: { p: 35, n: 20 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
