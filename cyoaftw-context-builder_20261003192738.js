@@ -51,6 +51,27 @@ function deriveRoomContext(room) {
         ctx.function = "rest";
     }
 
+    // Rooms behind the Town Hall's and Smithy's front rooms (see
+    // BUILDING_BLUEPRINTS in cyoaftw-world-data.js).
+    if (is("bedroom")) {
+        ctx.privacy = "private";
+        ctx.noise = "quiet";
+        ctx.function = "rest";
+    }
+
+    if (is("quarters")) {
+        ctx.privacy = "private";
+        ctx.noise = "quiet";
+        ctx.function = "rest";
+    }
+
+    if (is("council chamber") || is("records office") || is("hall corridor")) {
+        ctx.privacy = "semi-private";
+        ctx.noise = "quiet";
+        ctx.socialExpectation = "formal";
+        ctx.function = "work";
+    }
+
     if (is("guild") || is("quest board") || inCluster("guild")) {
         ctx.socialExpectation = "formal";
         ctx.function = "work";
@@ -83,6 +104,13 @@ function deriveRoomContext(room) {
 
     if (isConnector) {
         ctx.function = "transit";
+    }
+
+    // Behind a building's front door is not the street: interior rooms are at
+    // least semi-private (see BUILDING_BLUEPRINTS). Rooms with their own door
+    // off a hallway (guest rooms) stay as private as set above.
+    if (room.isBuildingRoom && !room.isEntrance && ctx.privacy === "public") {
+        ctx.privacy = "semi-private";
     }
 
     return ctx;
@@ -121,7 +149,18 @@ function buildLocationNarrativeContext(room) {
         .filter(n => n.memory && n.memory.anchorObjectId)
         .map(n => ({ role: n.role, anchor: n.memory.anchorObjectId }));
 
+    // Visible doors/archways on this room's exits, as plain compass phrases.
+    const doorNames = { door: "a door", arch: "an archway" };
+    const dirWords = { N: "north", S: "south", E: "east", W: "west", NE: "northeast", NW: "northwest", SE: "southeast", SW: "southwest", U: "up", D: "down" };
+    const doors = room.doors && typeof room.doors === "object"
+        ? Object.keys(room.doors)
+            .filter(dir => room.exits && room.exits[dir] && doorNames[room.doors[dir]])
+            .map(dir => `${doorNames[room.doors[dir]]} to the ${dirWords[dir] || dir}`)
+        : [];
+
     return {
+        building: room.buildingName || null,
+        doors: doors,
         room: {
             type: room.type,
             role: room.role,
@@ -166,6 +205,13 @@ function serializeSceneBlock(locCtx) {
     const lines = [];
 
     lines.push(`LOCATION: ${room.name} (${room.type})`);
+
+    if (locCtx.building) {
+        lines.push(`BUILDING: ${locCtx.building}`);
+    }
+    if (Array.isArray(locCtx.doors) && locCtx.doors.length > 0) {
+        lines.push(`DOORS: ${locCtx.doors.join("; ")}`);
+    }
 
     if (room.baseDescription) {
         lines.push(`DESCRIPTION: ${room.baseDescription}`);

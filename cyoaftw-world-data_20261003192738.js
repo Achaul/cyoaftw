@@ -5,7 +5,9 @@ const ZONE_TEMPLATES = [
         name: "Town",
         hostileArea: false,
         ambiance: "The sounds of daily life fill the air. People go about their business.",
-        // "Town Hall" is the zone's boss-room type (see ZONE_BOSS_ROOMS in
+        // (The boss-room type is now the "Council Chamber" behind the Town
+        // Hall's front hall - see BUILDING_BLUEPRINTS.) "Town Hall" was the
+        // old boss-room type (see ZONE_BOSS_ROOMS in
         // cyoaftw-engine-CORE.js) - it's a normal, flat-odds entry in this
         // list like any other room type, not specially weighted. "Cellar
         // Shrine" is this zone's guaranteed shrine room (ZONE_SHRINE_ROOMS)
@@ -1156,6 +1158,181 @@ const ROOM_TEMPLATES = [
         ]
     },
 
+    // ── BUILDING CONNECTORS ────────────────────────────────────────
+    // Hallways, stairs and doorways that tie a building's rooms together
+    // (see BUILDING_BLUEPRINTS). They are never part of a zone's random
+    // roomTypes roll - only blueprints place them. role "spine" means no
+    // NPCs spawn in them.
+    {
+        type: "Cellar Stairs",
+        zone: "Town",
+        role: "spine",
+        displayName: "Cellar Stairs",
+        baseDescription: "A narrow landing behind the taproom. A steep wooden stair drops into the cool dark of the cellar, and the smell of damp stone and spilled ale drifts up.",
+        allowedZones: ["town"],
+        parentCluster: ["tavern"],
+        isConnector: true,
+        structural: [
+            { id: "steep-stair", name: "steep wooden stair", tags: ["passage"] },
+            { id: "wall-hook",   name: "lantern hook",       tags: ["light"] }
+        ]
+    },
+    {
+        type: "Back Door",
+        zone: "Town",
+        role: "spine",
+        displayName: "Back Door",
+        baseDescription: "A cramped back passage by the kitchen, stacked with empty crates and slop buckets. A barred door leads out to the alley behind the building.",
+        allowedZones: ["town"],
+        parentCluster: ["tavern", "inn"],
+        isConnector: true,
+        structural: [
+            { id: "door-bar",   name: "heavy door bar", tags: ["barrier"] },
+            { id: "slop-buckets", name: "slop buckets", tags: ["refuse"] }
+        ]
+    },
+    {
+        type: "Stairs",
+        zone: "Town",
+        role: "spine",
+        displayName: "Staircase",
+        baseDescription: "A broad wooden staircase worn smooth by travellers' boots, rising from the common room to the guest floor above.",
+        allowedZones: ["town"],
+        parentCluster: ["inn"],
+        isConnector: true,
+        structural: [
+            { id: "banister", name: "polished banister", tags: ["passage"] },
+            { id: "stair-runner", name: "threadbare runner", tags: ["passage"] }
+        ]
+    },
+    {
+        type: "Upstairs Hallway",
+        zone: "Town",
+        role: "spine",
+        displayName: "Upstairs Hallway",
+        baseDescription: "A narrow, creaking hallway lined with numbered doors. A single lamp burns at the end, and muffled snores seep through the walls.",
+        allowedZones: ["town"],
+        parentCluster: ["inn"],
+        isConnector: true,
+        structural: [
+            { id: "hall-lamp", name: "hall lamp", tags: ["light"] },
+            { id: "room-doors", name: "numbered doors", tags: ["barrier"] }
+        ]
+    },
+
+    // ── SMITHY & TOWN HALL INTERIORS ───────────────────────────────
+    // Rooms behind the street-facing Smithy / Town Hall (see
+    // BUILDING_BLUEPRINTS). Never rolled randomly.
+    {
+        type: "Smithy Storeroom",
+        zone: "Town",
+        role: "interior",
+        displayName: "Smithy Storeroom",
+        baseDescription: "A low, sooty storeroom behind the forge. Ingots and ore sacks are stacked to the rafters, and a dwarven cargo lift squats against the back wall on its thick chains. A heavy yard door leads out to the alley.",
+        allowedZones: ["town"],
+        parentCluster: ["market", "square"],
+        isConnector: false,
+        structural: [
+            { id: "ore-bin",    name: "ore bin",         tags: ["storage", "loot"] },
+            { id: "ingot-rack", name: "ingot rack",      tags: ["storage", "commerce"] },
+            { id: "cargo-lift", name: "cargo lift",      tags: ["passage", "landmark"] }
+        ],
+        imageKey: "Smithy"
+    },
+    {
+        type: "Smith's Quarters",
+        zone: "Town",
+        role: "interior",
+        displayName: "Smith's Quarters",
+        baseDescription: "A cramped living space above the din of the forge: a narrow bed, a table with a half-eaten loaf, and a shelf of tools too precious to leave downstairs.",
+        allowedZones: ["town"],
+        parentCluster: ["market", "square"],
+        isConnector: false,
+        structural: [
+            { id: "bed",        name: "bed",         tags: ["rest"] },
+            { id: "chest",      name: "chest",       tags: ["storage"] },
+            { id: "wash-basin", name: "wash basin",  tags: ["hygiene"] }
+        ],
+        imageKey: "Guest Room"
+    },
+    {
+        type: "Townhouse",
+        zone: "Town",
+        role: "interior",
+        displayName: "Townhouse",
+        baseDescription: "The front room of a narrow townhouse: a worn table, a few stools, and a hearth banked low. Someone's washing hangs drying by the fire, and a door at the back leads further in.",
+        allowedZones: ["town"],
+        parentCluster: ["house"],
+        isConnector: false,
+        structural: [
+            { id: "table",  name: "worn table",  tags: ["surface", "social"] },
+            { id: "hearth", name: "hearth",      tags: ["heat", "light"] }
+        ],
+        imageKey: "Room"
+    },
+    {
+        type: "Bedroom",
+        zone: "Town",
+        role: "interior",
+        displayName: "Bedroom",
+        baseDescription: "A small, tidy bedroom: a narrow bed under a patched quilt, a clothes chest, and a shuttered window that looks out over the rooftops.",
+        allowedZones: ["town"],
+        parentCluster: ["house"],
+        isConnector: false,
+        structural: [
+            { id: "bed",        name: "bed",         tags: ["rest"] },
+            { id: "chest",      name: "chest",       tags: ["storage"] },
+            { id: "wash-basin", name: "wash basin",  tags: ["hygiene"] }
+        ],
+        imageKey: "Guest Room"
+    },
+    {
+        type: "Hall Corridor",
+        zone: "Town",
+        role: "spine",
+        displayName: "Hall Corridor",
+        baseDescription: "A cool stone corridor behind the great hall, hung with the portraits of long-dead magistrates. Clerks hurry past with armfuls of paper, and boots echo from the guardroom.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: true,
+        structural: [
+            { id: "portraits", name: "magistrates' portraits", tags: ["landmark"] },
+            { id: "wall-sconces", name: "wall sconces", tags: ["light"] }
+        ],
+        imageKey: "Town Hall"
+    },
+    {
+        type: "Council Chamber",
+        zone: "Town",
+        role: "landmark",
+        displayName: "Council Chamber",
+        baseDescription: "A high-ceilinged chamber of dressed stone. A long council table fills the floor beneath hanging banners, and a raised dais at the far end holds the chair of whoever truly runs this town.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: false,
+        structural: [
+            { id: "council-table", name: "long council table", tags: ["surface", "formal"] },
+            { id: "banners",       name: "hanging banners",     tags: ["landmark"] },
+            { id: "raised-dais",   name: "raised dais",         tags: ["formal", "landmark"] }
+        ],
+        imageKey: "Town Hall"
+    },
+    {
+        type: "Records Office",
+        zone: "Town",
+        role: "interior",
+        displayName: "Records Office",
+        baseDescription: "A narrow, dusty office walled with pigeonholes of deeds, tax rolls and levy tallies. A clerk's desk faces the door, and the room smells of ink and old paper.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: false,
+        structural: [
+            { id: "clerk-desk",  name: "clerk's desk",   tags: ["surface", "work", "formal"] },
+            { id: "pigeonholes", name: "pigeonholes of records", tags: ["storage", "information"] }
+        ],
+        imageKey: "Library"
+    },
+
     // ── ZONE BOSS ROOMS ────────────────────────────────────────────
     // One per zone, added as a normal flat-odds entry in that zone's
     // ZONE_TEMPLATES.roomTypes list. cyoaftw-engine-CORE.js's ZONE_BOSS_ROOMS
@@ -1393,6 +1570,350 @@ function buildRoomInstance(roomType, zoneName) {
         exits: {}
     };
 }
+
+
+// ── BUILDINGS & PLANNED ZONE LAYOUTS ─────────────────────────────
+// A building is no longer a loose room dropped next to whatever the random
+// generator rolled. It is a small blueprint: one ENTRANCE room that faces the
+// street on the main map plane, and a set of interior rooms on their own map
+// plane(s), joined by hallways, stairs and doors. The only ways in or out are
+// the doors the blueprint names (`front`, optionally `back`).
+//
+// Blueprint fields:
+//   entrance  room type of the street-facing room (main plane)
+//   front     key of the interior room the front door opens into (null for a
+//             single-room building)
+//   back      optional key of the interior room whose rear door opens onto an
+//             alley behind the building
+//   rooms     [{ key, type, floor, at:[x,y], chance?, anchorFor?, verticalLinks? }]
+//             floor 0 is the ground interior plane, 1 is upstairs, -1 is a
+//             cellar. at is local to the building; +y is toward the BACK of the
+//             building (away from the street).
+//   links     [[keyA, keyB, doorKind?]] - rooms on the same floor must be
+//             adjacent cells; rooms on different floors are joined by an
+//             Up/Down stair. doorKind: "door" | "arch" | omitted (open).
+//   anchorFor / verticalLinks: zone-link ids, see ZONE_LINKS in the engine.
+//
+// Interiors live far from the street grid (BUILDING_PLANE_X0 and up), each
+// building in its own x block and each floor in its own y band, so they can
+// never touch a neighbouring street room.
+const BUILDING_PLANE_X0 = 10000;
+const BUILDING_PLANE_X_STRIDE = 30;
+const BUILDING_FLOOR_Y_STRIDE = 60;
+
+const BUILDING_BLUEPRINTS = {
+    "Tavern": {
+        zone: "Town",
+        entrance: "Tavern",
+        front: "taproom",
+        back: "backdoor",
+        names: ["The Gilded Flagon", "The Hollow Oak", "The Crooked Lantern", "The Rusty Anchor", "The Sleeping Stag", "The Drowned Rat"],
+        rooms: [
+            { key: "taproom",      type: "Taproom",       floor: 0,  at: [0, 0] },
+            { key: "kitchen",      type: "Kitchen",       floor: 0,  at: [1, 0], minNpcs: 1 },
+            { key: "backdoor",     type: "Back Door",     floor: 0,  at: [1, 1] },
+            { key: "cellarstairs", type: "Cellar Stairs", floor: 0,  at: [0, 1] },
+            { key: "cellar",       type: "Cellar",        floor: -1, at: [0, 0],
+              anchorFor: ["dungeon-to-town"], verticalLinks: ["town-to-dungeon"] },
+            { key: "shrine",       type: "Cellar Shrine", floor: -1, at: [1, 0] }
+        ],
+        links: [
+            ["taproom", "kitchen", "door"],
+            ["kitchen", "backdoor", "door"],
+            ["taproom", "cellarstairs", "door"],
+            ["cellarstairs", "cellar"],
+            ["cellar", "shrine", "door"]
+        ]
+    },
+    "Inn": {
+        zone: "Town",
+        entrance: "Inn",
+        front: "common",
+        back: null,
+        names: ["The Wayfarer's Rest", "The Lantern & Loaf", "The Quiet Hearth", "The Traveller's Lamp", "The Weary Boot"],
+        rooms: [
+            { key: "common",  type: "Inn Common",       floor: 0, at: [0, 0] },
+            { key: "stairs",  type: "Stairs",           floor: 0, at: [1, 0] },
+            { key: "hall1",   type: "Upstairs Hallway", floor: 1, at: [1, 0] },
+            { key: "hall2",   type: "Upstairs Hallway", floor: 1, at: [2, 0] },
+            { key: "guest1",  type: "Guest Room",       floor: 1, at: [1, 1] },
+            { key: "guest2",  type: "Guest Room",       floor: 1, at: [1, -1] },
+            { key: "guest3",  type: "Guest Room",       floor: 1, at: [2, 1] },
+            { key: "guest4",  type: "Guest Room",       floor: 1, at: [2, -1], chance: 0.7 },
+            { key: "guest5",  type: "Guest Room",       floor: 1, at: [3, 0],  chance: 0.5 }
+        ],
+        links: [
+            ["common", "stairs", "arch"],
+            ["stairs", "hall1"],
+            ["hall1", "hall2"],
+            ["hall1", "guest1", "door"],
+            ["hall1", "guest2", "door"],
+            ["hall2", "guest3", "door"],
+            ["hall2", "guest4", "door"],
+            ["hall2", "guest5", "door"]
+        ]
+    },
+    // The forge floor is open-fronted to the street (an archway, not a door).
+    // Behind it: the storeroom (ore deliveries come in by the yard door to the
+    // alley, and the cargo lift down to the Underground City is here) and the
+    // smith's own quarters, which is a private room with its own door.
+    "Smithy": {
+        zone: "Town",
+        entrance: "Smithy",
+        streetDoor: "arch",
+        front: "storeroom",
+        frontDoor: "arch",
+        back: "storeroom",
+        names: ["The Cinder Anvil", "Ironhand Forge", "The Black Hammer", "Emberstone Smithy"],
+        rooms: [
+            { key: "storeroom", type: "Smithy Storeroom", floor: 0, at: [0, 0], minNpcs: 0,
+              anchorFor: ["uc-to-town"], verticalLinks: ["town-to-uc"] },
+            { key: "quarters",  type: "Smith's Quarters", floor: 0, at: [1, 0] }
+        ],
+        links: [
+            ["storeroom", "quarters", "door"]
+        ]
+    },
+    // An ordinary home: front room onto the street, a bedroom behind a door.
+    // One door in or out. Fills out larger towns.
+    "House": {
+        zone: "Town",
+        entrance: "Townhouse",
+        front: "bedroom",
+        frontDoor: "door",
+        back: null,
+        names: [],
+        rooms: [
+            { key: "bedroom", type: "Bedroom", floor: 0, at: [0, 0] }
+        ],
+        links: []
+    },
+    // Public hall at the front with the town guard; a corridor behind it leads
+    // to the council chamber (the town's boss room) and the records office.
+    // One door.
+    "Town Hall": {
+        zone: "Town",
+        entrance: "Town Hall",
+        front: "corridor",
+        frontDoor: "door",
+        back: null,
+        names: [],
+        rooms: [
+            { key: "corridor", type: "Hall Corridor",   floor: 0, at: [0, 0] },
+            { key: "chamber",  type: "Council Chamber", floor: 0, at: [0, 1] },
+            { key: "records",  type: "Records Office",  floor: 0, at: [1, 0], minNpcs: 1 }
+        ],
+        links: [
+            ["corridor", "chamber", "door"],
+            ["corridor", "records", "door"]
+        ]
+    }
+};
+
+const _DIR_DELTA = {
+    N: [0, 1], S: [0, -1], E: [1, 0], W: [-1, 0],
+    NE: [1, 1], NW: [-1, 1], SE: [1, -1], SW: [-1, -1]
+};
+const _DIR_OPP = { N: "S", S: "N", E: "W", W: "E", NE: "SW", SW: "NE", NW: "SE", SE: "NW", U: "D", D: "U" };
+
+function _dirFromDelta(dx, dy) {
+    const keys = Object.keys(_DIR_DELTA);
+    for (let i = 0; i < keys.length; i++) {
+        if (_DIR_DELTA[keys[i]][0] === dx && _DIR_DELTA[keys[i]][1] === dy) return keys[i];
+    }
+    return null;
+}
+
+function _planShuffle(list, rng) {
+    const a = list.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+}
+
+// A plan is plain data: { rooms: {coords: desc}, buildings: [...] }. The
+// engine turns each desc into a real room (see buildPlannedZone there).
+// desc: { coords, type, zone, exits{dir:coords}, portals{dir:true},
+//         doors{dir:kind}, buildingId, buildingType, buildingName, floor,
+//         isBuildingRoom, anchorFor[], verticalLinks[], guaranteedLink }
+function _planAddRoom(plan, coords, type, zone, extra) {
+    const desc = Object.assign({
+        coords: coords, type: type, zone: zone,
+        exits: {}, portals: {}, doors: {}
+    }, extra || {});
+    plan.rooms[coords] = desc;
+    return desc;
+}
+
+// Joins two planned rooms. A plain adjacent link is an ordinary exit. Pass
+// portal=true for links between cells that are not neighbours on the grid
+// (a street door into an interior plane, a back door into an alley). doorKind
+// puts a visible door (or archway) on both sides of the link.
+function _planLink(plan, aCoords, bCoords, dirFromA, doorKind, portal) {
+    const a = plan.rooms[aCoords];
+    const b = plan.rooms[bCoords];
+    const back = _DIR_OPP[dirFromA];
+    a.exits[dirFromA] = bCoords;
+    b.exits[back] = aCoords;
+    if (portal) { a.portals[dirFromA] = true; b.portals[back] = true; }
+    if (doorKind) { a.doors[dirFromA] = doorKind; b.doors[back] = doorKind; }
+}
+
+function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alleyCoords) {
+    const bp = BUILDING_BLUEPRINTS[bpKey];
+    const buildingId = bpKey.toLowerCase().replace(/[^a-z]+/g, "-") + "-" + index;
+    const name = bp.names && bp.names.length ? bp.names[Math.floor(rng() * bp.names.length)] : null;
+
+    entranceDesc.buildingId = buildingId;
+    entranceDesc.buildingType = bpKey;
+    entranceDesc.buildingName = name;
+    entranceDesc.isBuildingRoom = true;
+    entranceDesc.isEntrance = true;
+    entranceDesc.floor = 0;
+    if (bp.anchorFor) entranceDesc.anchorFor = bp.anchorFor.slice();
+    if (bp.verticalLinks) entranceDesc.verticalLinks = bp.verticalLinks.slice();
+
+    const byKey = {};
+    const x0 = BUILDING_PLANE_X0 + index * BUILDING_PLANE_X_STRIDE;
+    (bp.rooms || []).forEach(def => {
+        if (typeof def.chance === "number" && rng() >= def.chance) return;
+        const coords = (x0 + def.at[0]) + "," + (def.floor * BUILDING_FLOOR_Y_STRIDE + def.at[1] * side);
+        const desc = _planAddRoom(plan, coords, def.type, bp.zone, {
+            buildingId: buildingId, buildingType: bpKey, buildingName: name,
+            isBuildingRoom: true, floor: def.floor
+        });
+        if (typeof def.minNpcs === "number") desc.minNpcs = def.minNpcs;
+        if (def.anchorFor) desc.anchorFor = def.anchorFor.slice();
+        if (def.verticalLinks) desc.verticalLinks = def.verticalLinks.slice();
+        byKey[def.key] = desc;
+    });
+
+    (bp.links || []).forEach(link => {
+        const a = byKey[link[0]];
+        const b = byKey[link[1]];
+        if (!a || !b) return; // an optional room that did not roll
+        const kind = link[2] || null;
+        if (a.floor === b.floor) {
+            const pa = a.coords.split(","), pb = b.coords.split(",");
+            const dir = _dirFromDelta(Number(pb[0]) - Number(pa[0]), Number(pb[1]) - Number(pa[1]));
+            if (!dir) throw new Error("Blueprint " + bpKey + ": " + link[0] + " and " + link[1] + " are not adjacent");
+            _planLink(plan, a.coords, b.coords, dir, kind, false);
+        } else {
+            const upDir = b.floor > a.floor ? "U" : "D";
+            _planLink(plan, a.coords, b.coords, upDir, kind, false);
+        }
+    });
+
+    // The front door: street-facing entrance -> interior. "Inward" is toward
+    // the back of the building: north for a building on the north side of the
+    // street, south for one on the south side.
+    const inward = side > 0 ? "N" : "S";
+    if (bp.front && byKey[bp.front]) {
+        _planLink(plan, entranceDesc.coords, byKey[bp.front].coords, inward, bp.frontDoor || "door", true);
+    }
+    // The back door, if the blueprint has one: interior -> alley.
+    if (bp.back && byKey[bp.back] && alleyCoords) {
+        _planLink(plan, byKey[bp.back].coords, alleyCoords, inward, "door", true);
+    }
+    return { buildingId: buildingId, name: name, type: bpKey };
+}
+
+// Town: a street running east-west with a Square in the middle and a Gate at
+// the west end, buildings facing it from the north and south side, and a
+// back alley behind any building with a rear door. Closed to the east - the
+// Gate's outward exit is the only frontier (it always leads out to the
+// Ruins, see ZONE_LINKS).
+function planTownLayout(rngIn) {
+    const rng = typeof rngIn === "function" ? rngIn : Math.random;
+    const zone = "Town";
+    const plan = { zone: zone, rooms: {}, buildings: [], startByType: {} };
+    const randInt = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+
+    // Random size: the street runs `west` slots to the west of the Square and
+    // `east` to the east, so a town has between 3 and 7 slots per side (6 to
+    // 14 building plots in all, before empty ones are left as plain wall).
+    const west = randInt(1, 3);
+    const east = randInt(1, 3);
+    const SPINE_MIN = -(2 * west + 2);
+    const SPINE_MAX = 2 * east + 2;
+
+    for (let x = SPINE_MIN; x <= SPINE_MAX; x++) {
+        const type = x === SPINE_MIN ? "Gate" : x === 0 ? "Square" : Math.abs(x) === 1 ? "Avenue" : "Street";
+        _planAddRoom(plan, x + ",0", type, zone, {});
+    }
+    for (let x = SPINE_MIN; x < SPINE_MAX; x++) {
+        _planLink(plan, x + ",0", (x + 1) + ",0", "E", null, false);
+    }
+    // The Gate's outward (west) exit points at ground that does not exist
+    // yet; walking out is what builds the road to the Ruins.
+    const gate = plan.rooms[SPINE_MIN + ",0"];
+    gate.exits.W = (SPINE_MIN - 1) + ",0";
+    gate.guaranteedLink = "town-to-ruins";
+    gate.anchorFor = ["ruins-to-town"];
+
+    // Building slots: two columns apart so each has a free column beside it
+    // for an alley. Town Hall takes a slot facing the Square.
+    const slots = [];
+    for (let x = -2 * west; x <= 2 * east; x += 2) {
+        [1, -1].forEach(side => slots.push({ x: x, side: side }));
+    }
+    const squareSlots = slots.filter(s => s.x === 0);
+    const hallSlot = squareSlots[Math.floor(rng() * squareSlots.length)];
+    const rest = _planShuffle(slots.filter(s => s !== hallSlot), rng);
+
+    const assignment = [{ type: "Town Hall", slot: hallSlot }];
+    ["Tavern", "Inn", "Smithy"].forEach((type, i) => { assignment.push({ type: type, slot: rest[i] }); });
+    // Every other plot is a house or stays empty. Bigger towns get a second
+    // inn now and then. The Tavern (cellar shrine, way down to the dungeon),
+    // the Smithy (cargo lift to the Underground City) and the Town Hall
+    // (boss room) are always single, since each carries a one-per-zone
+    // feature or zone link.
+    rest.slice(3).forEach(slot => {
+        const roll = rng();
+        if (roll < 0.10) assignment.push({ type: "Inn", slot: slot });
+        else if (roll < 0.70) assignment.push({ type: "House", slot: slot });
+    });
+
+    assignment.forEach((entry, idx) => {
+        const slot = entry.slot;
+        const bp = BUILDING_BLUEPRINTS[entry.type];
+        const entranceCoords = slot.x + "," + slot.side;
+        const entrance = _planAddRoom(plan, entranceCoords, bp.entrance, zone, {});
+        _planLink(plan, slot.x + ",0", entranceCoords, slot.side > 0 ? "N" : "S", bp.streetDoor || "door", false);
+
+        let alleyCoords = null;
+        if (bp.back) {
+            // Alley: street -> beside the building -> behind it.
+            const a1 = (slot.x + 1) + "," + slot.side;
+            const a2 = (slot.x + 1) + "," + (2 * slot.side);
+            const a3 = slot.x + "," + (2 * slot.side);
+            _planAddRoom(plan, a1, "Alleyway", zone, {});
+            _planAddRoom(plan, a2, "Alleyway", zone, {});
+            _planAddRoom(plan, a3, "Alleyway", zone, {});
+            _planLink(plan, (slot.x + 1) + ",0", a1, slot.side > 0 ? "N" : "S", null, false);
+            _planLink(plan, a1, a2, slot.side > 0 ? "N" : "S", null, false);
+            _planLink(plan, a2, a3, "W", null, false);
+            alleyCoords = a3;
+        }
+        const info = _planBuildingInterior(plan, entry.type, idx, entrance, slot.side, rng, alleyCoords);
+        info.entranceCoords = entranceCoords;
+        plan.buildings.push(info);
+    });
+
+    // Where a new game can start, by the room type the player picked.
+    Object.keys(plan.rooms).forEach(coords => {
+        const type = plan.rooms[coords].type;
+        if (!plan.startByType[type]) plan.startByType[type] = coords;
+    });
+    return plan;
+}
+
+// Registry: which zones have a planner (others still grow room by room).
+const ZONE_PLANNERS = {
+    "Town": planTownLayout
+};
 
 // ── WORLD LORE ("world bible") ───────────────────────────────────
 // One shared history the NPCs draw on, so rumors, topics and replies point
