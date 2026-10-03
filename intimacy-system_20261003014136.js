@@ -1285,6 +1285,13 @@ function startIntimacyEncounter(npc, player, positionId = null) {
     const pos = positionId || DEFAULT_POSITION;
     npc.intimacy.position.player = pos;
     npc.intimacy.position.npc = pos;
+
+    // Refresh the clothing mirrors from REAL equipment state — clothes may
+    // have been dropped to the floor in a previous encounter (and picked
+    // back up), or gear changed since. The mirrors are what the act gating
+    // reads, so they must match reality at the start of each encounter.
+    npc.intimacy.clothing.player = getClothingStateForCharacter(player);
+    npc.intimacy.clothing.npc = getClothingStateForCharacter(npc);
     
     // Mark encounter as active
     npc.intimacy.encounter.active = true;
@@ -1473,22 +1480,88 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
  * TEASE/CLOTHING/END acts always return 0 — they are always available and
  * are the acts that build the disinhibition needed to unlock the rest.
  */
+/**
+ * Per-act disinhibition threshold (0-100) — the natural-progression ladder.
+ * The score it is compared against is the NPC's per-body-category
+ * disinhibition (npc.memory.actDisinhibition, raised by successfully
+ * performing lower-intensity acts in the same category via
+ * executeIntimacyAction → applyActDisinhibitionDelta). TEASE acts always
+ * return a tier and are how the ladder is climbed.
+ *
+ * Tease-type acts are not all equal — a kiss and oral sex share the TEASE
+ * type — so tease thresholds escalate by target area and tool:
+ *   0  — petting (hair/neck-face/body touching): always available
+ *   5  — kissing (mouth/lips)
+ *   10 — groping (hand on chest/butt/genitals)
+ *   15 — fingering (fingers on genitals)
+ *   20 — oral (mouth on genitals, or a genital tool on their face)
+ * Penetration then escalates by target: deep oral 25, vaginal 30, anal 40.
+ * Kink acts gate broadly: impact 50, watersports 60 (highest).
+ */
+const TEASE_INTIMATE_TARGETS = ["vagina", "pussy", "clitoris", "clit", "penis", "cock", "dick", "anus", "ass", "groin", "testicles", "balls"];
+const TEASE_CHEST_TARGETS = ["breasts", "breast", "nipples", "nipple", "chest", "butt", "buttocks", "rear"];
+const TEASE_GENITAL_TOOLS = ["penis", "cock", "dick", "vagina", "pussy"];
+
+function _teaseDisinhibitionThreshold(act) {
+    const target = String(act.target || "").toLowerCase();
+    const tool = String(act.tool || "").toLowerCase();
+    // A genital tool is intimate contact wherever it lands (e.g. rubbing a
+    // cock on their face is not "petting") — tier it with oral.
+    if (TEASE_GENITAL_TOOLS.indexOf(tool) !== -1 &&
+        (target === "face" || target === "mouth" || target === "lips" || target === "neck")) {
+        return 20;
+    }
+    if (TEASE_INTIMATE_TARGETS.indexOf(target) !== -1) {
+        if (tool === "mouth" || tool === "tongue" || tool === "lips") return 20; // oral
+        if (tool === "fingers") return 15;                                       // fingering
+        return 10;                                                              // groping
+    }
+    if (TEASE_CHEST_TARGETS.indexOf(target) !== -1) return 10;                 // groping
+    if (target === "mouth" || target === "lips") return 5;                     // kissing
+    return 0;                                                                   // petting
+}
+
+// Penetration ladder: deep oral < vaginal < anal.
+function _penetrationDisinhibitionThreshold(act) {
+    const target = String(act.target || "").toLowerCase();
+    if (target === "vagina" || target === "pussy") return 30;
+    if (target === "anus" || target === "ass") return 40;
+    if (target === "mouth" || target === "lips") return 25;
+    return 35;
+}
+
 function _actDisinhibitionThreshold(act) {
     if (!act || !act.type) return 0;
+    if (act.type === ACT_TYPES.TEASE) return _teaseDisinhibitionThreshold(act);
     switch (act.type) {
         case ACT_TYPES.PENETRATE:
         case ACT_TYPES.CONTINUE:
-            return 35;
+            return _penetrationDisinhibitionThreshold(act);
+        // Kink acts (impact, watersports) sit at the top of the ladder and
+        // gate on BROAD comfort — see checkActionValidity: their own
+        // category score cannot build from lower-tier acts, so gating them
+        // against it would deadlock. Broad bodily comfort is the gate.
         case ACT_TYPES.IMPACT:
-            return 55;
-        // WATERSPORT acts early-return in executeIntimacyAction and so never
-        // reach the disinhibition grant; gating them would permanently block
-        // the self-contained "Watersports" category. Leave them ungated.
+            return 50;
         case ACT_TYPES.WATERSPORT:
-            return 0;
+            return 60;
         default:
             return 0;
     }
+}
+
+// Highest per-category disinhibition the NPC has built anywhere — proxy for
+// general bodily comfort (used for WATERSPORT gating).
+function _getMaxCategoryDisinhibition(npc) {
+    const map = npc && npc.memory && npc.memory.actDisinhibition;
+    if (!map || typeof map !== "object") return 0;
+    let max = 0;
+    for (const key in map) {
+        if (!Object.prototype.hasOwnProperty.call(map, key)) continue;
+        const v = map[key];
+        if (typeof v === "number" && v > max) max = v;
+    }
+    return max;
 }
 
 /**
@@ -1922,10 +1995,24 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         if (_disinhibThreshold > 0 && typeof window !== "undefined" &&
             typeof window.getActDisinhibition === "function" &&
             typeof window.getActionCategory === "function") {
-            var _catKey = window.getActionCategory(actId, npc);
-            if (_catKey && _catKey !== "Other" &&
-                window.getActDisinhibition(npc, _catKey) < _disinhibThreshold) {
-                return { valid: false, reason: "not disinhibited" };
+            if (act.type === ACT_TYPES.WATERSPORT || act.type === ACT_TYPES.IMPACT) {
+                // Kink acts gate on broad comfort: their own category score
+                // cannot build from lower-tier acts, so the effective score
+                // is the higher of their own category (impact play already
+                // done) and the NPC's most-developed body category.
+                var _kinkCatKey = window.getActionCategory(actId, npc);
+                var _ownScore = (_kinkCatKey && _kinkCatKey !== "Other")
+                    ? window.getActDisinhibition(npc, _kinkCatKey)
+                    : 0;
+                if (Math.max(_ownScore, _getMaxCategoryDisinhibition(npc)) < _disinhibThreshold) {
+                    return { valid: false, reason: "not disinhibited" };
+                }
+            } else {
+                var _catKey = window.getActionCategory(actId, npc);
+                if (_catKey && _catKey !== "Other" &&
+                    window.getActDisinhibition(npc, _catKey) < _disinhibThreshold) {
+                    return { valid: false, reason: "not disinhibited" };
+                }
             }
         }
     }
@@ -2553,6 +2640,30 @@ function handleClothingAction(npc, player, act, clothingState) {
         }
     }
     
+    // Real undressing: removal acts drop the actual worn item into the
+    // current room so the clothes land on the floor and can be picked up
+    // again. Adjustment acts (move_aside/lift/pull_down) keep the garment
+    // ON the body, so they drop nothing.
+    if (typeof window !== "undefined" && typeof window.dropWornClothingToRoom === "function") {
+        var _who = act.target === "player" ? player : npc;
+        if (_who) {
+            var _slotMap = { top: "upper", bottom: "lower" };
+            var _slots = [];
+            if (!act.clothingItem && !act.clothingAction) {
+                // Bulk undress: everything worn, feet included
+                _slots = ["upper", "lower", "feet"];
+            } else if (!act.clothingAction && _slotMap[act.clothingItem]) {
+                _slots = [_slotMap[act.clothingItem]];
+            }
+            _slots.forEach(function (slot) {
+                var dropped = window.dropWornClothingToRoom(_who, slot);
+                if (dropped && dropped.name) {
+                    console.log("[Intimacy Clothing] dropped", dropped.name, "into the room");
+                }
+            });
+        }
+    }
+
     return {
         action: act.id,
         type: "clothing",
@@ -6064,11 +6175,9 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         console.log(`[DEBUG] After phase filter: ${validActions.length} actions for ${npc.name}, ${clothingActions.length} clothing actions, phase=${phase}`);
     }
     
-    const categorized = organizeActionsForMenu(validActions, npc);
-    
     // Also get disabled actions with their reasons for showing hints
     const allActionsWithStatus = generateAllActionsWithStatus(npc, player, positionId);
-    
+
     // Filter disabled actions by phase as well
     const filteredDisabledActions = allActionsWithStatus.invalid.filter(action => {
         // Create a mock action object for phase filtering
@@ -6076,112 +6185,77 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         return filterActionsByPhase([mockAction], phase).length > 0;
     });
     
-    const categorizedDisabled = organizeActionsForMenu(filteredDisabledActions, npc);
-    
-    // Convert to menu format with natural labels
+    // Convert to menu format with natural labels — a FLAT list ordered by
+    // natural progression (kissing/light touching first, escalating up the
+    // disinhibition ladder), like the conversation topic list, not grouped
+    // by body area. Valid actions show by default; disabled ones (blocked by
+    // position, clothing, or the disinhibition gate) keep their hint and only
+    // appear through the "Show all" toggle.
     const menu = [];
-    const addedCategories = new Set();
-    
-    // Define phase groups with their categories (now grouped by body area)
-    const phaseGroups = {
-        social: ["Mouth & Lips", "Hair", "Body", "Breasts"],
-        private: ["Clothing", "Breasts", "Lower Body", "Pussy", "Cock", "Anus", "Cloaca", "Impact"],
-        intimate: ["Pussy", "Cock", "Anus", "Cloaca", "Mouth & Lips", "Climax", "End", "Receive"]
+    const flatActions = [];
+
+    const seenActIds = new Set();
+    for (const a of validActions) {
+        if (seenActIds.has(a.actId)) continue;
+        seenActIds.add(a.actId);
+        flatActions.push({
+            id: a.actId,
+            label: getNaturalLabel(a.actId, npc, player),
+            description: a.desc,
+            type: a.type,
+            disabled: false
+        });
+    }
+    for (const a of filteredDisabledActions) {
+        if (seenActIds.has(a.actId)) continue;
+        seenActIds.add(a.actId);
+        flatActions.push({
+            id: a.actId,
+            label: getNaturalLabel(a.actId, npc, player) + (a.disabledHint ? ` (${a.disabledHint})` : ""),
+            description: a.desc,
+            type: a.type,
+            disabled: true,
+            disabledHint: a.disabledHint
+        });
+    }
+
+    // Intensity rank for ordering: act type first (tease, clothing, then
+    // escalating types), the disinhibition tier within a type (a kiss before
+    // chest contact before hand/fingers/mouth on genitals), and "Receive"
+    // acts (the NPC acting on the player) after the player-actor ones.
+    const FLAT_TYPE_ORDER = {};
+    FLAT_TYPE_ORDER[ACT_TYPES.TEASE] = 0;
+    FLAT_TYPE_ORDER[ACT_TYPES.CLOTHING] = 1;
+    FLAT_TYPE_ORDER[ACT_TYPES.PENETRATE] = 2;
+    FLAT_TYPE_ORDER[ACT_TYPES.CONTINUE] = 3;
+    FLAT_TYPE_ORDER[ACT_TYPES.IMPACT] = 5;
+    FLAT_TYPE_ORDER[ACT_TYPES.WATERSPORT] = 6;
+    FLAT_TYPE_ORDER[ACT_TYPES.END] = 7;
+
+    const flatMenuRank = function (entry) {
+        const act = getAct(entry.id) || {};
+        let order = FLAT_TYPE_ORDER.hasOwnProperty(entry.type) ? FLAT_TYPE_ORDER[entry.type] : 4;
+        if (act.playerIsBottom === true) order += 10;
+        const tier = _actDisinhibitionThreshold(act);
+        return order * 1000 + tier;
     };
-    
-    // Process each phase group in order
-    const phaseOrder = ["social", "private", "intimate"];
-    let addedSeparator = false;
-    
-    for (const phaseGroup of phaseOrder) {
-        const categories = phaseGroups[phaseGroup];
-        let phaseHasActions = false;
-        
-        for (const category of categories) {
-            // Skip if we've already added this category
-            if (addedCategories.has(category)) continue;
-            
-            const validActions = categorized[category] || [];
-            const disabledActions = categorizedDisabled[category] || [];
-            const hasActions = validActions.length > 0 || disabledActions.length > 0;
-            
-            if (hasActions) {
-                // Add separator before this phase if we've already added content from previous phase
-                if (menu.length > 0 && !addedSeparator) {
-                    menu.push({ type: "separator" });
-                    addedSeparator = true;
-                }
-                
-                // Merge valid and disabled actions
-                const allActions = [
-                    ...validActions.map(a => ({
-                        id: a.actId,
-                        label: getNaturalLabel(a.actId, npc, player),
-                        description: a.desc,
-                        type: a.type,
-                        phaseRequired: getMinimumPhaseForAction(a.actId),
-                        disabled: false
-                    })),
-                    ...disabledActions.map(a => ({
-                        id: a.actId,
-                        label: getNaturalLabel(a.actId, npc, player) + (a.disabledHint ? ` (${a.disabledHint})` : ""),
-                        description: a.desc,
-                        type: a.type,
-                        phaseRequired: getMinimumPhaseForAction(a.actId),
-                        disabled: true,
-                        disabledHint: a.disabledHint
-                    }))
-                ];
-                
-                menu.push({
-                    type: "category",
-                    label: category,
-                    actions: allActions
-                });
-                
-                addedCategories.add(category);
-                phaseHasActions = true;
-            }
-        }
-        
-        // Reset separator flag after each phase group
-        if (phaseHasActions) {
-            addedSeparator = false;
-        }
-    }
-    
-    // Add any remaining categories not in phase groups
-    for (const [category, actions] of Object.entries(categorized)) {
-        if (!Object.values(phaseGroups).flat().includes(category) && actions.length > 0 && !addedCategories.has(category)) {
-            const disabledActions = categorizedDisabled[category] || [];
-            const allActions = [
-                ...actions.map(a => ({
-                    id: a.actId,
-                    label: getNaturalLabel(a.actId, npc, player),
-                    description: a.desc,
-                    type: a.type,
-                    phaseRequired: getMinimumPhaseForAction(a.actId),
-                    disabled: false
-                })),
-                ...disabledActions.map(a => ({
-                    id: a.actId,
-                    label: getNaturalLabel(a.actId, npc, player) + (a.disabledHint ? ` (${a.disabledHint})` : ""),
-                    description: a.desc,
-                    type: a.type,
-                    phaseRequired: getMinimumPhaseForAction(a.actId),
-                    disabled: true,
-                    disabledHint: a.disabledHint
-                }))
-            ];
-            
-            menu.push({
-                type: "category",
-                label: category,
-                actions: allActions
-            });
-            addedCategories.add(category);
-        }
-    }
+
+    flatActions.sort(function (a, b) {
+        const rankDiff = flatMenuRank(a) - flatMenuRank(b);
+        if (rankDiff !== 0) return rankDiff;
+        return String(a.label).localeCompare(String(b.label));
+    });
+
+    flatActions.forEach(entry => {
+        menu.push({
+            type: "action",
+            id: entry.id,
+            label: entry.label,
+            description: entry.description,
+            disabled: entry.disabled,
+            disabledHint: entry.disabledHint
+        });
+    });
     
     // Add Continue and Pull out/Pull Away buttons if there's a last action
     const lastAction = npc && npc.intimacy && npc.intimacy.lastAction;
@@ -8375,6 +8449,32 @@ function getTargetNoun(actObj, posPronoun) {
     return (posPronoun || "their") + " " + t;
 }
 
+// Resolve the actual equipped garment name for a clothing key, so undressing
+// narrates the real item ("her red shirt") instead of a generic "top".
+function _getWornGarmentName(character, clothingKey) {
+    var slotMap = { top: "upper", bottom: "lower" };
+    var slot = slotMap[clothingKey];
+    var eq = character && character.equipped;
+    if (!slot || !eq) return null;
+    var item = eq[slot];
+    if (!item || Array.isArray(item)) return null;
+    if (typeof item === "string") return item;
+    return item.name ? String(item.name) : null;
+}
+
+// Classify a garment by its name to pick natural removal verbs (armor is
+// unbuckled and peeled, a skirt pools at the feet, trousers slide down...).
+function _garmentClass(name) {
+    var n = String(name || "").toLowerCase();
+    if (!n) return "generic";
+    if (/(scale|chain)?mail|breastplate|plate|cuirass|armor|armour|jerkin|harness|greaves/.test(n)) return "armor";
+    if (/dress|gown|robe/.test(n)) return "dress";
+    if (/skirt|kilt/.test(n)) return "skirt";
+    if (/shirt|tunic|blouse|sweater|vest|coat|bodice|corset/.test(n)) return "top";
+    if (/legging|trouser|pant|breech|hose|tights/.test(n)) return "bottom";
+    return "generic";
+}
+
 function buildClothingNarration(act, npc, player) {
     if (!act) return "You adjust their clothing.";
 
@@ -8382,36 +8482,112 @@ function buildClothingNarration(act, npc, player) {
     var clothingItem = act.clothingItem || "";
     var clothingAction = act.clothingAction || "";
 
-    // Determine whose clothing and the correct possessive pronoun
-    var whose;
-    if (target === "player") {
-        whose = "your";
-    } else {
-        whose = (typeof getPossessivePronoun === 'function')
-            ? getPossessivePronoun(npc) : "their";
-    }
+    var isPlayer = target === "player";
+    var character = isPlayer ? player : npc;
+    var whose = isPlayer ? "your"
+        : (typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their");
+
+    var gender = String((character && (character.gender || (character.stats && character.stats.gender))) || "").toLowerCase();
+    var isFemale = gender === "female" || gender === "f";
+
+    // The real worn garment, when equipment knows it
+    var garment = _getWornGarmentName(character, clothingItem);
+    var gclass = _garmentClass(garment);
+
+    // Gender- and owner-aware body references
+    var chestRef = isPlayer ? (isFemale ? "your breasts" : "your chest") : (isFemale ? whose + " breasts" : whose + " chest");
+    var legsRef = isPlayer ? "your legs" : whose + " legs";
+    var headRef = isPlayer ? "your head" : whose + " head";
 
     // Bulk undress (no specific clothingItem)
     if (!clothingItem && !clothingAction) {
-        if (target === "player") {
-            return "You undress yourself completely.";
+        if (isPlayer) {
+            return pickRandom([
+                "You strip out of your clothes piece by piece, dropping each one to the floor until nothing is left.",
+                "You shed everything you are wearing, the last garment landing in a heap on the floor."
+            ]);
         }
-        return "You undress " + whose + " completely.";
+        return pickRandom([
+            "You undress " + whose + " piece by piece, each garment joining the pile on the floor until nothing is left.",
+            "You peel " + whose + " clothes away one item at a time and let them fall, leaving " + whose + " bare."
+        ]);
     }
 
-    // Specific clothing actions: move_aside, lift, pull_down
+    // Adjustment actions: the garment stays on, just moved
     if (clothingAction === "move_aside") {
-        return "You move " + whose + " " + clothingItem + " aside.";
+        var asideRef = garment ? whose + " " + garment : (isPlayer ? "your top" : whose + " top");
+        return "You pull " + asideRef + " aside, baring " + chestRef + ".";
     }
     if (clothingAction === "lift") {
-        return "You lift " + whose + " " + clothingItem + ".";
+        var liftRef = garment ? whose + " " + garment : (isPlayer ? "your skirt" : whose + " skirt");
+        return "You lift " + liftRef + ", baring " + legsRef + " from the hips down.";
     }
     if (clothingAction === "pull_down") {
-        return "You pull down " + whose + " " + clothingItem + ".";
+        var pullRef = garment ? whose + " " + garment : (isPlayer ? "your bottom" : whose + " bottoms");
+        return "You tug " + pullRef + " down around " + (isPlayer ? "your thighs" : whose + " thighs") + ".";
+    }
+
+    // Removal actions: name the real garment where equipment knows it
+    var gRef = garment ? whose + " " + garment
+        : (clothingItem === "top" ? (isPlayer ? "your top" : whose + " top")
+        : (clothingItem === "bottom" ? (isPlayer ? "your bottoms" : whose + " bottoms")
+        : (isFemale ? (isPlayer ? "your panties" : whose + " panties") : (isPlayer ? "your underwear" : whose + " underwear"))));
+
+    // Underwear (not tracked as a real equipment item)
+    if (clothingItem === "underwear" || clothingItem === "undergarments") {
+        if (isPlayer) {
+            return pickRandom([
+                "You slide " + (isFemale ? "your panties" : "your underwear") + " down " + legsRef + " and step out of them.",
+                "You peel off " + (isFemale ? "your panties" : "your underwear") + " and let them drop to the floor."
+            ]);
+        }
+        return pickRandom([
+            "You slide " + (isFemale ? whose + " panties" : whose + " underwear") + " down " + legsRef + " and away entirely.",
+            "You peel " + (isFemale ? whose + " panties" : whose + " underwear") + " down " + legsRef + ", leaving " + (isFemale ? whose + " sex bare" : whose + " cock bare") + "."
+        ]);
+    }
+
+    // Top removal — over the head, over the chest; armor is unbuckled instead
+    if (clothingItem === "top") {
+        if (gclass === "armor") {
+            return pickRandom([
+                "You unbuckle " + gRef + " strap by strap and peel it away from " + chestRef + ".",
+                "You work " + gRef + " loose and lift it clear, letting it fall to the floor with a thud."
+            ]);
+        }
+        if (gclass === "dress") {
+            return "You pull " + gRef + " up over " + headRef + ", letting it fall to the floor.";
+        }
+        if (isFemale) {
+            return pickRandom([
+                "You pull " + gRef + " up over " + chestRef + " and off " + headRef + " entirely, letting it fall to the floor.",
+                "You slide " + gRef + " up " + (isPlayer ? "your body" : whose + " body") + " and over " + headRef + ", " + chestRef + " swaying free as it drops away.",
+                "You work " + gRef + " off over " + headRef + ", baring " + chestRef + " completely."
+            ]);
+        }
+        return pickRandom([
+            "You pull " + gRef + " up over " + headRef + " and off entirely, letting it fall to the floor.",
+            "You tug " + gRef + " off over " + headRef + ", baring " + chestRef + "."
+        ]);
+    }
+
+    // Bottom removal — down the legs; skirts pool at the feet
+    if (clothingItem === "bottom") {
+        if (gclass === "armor") {
+            return "You unbuckle " + gRef + " and pull it free of " + legsRef + ".";
+        }
+        if (gclass === "skirt") {
+            return "You unfasten " + gRef + " and let it pool at " + (isPlayer ? "your feet" : whose + " feet") + ".";
+        }
+        return pickRandom([
+            "You slide " + gRef + " down " + legsRef + " and off entirely, letting it fall to the floor.",
+            "You peel " + gRef + " down over " + (isPlayer ? "your hips" : whose + " hips") + " and " + legsRef + ", leaving them in a heap on the floor.",
+            "You work " + gRef + " down " + legsRef + " and " + (isPlayer ? "step out of them" : "pull them free") + "."
+        ]);
     }
 
     // Default: remove action
-    return "You remove " + whose + " " + clothingItem + ".";
+    return "You remove " + gRef + ".";
 }
 
 function buildInitialContactNarration(npc, act, pronouns = {}, player = null) {

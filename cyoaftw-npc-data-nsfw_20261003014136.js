@@ -20,7 +20,7 @@
         id: "flirt",
         label: "Flirt",
         intent: "flirt",
-        text: "You flirt with them, running your fingers near their {groin} to test their interest...",
+        text: "You flirt with them, letting your interest show and testing theirs.",
         priority: 10,
         repeat: "session",
         conditions: { romanceEligible: true, maxHostility: 70 },
@@ -77,8 +77,8 @@
     {
         id: "touch_intimately",
         label: "Touch them intimately",
-        text: "You reach out to touch their {groin} suggestively...",
-        playerText: "You reach out to touch their {groin} suggestively...",
+        text: "You reach out and touch them intimately, testing how they respond.",
+        playerText: "You reach out and touch them intimately, testing how they respond.",
         priority: 30,
         repeat: "encounter",
         conditions: {
@@ -101,8 +101,8 @@
     {
         id: "start_intimacy",
         label: "Make a move",
-        text: "You make your intentions clear, reaching for their {groin} to initiate intimacy...",
-        playerText: "You make your intentions clear, reaching for their {groin} to initiate intimacy...",
+        text: "You make your intentions clear, closing the last of the distance between you.",
+        playerText: "You make your intentions clear, closing the last of the distance between you.",
         priority: 35,
         repeat: "encounter",
         conditions: {
