@@ -671,6 +671,7 @@ function buildPlayerNarrativePrompt(context) {
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and erotic.",
+"- If the base text is a system-generated FRAGMENT (no main verb, e.g. \"Your mouth sucking her teats...\"), rewrite it as a complete, clear sentence with proper grammar.",
 "- Keep the same meaning, the same act, and the same physical details. Do NOT invent new actions or body parts.",
 "- The act: " + action.tool + " " + action.verb + " " + action.target + " (" + actTypeName + ").",
 "- Write in second person (\"You press...\"). This is the player's perspective.",
@@ -1342,8 +1343,9 @@ function endIntimacyEncounter(npc) {
     npc.intimacy.lastAction = null;
     npc.intimacy.actionHistory = [];
     
-    // Clear sensory fragment anti-repetition tracker
+    // Clear sensory fragment anti-repetition tracker and recent scene beats
     if (npc.intimacy._recentNarratives) delete npc.intimacy._recentNarratives;
+    if (npc.intimacy._recentScene) delete npc.intimacy._recentScene;
     
     // Clear penetration cache. After a save/load cycle this can be a plain
     // object (JSON has no Map representation), so migrate it instead of
@@ -3301,6 +3303,59 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         })();
     }
 
+    // Ladder-aware prefetch: warm the likely NEXT acts (same body category
+    // as this one) so first-time clicks hit a cached authored response
+    // instead of a raw template. Capped at 2 extra AI calls per action, and
+    // only for slots that are still cold.
+    if (_ai && isSexualAct(act) && intimacy && !act.playerIsBottom &&
+        act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.END) {
+        (async function() {
+            try {
+                if (typeof generateValidActions !== "function" || typeof getActionCategory !== "function") return;
+                var _catKey = getActionCategory(act.id, npc);
+                if (!_catKey || _catKey === "Other" || _catKey === "Receive") return;
+                var _candidates = generateValidActions(npc, player, currentPosition).filter(function (a) {
+                    if (!a || a.actId === act.id) return false;
+                    var a2 = typeof getAct === "function" ? getAct(a.actId) : null;
+                    if (!a2 || a2.playerIsBottom === true) return false;
+                    if (a2.type === ACT_TYPES.CLOTHING || a2.type === ACT_TYPES.END || a2.type === ACT_TYPES.WATERSPORT) return false;
+                    return getActionCategory(a.actId, npc) === _catKey;
+                });
+                var _warmed = 0;
+                for (var i = 0; i < _candidates.length && _warmed < 2; i++) {
+                    var candAct = typeof getAct === "function" ? getAct(_candidates[i].actId) : null;
+                    if (!candAct) continue;
+                    if (getCachedLLMEnhancement(intimacy, candAct.id, currentPosition)) continue;
+                    var candContext = buildActionContext(npc, player, candAct, intimacy, currentPosition);
+                    var candPrompt = buildIntimacyPrompt(candContext);
+                    _warmed++;
+                    try {
+                        console.log("[Intimacy AI] Ladder prefetch for", candAct.id);
+                        var r2 = await _ai({ instruction: candPrompt, startWith: "", endButtons: "none", generatorName: "cyoaftw-engine-core" });
+                        var t2 = r2 && (r2.text || r2);
+                        if (t2 && t2.trim()) {
+                            var _m2 = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(t2.trim());
+                            if (!_m2) cacheLLMEnhancement(intimacy, candAct.id, currentPosition, t2.trim());
+                        }
+                    } catch (e2) {
+                        console.warn("[Intimacy AI] Ladder prefetch failed for", candAct.id, e2);
+                    }
+                }
+            } catch (e) {
+                console.warn("[Intimacy AI] Ladder prefetch setup failed:", e);
+            }
+        })();
+    }
+
+    // Record this beat for author-mode continuation prompts (see
+    // buildIntimacyPrompt's RECENT BEATS section) — the last few narrated
+    // reactions, so repeated/continuing acts progress instead of rephrasing.
+    if (finalResponse && typeof finalResponse === "string" && finalResponse.trim()) {
+        if (!Array.isArray(intimacy._recentScene)) intimacy._recentScene = [];
+        intimacy._recentScene.push(finalResponse.trim());
+        intimacy._recentScene = intimacy._recentScene.slice(-4);
+    }
+
     // Return template response immediately — no blocking
     return {
         action: act.id,
@@ -3484,7 +3539,7 @@ function buildIntimacyPrompt(context) {
         && isUnnaturalUncivilizedAct(npc, action);
     var _baseLabel = _sampleMode
         ? "SAMPLE REACTION (a canned example of how this species might react - treat it as an IDEA for tone and content, not a script to preserve)"
-        : "BASE RESPONSE (polish this — fix grammar, refine the language, make it more erotic, but keep the same meaning and details)";
+        : "BASE RESPONSE (the FACTS of this beat — take the facts, not the phrasing)";
     var _dialogueRule = _sampleMode
         ? "- Rewrite the sample entirely in THIS NPC's own voice: apply the SPECIES NOTE, SPEECH STYLE, and temperament above. Keep the same underlying reaction (confused, uncertain, disgusted, or curious-but-consenting - whatever the sample conveys) and the same physical facts, but the wording and any dialogue must be freshly written for this character. You may replace the sample's dialogue with lines that fit better. Keep speech simple, direct, possibly broken - do not make an uncivilized NPC speak eloquently."
         : "- Do NOT invent new dialogue or speech. Keep existing speech if present, do not add new lines of dialogue.";
@@ -3547,21 +3602,37 @@ function buildIntimacyPrompt(context) {
         _temperamentInflection = "\n" + window.getTemperamentInflection(npc.temperament);
     }
 
+    // Recent scene beats + continuation guidance: repeated and continuing
+    // acts must PROGRESS the scene rather than rephrase the previous beat.
+    // Beats are recorded in executeIntimacyAction (intimacy._recentScene).
+    var _recentBeats = (ctxIntimacy && Array.isArray(ctxIntimacy._recentScene))
+        ? ctxIntimacy._recentScene.slice(-3) : [];
+    var _isContinuation = action.type === "continue" ||
+        (ctxIntimacy && ctxIntimacy.lastAction && ctxIntimacy.lastAction.actId === (action.actId || action.id));
+    var _recentSceneBlock = "";
+    if (_recentBeats.length) {
+        _recentSceneBlock = "RECENT BEATS (what was just narrated — do NOT reuse their imagery or phrasing):\n" +
+            _recentBeats.map(function (b) { return "- " + b; }).join("\n");
+        if (_isContinuation) {
+            _recentSceneBlock += "\nThis is a CONTINUATION of the ongoing act: progress the scene — deeper, faster, more intense, or a new sensation, per the STATE. Never restate a recent beat.";
+        }
+    }
+
     const prompt = `
-You are polishing a sentence from a sex scene in a text adventure game.
+You are writing an NPC's immediate reaction in a sex scene in a text adventure game.
 The NPC is ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}.${npc.temperament ? ` Temperament: ${npc.temperament}.` : ""}${npc.personalityTraits && npc.personalityTraits.length ? ` Traits: ${npc.personalityTraits.join(", ")}.` : ""}${_speciesContext}${_speechContext}${_temperamentInflection}
 
 INSTRUCTIONS:
-${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Make it read like a clean, well-written sentence in a published novel — not a rough draft." : "- Fix grammar, polish sentence structure, and refine the BASE RESPONSE below. Make it read like a clean, well-written sentence in a published novel — not a rough draft."}
-- Make the language more vivid and erotic, but keep the same meaning, the same act, and the same details. Do NOT invent anything new.
+${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Make it read like clean, well-written prose in a published novel — not a rough draft." : "- AUTHOR her reaction fresh from the STATE below. The BASE RESPONSE lists the FACTS of this beat (what her body does, sounds, sensations) — take the facts, NOT the phrasing. Write it in her own voice, as clean novel prose."}
+- Stay consistent with the facts: same act, same body parts, same sensations as the BASE RESPONSE. You may add vivid physical detail drawn from the ANATOMY and STATE context, but never contradict it.
 - The act: ${action.tool} ${action.verb} ${action.target} (${actTypeName}).${actDescription.includes("NOT about vaginal sex") ? " Do NOT describe penetration or vaginal sex unless the base response describes it." : ""}
 - Do NOT invent new body parts, actions, or context not in the base response.
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
 ${_dialogueRule}
 ${_sampleModeLines}
 - Your output is ONLY the NPC's immediate REACTION to the act: her body, her sounds, her face, her words. The player's action is described separately — do NOT re-narrate it. Cut any "as you push/slide/fill" clause that describes what the PLAYER does.
-- Keep it SHORT: one or two sentences, under 25 words total. This is a reaction beat, not a paragraph.
-- If the base response includes a sound (grunt, gasp, squeal), keep it.
+- One to three complete, grammatical sentences — never fragments. Under 45 words. This is a reaction beat, not a paragraph.
+- If the base response includes a sound (grunt, gasp, squeal), keep that reaction.
 - If the base response mentions depth, pressure, or a specific body part, keep that detail.
 
 STYLE — write clear, direct, grammatically correct English:
@@ -3581,11 +3652,12 @@ ACT: ${action.tool} ${action.verb} ${action.target} (${actTypeName})
 ${positionContext} | ${clothingContext} | ${arousalContext} | ${penetrationContext}
 ${anatomyContext ? "\n" + anatomyContext : ""}
 ${getSizeContext(player, npc) ? "\n" + getSizeContext(player, npc) : ""}
+${_recentSceneBlock ? "\n" + _recentSceneBlock + "\n" : ""}
 
 ${_baseLabel}:
 "${templateResponse || ""}"
 
-IMPORTANT: Output ONLY the polished response text. No explanations, no commentary, no meta-discussion. If the base response is a fragment, complete it into a full sentence. Just output the final polished text.
+IMPORTANT: Output ONLY the reaction text. No explanations, no commentary, no meta-discussion. Just the final text.
 
 ${(() => {
     var _intimacy = ctxIntimacy || context.intimacy || null;
