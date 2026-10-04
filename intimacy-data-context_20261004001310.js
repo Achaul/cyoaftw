@@ -225,11 +225,9 @@ var NATURAL_LABELS = {
     // Stage 2: Clothing Removal
     remove_player_top: "Remove your top",
     remove_player_bottom: "Remove your bottom",
-    remove_player_underwear: "Remove your underwear",
     undress_player: "Undress yourself",
     remove_npc_top: "Remove their top",
     remove_npc_bottom: "Remove their bottom",
-    remove_npc_underwear: "Remove their underwear",
     undress_npc: "Undress them completely",
     move_top_aside: "Move your top aside",
     pull_down_bottom: "Pull down your bottom",
@@ -249,7 +247,7 @@ var NATURAL_LABELS = {
     suck_nipples: "Suck their nipples",
     bite_nipples: "Nibble their nipples",
     
-    caress_stomach: "Run your hand over their stomach",
+    caress_stomach: "Caress their stomach",
     stroke_back: "Stroke their back",
     massage_shoulders: "Massage their shoulders",
     grip_hips: "Grip their hips",
@@ -259,26 +257,26 @@ var NATURAL_LABELS = {
     // Genital actions - suggestive
     rub_pussy: "Touch their {pussy}",
     tease_pussy: "Tease their {pussy}",
-    press_pussy: "Press against their {pussy}",
+    press_pussy: "Press {pussy} with your hand",
     spread_pussy: "Part their {pussy} lips",
-    finger_pussy: "Explore their {pussy} with your fingers",
-    enter_pussy_finger: "Slide your fingers inside their {pussy}",
-    finger_pussy_fast: "Finger their {pussy} quickly",
+    finger_pussy: "Finger their {pussy}",
+    enter_pussy_finger: "Slide fingers into {pussy}",
+    finger_pussy_fast: "Finger their {pussy} fast",
     kiss_pussy: "Kiss their {pussy}",
     lick_pussy: "Taste their {pussy}",
-    eat_pussy: "Pleasure them with your mouth on their {pussy}",
-    tongue_pussy: "Use your tongue on their {pussy}",
-    grind_pussy: "Grind against their {pussy}",
+    eat_pussy: "Eat their {pussy}",
+    tongue_pussy: "Tongue their {pussy}",
+    grind_pussy: "Grind your groin on {pussy}",
     
-    press_penis_pussy: "Press your {penis} against their {pussy}",
-    enter_pussy: "Enter their {pussy}",
-    thrust_pussy: "Thrust into their {pussy}",
-    pump_pussy: "Move with their {pussy}",
-    fuck_pussy: "Take their {pussy}",
-    pound_pussy: "Pound into their {pussy}",
+    press_penis_pussy: "Press your {penis} on {pussy}",
+    enter_pussy: "Enter {pussy} with your {penis}",
+    thrust_pussy: "Thrust your {penis} in {pussy}",
+    pump_pussy: "Pump your {penis} in {pussy}",
+    fuck_pussy: "Fuck {pussy} with your {penis}",
+    pound_pussy: "Pound your {penis} into {pussy}",
     
     // Vagina on penis (player bottom)
-    impale_penis: "Lower yourself onto their {penis}",
+    impale_penis: "Lower onto their {penis}",
     ride_penis: "Ride their {penis}",
     bounce_penis: "Bounce on their {penis}",
     grind_penis: "Grind on their {penis}",
@@ -288,25 +286,25 @@ var NATURAL_LABELS = {
     squeeze_ass: "Squeeze their {buttocks}",
     assjob: "Hotdog their {buttocks}",
     slap_ass: "Spank their {buttocks}",
-    spread_cheeks: "Spread their {buttocks} cheeks",
+    spread_cheeks: "Spread their cheeks",
     touch_anus: "Touch their {anus}",
-    press_anus: "Press against their {anus}",
+    press_anus: "Press {anus} with your hand",
     rub_anus: "Rub their {anus}",
-    finger_anus: "Tease their {anus} with your finger",
-    enter_anus_finger: "Slide your finger inside their {anus}",
-    finger_anus_fast: "Finger their {anus} quickly",
+    finger_anus: "Finger-tease their {anus}",
+    enter_anus_finger: "Slide a finger into {anus}",
+    finger_anus_fast: "Finger their {anus} fast",
     kiss_anus: "Kiss their {anus}",
     lick_anus: "Lick their {anus}",
     suck_anus: "Suck on their {anus}",
-    rim_anus: "Rim their {anus}",
-    tongue_anus: "Use your tongue on their {anus}",
-    press_penis_anus: "Press your {penis} against their {anus}",
-    enter_anus: "Enter their {anus} from behind",
-    thrust_anus: "Thrust into their {anus} from behind",
-    pound_anus: "Pound into their {anus} from behind",
-    fuck_anus: "Take their {anus} from behind",
-    accept_penis_anus: "Ask them to enter your {anus}",
-    take_penis_anus: "Take their {penis} deeper into your {anus}",
+    rim_anus: "Rim {anus} with your tongue",
+    tongue_anus: "Tongue their {anus}",
+    press_penis_anus: "Press your {penis} on {anus}",
+    enter_anus: "Enter {anus} with your {penis}",
+    thrust_anus: "Thrust your {penis} in {anus}",
+    pound_anus: "Pound your {penis} into {anus}",
+    fuck_anus: "Fuck {anus} with your {penis}",
+    accept_penis_anus: "Ask for their {penis} in your {anus}",
+    take_penis_anus: "Take their {penis} deeper",
     
     // Penis actions (on NPC)
     stroke_penis: "Stroke their {penis}",
@@ -314,17 +312,19 @@ var NATURAL_LABELS = {
     squeeze_penis: "Squeeze their {penis}",
     kiss_penis: "Kiss their {penis}",
     lick_penis: "Lick their {penis}",
-    suck_penis: "Take their {penis} in your mouth",
-    deepthroat_penis: "Take their {penis} deep",
+    suck_penis: "Suck their {penis}",
+    deepthroat_penis: "Deepthroat their {penis}",
+    fuck_mouth: "Facefuck them with your {penis}",
     
     // On player
     suck_player_nipples: "Ask them to suck your {nipples}",
-    lick_player_pussy: "Ask them to pleasure you with their mouth on your {pussy}",
+    accept_penis_mouth: "Offer your mouth for their {penis}",
+    lick_player_pussy: "Ask them to eat your {pussy}",
     eat_player_pussy: "Ask them to taste your {pussy}",
-    suck_player_penis: "Ask them to please you with their mouth on your {penis}",
+    suck_player_penis: "Ask them to suck your {penis}",
     stroke_player_penis: "Ask them to stroke your {penis}",
-    titjob_player: "Ask them to wrap their breasts around your {penis}",
-    deepthroat_player_penis: "Ask them to take your {penis} deep",
+    titjob_player: "Ask them to titfuck your {penis}",
+    deepthroat_player_penis: "Ask them to deepthroat you",
     lick_player_balls: "Ask them to lick your {balls}",
     suck_player_balls: "Ask them to suck your {balls}",
     lick_player_anus: "Ask them to lick your {anus}",
@@ -332,7 +332,7 @@ var NATURAL_LABELS = {
     
     // Climax actions - natural
     ejaculate_in_vagina: "Finish inside their {pussy}",
-    ejaculate_in_anus: "Finish inside their {anus} from behind",
+    ejaculate_in_anus: "Finish inside their {anus}",
     ejaculate_in_mouth: "Release in their mouth",
     ejaculate_on_face: "Mark their face",
     ejaculate_on_chest: "Finish on their {chest}",
@@ -356,34 +356,25 @@ var NATURAL_LABELS = {
  * If npc and player are provided, uses gendered labels when available
  */
 function getNaturalLabel(actId, npc, player) {
-    // First check NATURAL_LABELS for override
+    // First check NATURAL_LABELS for override — the curated menu label wins
+    // over the raw act label; gendering is applied to the natural label
+    // itself (via a temp act carrying the real act's target), never to the
+    // raw act label, so a gendered "Enter her anus" can't shadow the
+    // curated "Enter their {anus} with your {penis}".
     if (NATURAL_LABELS[actId]) {
-        // If gendered label function exists and we have npc/player info, try to apply gender
         if (typeof getGenderedLabel === 'function' && npc && player) {
-            // Create a mock act object with the NATURAL_LABEL as the label
-            // This allows getGenderedLabel to properly add possessive pronouns
-            const naturalLabel = NATURAL_LABELS[actId];
-            const act = getAct(actId);
-            if (act) {
-                // Try to get gendered version using the act's target info
-                const gendered = getGenderedLabel(act, npc, player);
-                if (gendered && gendered !== act.label) {
-                    return gendered;
-                }
-            }
-            // If act-based gendering didn't work or act not found,
-            // try to gender the natural label directly by finding the target
             const actForNatural = getAct(actId);
             if (actForNatural && actForNatural.target) {
-                // Create a temporary act with the natural label and the act's target
-                // Include playerIsBottom so receive actions are handled correctly
+                // Gender the natural label directly using the act's target
+                // info, so possessive/token handling works the same as for
+                // act labels (playerIsBottom included for receive actions).
                 const tempAct = {
-                    label: naturalLabel,
+                    label: NATURAL_LABELS[actId],
                     target: actForNatural.target,
                     playerIsBottom: actForNatural.playerIsBottom
                 };
                 const genderedNatural = getGenderedLabel(tempAct, npc, player);
-                if (genderedNatural && genderedNatural !== naturalLabel) {
+                if (genderedNatural && genderedNatural !== NATURAL_LABELS[actId]) {
                     return genderedNatural;
                 }
             }

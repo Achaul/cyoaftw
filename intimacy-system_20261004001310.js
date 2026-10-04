@@ -1328,6 +1328,7 @@ function endIntimacyEncounter(npc) {
     
     // Reset penetration state
     npc.intimacy.penetration = { active: false, tool: null, target: null, depth: 0 };
+    npc.intimacy.engagedActs = [];
     
     // Reset encounter tracking flags (impact count, nipple play count, etc.)
     npc.intimacy.encounterFlags = {
@@ -1342,6 +1343,7 @@ function endIntimacyEncounter(npc) {
     // (no stale "continue" button or transition narration from a previous session)
     npc.intimacy.lastAction = null;
     npc.intimacy.actionHistory = [];
+    npc.intimacy.engagedActs = [];
     
     // Clear sensory fragment anti-repetition tracker and recent scene beats
     if (npc.intimacy._recentNarratives) delete npc.intimacy._recentNarratives;
@@ -1645,7 +1647,10 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     }
 
     // Check position requirement
-    if (act.pos && act.pos.length > 0 && !act.pos.includes(positionId)) {
+    // Clothing (undressing) acts are exempt from the position requirement:
+    // valid in every position while the relevant item is still worn (the
+    // reqCloth / worn checks below enforce that).
+    if (act.type !== ACT_TYPES.CLOTHING && act.pos && act.pos.length > 0 && !act.pos.includes(positionId)) {
         return { valid: false, reason: "no position" };
     }
     
@@ -1812,8 +1817,11 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
             }
         }
     } else {
-        // No active penetration: CONTINUE actions are not available
-        if (act.type === ACT_TYPES.CONTINUE) {
+        // No active penetration: CONTINUE actions are not available.
+        // External climax acts (ejaculate_on_*, consequence "external_semen")
+        // are exempt — they are release beats performed right after pulling
+        // out, when penetration is deliberately no longer active.
+        if (act.type === ACT_TYPES.CONTINUE && act.consequence !== "external_semen") {
             return { valid: false, reason: "not penetrated" };
         }
     }
@@ -2367,6 +2375,176 @@ function _grantIntimacyProgression(npc, player, act) {
 /**
  * Execute an intimacy action
  */
+// ============================================================================
+// LUST PROGRESSION (relationship stat: npc.memory.lust, 0-100)
+// ============================================================================
+
+// Kink acts (impact, watersports, anal) only BUILD lust once the NPC is
+// broadly comfortable. 60 lines up with the watersport gate in
+// checkActionValidity: at 50-59 an impact act is already performable, but
+// the NPC is not comfortable enough for it to raise lust yet.
+const LUST_KINK_DISINHIBITION_MIN = 60;
+// How much a kink act LOWERS lust when performed below that comfort level.
+const LUST_KINK_PENALTY = 1.0;
+
+function _intimacyActIsAnal(act) {
+    const target = String((act && act.target) || "").toLowerCase();
+    const id = String((act && act.id) || "").toLowerCase();
+    return target === "anus" || id.indexOf("anal") !== -1 || id.indexOf("anus") !== -1;
+}
+
+function _intimacyActInvolvesPenis(act) {
+    if (!act) return false;
+    const tool = String(act.tool || "").toLowerCase();
+    const target = String(act.target || "").toLowerCase();
+    return tool === "penis" || tool === "cock" || tool === "dick" ||
+        target === "penis" || target === "cock" || target === "dick";
+}
+
+// Male-rate profile for male NPCs; penis-bearing others (futanari) follow
+// the male rates too, everyone else the female rates. Female is checked
+// first so "female" never matches the male branch.
+function _intimacyLustProfile(npc) {
+    const gender = String((npc && npc.gender) || "").toLowerCase();
+    if (gender === "female" || gender === "f" || gender.startsWith("female")) return "female";
+    if (gender === "male" || gender === "m" || gender.startsWith("male")) return "male";
+    if (npc && npc.anatomy && (npc.anatomy.penis || npc.anatomy.cock)) return "male";
+    return "female";
+}
+
+/**
+ * Gender-based npc.memory.lust delta for one executed intimacy act:
+ * - female profile: foreplay (non-penetrative acts) +1.25,
+ *   intercourse (PENETRATE/CONTINUE) +0.75
+ * - male profile: penis-involving acts +1.5, anything else +0.6
+ * - impact / watersports / anal acts only ADD lust when the NPC's broad
+ *   disinhibition is at least LUST_KINK_DISINHIBITION_MIN; below that they
+ *   SUBTRACT LUST_KINK_PENALTY instead.
+ * Clothing and END acts return 0 (no lust effect).
+ */
+function getIntimacyLustDelta(npc, act) {
+    if (!npc || !act || !act.type) return 0;
+    if (act.type === ACT_TYPES.CLOTHING || act.type === ACT_TYPES.END) return 0;
+
+    const isKinkAct = act.type === ACT_TYPES.IMPACT ||
+        act.type === ACT_TYPES.WATERSPORT ||
+        _intimacyActIsAnal(act);
+    if (isKinkAct && _getMaxCategoryDisinhibition(npc) < LUST_KINK_DISINHIBITION_MIN) {
+        return -LUST_KINK_PENALTY;
+    }
+
+    if (_intimacyLustProfile(npc) === "male") {
+        return _intimacyActInvolvesPenis(act) ? 1.5 : 0.6;
+    }
+    const isIntercourse = act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE;
+    return isIntercourse ? 0.75 : 1.25;
+}
+
+/**
+ * Apply the gender-based lust delta for an executed act to npc.memory.lust
+ * (clamped 0-100; fractional deltas accumulate as floats and displays floor).
+ */
+function applyIntimacyLustGain(npc, act) {
+    if (!npc || !npc.memory) return;
+    const delta = getIntimacyLustDelta(npc, act);
+    if (!delta) return;
+    if (typeof npc.memory.lust !== "number") npc.memory.lust = 0;
+    npc.memory.lust = Math.max(0, Math.min(100, npc.memory.lust + delta));
+}
+
+// ============================================================================
+// ENGAGED ACT SLOTS (multi-act simultaneity)
+// ============================================================================
+// The player can be engaged in several acts at once: one mouth act (kissing,
+// licking), one hand act (groping, fingering) and one genital act
+// (penetration, grinding), tracked in intimacy.engagedActs. Choosing a new
+// act in an occupied slot disengages the previous one; the action menu
+// highlights engaged acts with a border and "Continue" continues every
+// engaged act. One-shot acts (impact, watersports, climax) and receive acts
+// (the NPC acting on the player, which run through the paced receive flow)
+// do not occupy slots, but impact play frees the hand slot and watersports
+// frees the genitals slot when performed. Only one genital act can be
+// engaged at a time, so
+// the single intimacy.penetration depth state stays safe.
+
+function getIntimacyActSlot(act) {
+    if (!act || !act.type) return null;
+    if (act.playerIsBottom === true) return null;
+    if (act.triggersClimax) return null;
+    if (act.type !== ACT_TYPES.TEASE &&
+        act.type !== ACT_TYPES.PENETRATE &&
+        act.type !== ACT_TYPES.CONTINUE) return null;
+    const tool = String(act.tool || "").toLowerCase();
+    if (tool === "mouth" || tool === "tongue" || tool === "lips") return "mouth";
+    if (tool === "hand" || tool === "fingers") return "hand";
+    if (tool === "penis" || tool === "cock" || tool === "dick" ||
+        tool === "groin" || tool === "vagina" || tool === "pussy") return "genitals";
+    return "other";
+}
+
+function getEngagedActs(npc) {
+    const intimacy = npc && npc.intimacy;
+    if (!intimacy) return [];
+    if (!Array.isArray(intimacy.engagedActs)) intimacy.engagedActs = [];
+    return intimacy.engagedActs;
+}
+
+function getEngagedActIds(npc) {
+    return getEngagedActs(npc).map(e => e && e.actId).filter(Boolean);
+}
+
+function isActEngaged(npc, actId) {
+    return getEngagedActIds(npc).indexOf(actId) !== -1;
+}
+
+// Slot-specific disengage for END acts (pull out, stop fingering, ...).
+// Generic stops clear everything; unknown END acts clear everything too.
+function _clearEngagedActsForEndAct(npc, act) {
+    if (!getEngagedActs(npc).length) return;
+    const id = String((act && act.id) || "").toLowerCase();
+    if (id === "stop" || id === "pause" || id === "step_away") {
+        npc.intimacy.engagedActs = [];
+        return;
+    }
+    let slot = null;
+    if (id.indexOf("finger") !== -1) slot = "hand";
+    else if (id.indexOf("pull_out") !== -1 || id.indexOf("pull_off") !== -1) slot = "genitals";
+    if (slot) {
+        npc.intimacy.engagedActs = npc.intimacy.engagedActs.filter(e => e.slot !== slot);
+    } else {
+        npc.intimacy.engagedActs = [];
+    }
+}
+
+// Update engaged-act tracking for a freshly executed act: disengage the
+// previous act occupying the same slot (if any), then engage this one.
+function _updateEngagedActsForAct(npc, act) {
+    if (!npc || !npc.intimacy || !act) return;
+    if (act.type === ACT_TYPES.END) {
+        _clearEngagedActsForEndAct(npc, act);
+        return;
+    }
+    // Impact play needs a free hand: disengage any hand-slot act first.
+    // Climax acts typed IMPACT (ejaculate_on_*) are release beats, not
+    // rough play, and do NOT free the hand.
+    if (act.type === ACT_TYPES.IMPACT && !act.triggersClimax) {
+        npc.intimacy.engagedActs = getEngagedActs(npc).filter(e => e.slot !== "hand");
+        return;
+    }
+    // Watersports needs the genitals free: disengage any genital act first.
+    if (act.type === ACT_TYPES.WATERSPORT) {
+        npc.intimacy.engagedActs = getEngagedActs(npc).filter(e => e.slot !== "genitals");
+        return;
+    }
+    const slot = getIntimacyActSlot(act);
+    if (!slot) return;
+    const engaged = getEngagedActs(npc);
+    npc.intimacy.engagedActs = engaged.filter(e => e.slot !== slot || e.actId === act.id);
+    if (!isActEngaged(npc, act.id)) {
+        npc.intimacy.engagedActs.push({ actId: act.id, slot: slot });
+    }
+}
+
 async function executeIntimacyAction(npc, player, actId, positionId = null) {
     if (!npc || !player || !hasAct(actId)) return null;
     
@@ -2423,6 +2601,16 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         intimacy.encounterFlags.nipplePlayCount = (intimacy.encounterFlags.nipplePlayCount || 0) + 1;
     }
     
+    // Multi-act engagement: track which acts are ongoing (per body-tool
+    // slot) so the menu can highlight them and Continue can continue them
+    // all. See getIntimacyActSlot.
+    _updateEngagedActsForAct(npc, act);
+
+    // Lust progression: gender-based npc.memory.lust gain (or loss for
+    // impact/watersports/anal below the disinhibition threshold).
+    // See getIntimacyLustDelta.
+    applyIntimacyLustGain(npc, act);
+
     // Handle clothing actions
     if (act.type === ACT_TYPES.CLOTHING) {
         const result = handleClothingAction(npc, player, act, clothingState);
@@ -2678,6 +2866,13 @@ function handleClothingAction(npc, player, act, clothingState) {
         } else {
             // Remove action
             targetClothing[act.clothingItem] = false;
+        }
+        // Underwear does not map to a real equipment slot — the undergarments
+        // layer comes off together with the bottom (remove or pull down), so
+        // the NUDE clothing requirement stays reachable without a separate
+        // underwear act.
+        if (act.clothingItem === "bottom") {
+            targetClothing.undergarments = false;
         }
     }
     
@@ -3574,6 +3769,7 @@ function buildIntimacyPrompt(context) {
     var actDescription = `The player is using their ${action.tool} to ${action.verb} the NPC's ${action.target}. This is a ${actTypeName} act. The NPC's reaction should be about the sensation of ${action.tool} on ${action.target}, NOT about vaginal sex or penetration unless the act IS penetration.`;
 
     // Construct the full prompt
+    var _pos = (typeof getPossessivePronoun === "function" && npc) ? getPossessivePronoun(npc) : "their";
     var _species = (npc.species || "Human").toLowerCase();
     var _isUncivilized = _species && !isCivilizedSpecies(_species);
     var _speechPattern = npc.speechPattern || npc.speechStyle || "";
@@ -3632,14 +3828,14 @@ You are writing an NPC's immediate reaction in a sex scene in a text adventure g
 The NPC is ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}.${npc.temperament ? ` Temperament: ${npc.temperament}.` : ""}${npc.personalityTraits && npc.personalityTraits.length ? ` Traits: ${npc.personalityTraits.join(", ")}.` : ""}${_speciesContext}${_speechContext}${_temperamentInflection}
 
 INSTRUCTIONS:
-${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Make it read like clean, well-written prose in a published novel — not a rough draft." : "- AUTHOR her reaction fresh from the STATE below. The BASE RESPONSE lists the FACTS of this beat (what her body does, sounds, sensations) — take the facts, NOT the phrasing. Write it in her own voice, as clean novel prose."}
+${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Make it read like clean, well-written prose in a published novel — not a rough draft." : "- AUTHOR " + _pos + " reaction fresh from the STATE below. The BASE RESPONSE lists the FACTS of this beat (what " + _pos + " body does, sounds, sensations) — take the facts, NOT the phrasing. Write it in " + _pos + " own voice, as clean novel prose."}
 - Stay consistent with the facts: same act, same body parts, same sensations as the BASE RESPONSE. You may add vivid physical detail drawn from the ANATOMY and STATE context, but never contradict it.
 - The act: ${action.tool} ${action.verb} ${action.target} (${actTypeName}).${actDescription.includes("NOT about vaginal sex") ? " Do NOT describe penetration or vaginal sex unless the base response describes it." : ""}
 - Do NOT invent new body parts, actions, or context not in the base response.
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
 ${_dialogueRule}
 ${_sampleModeLines}
-- Your output is ONLY the NPC's immediate REACTION to the act: her body, her sounds, her face, her words. The player's action is described separately — do NOT re-narrate it. Cut any "as you push/slide/fill" clause that describes what the PLAYER does.
+- Your output is ONLY the NPC's immediate REACTION to the act: ${_pos} body, ${_pos} sounds, ${_pos} face, ${_pos} words. The player's action is described separately — do NOT re-narrate it. Cut any "as you push/slide/fill" clause that describes what the PLAYER does.
 - One to three complete, grammatical sentences — never fragments. Under 45 words. This is a reaction beat, not a paragraph.
 - If the base response includes a sound (grunt, gasp, squeal), keep that reaction.
 - If the base response mentions depth, pressure, or a specific body part, keep that detail.
@@ -3914,14 +4110,32 @@ function pickUnique(arr, intimacy, key) {
 // Each fragment is appended to the base narrative sentence.
 // ============================================================================
 
+/**
+ * Resolve {npcP}/{npcS}/{npcO} placeholders in template text to the
+ * NPC's actual pronouns, so flavor and reaction templates reflect
+ * the actor's gender instead of assuming a female NPC.
+ * {npcP} = possessive (her/his/their), {npcS} = subject (she/he/they),
+ * {npcO} = object (her/him/them).
+ */
+function applyNPCPronouns(npc, text) {
+    if (text === null || text === undefined) return text;
+    var p = (typeof getPossessivePronoun === "function" && npc) ? getPossessivePronoun(npc) : "their";
+    var s = (typeof getSubjectPronoun === "function" && npc) ? getSubjectPronoun(npc) : "They";
+    var o = (typeof getObjectPronoun === "function" && npc) ? getObjectPronoun(npc) : "them";
+    return String(text)
+        .replace(/\{npcP\}/g, p)
+        .replace(/\{npcS\}/g, s)
+        .replace(/\{npcO\}/g, o);
+}
+
 var SENSORY_FRAGMENTS = {
     // Friction/sensation — varies by body part
     friction: {
         vagina: [
             ", the slick heat enveloping you",
-            ", her inner walls clinging with each stroke",
+            ", {npcP} inner walls clinging with each stroke",
             ", the wet friction pulling at your {yourTool}",
-            ", her depths gripping you with each thrust",
+            ", {npcP} depths gripping you with each thrust",
             ", the soft wet flesh yielding around you"
         ],
         anus: [
@@ -3932,11 +4146,11 @@ var SENSORY_FRAGMENTS = {
             ", the tight friction sending sparks through you"
         ],
         mouth: [
-            ", the wet warmth of her mouth enveloping you",
-            ", her tongue working against the underside",
+            ", the wet warmth of {npcP} mouth enveloping you",
+            ", {npcP} tongue working against the underside",
             ", the suction pulling at your tip",
-            ", the slick pressure of her cheeks hollowing around you",
-            ", the wet heat of her throat pulsing"
+            ", the slick pressure of {npcP} cheeks hollowing around you",
+            ", the wet heat of {npcP} throat pulsing"
         ],
         breasts: [
             ", the soft flesh yielding under your touch",
@@ -3949,20 +4163,20 @@ var SENSORY_FRAGMENTS = {
             ", the soft skin stretching taut as you squeeze"
         ],
         general: [
-            ", the warmth of her body against yours",
+            ", the warmth of {npcP} body against yours",
             ", the soft skin beneath your touch",
-            ", the heat radiating from her body"
+            ", the heat radiating from {npcP} body"
         ]
     },
 
     // Fluid descriptors — only when aroused/lubricated
     fluids: {
         vagina: [
-            ", her arousal coating your {yourTool}",
-            ", the slick sounds of her wetness filling the air",
-            ", a thread of her juices stretching between you",
-            ", her slick folds parting easily for you",
-            ", the wet heat of her arousal soaking your skin"
+            ", {npcP} arousal coating your {yourTool}",
+            ", the slick sounds of {npcP} wetness filling the air",
+            ", a thread of {npcP} juices stretching between you",
+            ", {npcP} slick folds parting easily for you",
+            ", the wet heat of {npcP} arousal soaking your skin"
         ],
         anus: [
             ", the lube easing your passage",
@@ -3970,11 +4184,11 @@ var SENSORY_FRAGMENTS = {
             ", the slickness letting you glide deeper"
         ],
         mouth: [
-            ", saliva dripping from the corners of her mouth",
-            ", the wet sounds of her mouth working you"
+            ", saliva dripping from the corners of {npcP} mouth",
+            ", the wet sounds of {npcP} mouth working you"
         ],
         general: [
-            ", her body slick with arousal",
+            ", {npcP} body slick with arousal",
             ", the wet heat between you growing"
         ]
     },
@@ -3982,9 +4196,9 @@ var SENSORY_FRAGMENTS = {
     // Skin/pigmentation — from NPC anatomy
     skin: {
         vagina: [
-            ", her {interiorColor} folds parting for you",
+            ", {npcP} {interiorColor} folds parting for you",
             ", the {skinTone} skin flushing with heat",
-            ", the {interiorColor} of her inner lips glistening"
+            ", the {interiorColor} of {npcP} inner lips glistening"
         ],
         anus: [
             ", the {skinTone} ring of muscle stretching around you",
@@ -3992,25 +4206,25 @@ var SENSORY_FRAGMENTS = {
             ", the {skinTone} flesh clenching tight"
         ],
         breasts: [
-            ", her {skinTone} skin warm under your hands",
+            ", {npcP} {skinTone} skin warm under your hands",
             ", the {skinTone} curves flushed with arousal"
         ],
         general: [
-            ", her {skinTone} skin glowing with heat",
-            ", the {skinTone} flush spreading across her body"
+            ", {npcP} {skinTone} skin glowing with heat",
+            ", the {skinTone} flush spreading across {npcP} body"
         ]
     },
 
     // Pubic hair — from NPC anatomy
     pubic: {
         vagina: [
-            ", parting her {pubicDesc} to reach her depths",
-            ", pressing through her {pubicDesc}",
-            ", her {pubicDesc} brushing against your skin"
+            ", parting {npcP} {pubicDesc} to reach {npcP} depths",
+            ", pressing through {npcP} {pubicDesc}",
+            ", {npcP} {pubicDesc} brushing against your skin"
         ],
         anus: [
-            ", the {pubicDesc} around her hole tickling your {yourTool}",
-            ", the coarse hair dusting her cleft brushing against you"
+            ", the {pubicDesc} around {npcP} hole tickling your {yourTool}",
+            ", the coarse hair dusting {npcP} cleft brushing against you"
         ],
         general: []
     },
@@ -4020,35 +4234,35 @@ var SENSORY_FRAGMENTS = {
         " You pull back until only your tip remains inside, then drive back in.",
         " You withdraw halfway, the suction tugging at your shaft, before sinking deep again.",
         " You slide almost fully out, the cool air hitting your wet shaft, then plunge back in.",
-        " You pull back slowly, feeling every inch drag against her walls, before thrusting home."
+        " You pull back slowly, feeling every inch drag against {npcP} walls, before thrusting home."
     ],
 
     // Size difference descriptors — only injected when player and NPC differ
     // in size. Uses {frameDesc} placeholder replaced with the relative size phrase.
     sizeDifference: {
         "player-larger": [
-            ", her small frame dwarfed beneath you",
-            ", her petite body struggling to take your full size",
-            ", her smaller frame fitting beneath you like she was made for it",
-            ", the size difference making her gasp with each thrust"
+            ", {npcP} small frame dwarfed beneath you",
+            ", {npcP} petite body struggling to take your full size",
+            ", {npcP} snug depths stretched tight around your girth, every inch a tight fit",
+            ", the size difference making {npcP} gasp with each thrust"
         ],
         "player-much-larger": [
-            ", her tiny body barely able to accommodate your girth",
-            ", the sheer size difference stretching her to her limit",
-            ", her small frame shaking as your cock fills her completely",
-            ", her diminutive body trembling under your much larger frame"
+            ", {npcP} tiny body barely able to accommodate your girth",
+            ", the sheer size difference stretching {npcP} to {npcP} limit",
+            ", {npcP} small frame shaking as your cock fills {npcP} completely",
+            ", {npcP} diminutive body trembling under your much larger frame"
         ],
         "npc-larger": [
-            ", her larger body enveloping you with warmth",
-            ", her ample frame pressing against you with weight and heat",
-            ", her size making your cock feel small inside her",
-            ", her bigger body swallowing you in its depths"
+            ", {npcP} larger body enveloping you with warmth",
+            ", {npcP} ample frame pressing against you with weight and heat",
+            ", {npcP} loose, easy depths taking your whole length without resistance",
+            ", {npcP} soft, puffy heat swallowing your cock with room to spare, {npcP} size making you feel small inside {npcP}"
         ],
         "npc-much-larger": [
-            ", her massive frame dwarfing you beneath her",
-            ", her enormous body engulfing your cock with ease",
-            ", the size difference making you feel small inside her",
-            ", her towering body pressing you down with its weight"
+            ", {npcP} massive frame dwarfing you beneath {npcP}",
+            ", {npcP} enormous body engulfing your cock with ease",
+            ", the size difference making you feel small inside {npcP}",
+            ", {npcP} towering body pressing you down with its weight"
         ]
     },
 
@@ -4056,15 +4270,15 @@ var SENSORY_FRAGMENTS = {
     // or a distinctive skin tone. Uses {skinDesc} replaced at runtime.
     species: {
         nonHuman: [
-            ", her {skinDesc} skin warm beneath your hands",
-            ", the {skinDesc} of her body pressed against you",
-            ", the exotic {skinDesc} of her flesh yielding to your touch",
-            ", running your hands over her {skinDesc} skin"
+            ", {npcP} {skinDesc} skin warm beneath your hands",
+            ", the {skinDesc} of {npcP} body pressed against you",
+            ", the exotic {skinDesc} of {npcP} flesh yielding to your touch",
+            ", running your hands over {npcP} {skinDesc} skin"
         ],
         distinctTone: [
-            ", her {skinDesc} complexion flushing with heat",
-            ", the {skinDesc} of her skin glistening with a light sheen",
-            ", her {skinDesc} body warm and alive under your touch"
+            ", {npcP} {skinDesc} complexion flushing with heat",
+            ", the {skinDesc} of {npcP} skin glistening with a light sheen",
+            ", {npcP} {skinDesc} body warm and alive under your touch"
         ]
     }
 };
@@ -4196,8 +4410,8 @@ function getSensoryFragment(npc, target, intimacy, options) {
     }
 
     var result = {};
-    if (clauses.length) result.clauses = clauses.join("");
-    if (sentences.length) result.sentences = sentences.join(" ");
+    if (clauses.length) result.clauses = applyNPCPronouns(npc, clauses.join(""));
+    if (sentences.length) result.sentences = applyNPCPronouns(npc, sentences.join(" "));
     return (result.clauses || result.sentences) ? result : "";
 }
 
@@ -4276,7 +4490,7 @@ function buildHiddenFlavorContext(npc, target, intimacy, options) {
     }
 
     if (!flavors.length) return "";
-    return "HIDDEN FLAVOR (optional — weave 1-2 of these into your polish if they fit):\n" + flavors.join("\n");
+    return applyNPCPronouns(npc, "HIDDEN FLAVOR (optional — weave 1-2 of these into your polish if they fit):\n" + flavors.join("\n"));
 }
 
 /**
@@ -4286,49 +4500,49 @@ function buildHiddenFlavorContext(npc, target, intimacy, options) {
 var BODY_PART_REACTIONS = {
     // Hair
     hair: {
-        mild: ["tilts her head", "closes her eyes briefly", "smiles softly", "sighs contentedly"],
+        mild: ["tilts {npcP} head", "closes {npcP} eyes briefly", "smiles softly", "sighs contentedly"],
         moderate: ["lets out a soft moan", "nuzzles into your touch", "murmurs", "arches slightly"],
-        high: ["gasps softly", "presses her head against your hand", "whispers your name", "shivers"],
-        intense: ["moans with delight", "grinds her head against you", "begs for more", "trembles"]
+        high: ["gasps softly", "presses {npcP} head against your hand", "whispers your name", "shivers"],
+        intense: ["moans with delight", "grinds {npcP} head against you", "begs for more", "trembles"]
     },
     
     // Breasts/Nipples
     breasts: {
-        mild: ["breathes a little faster", "lets out a soft sigh", "glances at you shyly", "bites her lip"],
+        mild: ["breathes a little faster", "lets out a soft sigh", "glances at you shyly", "bites {npcP} lip"],
         moderate: ["lets out a soft moan", "shifts closer to you", "presses into your touch", "gasps softly"],
         high: ["moans", "leans into your hands", "whispers encouragement", "shivers"],
-        intense: ["gasps and moans loudly", "pushes her chest toward you", "begs you not to stop", "trembles"]
+        intense: ["gasps and moans loudly", "pushes {npcP} chest toward you", "begs you not to stop", "trembles"]
     },
     nipples: {
-        mild: ["lets out a tiny gasp", "shivers slightly", "bits her lip", "tenses slightly"],
-        moderate: ["lets out a soft moan", "arches her back", "gasps", "presses into your touch"],
+        mild: ["lets out a tiny gasp", "shivers slightly", "bits {npcP} lip", "tenses slightly"],
+        moderate: ["lets out a soft moan", "arches {npcP} back", "gasps", "presses into your touch"],
         high: ["moans loudly", "twitches", "whispers your name", "grinds against you"],
-        intense: ["screams with pleasure", "begs for more", "trembles uncontrollably", "digs her nails into you"]
+        intense: ["screams with pleasure", "begs for more", "trembles uncontrollably", "digs {npcP} nails into you"]
     },
     
     // Vagina/Pussy
     vagina: {
         mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "smiles warmly"],
-        moderate: ["lets out a soft moan", "spreads her legs slightly", "gasps", "presses against your hand"],
+        moderate: ["lets out a soft moan", "spreads {npcP} legs slightly", "gasps", "presses against your hand"],
         high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers"],
-        intense: ["gasps and moans", "bucks her hips", "begs for more", "drips with arousal"]
+        intense: ["gasps and moans", "bucks {npcP} hips", "begs for more", "drips with arousal"]
     },
     pussy: {
         mild: ["lets out a soft sigh", "shifts slightly", "glances at you", "smiles warmly"],
-        moderate: ["lets out a soft moan", "spreads her legs slightly", "gasps", "presses against your hand"],
+        moderate: ["lets out a soft moan", "spreads {npcP} legs slightly", "gasps", "presses against your hand"],
         high: ["moans loudly", "grinds against your hand", "whispers encouragement", "shivers"],
-        intense: ["gasps and moans", "bucks her hips", "begs for more", "drips with arousal"]
+        intense: ["gasps and moans", "bucks {npcP} hips", "begs for more", "drips with arousal"]
     },
     clitoris: {
-        mild: ["lets out a tiny gasp", "shivers", "bits her lip", "tenses"],
-        moderate: ["lets out a soft moan", "presses against your fingers", "gasps sharply", "arches her back"],
+        mild: ["lets out a tiny gasp", "shivers", "bits {npcP} lip", "tenses"],
+        moderate: ["lets out a soft moan", "presses against your fingers", "gasps sharply", "arches {npcP} back"],
         high: ["moans loudly", "grinds against you", "whispers please don't stop", "trembles with pleasure"],
         intense: ["screams with pleasure", "bucks wildly", "begs desperately", "nearly climaxing"]
     },
     
     // Buttocks/Anus
     buttocks: {
-        mild: ["lets out a soft sigh", "shifts her weight", "glances back at you", "smiles"],
+        mild: ["lets out a soft sigh", "shifts {npcP} weight", "glances back at you", "smiles"],
         moderate: ["lets out a soft moan", "presses back against you", "gasps with pleasure", "arches slightly"],
         high: ["moans loudly", "grinds back against you", "whispers encouragement", "shivers with arousal"],
         intense: ["gasps and moans", "pushes back", "begs for more", "trembles with need"]
@@ -4441,7 +4655,7 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
         legs: "moderate", feet: "moderate"
     };
     var maxTier = SENSITIVITY_TIERS[target.toLowerCase()] || "high";
-    const reaction = getWeightedReaction(bodyReactions, scaleArousal(arousalLevel), maxTier);
+    const reaction = applyNPCPronouns(npc, getWeightedReaction(bodyReactions, scaleArousal(arousalLevel), maxTier));
     
     // Get anatomy descriptions
     let anatomyDesc = "";
@@ -4537,7 +4751,7 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
             `leans into your touch.`,
             `sighs contentedly.`,
             `${reaction} at your touch.`,
-            `closes her eyes for a moment.`,
+            `closes ${possessivePronoun} eyes for a moment.`,
             `lets out a quiet breath.`,
             `relaxes beneath your touch.`,
             `${reaction} softly.`,
@@ -4990,9 +5204,25 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
         ]
     };
     
+    // External climax (ejaculate_on_*): a release beat on the body, not
+    // a penetration thrust — its own reaction set, never the hole templates.
+    const isExternalClimax = act.triggersClimax === true && String(act.consequence || "") === "external_semen";
     // Select templates based on penetration type
     let templates;
-    if (isVaginalPenetration) {
+    if (isExternalClimax) {
+        templates = {
+            enter: [
+                `gasps as your ${tool} twitches, hot spurts landing on ${possessivePronoun} ${bodyPartDesc}.`,
+                `shivers as your release splashes across ${possessivePronoun} ${bodyPartDesc}.`,
+                `watches you with wide eyes as you spend yourself on ${possessivePronoun} ${bodyPartDesc}.`
+            ],
+            continue: [
+                `lies still as your seed drips down ${possessivePronoun} ${bodyPartDesc}, breath slowing.`,
+                `smirks up at you, ${possessivePronoun} ${bodyPartDesc} glistening with your spend.`,
+                `runs a finger through the warmth on ${possessivePronoun} ${bodyPartDesc}, cheeks flushed.`
+            ]
+        };
+    } else if (isVaginalPenetration) {
         templates = vaginalTemplates;
     } else if (isAnalPenetration) {
         templates = analTemplates;
@@ -5164,22 +5394,22 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             var bottomOutCues;
             if (isAnalPenetration) {
                 bottomOutCues = [
-                    " She lets out a sharp gasp as you bottom out inside her,",
-                    " She grunts loudly as you reach full depth,",
-                    " She winces as you bury yourself to the hilt,"
+                    ` ${subjectPronoun} lets out a sharp gasp as you bottom out inside ${objectPronoun},`,
+                    ` ${subjectPronoun} grunts loudly as you reach full depth,`,
+                    ` ${subjectPronoun} winces as you bury yourself to the hilt,`
                 ];
             } else if (isVaginalPenetration) {
                 bottomOutCues = [
-                    " She cries out as you press against her cervix, the deep pressure sending a jolt through her,",
-                    " She yelps sharply as you hit the back of her passage, grinding against her cervix,",
-                    " She gasps loudly as your tip butts against her deepest point, the pressure intense,",
-                    " She lets out a pained moan as you bottom out against her cervix, her body tensing,"
+                    ` ${subjectPronoun} cries out as you press against ${possessivePronoun} cervix, the deep pressure sending a jolt through ${objectPronoun},`,
+                    ` ${subjectPronoun} yelps sharply as you hit the back of ${possessivePronoun} passage, grinding against ${possessivePronoun} cervix,`,
+                    ` ${subjectPronoun} gasps loudly as your tip butts against ${possessivePronoun} deepest point, the pressure intense,`,
+                    ` ${subjectPronoun} lets out a pained moan as you bottom out against ${possessivePronoun} cervix, ${possessivePronoun} body tensing,`
                 ];
             } else if (isOralPenetration) {
                 bottomOutCues = [
-                    " She gags hard as you push in to the hilt, her throat spasming around you,",
-                    " She chokes and coughs as you bury yourself fully in her mouth,",
-                    " She gags, eyes watering as you hit the back of her throat,"
+                    ` ${subjectPronoun} gags hard as you push in to the hilt, ${possessivePronoun} throat spasming around you,`,
+                    ` ${subjectPronoun} chokes and coughs as you bury yourself fully in ${possessivePronoun} mouth,`,
+                    ` ${subjectPronoun} gags, eyes watering as you hit the back of ${possessivePronoun} throat,`
                 ];
             } else {
                 bottomOutCues = [
@@ -6264,6 +6494,20 @@ function organizeActionsForMenu(validActions, npc) {
  * @param {Object} room - Current room (for context detection)
  * @param {string} positionId - Current position
  */
+/**
+ * Accent styling for intimacy action buttons. Differentiates rough/impact
+ * play (orange), watersports (yellow), and climax/ejaculation acts (white,
+ * bold) from the default button color. Returns null for ordinary acts.
+ */
+function getIntimacyActionAccent(actId) {
+    const act = getAct(actId);
+    if (!act) return null;
+    if (act.triggersClimax) return { color: "#ffffff", bold: true };
+    if (act.type === ACT_TYPES.WATERSPORT) return { color: "#f2c94c" };
+    if (act.type === ACT_TYPES.IMPACT) return { color: "#ff8c42" };
+    return null;
+}
+
 function getMenuActions(npc, player, room = null, positionId = null) {
     // Determine current intimacy phase based on context
     const phase = room ? getCurrentIntimacyPhase(room, npc, npc) : INTIMACY_PHASES.SOCIAL;
@@ -6296,12 +6540,15 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         return filterActionsByPhase([mockAction], phase).length > 0;
     });
     
-    // Convert to menu format with natural labels — a FLAT list ordered by
-    // natural progression (kissing/light touching first, escalating up the
-    // disinhibition ladder), like the conversation topic list, not grouped
-    // by body area. Valid actions show by default; disabled ones (blocked by
-    // position, clothing, or the disinhibition gate) keep their hint and only
-    // appear through the "Show all" toggle.
+    // Convert to menu format with natural labels, grouped into progression
+    // sections: Undress first (undressing opens up everything else), then
+    // Foreplay (kissing, touching, teasing — escalating up the disinhibition
+    // ladder), then Penetration (entry and thrusting), then Climax (release
+    // acts), then Other (end-of-flow
+    // and specialty acts). Within a section, entries keep the natural
+    // progression order. Valid actions show by default; disabled ones
+    // (blocked by position, clothing, or the disinhibition gate) keep their
+    // hint and only appear through the "Show all" toggle.
     const menu = [];
     const flatActions = [];
 
@@ -6322,7 +6569,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         seenActIds.add(a.actId);
         flatActions.push({
             id: a.actId,
-            label: getNaturalLabel(a.actId, npc, player) + (a.disabledHint ? ` (${a.disabledHint})` : ""),
+            label: getNaturalLabel(a.actId, npc, player),
             description: a.desc,
             type: a.type,
             disabled: true,
@@ -6357,17 +6604,72 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         return String(a.label).localeCompare(String(b.label));
     });
 
-    flatActions.forEach(entry => {
+    // Section grouping — differentiate undressing from foreplay from
+    // penetration, with undressing first so the natural flow reads top to
+    // bottom: get clothes out of the way, warm up, then escalate.
+    const MENU_SECTIONS = ["Undress", "Foreplay", "Penetration", "Climax", "Other"];
+    const getMenuSection = function (entry) {
+        const act = getAct(entry.id) || {};
+        const actType = act.type || entry.type;
+        if (actType === ACT_TYPES.CLOTHING) return "Undress";
+        if (act.triggersClimax) return "Climax";
+        if (actType === ACT_TYPES.PENETRATE || actType === ACT_TYPES.CONTINUE) return "Penetration";
+        if (actType === ACT_TYPES.END || actType === ACT_TYPES.WATERSPORT) return "Other";
+        return "Foreplay";
+    };
+
+    const sectionedActions = {};
+    for (const entry of flatActions) {
+        const section = getMenuSection(entry);
+        if (!sectionedActions[section]) sectionedActions[section] = [];
+        sectionedActions[section].push(entry);
+    }
+
+    for (const section of MENU_SECTIONS) {
+        const actions = sectionedActions[section];
+        if (!actions || !actions.length) continue;
         menu.push({
-            type: "action",
-            id: entry.id,
-            label: entry.label,
-            description: entry.description,
-            disabled: entry.disabled,
-            disabledHint: entry.disabledHint
+            type: "section",
+            label: section,
+            actions: actions.map(entry => ({
+                id: entry.id,
+                label: entry.label,
+                description: entry.description,
+                disabled: entry.disabled,
+                disabledHint: entry.disabledHint
+            }))
         });
-    });
+    }
     
+    // Multi-act Continue: with acts engaged in several slots (kissing +
+    // fingering + penetration), a single Continue button continues them all
+    // (continueAll flag; the engine runs each engaged act). Falls back to
+    // the legacy single lastAction continue when nothing is engaged.
+    const engagedIds = getEngagedActIds(npc);
+    const pushContinueButton = function () {
+        if (engagedIds.length > 0) {
+            menu.unshift({
+                type: "continue",
+                label: engagedIds.length === 1
+                    ? `Continue (${getNaturalLabel(engagedIds[0], npc, player)})`
+                    : `Continue (${engagedIds.length} acts)`,
+                actionId: engagedIds[engagedIds.length - 1],
+                continueAll: true,
+                description: engagedIds.length === 1
+                    ? `Continue ${getNaturalLabel(engagedIds[0], npc, player)}`
+                    : "Continue all engaged acts"
+            });
+            return;
+        }
+        if (!lastAction || !lastAction.actId) return;
+        menu.unshift({
+            type: "continue",
+            label: `Continue (${getNaturalLabel(lastAction.actId, npc, player)})`,
+            actionId: lastAction.actId,
+            description: `Continue ${lastActionDetails.desc || 'the previous action'}`
+        });
+    };
+
     // Add Continue and Pull out/Pull Away buttons if there's a last action
     const lastAction = npc && npc.intimacy && npc.intimacy.lastAction;
     const intimacy = npc.intimacy || {};
@@ -6455,12 +6757,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                         });
                     } else {
                         // Fall back to Continue button if no ejaculation options are valid
-                        menu.unshift({
-                            type: "continue",
-                            label: `Continue (${getNaturalLabel(lastAction.actId, npc, player)})`,
-                            actionId: lastAction.actId,
-                            description: `Continue ${lastActionDetails.desc || 'the previous action'}`
-                        });
+                        pushContinueButton();
                     }
                     
                     // Clear the justPulledOut flag after processing (only once per pull-out)
@@ -6470,12 +6767,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                     }
                 } else {
                     // Add Continue button at the beginning of the menu
-                    menu.unshift({
-                        type: "continue",
-                        label: `Continue (${getNaturalLabel(lastAction.actId, npc, player)})`,
-                        actionId: lastAction.actId,
-                        description: `Continue ${lastActionDetails.desc || 'the previous action'}`
-                    });
+                    pushContinueButton();
                 }
                 
                 // Add Pull out/Pull Away button based on whether it was penetration
@@ -6757,6 +7049,9 @@ function changePosition(npc, player, newPositionId, options = {}) {
     
     // Clear last action so the next action after position change doesn't
     // build a transition narration referencing the pre-change action.
+    // Position change also resets every engaged act (multi-act slots) —
+    // kissing, fingering etc. all stop when the bodies move.
+    npc.intimacy.engagedActs = [];
     npc.intimacy.lastAction = null;
     
     // Clear LLM enhancement cache on position change
@@ -8018,6 +8313,13 @@ if (typeof module !== 'undefined' && module.exports) {
         // Menu
         organizeActionsForMenu,
         getMenuActions,
+        getIntimacyActionAccent,
+        getIntimacyLustDelta,
+        applyIntimacyLustGain,
+        getIntimacyActSlot,
+        getEngagedActs,
+        getEngagedActIds,
+        isActEngaged,
         getActionCategory,
         getMinimumPhaseForAction,
         getPhaseName,
@@ -8259,6 +8561,13 @@ if (typeof window !== 'undefined') {
     window.endIntimacyEncounter = endIntimacyEncounter;
     window.executeIntimacyAction = executeIntimacyAction;
     window.getMenuActions = getMenuActions;
+    window.getIntimacyActionAccent = getIntimacyActionAccent;
+    window.getIntimacyLustDelta = getIntimacyLustDelta;
+    window.applyIntimacyLustGain = applyIntimacyLustGain;
+    window.getIntimacyActSlot = getIntimacyActSlot;
+    window.getEngagedActs = getEngagedActs;
+    window.getEngagedActIds = getEngagedActIds;
+    window.isActEngaged = isActEngaged;
     window.CLIMAX_CONFIG = CLIMAX_CONFIG;
     window.checkActionValidity = checkActionValidity;
     window.generateAllActionsWithStatus = generateAllActionsWithStatus;
@@ -9287,7 +9596,7 @@ function buildReceiveAgreementPrompt(npc, act, player, accepted, template) {
         accepted
             ? "- " + subj + " AGREES. Write " + subj.toLowerCase() + " agreeing in character — optionally one short line of dialogue in angle brackets <like this> — and clearly taking the lead."
             : "- " + subj + " DECLINES. Write " + subj.toLowerCase() + " refusing in character — kind but firm, true to " + pos + " temperament.",
-        "- Third person, 1-2 sentences. No narration of the act itself — this is only " + (accepted ? "her answer and taking charge." : "her answer."),
+        "- Third person, 1-2 sentences. No narration of the act itself — this is only " + (accepted ? pos + " answer and taking charge." : pos + " answer."),
         "- Match personality, species and mood. A shy halfling speaks differently from a bold orc.",
         "- Do NOT use words like: I cannot, I'm unable, as an AI.",
         "",
@@ -9940,7 +10249,7 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
     if (verbBase === 'rub') {
         narratives.push(
             `You ${verbPresent} ${cleanAnatomyDesc}, creating delicious friction against ${posPronoun} ${highArousal ? 'soaked' : 'dampening'} folds.`,
-            `You ${verbPresent} ${cleanAnatomyDesc} with the pad of your fingers, ${highArousal ? 'her slickness coating your skin' : 'warmth building under your touch'}.`,
+            `You ${verbPresent} ${cleanAnatomyDesc} with the pad of your fingers, ${highArousal ? posPronoun + ' slickness coating your skin' : 'warmth building under your touch'}.`,
             `Your palm ${verbIng} ${cleanAnatomyDesc} in a steady rhythm, pressing ${highArousal ? 'firm and insistent' : 'gently at first'} against the heat.`
         );
     }
@@ -10077,9 +10386,9 @@ function buildVaginaNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc,
         narratives.push(
             `You ejaculate into ${cleanAnatomyDesc}, filling ${posPronoun} ${channelDesc} with ${isMultipleEjaculation ? 'another thick deposit, mixing with the slick pool already there' : 'your hot cum, the warm fluid spreading deep within'}${soundSuffix}${scentDesc ? ', ' + scentDesc : ''}.`,
             `You release deep inside ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'adding more to the growing pool of semen in ' : 'pumping your seed into '}${posPronoun} warm, welcoming ${channelDesc} with a wet sound${scentDesc ? ', ' + scentDesc : ''}.`,
-            `You climax inside ${cleanAnatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous load with a lewd squelch, her depths struggling to contain it all' : 'filling ' + posPronoun + ' ' + channelDesc + ', the slick walls clenching around your release'}${scentDesc ? ', ' + scentDesc : ''}.`,
+            `You climax inside ${cleanAnatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous load with a lewd squelch, ' + posPronoun + ' depths struggling to contain it all' : 'filling ' + posPronoun + ' ' + channelDesc + ', the slick walls clenching around your release'}${scentDesc ? ', ' + scentDesc : ''}.`,
             `Your ${penisState} penis ejaculates into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'more semen joining the existing pool, dripping out around your shaft with each pulse as ' : 'thick spurts of cum coating '}${posPronoun} inner walls${isMultipleEjaculation ? ' clench greedily' : ' as they clench greedily'}${scentDesc ? ', ' + scentDesc : ''}.`,
-            `You fill ${cleanAnatomyDesc} with your seed, ${isVaginaOpen ? 'the relaxed folds accepting' : 'the slick folds greedily drawing in'} your ${isMultipleEjaculation ? 'additional' : 'hot'} release, the warmth spreading through her core${scentDesc ? ', ' + scentDesc : ''}.`,
+            `You fill ${cleanAnatomyDesc} with your seed, ${isVaginaOpen ? 'the relaxed folds accepting' : 'the slick folds greedily drawing in'} your ${isMultipleEjaculation ? 'additional' : 'hot'} release, the warmth spreading through ${posPronoun} core${scentDesc ? ', ' + scentDesc : ''}.`,
             `Your ${cockState} cock pulses into ${cleanAnatomyDesc}, ${isMultipleEjaculation ? 'another load of cum adding to the mess inside ' + posPronoun + ' ' + channelDesc + ', some squirting out around your shaft with each thrust' : 'hot jets of semen flooding ' + posPronoun + ' ' + channelDesc}${scentDesc ? ', ' + scentDesc : ''}.`
         );
     }
@@ -10122,7 +10431,7 @@ function buildTesticlesNarratives(npc, verbBase, verbPresent, verbIng, anatomyDe
     return [
         `You ${verbPresent} ${anatomyDesc}.`,
         `Your ${actualTool} ${toolVerb} ${anatomyDesc}.`,
-        verbBase === 'squeeze' ? `You gently ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling them draw up tight against her' : 'feeling their warm weight in your palm'}.` : null,
+        verbBase === 'squeeze' ? `You gently ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling them draw up tight against ' + (typeof getObjectPronoun === "function" ? getObjectPronoun(npc) : "them") : 'feeling their warm weight in your palm'}.` : null,
         verbBase === 'cupp' || verbBase === 'cup' ? `You cup ${anatomyDesc} in your palm, massaging the heavy orbs.` : null,
         verbBase === 'fondle' ? `You fondle ${anatomyDesc}, rolling them gently in your ${pickRandom(['hand', 'palm', 'fingers'])}.` : null,
         `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'feeling them shift in your hand' : 'enjoying the texture'}.`
@@ -10448,10 +10757,10 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
         return [
             `You ejaculate into ${anatomyDesc}, filling ${posPronoun} ${cavityDesc} with ${isMultipleEjaculation ? 'another thick deposit, the cavity already swollen and heavy with semen' : 'your hot seed, the viscous fluid filling the unseen depths'}${soundSuffix}${scentDesc ? ', ' + scentDesc : ''}.`,
             `You release into ${anatomyDesc}, ${isMultipleEjaculation ? 'adding to the growing pool of semen already sloshing in ' : 'pumping your thick cum into '}${posPronoun} ${cavityDesc} with a wet squelch${scentDesc ? ', ' + scentDesc : ''}.`,
-            `You climax inside ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous deposits with a lewd gurgle, her bowels struggling to contain the growing volume' : 'filling ' + posPronoun + ' ' + cavityDesc + ', the slick sounds of release echoing from within'}${scentDesc ? ', ' + scentDesc : ''}.`,
+            `You climax inside ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining the previous deposits with a lewd gurgle, ' + posPronoun + ' bowels struggling to contain the growing volume' : 'filling ' + posPronoun + ' ' + cavityDesc + ', the slick sounds of release echoing from within'}${scentDesc ? ', ' + scentDesc : ''}.`,
             `Your ${penisState} penis ejaculates into ${anatomyDesc}, ${isMultipleEjaculation ? 'more semen forcing its way into the already-full cavity, a wet squelch escaping with each pulse, filling ' : 'releasing deep into '}${posPronoun} hot, clenching ${cavityDesc}${scentDesc ? ', ' + scentDesc : ''}.`,
             `You fill ${anatomyDesc} with your seed, ${isAnusOpen ? 'the relaxed ring accepting' : 'the tight ring milking'} your ${isMultipleEjaculation ? 'remaining' : 'thick'} cum into ${posPronoun} depths as the cavity makes wet, obscene sounds${scentDesc ? ', ' + scentDesc : ''}.`,
-            `Your ${penisState} cock pumps into ${anatomyDesc}, ${isMultipleEjaculation ? 'another load of semen adding to the slick, sloshing mess inside, her bowels gurgling with the overflow' : 'hot spurt after spurt coating ' + posPronoun + ' ' + cavityDesc + ' with glistening warmth'}${scentDesc ? ', ' + scentDesc : ''}.`
+            `Your ${penisState} cock pumps into ${anatomyDesc}, ${isMultipleEjaculation ? 'another load of semen adding to the slick, sloshing mess inside, ' + posPronoun + ' bowels gurgling with the overflow' : 'hot spurt after spurt coating ' + posPronoun + ' ' + cavityDesc + ' with glistening warmth'}${scentDesc ? ', ' + scentDesc : ''}.`
         ];
     }
     
@@ -10681,20 +10990,20 @@ function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
         // Kiss templates — mood-aware, with favorability and attraction details
         verbBase === 'kiss' ? (function() {
             var kissLines = [
-                `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing firmly, tasting the warmth of her breath' : 'gently touching the soft surface'}.`
+                `You ${verbPresent} ${anatomyDesc}, ${highArousal ? 'pressing firmly, tasting the warmth of ' + posPronoun + ' breath' : 'gently touching the soft surface'}.`
             ];
             if (highFavor && highAttraction) {
                 kissLines.push(
-                    `Your excitement grows as you press against ${anatomyDesc}, sliding your tongue against hers, tasting something sweet.`,
-                    `A tingle runs up your spine as she presses her mouth against yours, her lips warm and inviting, and your loins tighten with the heat of it.`,
-                    `You deepen the kiss against ${anatomyDesc}, your tongue finding hers, the soft wet contact sending a jolt through your chest.`,
-                    `You kiss ${anatomyDesc} hungrily, the sweetness of her mouth and the press of her body against yours making your pulse race.`,
-                    `You linger against ${anatomyDesc}, tasting the faint sweetness on her tongue, your body responding to the warmth of the kiss with a familiar ache.`
+                    `Your excitement grows as you press against ${anatomyDesc}, sliding your tongue against ${posPronoun}, tasting something sweet.`,
+                    `A tingle runs up your spine as ${subjectPronoun.toLowerCase()} presses ${posPronoun} mouth against yours, ${posPronoun} lips warm and inviting, and your loins tighten with the heat of it.`,
+                    `You deepen the kiss against ${anatomyDesc}, your tongue finding ${posPronoun}, the soft wet contact sending a jolt through your chest.`,
+                    `You kiss ${anatomyDesc} hungrily, the sweetness of ${posPronoun} mouth and the press of ${posPronoun} body against yours making your pulse race.`,
+                    `You linger against ${anatomyDesc}, tasting the faint sweetness on ${posPronoun} tongue, your body responding to the warmth of the kiss with a familiar ache.`
                 );
             } else if (highFavor) {
                 kissLines.push(
-                    `You ${verbPresent} ${anatomyDesc}, a warmth spreading through you as her lips soften against yours.`,
-                    `You press into the kiss, tasting her, the gentleness of it making your breath catch.`
+                    `You ${verbPresent} ${anatomyDesc}, a warmth spreading through you as ${posPronoun} lips soften against yours.`,
+                    `You press into the kiss, tasting ${getObjectPronoun(npc)}, the gentleness of it making your breath catch.`
                 );
             } else {
                 kissLines.push(

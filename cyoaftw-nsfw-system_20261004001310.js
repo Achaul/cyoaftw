@@ -1492,6 +1492,19 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     if (!item || !el) return;
     nsfwEnsureBodyTraits(item);
 
+    // Strip group — garments still worn can be worked off the body (they
+    // drop to the room floor and can be picked up later).
+    var stripButtons = [];
+    if (nsfwBodySlotPresent(item, "upper")) {
+      stripButtons.push(window.createCombatButton("Strip top", () => stripBodyGarment(item, "upper")));
+    }
+    if (nsfwBodySlotPresent(item, "lower")) {
+      stripButtons.push(window.createCombatButton("Strip bottom", () => stripBodyGarment(item, "lower")));
+    }
+    if (stripButtons.length) {
+      window.appendCombatGroup(el, "Strip", stripButtons);
+    }
+
     // Kiss group (always available — mouth/cheek are never clothing-gated)
     window.appendCombatGroup(el, "Kiss", [
       window.createCombatButton("Kiss mouth", () => kissUnconsciousBody(item, "mouth")),
@@ -1510,6 +1523,26 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         disabled: currentPos === p.key
       })
     ));
+
+    // Touch group — hands and mouth on bare flesh (foreplay)
+    var touchButtons = [];
+    var touchGenitalType = nsfwBodyGenitalType(item);
+    var touchHasAnus = nsfwBodyHasAnus(item);
+    if (nsfwBodyHasBreasts(item) && nsfwRegionExposed(item, "breasts")) {
+      touchButtons.push(window.createCombatButton("Grope breasts", () => gropeUnconsciousBody(item)));
+      touchButtons.push(window.createCombatButton("Lick nipples", () => lickUnconsciousBody(item, "nipples")));
+    }
+    if (touchGenitalType === "vagina" && nsfwRegionExposed(item, "genitals")) {
+      touchButtons.push(window.createCombatButton("Lick vagina", () => lickUnconsciousBody(item, "vagina")));
+    } else if ((touchGenitalType === "cloaca-vent" || touchGenitalType === "cloaca-penis") && nsfwRegionExposed(item, "genitals")) {
+      touchButtons.push(window.createCombatButton("Lick cloacal vent", () => lickUnconsciousBody(item, "cloaca")));
+    }
+    if (touchHasAnus && nsfwRegionExposed(item, "anus")) {
+      touchButtons.push(window.createCombatButton("Lick anus", () => lickUnconsciousBody(item, "anus")));
+    }
+    if (touchButtons.length) {
+      window.appendCombatGroup(el, "Touch", touchButtons);
+    }
 
     // Oral group — player must have a penis; mouth accessible (not face-down).
     // Once entered, the button becomes a continuation thrust so the entry
@@ -1564,6 +1597,28 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       window.appendCombatGroup(el, "Penetrate", penButtons);
     }
 
+    // Their cock group — the body's own reflex-hardened cock. Stroking is
+    // available to any player; mounting/riding to players without a
+    // penis (penis players use the Penetrate/Climax groups above).
+    if (genitalType === "penis" && nsfwRegionExposed(item, "genitals")) {
+      var cockButtons = [];
+      cockButtons.push(window.createCombatButton(
+        item.bodyCockStiff ? "Stroke their stiff cock" : "Stroke their cock",
+        () => strokeBodyCock(item)
+      ));
+      if (!nsfwPlayerHasPenis()) {
+        if (item.bodyRidden) {
+          cockButtons.push(window.createCombatButton("Ride their cock", () => rideBodyCock(item)));
+          cockButtons.push(window.createCombatButton("Climax (riding)", () => riderClimaxBody(item)));
+        } else {
+          cockButtons.push(window.createCombatButton("Mount their cock", () => rideBodyCock(item), {
+            disabled: !item.bodyCockStiff
+          }));
+        }
+      }
+      window.appendCombatGroup(el, "Their cock", cockButtons);
+    }
+
     // Climax group — surfaced once the player is inside one or more holes.
     // Lists a finish button for every hole currently in use and still
     // accessible in this pose.
@@ -1582,6 +1637,28 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       }
       if (climaxButtons.length) {
         window.appendCombatGroup(el, "Climax", climaxButtons);
+      }
+    }
+
+    // Finish on them — external climax for penis players. Works with no
+    // penetration (masturbating over the body) or as a pull-out finish
+    // while inside a hole.
+    if (nsfwPlayerHasPenis()) {
+      var finishOnButtons = [];
+      if (nsfwRegionExposed(item, "mouth")) {
+        finishOnButtons.push(window.createCombatButton("Finish on face", () => finishOnBody(item, "face")));
+      }
+      if (nsfwRegionExposed(item, "breasts")) {
+        finishOnButtons.push(window.createCombatButton("Finish on chest", () => finishOnBody(item, "chest")));
+      }
+      if ((item.bodyPosition || "back") !== "face" && !nsfwBodySlotPresent(item, "upper")) {
+        finishOnButtons.push(window.createCombatButton("Finish on stomach", () => finishOnBody(item, "stomach")));
+      }
+      if (genitalType && nsfwRegionExposed(item, "genitals")) {
+        finishOnButtons.push(window.createCombatButton("Finish on genitals", () => finishOnBody(item, "genitals")));
+      }
+      if (finishOnButtons.length) {
+        window.appendCombatGroup(el, "Finish on them", finishOnButtons);
       }
     }
 
@@ -1721,6 +1798,66 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       involuntary: "Reflexive only: one last clench or flutter around the shaft, a faint hip twitch, an involuntary swallow if in the mouth. No awareness, no conscious reaction.",
       anatomyKeys: ["genitals", "anus"]
     },
+    "grope breasts": {
+      label: "breast groping (unconscious)",
+      difficulty: "The NPC's arms are limp; the chest rises and falls with slow unconscious breathing. The player handles the bare breasts at will — the body offers nothing but that slow breathing.",
+      involuntary: "Reflexive only: the nipples may pebble and harden under attention, a faint change in breathing. No awareness, no conscious reaction.",
+      anatomyKeys: ["breasts", "nipples"]
+    },
+    "lick nipples": {
+      label: "nipple licking (unconscious)",
+      difficulty: "The player mouths and laps at the bare, unmoving chest. The body lies slack; the player lifts and angles the breasts themselves.",
+      involuntary: "Reflexive only: the nipples may stiffen against the tongue, a faint shift in breathing. No awareness, no conscious reaction.",
+      anatomyKeys: ["breasts", "nipples"]
+    },
+    "lick vagina": {
+      label: "cunnilingus (unconscious)",
+      difficulty: "The NPC's thighs are limp and must be spread manually. The player holds the hips still and laps at the bare sex; the body cannot press up or respond in any way.",
+      involuntary: "Reflexive only: the sex may grow flush and slick under prolonged attention, a hip twitch, a clench. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "vagina", "pubicHair"]
+    },
+    "lick cloacal vent": {
+      label: "cloacal licking (unconscious)",
+      difficulty: "The vent lies still and closed. The player spreads the limp thighs and laps at the smooth-scaled opening, which stays passive and unyielding.",
+      involuntary: "Reflexive only: the vent may twitch or slicken under attention, a hip twitch. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "anus"]
+    },
+    "lick anus": {
+      label: "anilingus (unconscious)",
+      difficulty: "The cheeks must be spread by hand — the body gives no help. The player laps and circles the unmoved pucker at their own pace.",
+      involuntary: "Reflexive only: the pucker may flutter under the tongue, a faint clench. No awareness, no conscious reaction.",
+      anatomyKeys: ["anus"]
+    },
+    "stroke cock": {
+      label: "cock stroking (unconscious)",
+      difficulty: "The NPC's cock is soft and slack in unconsciousness. The player works it in their hand; it stiffens as pure reflex — the body gains no awareness and gives no participation.",
+      involuntary: "Reflexive only: the cock hardens and may twitch in the grip; the hips may buck once or twice in reflex. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "penis"]
+    },
+    "ride cock": {
+      label: "riding an unconscious cock",
+      difficulty: "The stiff cock twitches upward on its own. The player lowers themselves onto it and does ALL the work — the body lies passive, and the player sets every motion themselves.",
+      involuntary: "Reflexive only: the cock stays hard by reflex and may twitch inside, the hips may buck faintly. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "penis"]
+    },
+    "rider climax": {
+      label: "climax while riding (unconscious)",
+      difficulty: "The player brings themselves off on the unconscious body's reflexively stiff cock. The body contributes nothing — it simply stays hard beneath them.",
+      involuntary: "Reflexive only: a last twitch of the cock inside them, the body's chest rising and falling in slow sleep-breath. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals", "penis"]
+    },
+    "climax on body": {
+      label: "external climax on an unconscious body",
+      difficulty: "The player finishes on the unmoving body — no participation, no reaction. The release lands on slack, unresponsive flesh and runs where gravity takes it.",
+      involuntary: "Reflexive only: nothing, or a twitch of the nose, slow breathing undisturbed. The body does not stir for the act.",
+      anatomyKeys: ["genitals"]
+    },
+    "strip": {
+      label: "stripping an unconscious body",
+      difficulty: "The NPC is dead weight. Garments must be worked off limp limbs — arms flopping, hips lifting only when the player hauls them.",
+      involuntary: "None beyond the body's passive flopping as it is handled. No awareness, no conscious reaction.",
+      anatomyKeys: []
+    },
     "spit": {
       label: "spitting / degradation (unconscious)",
       difficulty: "The NPC cannot react. The spit lands on unmoving, unresponsive flesh.",
@@ -1745,6 +1882,18 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   // "finger vagina", "penetrate anus", "spit on face", "kiss cheek", etc.)
   function buildBodyActContext(actionDesc) {
     var d = String(actionDesc || "").toLowerCase();
+    if (d.indexOf("rider") !== -1) return BODY_ACT_CONTEXT["rider climax"];
+    if (d.indexOf("finish on") !== -1) return BODY_ACT_CONTEXT["climax on body"];
+    if (d.indexOf("strip") !== -1) return BODY_ACT_CONTEXT["strip"];
+    if (d.indexOf("grope") !== -1) return BODY_ACT_CONTEXT["grope breasts"];
+    if (d.indexOf("stroke") !== -1) return BODY_ACT_CONTEXT["stroke cock"];
+    if (d.indexOf("ride") !== -1 || d.indexOf("mount") !== -1) return BODY_ACT_CONTEXT["ride cock"];
+    if (d.indexOf("lick") !== -1) {
+      if (d.indexOf("cloaca") !== -1) return BODY_ACT_CONTEXT["lick cloacal vent"];
+      if (d.indexOf("anus") !== -1) return BODY_ACT_CONTEXT["lick anus"];
+      if (d.indexOf("nipple") !== -1) return BODY_ACT_CONTEXT["lick nipples"];
+      return BODY_ACT_CONTEXT["lick vagina"];
+    }
     if (d.indexOf("thrust") !== -1) {
       if (d.indexOf("mouth") !== -1) return BODY_ACT_CONTEXT["thrust mouth"];
       if (d.indexOf("cloaca") !== -1) return BODY_ACT_CONTEXT["thrust cloaca"];
@@ -1810,6 +1959,23 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       ". Weave this into the polish where relevant - an already-used hole reads wetter, looser, easier to enter than a fresh one.";
   }
 
+  // Reflex-arousal note: prolonged handling of the unconscious body
+  // leaves purely involuntary traces — flushed skin, hardened nipples,
+  // a cock that stiffens by reflex. Folded into the polish prompt so
+  // repeated stimulation reads ON the body instead of every act landing
+  // on "fresh" flesh.
+  function nsfwBodyReflexNote(item) {
+    var notes = [];
+    if (((item && item.bodyStimulus) || 0) >= 3) {
+      notes.push("the body shows the reflex signs of prolonged handling — skin flushed where it has been touched, breathing shifted slightly deeper, purely involuntary");
+    }
+    if (item && item.bodyCockStiff) {
+      notes.push("the NPC's cock stands stiff from reflex — unconscious flesh responding to touch without any awareness");
+    }
+    if (!notes.length) return "";
+    return "\nREFLEX STATE (weave into the polish where relevant — involuntary only): " + notes.join("; ") + ".";
+  }
+
   function buildBodyActionPrompt(item, actionDesc, baseText) {
     const name = nsfwGetEntityName(item);
     const species = (item.species || "human").toLowerCase();
@@ -1842,10 +2008,11 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       ? buildBodyAnatomyNote(item, actCtx.anatomyKeys)
       : "";
     var bodyUseNote = nsfwBodyUsePromptNote(item, actionDesc);
+    var reflexNote = nsfwBodyReflexNote(item);
 
     var prompt = [
 "You are polishing a player action description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote,
+"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote + reflexNote,
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and sensory.",
@@ -2028,6 +2195,9 @@ anatomyNote,
 
   function nsfwPlayerHasPenis() {
     var g = nsfwPlayerGender();
+    // "female" contains the substring "male" — exclude it explicitly before
+    // the prefix match, or every female player counts as penis-bearing.
+    if (g === "female" || g === "f" || g === "woman") return false;
     return g === "male" || g.indexOf("male") !== -1;
   }
 
@@ -2294,6 +2464,204 @@ anatomyNote,
     const actionDesc = "spit on " + label;
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} spat on ${name}'s ${label} while they were unconscious.`, 3);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // ── Extended body interactions ─────────────────────────────
+  // Foreplay, the body's own cock, and external finishes — mirroring the
+  // awake intimacy system's spread so unconscious bodies get more than
+  // kiss/penetrate/spit. Each follows the established pattern: guard,
+  // state flags, base text, AI-polish, remember event, save, re-render.
+
+  // Stimulating acts raise a body-stimulus counter; at 3+ the polish
+  // prompt gains a reflex-state note (nsfwBodyReflexNote above).
+  function nsfwBodyAddStimulus(item, n) {
+    item.bodyStimulus = ((item && item.bodyStimulus) || 0) + (n || 1);
+  }
+
+  // Grope the bare breasts of the unconscious body.
+  function gropeUnconsciousBody(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwBodyHasBreasts(item) || !nsfwRegionExposed(item, "breasts")) return;
+    const name = nsfwGetEntityName(item);
+    const baseText = pickFrom([
+      `You kneel over ${name}'s limp form and take their bare breast in your hand, kneading the soft flesh. The nipple hardens against your palm — a reflex the sleeping body can't suppress.`,
+      `You cup and squeeze ${name}'s unresisting breasts, weighing them in your palms. They lie utterly passive under your touch, only their slow breathing lifting the flesh.`
+    ]);
+    nsfwBodyAddStimulus(item);
+    item.groped = true;
+    polishBodyNarration(item, "grope breasts", baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} groped ${name}'s breasts while they were unconscious.`, 4);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Lick a bare region of the body: "nipples" | "vagina" | "cloaca" | "anus".
+  function lickUnconsciousBody(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    const name = nsfwGetEntityName(item);
+    var label;
+    var baseText;
+
+    if (target === "nipples") {
+      if (!nsfwBodyHasBreasts(item) || !nsfwRegionExposed(item, "breasts")) return;
+      label = "nipples";
+      baseText = pickFrom([
+        `You bow over ${name}'s slack form and lap at their bare nipple, then draw it into your mouth and suck. The nub stiffens on your tongue — pure reflex — while the body itself never stirs.`,
+        `You suck and tongue ${name}'s unresisting nipple, the flesh warming under your mouth. Their chest keeps rising and falling in slow sleep-breath, ignoring you completely.`
+      ]);
+    } else if (target === "vagina") {
+      if (nsfwBodyGenitalType(item) !== "vagina" || !nsfwRegionExposed(item, "genitals")) return;
+      label = "vagina";
+      baseText = pickFrom([
+        `You spread ${name}'s limp thighs and press your mouth to their bare sex, lapping slow and thorough. Their hips twitch once — a reflex — as you work your tongue through the soft folds.`,
+        `You settle between ${name}'s unconscious legs and eat them out at your own unhurried pace, holding their hips still. The flesh flushes warm and slick under your tongue without their knowledge.`
+      ]);
+    } else if (target === "cloaca") {
+      var cg = nsfwBodyGenitalType(item);
+      if (cg !== "cloaca-vent" && cg !== "cloaca-penis") return;
+      if (!nsfwRegionExposed(item, "genitals")) return;
+      label = nsfwGenitalLabel(item) || "cloacal vent";
+      baseText = `You spread ${name}'s limp thighs and lap over their ${label}, the smooth scales warm under your tongue. The vent twitches faintly — reflex only — as you work it.`;
+    } else if (target === "anus") {
+      if (!nsfwBodyHasAnus(item) || !nsfwRegionExposed(item, "anus")) return;
+      label = "anus";
+      baseText = pickFrom([
+        `You spread ${name}'s cheeks with both hands and drag your tongue over their unmoved pucker, circling it slow. The ring flutters once against your tongue — the body's only answer.`,
+        `You rim ${name}'s unconscious body thoroughly, their limp form giving no reaction but the occasional reflexive clench under your tongue.`
+      ]);
+    } else return;
+
+    nsfwBodyAddStimulus(item);
+    item.licked = true;
+    if (target !== "nipples" && typeof window.recordBodyUse === "function") {
+      window.recordBodyUse(item, target, { useKind: "mouth" });
+    }
+    polishBodyNarration(item, "lick " + label, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} licked ${name}'s ${label} while they were unconscious.`, 5);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Stroke the body's cock (any player). The first stroke narrates the
+  // reflex stiffening; later strokes work the stiffened shaft.
+  function strokeBodyCock(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (nsfwBodyGenitalType(item) !== "penis") return;
+    if (!nsfwRegionExposed(item, "genitals")) return;
+    const name = nsfwGetEntityName(item);
+    var wasStiff = !!item.bodyCockStiff;
+    var baseText = wasStiff
+      ? pickFrom([
+        `You work ${name}'s stiffened cock in slow strokes, the flesh twitching in your grip. The hips buck once in pure reflex; the body itself sleeps on.`,
+        `You stroke the unconscious cock steadily, thumbing the slick head. ${name} gives no sign of knowing — only the reflex-throb in your hand.`
+      ])
+      : `You take ${name}'s soft, slack cock in hand and work it with slow strokes. It swells and hardens in your grip — pure reflex — while their face stays slack and unbothered.`;
+    nsfwBodyAddStimulus(item);
+    item.bodyCockStiff = true;
+    item.cockStroked = true;
+    if (!wasStiff && typeof window.recordBodyUse === "function") window.recordBodyUse(item, "penis", { useKind: "hand" });
+    polishBodyNarration(item, "stroke cock", baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} stroked ${name}'s cock while they were unconscious.`, 5);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Mount / continue riding the body's reflex-stiff cock. Only for
+  // players WITHOUT a penis (penis players use the Penetrate groups).
+  function rideBodyCock(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (nsfwPlayerHasPenis()) return;
+    if (nsfwBodyGenitalType(item) !== "penis") return;
+    if (!item.bodyCockStiff) return;
+    if (!nsfwRegionExposed(item, "genitals")) return;
+    const name = nsfwGetEntityName(item);
+    var wasRiding = !!item.bodyRidden;
+    var baseText = wasRiding
+      ? pickFrom([
+        `You ride ${name}'s stiff cock at your own pace, your hips rolling while the body lies passive beneath you. It twitches inside you on reflex alone.`,
+        `You grind down onto the unconscious cock, doing all the work yourself. The only answer from ${name} is a faint reflex-buck of their hips.`
+      ])
+      : `You straddle ${name}'s limp form, line up their reflex-stiff cock, and sink down onto it. The body doesn't stir beyond a single twitch — you take your pleasure from unconscious flesh.`;
+    nsfwBodyAddStimulus(item);
+    item.bodyRidden = true;
+    item.rideCount = ((item && item.rideCount) || 0) + 1;
+    if (!wasRiding && typeof window.recordBodyUse === "function") window.recordBodyUse(item, "penis", { useKind: "penetrate" });
+    polishBodyNarration(item, wasRiding ? "ride cock" : "mount cock", baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} ${wasRiding ? "continued riding" : "mounted and rode"} ${name}'s cock while they were unconscious.`, 7);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // The riding player's own climax on the unconscious body.
+  function riderClimaxBody(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!item.bodyRidden) return;
+    const name = nsfwGetEntityName(item);
+    var baseText = pickFrom([
+      `You grind down hard and come on ${name}'s stiff cock, your climax rolling through you while the body beneath stays limp and oblivious. The cock keeps twitching inside you by reflex.`,
+      `You bring yourself off riding the unconscious cock, clenching around it as waves take you. ${name} sleeps through your orgasm completely.`
+    ]);
+    item.riderClimaxCount = ((item && item.riderClimaxCount) || 0) + 1;
+    polishBodyNarration(item, "rider climax", baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} climaxed while riding ${name}'s unconscious body.`, 7);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // External finish: masturbate over the body (or pull out first while
+  // inside) and spend on it. target: "face" | "chest" | "stomach" | "genitals".
+  function finishOnBody(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwPlayerHasPenis()) return;
+    const name = nsfwGetEntityName(item);
+    var inside = item.penetratedTarget || (item.mouthUsed ? "mouth" : null);
+    var label;
+    if (target === "face") {
+      if (!nsfwRegionExposed(item, "mouth")) return;
+      label = "face";
+    } else if (target === "chest") {
+      if (!nsfwRegionExposed(item, "breasts")) return;
+      label = "chest";
+    } else if (target === "stomach") {
+      if ((item.bodyPosition || "back") === "face" || nsfwBodySlotPresent(item, "upper")) return;
+      label = "stomach";
+    } else if (target === "genitals") {
+      if (!nsfwRegionExposed(item, "genitals")) return;
+      label = "genitals";
+    } else return;
+    var baseText = inside
+      ? `You pull out of ${name}'s ${inside} and strip off, stroking yourself over their limp body. You come across their ${label}, the release striping unconscious flesh that doesn't flinch.`
+      : `You stand over ${name}'s unconscious body and work yourself, eyes on their slack face. You come across their ${label}, the release landing on flesh that doesn't flinch.`;
+    item.bodyMarks = ((item && item.bodyMarks) || 0) + 1;
+    item.marksTarget = label;
+    polishBodyNarration(item, "finish on " + label, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} finished on ${name}'s ${label} while they were unconscious.`, 6);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Strip a garment off the body with handling narration; the item
+  // drops to the room floor like any discarded clothing. slot: "upper" | "lower".
+  function stripBodyGarment(item, slot) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (slot !== "upper" && slot !== "lower") return;
+    if (!nsfwBodySlotPresent(item, slot)) return;
+    const name = nsfwGetEntityName(item);
+    var dropped = null;
+    if (typeof window.dropWornClothingToRoom === "function") {
+      dropped = window.dropWornClothingToRoom(item, slot);
+    } else if (item.equipped) {
+      delete item.equipped[slot];
+    }
+    const garment = dropped && dropped.name ? dropped.name : (slot === "upper" ? "top" : "bottom");
+    const baseText = pickFrom([
+      `You work ${name}'s ${garment} off their limp body, hauling dead-weight hips and flopping arms free of it. They lie utterly passive as you strip them.`,
+      `You peel the ${garment} from ${name}'s unconscious form, their limbs flopping as you tug it free. The bared flesh underneath doesn't so much as stir.`
+    ]);
+    polishBodyNarration(item, "strip " + (slot === "upper" ? "top" : "bottom"), baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} stripped the ${garment} off ${name}'s unconscious body.`, 3);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
   }

@@ -3383,6 +3383,108 @@ function computeNPCAttractionBase(npc) {
     return capped + _npcGetUnclothedAttractionTerm(npc, charisma);
 }
 
+// -- NUDITY REACTIONS (walking into a populated room unclothed) ----------
+// The engine's applyNudityReaction runs this per NPC on room entry. An NPC
+// whose "type" the player matches exactly (with a compatible orientation)
+// is intrigued instead of offended: attraction and lust rise, and a
+// sufficiently disinhibited one may call out something appreciative.
+// Everyone else civilized bristles — public indecency costs favor and
+// earns hostility. Uncivilized humanoids skip the offense (they don't
+// care about indecency) unless they match the player's type, in which case
+// the intrigued branch above still applies.
+
+const NUDITY_EXACT_MATCH_SCORE = 1.5;   // both type prefs line up
+const NUDITY_OFFENDED_HOSTILITY = 7;
+const NUDITY_OFFENDED_FAVOR = -3;
+const NUDITY_INTRIGUED_ATTRACTION = 4;
+const NUDITY_INTRIGUED_LUST = 3;
+const NUDITY_CATCALL_MIN_DISINHIBITION = 30;
+
+function _npcPickLine(arr) {
+    if (!Array.isArray(arr) || !arr.length) return "";
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function _npcNudityOffendedLines() {
+    return [
+        "gasps and looks away, scandalized",
+        "splutters, \"Have you no shame?\"",
+        "chokes on their drink, staring",
+        "mutters, \"For mercy's sake, put something on!\"",
+        "raises a hand to shield their eyes",
+        "bristles, \"Not in here! Out with you!\""
+    ];
+}
+
+function _npcNudityFlusteredLines() {
+    return [
+        "quietly averts their eyes, ears burning",
+        "goes very red and studies the floor",
+        "coughs and pretends nothing is out of the ordinary"
+    ];
+}
+
+function _npcNudityCatcallLines(npc) {
+    var temperament = String((npc && npc.temperament) || "").toLowerCase();
+    var bold = temperament === "bold" || temperament === "forward" ||
+        temperament === "lustful" || temperament === "dominant";
+    return bold ? [
+        "\"Well now — not much left to the imagination, is there?\"",
+        "\"Now THAT'S a sight. Careful, you'll cause a scene.\"",
+        "\"Looking for attention? Consider it gotten.\"",
+        "\"Gods above — you could stop traffic dressed like that. Or not dressed.\""
+    ] : [
+        "\"I, um — wow. You look... wow.\"",
+        "\"You're, uh... really not shy, are you?\"",
+        "\"That's... quite the entrance you just made.\""
+    ];
+}
+
+// One NPC's reaction to the unclothed player entering. Returns
+// { stance: "intrigued" | "offended" | "flustered", catcall, line } or null
+// when this NPC doesn't react. Stat changes are applied here so the engine
+// hook stays a thin narration assembler.
+function getNudityReactionForNPC(npc) {
+    if (!npc || !isAdultHumanoidNPC(npc)) return null;
+    if (!_npcIsPlayerUnclothed()) return null;
+    ensureNPCRelationshipState(npc);
+
+    const typeScore = getNPCTypeMatchScore(npc);
+    const orientationMatch = _npcGetOrientationFactor(npc) === 1;
+
+    // Exact type match with a compatible orientation: intrigued, not
+    // offended — attraction and lust rise, scaled by the player's appeal.
+    if (typeScore >= NUDITY_EXACT_MATCH_SCORE && orientationMatch) {
+        const appeal = getPlayerAppealMultiplier(npc);
+        const attractionGain = Math.max(1, Math.round(NUDITY_INTRIGUED_ATTRACTION * appeal));
+        npc.memory.attractionEarned = (typeof npc.memory.attractionEarned === "number" ? npc.memory.attractionEarned : 0) + attractionGain;
+        npc.memory.attraction = Math.max(0, Math.min(100, (npc.memory.attraction || 0) + attractionGain));
+        npc.memory.lust = Math.max(0, Math.min(100, (npc.memory.lust || 0) + NUDITY_INTRIGUED_LUST));
+        const disinhibition = typeof npc.memory.disinhibition === "number" ? npc.memory.disinhibition : 0;
+        const willCatcall = disinhibition >= NUDITY_CATCALL_MIN_DISINHIBITION;
+        if (willCatcall && typeof rememberStoryEvent === "function") {
+            rememberStoryEvent("social", `${npc.name || "Someone"} cat-called ${G.player.name} on sight for walking in unclothed.`, 3);
+        }
+        return {
+            stance: "intrigued",
+            catcall: willCatcall,
+            line: willCatcall ? _npcPickLine(_npcNudityCatcallLines(npc)) : null
+        };
+    }
+
+    // Uncivilized creatures don't care about public indecency.
+    const civilized = typeof getSpeciesIsCivilized === "function" ? getSpeciesIsCivilized(npc.species) : true;
+    if (!civilized) return null;
+
+    // Most civilized onlookers take offense; a few just fluster.
+    if (Math.random() < 0.8) {
+        npc.hostility = Math.max(0, Math.min(100, (npc.hostility || 0) + NUDITY_OFFENDED_HOSTILITY));
+        npc.memory.favorability = Math.max(-100, Math.min(100, (npc.memory.favorability || 0) + NUDITY_OFFENDED_FAVOR));
+        return { stance: "offended", catcall: false, line: _npcPickLine(_npcNudityOffendedLines()) };
+    }
+    return { stance: "flustered", catcall: false, line: _npcPickLine(_npcNudityFlusteredLines()) };
+}
+
 // Fresh per-engagement variance, rolled every time the player clicks the
 // NPC: a d20 (the engine's own dice when available) mapped to roughly
 // -4..+5, plus the NPC's current mood on the engine mood scale (-3..+3,
@@ -3738,6 +3840,8 @@ if (typeof window !== "undefined") {
     window.getPlayerAppealMultiplier = getPlayerAppealMultiplier;
     window.applyNPCFirstImpression = applyNPCFirstImpression;
     window.getNPCTypeMatchScore = getNPCTypeMatchScore;
+    window.isPlayerUnclothed = _npcIsPlayerUnclothed;
+    window.getNudityReactionForNPC = getNudityReactionForNPC;
     window.ensureNPCTypePreferences = ensureNPCTypePreferences;
     window.getNPCTypeSummary = getNPCTypeSummary;
     window.getNPCRevealedTypeHints = getNPCRevealedTypeHints;
