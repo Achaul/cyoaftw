@@ -1335,6 +1335,99 @@ const ROOM_TEMPLATES = [
         imageKey: "Library"
     },
 
+    // ── GUILDHALL & CHAPEL ─────────────────────────────────────────
+    // Two more public buildings (see BUILDING_BLUEPRINTS). Never rolled
+    // randomly. The Guildhall is where fighters and sellswords are trained
+    // and hired (its yard carries "training" fixtures, which makes it a
+    // synergy yard station); the Chapel is a real, prayer-capable temple,
+    // unlike the hidden cellar shrine under the tavern.
+    {
+        type: "Guildhall",
+        zone: "Town",
+        role: "landmark",
+        displayName: "Guildhall",
+        baseDescription: "A broad, timber-framed hall with a painted shield over the door for every company that ever signed its rolls. A job board crowds the entrance, and the sound of steel on steel rings from somewhere behind.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: false,
+        structural: [
+            { id: "job-board",    name: "job board",         tags: ["information", "commerce"] },
+            { id: "guild-shields", name: "painted guild shields", tags: ["landmark"] },
+            { id: "muster-bench", name: "muster bench",      tags: ["social", "rest"] }
+        ],
+        imageKey: "Town Hall"
+    },
+    {
+        type: "Training Yard",
+        zone: "Town",
+        role: "interior",
+        displayName: "Training Yard",
+        baseDescription: "A packed-earth yard walled in on all sides, scuffed by years of boots. Straw dummies stand against one wall, a weapon rack against another, and a pair of recruits trade slow, careful blows under a master's eye.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: false,
+        minNpcs: 1,
+        structural: [
+            { id: "straw-dummies", name: "straw dummies",  tags: ["training", "combat"] },
+            { id: "weapon-rack",   name: "weapon rack",    tags: ["storage", "combat"] },
+            { id: "sparring-ring", name: "chalked sparring ring", tags: ["training", "formal"] }
+        ],
+        imageKey: "Town Hall"
+    },
+    {
+        type: "Guildmaster's Office",
+        zone: "Town",
+        role: "interior",
+        displayName: "Guildmaster's Office",
+        baseDescription: "A cramped office stacked with contract scrolls and muster rolls. A scarred desk faces the door, and a map of the district is pinned to the wall, studded with coloured tacks.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: false,
+        structural: [
+            { id: "scarred-desk",  name: "scarred desk",     tags: ["surface", "work", "formal"] },
+            { id: "contract-shelf", name: "shelf of contracts", tags: ["storage", "information"] },
+            { id: "district-map",  name: "pinned district map", tags: ["information", "landmark"] }
+        ],
+        imageKey: "Library"
+    },
+    {
+        type: "Chapel",
+        zone: "Town",
+        role: "landmark",
+        displayName: "Chapel",
+        baseDescription: "A small stone chapel with a narrow bell-cote and a worn step. Inside, light falls in coloured bars through a single window onto rows of plain benches and an altar kept clean by someone who clearly cares.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: false,
+        // Prayer-capable (see isShrineRoom in cyoaftw-engine-CORE.js), and
+        // always tended: minNpcs keeps the priest at the altar even though
+        // ordinary shrines are mostly empty.
+        isShrine: true,
+        minNpcs: 1,
+        structural: [
+            { id: "altar-stone",  name: "altar stone",     tags: ["ritual", "landmark"] },
+            { id: "votive-rack",  name: "rack of votive candles", tags: ["light", "ritual"] },
+            { id: "plain-benches", name: "plain benches",  tags: ["social", "rest"] }
+        ],
+        imageKey: "Cellar"
+    },
+    {
+        type: "Vestry",
+        zone: "Town",
+        role: "interior",
+        displayName: "Vestry",
+        baseDescription: "A narrow room behind the altar where vestments hang on pegs and the poor-box is counted. A kettle sits by a small stove, and a shelf of worn prayer books leans against the wall.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: false,
+        structural: [
+            { id: "vestment-pegs", name: "pegs of vestments", tags: ["storage"] },
+            { id: "prayer-shelf",  name: "shelf of prayer books", tags: ["storage", "information"] },
+            { id: "poor-box",      name: "iron-banded poor-box", tags: ["storage", "commerce"] }
+        ],
+        imageKey: "Room"
+    },
+
     // ── ZONE BOSS ROOMS ────────────────────────────────────────────
     // One per zone, added as a normal flat-odds entry in that zone's
     // ZONE_TEMPLATES.roomTypes list. cyoaftw-engine-CORE.js's ZONE_BOSS_ROOMS
@@ -1717,6 +1810,38 @@ const BUILDING_BLUEPRINTS = {
             ["corridor", "chamber", "door"],
             ["corridor", "records", "door", { chance: 0.7, level: 3 }]
         ]
+    },
+    // The street-facing hall holds the Guildmaster and the job board; an
+    // archway opens onto the training yard behind, and the Guildmaster's
+    // office is a locked room off the yard. One way in.
+    "Guildhall": {
+        zone: "Town",
+        entrance: "Guildhall",
+        front: "yard",
+        frontDoor: "arch",
+        back: null,
+        names: ["The Ironbound Guildhall", "The Company of the Open Road", "The Wayfarers' Guildhall", "The Brazen Banner Hall", "The Sellswords' Hall"],
+        rooms: [
+            { key: "yard",   type: "Training Yard",        floor: 0, at: [0, 0], minNpcs: 1 },
+            { key: "office", type: "Guildmaster's Office", floor: 0, at: [1, 0] }
+        ],
+        links: [
+            ["yard", "office", "door", { chance: 0.6, level: 2 }]
+        ]
+    },
+    // A nave open to the street with a vestry behind. One door, never locked
+    // (a chapel turns nobody away).
+    "Chapel": {
+        zone: "Town",
+        entrance: "Chapel",
+        front: "vestry",
+        frontDoor: "door",
+        back: null,
+        names: ["The Chapel of the Lantern", "The Chapel of Ash and Dawn", "The Hearthward Chapel", "The Chapel of Quiet Lamps"],
+        rooms: [
+            { key: "vestry", type: "Vestry", floor: 0, at: [0, 0] }
+        ],
+        links: []
     }
 };
 
@@ -1897,13 +2022,16 @@ function planTownLayout(rngIn) {
     const rest = _planShuffle(slots.filter(s => s !== hallSlot), rng);
 
     const assignment = [{ type: "Town Hall", slot: hallSlot }];
-    ["Tavern", "Inn", "Smithy"].forEach((type, i) => { assignment.push({ type: type, slot: rest[i] }); });
+    // Every town has these. The Guildhall and the Chapel are the guide's
+    // lead destinations (see PLAYER_ARCHETYPES), so they are always placed.
+    const MUST_HAVE = ["Tavern", "Inn", "Smithy", "Guildhall", "Chapel"];
+    MUST_HAVE.forEach((type, i) => { assignment.push({ type: type, slot: rest[i] }); });
     // Every other plot is a house or stays empty. Bigger towns get a second
     // inn now and then. The Tavern (cellar shrine, way down to the dungeon),
     // the Smithy (cargo lift to the Underground City) and the Town Hall
     // (boss room) are always single, since each carries a one-per-zone
-    // feature or zone link.
-    rest.slice(3).forEach(slot => {
+    // feature or zone link; the Guildhall and Chapel are single too.
+    rest.slice(MUST_HAVE.length).forEach(slot => {
         const roll = rng();
         if (roll < 0.10) assignment.push({ type: "Inn", slot: slot });
         else if (roll < 0.70) assignment.push({ type: "House", slot: slot });
@@ -2282,6 +2410,18 @@ function getPlaceLoreFacts() {
                 },
                 distorted: "The Town Hall is where the council meets, and the council answers to whoever pays the guards."
             }));
+        } else if (type === "Guildhall") {
+            out.push(Object.assign({}, base, {
+                id: "place-" + id, tiers: ["local", "military", "trade"], know: 80, rumor: true, topic: name,
+                text: name + " is the town's guildhall, " + where + ". The guildmaster holds court in the front hall beside the job board, recruits train in the yard behind it, and the guildmaster's office is kept locked when its owner is out.",
+                distorted: name + " is where sellswords are hired, and the guildmaster takes a cut of everything."
+            }));
+        } else if (type === "Chapel") {
+            out.push(Object.assign({}, base, {
+                id: "place-" + id, tiers: ["local", "faith"], know: 85, rumor: true, topic: name,
+                text: name + " is the town's chapel, " + where + ". The priest keeps the altar and the vestry behind it, prays with anyone who asks, and has never been known to turn a traveller from the door.",
+                distorted: name + " is where folk go to ask forgiveness, and the priest hears more than most."
+            }));
         }
     });
     return out;
@@ -2340,4 +2480,890 @@ if (typeof window !== "undefined") {
     window.getWorldLoreFactText = getWorldLoreFactText;
     window.getWorldStanding = getWorldStanding;
     window.shiftWorldStanding = shiftWorldStanding;
+}
+
+// ── STARTING PAST: ARCHETYPES, BACKSTORY AND THE GUIDE ───────────
+// Character creation asks "what brought you here?" (an archetype), one
+// class-specific question about how the player learned their craft, and two
+// questions that fill in the details of the archetype. The answers become a
+// backstory (G.player.backstory, built by the engine's beginAdventure from
+// buildPlayerBackstory below) and decide who the GUIDE is: an NPC who joins
+// the player shortly after the adventure begins, opens the first
+// conversation and points at a first lead. The leads are real lore facts
+// (getBackstoryLoreFacts) so asking around actually turns something up.
+//
+// Everything here is plain data plus small pure helpers. The engine owns
+// the UI (setup pages), the guide's spawn and the story hooks; the
+// conversation entries live in cyoaftw-npc-data.js (ids "guide-*").
+//
+// SLOTS: each answer sets one or more named slots (home, wrong, craft ...).
+// Backstory templates, guide lines and lore facts read them through
+// {placeholders}, so every answer changes the wording the player sees later.
+
+// How many random "approach" questions the personality page asks.
+const APPROACH_QUESTION_COUNT = 4;
+
+// Story turns the player gets to look around before the guide arrives.
+const GUIDE_ARRIVAL_TURN = 1;
+
+function _spFill(text, map) {
+    return String(text == null ? "" : text).replace(/\{(\w+)\}/g, function (m, key) {
+        const v = map && map[key];
+        return (v === undefined || v === null || v === "") ? m : String(v);
+    });
+}
+
+// ── CLASS CRAFT QUESTION: how did you learn what you do? ─────────
+const CLASS_CRAFT_QUESTIONS = {
+    Fighter: {
+        prompt: "Where did you learn to fight?",
+        options: [
+            { label: "Militia drills back home", slot: { craft: "learned to fight in the militia drills back home" }, trait: "boldness" },
+            { label: "A mercenary company that fell apart", slot: { craft: "carried a spear for a mercenary company until it broke up" }, trait: "boldness" },
+            { label: "Taverns and alley scraps", slot: { craft: "learned to fight the hard way, in taverns and alley scraps" }, trait: "curiosity" },
+            { label: "A veteran who saw something in me", slot: { craft: "were trained by an old veteran who saw something in you" }, trait: "empathy" }
+        ]
+    },
+    Rogue: {
+        prompt: "Where did you pick up your light fingers?",
+        options: [
+            { label: "Running errands for a street crew", slot: { craft: "grew up running errands for a street crew" }, trait: "boldness" },
+            { label: "Touring with a troupe of players", slot: { craft: "toured with a troupe of players and picked up more than lines" }, trait: "empathy" },
+            { label: "A locksmith's workshop", slot: { craft: "apprenticed under a locksmith and learned what every lock is hiding" }, trait: "curiosity" },
+            { label: "Working off a family debt", slot: { craft: "worked off a family debt with quick fingers and a quicker exit" }, trait: "boldness" }
+        ]
+    },
+    Cleric: {
+        prompt: "What first turned you toward your faith?",
+        options: [
+            { label: "A vow I made as a child", slot: { craft: "swore a vow of service as a child and never took it back" }, trait: "empathy" },
+            { label: "A stranger's deathbed", slot: { craft: "sat at a dying stranger's bedside and heard something you could not explain" }, trait: "curiosity" },
+            { label: "Years on the pilgrim roads", slot: { craft: "walked the pilgrim roads until the road itself became your faith" }, trait: "curiosity" },
+            { label: "A temple that took in foundlings", slot: { craft: "were raised in a temple that took in those nobody else wanted" }, trait: "empathy" }
+        ]
+    },
+    Wizard: {
+        prompt: "How did you come by your magic?",
+        options: [
+            { label: "A stolen primer and stubbornness", slot: { craft: "taught yourself from a stolen primer and a great deal of stubbornness" }, trait: "curiosity" },
+            { label: "A failed apprenticeship", slot: { craft: "washed out of a respectable apprenticeship and kept everything you learned" }, trait: "boldness" },
+            { label: "A wandering hedge-mage", slot: { craft: "were taken in by a wandering hedge-mage who never stayed anywhere long" }, trait: "curiosity" },
+            { label: "A dangerous inheritance", slot: { craft: "inherited a trunk of somebody else's dangerous notes" }, trait: "boldness" }
+        ]
+    }
+};
+
+// ── APPROACH QUESTION POOL (random subset each new game) ─────────
+// Same three traits as before (curiosity / empathy / boldness) - the
+// conversation catalogue and deity judgment already read them - but a
+// different handful of scenarios each time. Options per question may be 2-3.
+const APPROACH_QUESTION_POOL = [
+    { id: "new-place", prompt: "You step into a place you've never seen before. What draws you first?", options: [
+        { text: "The layout, exits, and anything unusual", trait: "curiosity" },
+        { text: "The people, and whether anyone seems worth approaching", trait: "empathy" },
+        { text: "Who looks dangerous, and where I'd stand if it went wrong", trait: "boldness" } ] },
+    { id: "troubled", prompt: "You notice someone nearby who looks troubled. What do you do?", options: [
+        { text: "Check on them and offer help", trait: "empathy" },
+        { text: "Stay back and watch before getting involved", trait: "boldness" },
+        { text: "Find out what's troubling them, so I understand the situation", trait: "curiosity" } ] },
+    { id: "strange-sound", prompt: "A strange sound comes from deeper inside. Your instinct is to:", options: [
+        { text: "Go find out what made it", trait: "curiosity" },
+        { text: "Leave it alone unless it becomes my problem", trait: "boldness" } ] },
+    { id: "blocked", prompt: "Someone blocks your way and tests you. How do you respond?", options: [
+        { text: "Hold your ground and push back", trait: "boldness" },
+        { text: "Talk them down and keep things under control", trait: "empathy" } ] },
+    { id: "found-purse", prompt: "You find a purse on the road with a name stitched inside. You:", options: [
+        { text: "Track down the owner, whatever it takes", trait: "empathy" },
+        { text: "Look through it carefully for what it can tell you", trait: "curiosity" },
+        { text: "Keep it. The road is not a lost-and-found", trait: "boldness" } ] },
+    { id: "locked-door", prompt: "A door is locked and nobody is watching. What goes through your mind?", options: [
+        { text: "What could be behind it?", trait: "curiosity" },
+        { text: "That someone must have a reason for the lock", trait: "empathy" },
+        { text: "That a lock is only a suggestion", trait: "boldness" } ] },
+    { id: "argument", prompt: "Two strangers are arguing loudly in the street. You:", options: [
+        { text: "Step between them before it turns ugly", trait: "boldness" },
+        { text: "Listen in. Arguments tell you a lot about a town", trait: "curiosity" },
+        { text: "Ask one of them if they're alright afterward", trait: "empathy" } ] },
+    { id: "offer", prompt: "A stranger offers you well-paid work and won't say what it is. You:", options: [
+        { text: "Take it. Details can wait", trait: "boldness" },
+        { text: "Ask questions until the story stops changing", trait: "curiosity" },
+        { text: "Ask who else will be hurt if it goes wrong", trait: "empathy" } ] },
+    { id: "ruin", prompt: "You pass a collapsed house with something glinting in the rubble. You:", options: [
+        { text: "Climb in. Something that shiny won't wait", trait: "boldness" },
+        { text: "Look for another way in that doesn't bring the roof down", trait: "curiosity" },
+        { text: "Call out in case anyone is still inside", trait: "empathy" } ] },
+    { id: "rumor", prompt: "You overhear a rumor that may or may not be true. You:", options: [
+        { text: "Chase it down to see for myself", trait: "curiosity" },
+        { text: "Think about who it might hurt before repeating it", trait: "empathy" },
+        { text: "Use it, if it gets me an edge", trait: "boldness" } ] },
+    { id: "wounded", prompt: "You come across an injured stranger on the road. You:", options: [
+        { text: "Stop and tend to them", trait: "empathy" },
+        { text: "Check whether this is a trap before approaching", trait: "boldness" },
+        { text: "Ask what happened to them, because it may happen to me", trait: "curiosity" } ] },
+    { id: "night-camp", prompt: "You are alone at a camp after dark and hear something moving outside the light. You:", options: [
+        { text: "Draw steel and call out", trait: "boldness" },
+        { text: "Douse the fire and listen", trait: "curiosity" },
+        { text: "Leave food at the edge of the light, in case it only needs that", trait: "empathy" } ] }
+];
+
+// ── ARCHETYPES ───────────────────────────────────────────────────
+// id            key stored on G.player.backstory.archetype
+// label/blurb   shown on the setup page
+// classFit      classes the choice is labelled "suits your class" for
+// questions     two detail questions; option.slot merges into the slots
+// build         (slots, ctx) -> backstory text; ctx = { name, cls, craft }
+// goal          (slots) -> one line for the character sheet and story thread
+// guide         who joins the player (see buildGuideSpec / the engine's
+//               spawnGuideNPC): species pool, role, age, relation, persona,
+//               opening line variants and three canned replies
+// lead          { building, ... }: where the first lead points, and the lore
+//               fact asking around will turn up (see getBackstoryLoreFacts)
+// Placeholders available in guide lines and leads: {player} {class}
+// {leadPlace} {mentorHint} {guideName} plus every slot.
+const PLAYER_ARCHETYPES = {
+    "coming-of-age": {
+        label: "Coming of Age",
+        blurb: "You have left home to make something of yourself, and someone has promised to see you started.",
+        classFit: ["Fighter", "Rogue", "Wizard"],
+        questions: [
+            { prompt: "What did you leave behind?", options: [
+                { label: "A farming village", slot: { home: "a farming village" }, trait: "empathy" },
+                { label: "A family trade", slot: { home: "your family's trade" }, trait: "boldness" },
+                { label: "A quiet monastery school", slot: { home: "a quiet monastery school" }, trait: "curiosity" },
+                { label: "A fishing hamlet", slot: { home: "a fishing hamlet" }, trait: "boldness" } ] },
+            { prompt: "Why leave now?", options: [
+                { label: "To see the world before settling down", slot: { reason: "you wanted to see the world before the world settled you" }, trait: "curiosity" },
+                { label: "There was no place left for me at home", slot: { reason: "there was no place left for you at home" }, trait: "boldness" },
+                { label: "To prove myself to someone who doubted me", slot: { reason: "someone back home never believed you would amount to anything" }, trait: "boldness" },
+                { label: "My teacher said I had outgrown the place", slot: { reason: "your teacher told you that you had outgrown the place" }, trait: "empathy" } ] }
+        ],
+        build: function (s, c) {
+            return "You grew up in " + s.home + ", and you " + c.craft + ". You left because " + s.reason + ". " +
+                "Now you have come to this town with a few coins and a promise: an old friend of the family swore to see you properly started.";
+        },
+        goal: function () { return "Find a teacher or a guild willing to take you on."; },
+        guide: {
+            relation: "an old friend of your family who promised to see you started",
+            species: ["Human", "Dwarf", "Elf", "Halfling"], role: "Townsfolk", age: "middle-aged",
+            persona: "A weathered, patient old friend of the player's family who has seen plenty of green youngsters come to this town and wants this one to land on their feet. Dry humor, gentle teasing, genuinely proud of the player.",
+            opening: [
+                "\"{player}! There you are. So, what do you make of this town? Ready to start your apprenticeship, or do you want a day to find your feet first?\"",
+                "\"Found you at last. Well? What do you make of the place? Home must feel a long way off by now. Time we found you someone worth learning from.\"",
+                "\"There's the face I promised your family I'd look after. So, {player}, what do you think of the town? Ready to meet some people who can teach you something?\""
+            ],
+            replies: [
+                { label: "Say you're ready", say: "I'm ready. Where do we start?", stance: "friendly" },
+                { label: "Admit it's a lot to take in", say: "Give me a moment. It's a lot to take in.", stance: "guarded" },
+                { label: "Bristle at being looked after", say: "I don't need a minder.", stance: "hostile" }
+            ]
+        },
+        lead: { building: "classMentor" }
+    },
+
+    "revenge": {
+        label: "Revenge",
+        blurb: "Someone took something from you. You have come to take it back, and you have a name to follow.",
+        classFit: ["Fighter", "Rogue"],
+        questions: [
+            { prompt: "What was done to you?", options: [
+                { label: "They burned my home", slot: { wrong: "burned your home to the ground" }, trait: "boldness" },
+                { label: "They killed someone I loved", slot: { wrong: "killed someone you loved" }, trait: "empathy" },
+                { label: "They betrayed me and left me for dead", slot: { wrong: "betrayed you and left you for dead" }, trait: "boldness" },
+                { label: "They stole my family's name and land", slot: { wrong: "stole your family's name and land" }, trait: "curiosity" } ] },
+            { prompt: "Who are you after?", options: [
+                { label: "An agent of the Ashen Court", slot: { quarry: "the Ashen Court", quarryFaction: "crown" }, trait: "curiosity" },
+                { label: "A captain of the Tattered Banners", slot: { quarry: "the Tattered Banners", quarryFaction: "banners" }, trait: "boldness" },
+                { label: "Someone I once trusted", slot: { quarry: "the one who betrayed you", quarryFaction: "" }, trait: "empathy" },
+                { label: "Someone whose face I never saw", slot: { quarry: "the one whose face you never saw", quarryFaction: "" }, trait: "curiosity" } ] }
+        ],
+        build: function (s, c) {
+            return "You " + c.craft + ", and for a long time that was enough. Then came the worst day of your life, when someone " + s.wrong + ". " +
+                "Since then you have followed one trail: that of " + s.quarry + ". It has led you here, and so has an old comrade who shares your grudge.";
+        },
+        goal: function (s) { return "Follow the trail of " + s.quarry + " and see justice done."; },
+        guide: {
+            relation: "an old comrade who shares your grudge",
+            species: ["Human", "Dwarf", "Orc", "Halfling"], role: "Adventurer", age: "adult",
+            persona: "A hard, quiet old comrade of the player's who shares the grudge and has been tracking the same trail. Speaks low and plainly, trusts few people, loyal without being soft about it.",
+            opening: [
+                "\"{player}. Keep your voice down. The trail of {quarry} had gone cold, and then a trace of it turned up at {leadPlace}. We ask around quietly, and we don't say who is asking.\"",
+                "\"Over here. Don't stare. Last traces of {quarry} were seen at {leadPlace}. Let's ask around, nice and easy, and see who flinches.\"",
+                "\"Good, you came. I've something. {quarry}, or someone who deals with them, passed through {leadPlace} not long ago. We start there, and we start quiet.\""
+            ],
+            replies: [
+                { label: "Say you're with them", say: "Then we start there. Lead on.", stance: "friendly" },
+                { label: "Ask what exactly they know", say: "How sure are you? I won't chase a rumor.", stance: "guarded" },
+                { label: "Say you work alone", say: "I'll do this my way. Stay out of it.", stance: "hostile" }
+            ]
+        },
+        lead: { building: { Fighter: "Guildhall", "default": "Inn" } }
+    },
+
+    "redemption": {
+        label: "Redemption",
+        blurb: "You did something you cannot undo. You have come here to start making up for it.",
+        classFit: ["Cleric", "Fighter"],
+        questions: [
+            { prompt: "What do you carry?", options: [
+                { label: "I left my comrades to die", slot: { sin: "left your comrades to die" }, trait: "boldness" },
+                { label: "I stole from people who trusted me", slot: { sin: "stole from people who trusted you" }, trait: "curiosity" },
+                { label: "I took a life I could have spared", slot: { sin: "took a life you could have spared" }, trait: "empathy" },
+                { label: "I ran when I was needed", slot: { sin: "ran when you were needed most" }, trait: "boldness" } ] },
+            { prompt: "What do you want now?", options: [
+                { label: "To repay what I owe", slot: { penance: "you mean to repay what you owe, whatever it costs" }, trait: "empathy" },
+                { label: "To make things right with the one I wronged", slot: { penance: "you mean to make things right with the one you wronged" }, trait: "empathy" },
+                { label: "To earn a second chance", slot: { penance: "you mean to earn a second chance, one honest deed at a time" }, trait: "curiosity" },
+                { label: "To be somebody I can stand to be", slot: { penance: "you mean to become someone you can stand to be" }, trait: "boldness" } ] }
+        ],
+        build: function (s, c) {
+            return "You " + c.craft + ", but that is not what you are remembered for. You " + s.sin + ", and you have carried it ever since. " +
+                "Now " + s.penance + ". Someone who knew you before the worst of it has offered to help you begin.";
+        },
+        goal: function () { return "Make amends, one honest deed at a time."; },
+        guide: {
+            relation: "someone who offered you a way to begin making amends",
+            species: ["Human", "Dwarf", "Elf", "Halfling"], role: "Priest", age: "elderly",
+            persona: "A calm, plainspoken priest who knew the player before the worst of it and chose to offer help anyway. Gentle but never flattering; believes in small deeds over grand gestures.",
+            opening: [
+                "\"{player}. You came. I was not certain you would. So, what do you make of this town? It is as good a place as any to begin setting things right. I would start with {leadPlace}.\"",
+                "\"There you are. Walk with me a moment. What do you make of the town? Folk here remember a kindness a long time, and a harm longer. We should begin at {leadPlace}.\"",
+                "\"I'm glad you stayed. No speeches, {player}. This town has people who need help and a shrine worth sitting in. Start at {leadPlace}, and we will see what you make of it.\""
+            ],
+            replies: [
+                { label: "Thank them", say: "Thank you for not giving up on me. Where do I begin?", stance: "friendly" },
+                { label: "Admit you don't deserve it", say: "I don't know that I deserve this.", stance: "guarded" },
+                { label: "Snap that you didn't ask for pity", say: "I didn't ask for your pity.", stance: "hostile" }
+            ]
+        },
+        lead: { building: "Chapel", shrine: true }
+    },
+
+    "missing-kin": {
+        label: "Search",
+        blurb: "Someone who matters to you vanished. Their last known trail leads to this town.",
+        classFit: ["Rogue", "Wizard", "Cleric"],
+        questions: [
+            { prompt: "Who are you looking for?", options: [
+                { label: "My younger sibling", slot: { who: "your younger sibling" }, trait: "empathy" },
+                { label: "A parent", slot: { who: "your mother or father" }, trait: "empathy" },
+                { label: "My oldest friend", slot: { who: "your oldest friend" }, trait: "curiosity" },
+                { label: "My child", slot: { who: "your child" }, trait: "boldness" } ] },
+            { prompt: "How did they go missing?", options: [
+                { label: "They left to find work in town", slot: { lastSeen: "left for this town to find work and never wrote again" }, trait: "curiosity" },
+                { label: "They were taken by sellswords", slot: { lastSeen: "were taken by sellswords on the road" }, trait: "boldness" },
+                { label: "They vanished after a quarrel", slot: { lastSeen: "vanished after a bitter quarrel, and you never got to take it back" }, trait: "empathy" },
+                { label: "They went to the old capital", slot: { lastSeen: "went to the ruined capital of Aldermere and did not come back" }, trait: "curiosity" } ] }
+        ],
+        build: function (s, c) {
+            return "You " + c.craft + ", but your thoughts are always elsewhere. " + s.who.charAt(0).toUpperCase() + s.who.slice(1) + " " + s.lastSeen + ". " +
+                "The last trail you could find points here, and a friend who also wants answers has come to help you follow it.";
+        },
+        goal: function (s) { return "Find out what happened to " + s.who + "."; },
+        guide: {
+            relation: "a friend who wants answers as badly as you do",
+            species: ["Human", "Elf", "Halfling", "Dwarf"], role: "Townsfolk", age: "adult",
+            persona: "A loyal, observant friend of the missing person who has been helping the player search. Practical, quick to notice small details, careful about raising hope too high.",
+            opening: [
+                "\"{player}, over here. So, what do you make of the place? Big enough that someone could vanish into it. The clerk at {leadPlace} keeps a ledger of who comes and goes. If {who} passed through, a name is in it.\"",
+                "\"There you are. First impressions of the town? Mine is that it keeps records, and records are where we start. {leadPlace} should have something on arrivals.\"",
+                "\"I've been walking the street all morning. It's smaller than I feared, and that's good news for us. Let's start at {leadPlace}. Someone there will have seen something.\""
+            ],
+            replies: [
+                { label: "Say let's go", say: "Then let's go. I'm not stopping until I know.", stance: "friendly" },
+                { label: "Admit you're afraid of the answer", say: "What if the answer is one I can't bear?", stance: "guarded" },
+                { label: "Say you'd rather search alone", say: "I'd rather do this on my own.", stance: "hostile" }
+            ]
+        },
+        lead: { building: "Town Hall" }
+    },
+
+    "fortune": {
+        label: "Fortune",
+        blurb: "You are in debt, or in need, or just hungry for more, and this town is where the coin is.",
+        classFit: ["Rogue", "Wizard", "Fighter"],
+        questions: [
+            { prompt: "How did you end up needing coin?", options: [
+                { label: "A moneylender called in my family's debt", slot: { need: "a moneylender called in your family's debt" }, trait: "boldness" },
+                { label: "A venture of mine failed badly", slot: { need: "a venture of yours failed badly and took everything with it" }, trait: "curiosity" },
+                { label: "I gambled it away", slot: { need: "you gambled away a good deal more than you owned" }, trait: "boldness" },
+                { label: "I'm just tired of being poor", slot: { need: "you grew tired of being poor and decided to do something about it" }, trait: "empathy" } ] },
+            { prompt: "What would count as winning?", options: [
+                { label: "Paying off every debt", slot: { dream: "clear every debt you owe" }, trait: "empathy" },
+                { label: "A house with a lock only I hold the key to", slot: { dream: "own a place with a lock only you hold the key to" }, trait: "boldness" },
+                { label: "Enough to start my own business", slot: { dream: "have enough to start something of your own" }, trait: "curiosity" },
+                { label: "More than anyone thinks I deserve", slot: { dream: "prove everyone wrong with more than they think you deserve" }, trait: "boldness" } ] }
+        ],
+        build: function (s, c) {
+            return "You " + c.craft + ", and it was almost enough, until " + s.need + ". Now you want to " + s.dream + ". " +
+                "A fellow chancer who got you into this, or out of the last mess, has come along to see how far it goes.";
+        },
+        goal: function (s) { return "Earn enough coin to " + s.dream + "."; },
+        guide: {
+            relation: "a fellow chancer who got you into this",
+            species: ["Human", "Halfling", "Dwarf", "Elf"], role: "Adventurer", age: "adult",
+            persona: "A charming, chancy partner in the player's schemes who talks fast, jokes through danger and has never once been honest about a price. Loyal in their own way.",
+            opening: [
+                "\"{player}! Well, here we are. So, what do you make of the place? More coin in this town than either of us has seen in a year, and I intend we meet some of it. Start at {leadPlace}. Somebody always pays for a quiet pair of hands.\"",
+                "\"There you are. Don't look so grim. Look at the place, there's money in the walls. First stop, {leadPlace}. I hear someone's always hiring.\"",
+                "\"Right. Town. Lots of people. Lots of purses. Not that I'd suggest anything. Let's ask around at {leadPlace} for honest work first, and see what turns up after.\""
+            ],
+            replies: [
+                { label: "Grin and agree", say: "Honest work first. Then we see.", stance: "friendly" },
+                { label: "Ask if you can trust them", say: "Last time you said that I nearly lost a hand.", stance: "guarded" },
+                { label: "Say you'll take the lead", say: "I'll decide where we go. You follow.", stance: "hostile" }
+            ]
+        },
+        lead: { building: { Rogue: "Tavern", "default": "Guildhall" } }
+    },
+
+    "exile": {
+        label: "Exile",
+        blurb: "You can't go home. You came here to disappear, and one person knows where to find you.",
+        classFit: ["Rogue", "Fighter", "Cleric"],
+        questions: [
+            { prompt: "Why can't you go home?", options: [
+                { label: "Accused of a crime I didn't commit", slot: { cause: "were accused of a crime you did not commit" }, trait: "empathy" },
+                { label: "I refused an order I couldn't stomach", slot: { cause: "refused an order you could not stomach" }, trait: "boldness" },
+                { label: "I was caught on the wrong side of a feud", slot: { cause: "were caught on the wrong side of a feud between people far above you" }, trait: "curiosity" },
+                { label: "I was cast out for what I believe", slot: { cause: "were cast out for what you believe" }, trait: "boldness" } ] },
+            { prompt: "Who might be looking for you?", options: [
+                { label: "The Crown's magistrates", slot: { hunters: "the Crown's old magistrates" }, trait: "curiosity" },
+                { label: "My former company", slot: { hunters: "your former company" }, trait: "boldness" },
+                { label: "A powerful family", slot: { hunters: "a powerful family with long arms" }, trait: "curiosity" },
+                { label: "Nobody, if I'm careful", slot: { hunters: "nobody, as long as you stay careful" }, trait: "empathy" } ] }
+        ],
+        build: function (s, c) {
+            return "You " + c.craft + ", until you " + s.cause + ". You cannot go home, and " + s.hunters + " may come looking. " +
+                "You came here to be nobody for a while, and one friend who vouched for you has followed to see you through.";
+        },
+        goal: function () { return "Lie low, and find a way to clear your name or start over."; },
+        guide: {
+            relation: "a friend who vouched for you when nobody else would",
+            species: ["Human", "Elf", "Dwarf", "Halfling"], role: "Adventurer", age: "adult",
+            persona: "A steady, protective friend who vouched for the player and has been quietly watching their back. Soft-spoken, always checking the room, never raises their voice.",
+            opening: [
+                "\"Easy, {player}. Nobody's followed us. So, what do you make of the place? Small enough to hide in, big enough that nobody looks twice. Use no real name where you can help it. {leadPlace} is a good place to start being nobody.\"",
+                "\"Steady. Look at the room, not at me. This town asks few questions. We keep it that way. Start at {leadPlace} and keep your head down.\"",
+                "\"There you are. Good. First impression of the town? Mine is that it's the sort of place that minds its business. Let's stay in {leadPlace} and watch who comes and goes.\""
+            ],
+            replies: [
+                { label: "Thank them for the warning", say: "Thank you. I'll keep my head down.", stance: "friendly" },
+                { label: "Ask whether it's safe", say: "How safe is it, really?", stance: "guarded" },
+                { label: "Say you won't hide", say: "I'm done hiding. Let them come.", stance: "hostile" }
+            ]
+        },
+        lead: { building: { Cleric: "Chapel", "default": "Inn" } }
+    },
+
+    "calling": {
+        label: "Calling",
+        blurb: "Something drew you here: a dream, a voice, a sign you can't explain. Someone knows what it means.",
+        classFit: ["Cleric", "Wizard"],
+        questions: [
+            { prompt: "What was the sign?", options: [
+                { label: "A dream that came three nights running", slot: { sign: "a dream that returned three nights running" }, trait: "curiosity" },
+                { label: "A voice at a roadside shrine", slot: { sign: "a voice at a roadside shrine" }, trait: "empathy" },
+                { label: "A dying stranger's last words", slot: { sign: "a dying stranger's last words" }, trait: "empathy" },
+                { label: "A relic that came into my hands", slot: { sign: "a relic that came into your hands, unasked" }, trait: "curiosity" } ] },
+            { prompt: "How do you feel about it?", options: [
+                { label: "Afraid, but I'm going anyway", slot: { feeling: "afraid, and going anyway" }, trait: "boldness" },
+                { label: "Certain. It feels like coming home", slot: { feeling: "certain, as if it were coming home" }, trait: "empathy" },
+                { label: "Suspicious. I want proof", slot: { feeling: "suspicious, and wanting proof" }, trait: "curiosity" },
+                { label: "Resentful. I didn't ask for this", slot: { feeling: "resentful, because you never asked for any of this" }, trait: "boldness" } ] }
+        ],
+        build: function (s, c) {
+            return "You " + c.craft + ", and then came " + s.sign + ". You are " + s.feeling + ". " +
+                "It led you to this town, where someone who understands such signs has agreed to help you read it.";
+        },
+        goal: function () { return "Find out what the sign that brought you here means."; },
+        guide: {
+            relation: "someone who understands the sign that drew you here",
+            species: ["Human", "Elf", "Dwarf", "Halfling"], role: "Priest", age: "elderly",
+            persona: "A quiet, unflappable old pilgrim who recognises the sign that drew the player and speaks of it without drama. Patient, amused by questions, never gives a straight answer when a story will do.",
+            opening: [
+                "\"{player}. You followed it all the way. So, what do you make of this town? Folk say an old shrine tied to {leadPlace} still answers. Come, we'll see whether it answers you.\"",
+                "\"There. You can feel it too, can't you? Never mind the town, it's only the road you walked to get here. {leadPlace} is where I'd start.\"",
+                "\"I wondered whether you would come. What did you see on the way? Walk with me to {leadPlace}. Some things are easier to understand where they began.\""
+            ],
+            replies: [
+                { label: "Ask them to explain", say: "Then tell me what it means. Please.", stance: "friendly" },
+                { label: "Admit you can still turn back", say: "I could still turn around. Couldn't I?", stance: "guarded" },
+                { label: "Reject the idea of fate", say: "I don't believe in signs.", stance: "hostile" }
+            ]
+        },
+        lead: { building: { Cleric: "Chapel", "default": "Tavern" }, shrine: true }
+    }
+};
+
+// Which Town building a green character of each class would start looking
+// for a teacher in (used by "coming-of-age"). Hints are per building type.
+const CLASS_MENTOR_HINTS = {
+    Fighter: { building: "Guildhall" },
+    Rogue: { building: "Tavern" },
+    Cleric: { building: "Chapel" },
+    Wizard: { building: "Town Hall" }
+};
+const BUILDING_MENTOR_HINTS = {
+    "Guildhall": "The guildmaster keeps a roll of recruits, and the training yard behind the hall is where they learn. Ask to speak to the guildmaster.",
+    "Chapel": "The priest here takes in the faithful and the lost alike, and teaches those who show a true calling. Ask after the vestry's prayer books.",
+    "Tavern": "The kind of people who teach a rogue drink in the taproom. Ask the bartender who is worth knowing.",
+    "Town Hall": "The records office at the Town Hall is the nearest thing this town has to a library. Ask the clerk who here can teach.",
+    "Inn": "Travellers pass through the inn with all sorts of skills. Ask the innkeeper who is worth learning from."
+};
+// If a town (an old save, say) has no such building, lead somewhere that does.
+const LEAD_FALLBACKS = {
+    "Chapel": ["Tavern", "Town Hall"],
+    "Guildhall": ["Town Hall", "Tavern"]
+};
+
+// Generic wording when the world has no such building (a non-town start).
+const GUIDE_FALLBACK_PLACE = "the nearest place where people gather";
+
+function getArchetypeIdsForClass(cls) {
+    const ids = Object.keys(PLAYER_ARCHETYPES);
+    const fits = ids.filter(function (id) { return PLAYER_ARCHETYPES[id].classFit.indexOf(cls) >= 0; });
+    const rest = ids.filter(function (id) { return fits.indexOf(id) < 0; });
+    return fits.concat(rest);
+}
+
+function _spCap(text) {
+    const t = String(text || "");
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}
+
+// Finds a named building of the live Town ({ name, type, coords }), or null.
+function findTownBuilding(type) {
+    const rooms = typeof G !== "undefined" && G && G.roomMap ? G.roomMap : null;
+    if (!rooms) return null;
+    let found = null;
+    Object.keys(rooms).forEach(function (key) {
+        const r = rooms[key];
+        if (found || !r || !r.isEntrance || !r.buildingId || r.buildingType !== type) return;
+        found = {
+            id: r.buildingId,
+            type: type,
+            coords: key,
+            name: r.buildingName || (type === "Town Hall" ? "the Town Hall" : "the " + type.toLowerCase())
+        };
+    });
+    return found;
+}
+
+// The place the first lead points at, resolved against the live world.
+function _leadTypeFor(arch, cls) {
+    let b = arch.lead ? arch.lead.building : null;
+    if (b && typeof b === "object") b = b[cls] || b["default"];
+    if (b === "classMentor") b = (CLASS_MENTOR_HINTS[cls] || CLASS_MENTOR_HINTS.Fighter).building;
+    return b || "Tavern";
+}
+
+function resolveGuideLeadPlace(backstory) {
+    const arch = backstory ? PLAYER_ARCHETYPES[backstory.archetype] : null;
+    if (!arch) return null;
+    let type = _leadTypeFor(arch, backstory.cls);
+    let building = findTownBuilding(type);
+    if (!building && LEAD_FALLBACKS[type]) {
+        const fbs = LEAD_FALLBACKS[type];
+        for (let i = 0; i < fbs.length && !building; i++) {
+            building = findTownBuilding(fbs[i]);
+            if (building) type = fbs[i];
+        }
+    }
+    return { building: building, type: type, hint: BUILDING_MENTOR_HINTS[type] || "" };
+}
+
+// The fill map for guide lines and lore facts: slots + player + place.
+function getBackstoryFillMap(backstory) {
+    const slots = backstory && backstory.slots ? backstory.slots : {};
+    const map = {};
+    Object.keys(slots).forEach(function (k) { map[k] = slots[k]; });
+    map.player = backstory && backstory.playerName ? backstory.playerName : "friend";
+    map.class = backstory && backstory.cls ? String(backstory.cls).toLowerCase() : "adventurer";
+    const lead = resolveGuideLeadPlace(backstory);
+    map.leadPlace = lead && lead.building ? lead.building.name : GUIDE_FALLBACK_PLACE;
+    map.mentorHint = lead && lead.hint ? lead.hint : "";
+    map.guideName = backstory && backstory.guide && backstory.guide.name ? backstory.guide.name : "your guide";
+    return map;
+}
+
+// choices = { archetype, cls, playerName, slots }; returns the object the
+// engine stores on G.player.backstory (text is the template version; the
+// engine may replace it with an AI-polished one and keeps this as `template`).
+function buildPlayerBackstory(choices) {
+    const arch = PLAYER_ARCHETYPES[choices.archetype];
+    if (!arch) return null;
+    const slots = Object.assign({}, choices.slots || {});
+    const craft = slots.craft || "made your own way in the world";
+    const template = arch.build(slots, { name: choices.playerName, cls: choices.cls, craft: craft });
+    return {
+        archetype: choices.archetype,
+        label: arch.label,
+        cls: choices.cls,
+        playerName: choices.playerName,
+        slots: slots,
+        template: template,
+        text: template,
+        goal: arch.goal(slots),
+        guide: { state: "pending" },
+        version: 1
+    };
+}
+
+// The guide's opening line for this backstory (one of the variants, stable per player).
+function getGuideOpeningLine(backstory) {
+    const arch = backstory ? PLAYER_ARCHETYPES[backstory.archetype] : null;
+    if (!arch) return "";
+    const variants = arch.guide.opening;
+    let h = 0;
+    const seed = String(backstory.playerName || "") + backstory.archetype;
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 9973;
+    return _spFill(variants[h % variants.length], getBackstoryFillMap(backstory));
+}
+
+// First-lead facts the world can answer. These join the lore pool (see
+// getNPCKnownLoreFacts in cyoaftw-npc-data.js), so asking around at the
+// named building turns up exactly what the guide hinted at.
+function getBackstoryLoreFacts() {
+    const bs = typeof G !== "undefined" && G && G.player ? G.player.backstory : null;
+    const arch = bs ? PLAYER_ARCHETYPES[bs.archetype] : null;
+    if (!arch) return [];
+    const lead = resolveGuideLeadPlace(bs);
+    if (!lead || !lead.building) return [];
+    const map = getBackstoryFillMap(bs);
+    const place = lead.building.name;
+    const base = { buildingId: lead.building.id, zones: ["Town"], know: 85, rumor: true, backstoryLead: true };
+    const out = [];
+    const id = "lead-" + bs.archetype;
+    const common = ["local", "trade"];
+    const type = lead.type;
+    const isChapel = type === "Chapel";
+    const isGuild = type === "Guildhall";
+    if (bs.archetype === "coming-of-age") {
+        out.push(Object.assign({}, base, { id: id, tiers: common, topic: "finding a teacher",
+            text: place + " is where a green " + map.class + " is most likely to find somebody willing to teach. " + lead.hint,
+            distorted: "Folk say you can find a teacher at " + place + ", if the teacher likes your face." }));
+    } else if (bs.archetype === "revenge") {
+        const trace = bs.slots.quarryFaction === "crown" ? "a quiet man in Crown grey who paid in old coin"
+            : bs.slots.quarryFaction === "banners" ? "a scarred sellsword with a faded Banner patch under his cloak"
+            : "a stranger who gave no name and watched the door the whole evening";
+        if (isGuild) {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "a stranger at " + place,
+                text: "Some time ago " + trace + " came to " + place + ", asked the guildmaster who had taken contracts in this town before the war, and left before dawn. Nobody saw which road.",
+                distorted: "A stranger asked about old contracts at " + place + " and left in a hurry. Folk say he was hiring, or hunting." }));
+        } else {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "a stranger at " + place,
+                text: "Some time ago " + trace + " took a room at " + place + ", asked who still lived in the town from before the war, and left before dawn. Nobody saw which road.",
+                distorted: "A stranger stayed at " + place + " and left in a hurry. Folk say he was running from something, or toward it." }));
+        }
+    } else if (bs.archetype === "redemption") {
+        if (isChapel) {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "the altar at " + place,
+                text: "The priest at " + place + " asks nothing of those who kneel at the altar. Folk go there when they have something to answer for, and most walk out lighter.",
+                distorted: "There is a chapel where people go to confess. Nobody talks about what they say." }));
+        } else {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "the shrine below " + place,
+                text: "The shrine below " + place + " is kept clean by someone who asks for nothing. Folk go down there when they have something to answer for, and most come back lighter.",
+                distorted: "There is a shrine under " + place + " where people go to confess. Nobody talks about what they say." }));
+        }
+    } else if (bs.archetype === "missing-kin") {
+        out.push(Object.assign({}, base, { id: id, tiers: ["local", "military"], topic: "the arrivals ledger",
+            text: "The clerk at " + place + " keeps a ledger of who comes through the town. Anyone looking for someone who passed this way should ask there, politely, and the clerk usually has more patience than coin.",
+            distorted: "Someone at " + place + " writes down everyone who comes and goes, if you can get past the guards." }));
+    } else if (bs.archetype === "fortune") {
+        if (isGuild) {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "who is hiring",
+                text: "The job board at " + place + " is where this town's contracts end up: escorts, bounties, a little quiet work. The guildmaster knows which ones pay and which ones get people killed.",
+                distorted: "There is always work on the board at " + place + " for anyone who doesn't ask what it is." }));
+        } else {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "who is hiring",
+                text: "Anyone in this town who wants a job done quietly ends up at " + place + ". The bartender knows who is hiring and what they are willing to pay.",
+                distorted: "There is always work at " + place + " for anyone who doesn't ask what it is." }));
+        }
+    } else if (bs.archetype === "exile") {
+        if (isChapel) {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "keeping quiet in town",
+                text: "The priest at " + place + " takes in anyone who comes to the altar and never asks a penitent's name. Strangers who keep their heads down there are left alone.",
+                distorted: "They say " + place + " shelters anyone who kneels, and forgets every face." }));
+        } else {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "keeping quiet in town",
+                text: "Strangers who keep their heads down at " + place + " are left alone, and the people who run it are used to not asking where a guest comes from.",
+                distorted: "They say " + place + " takes in anyone who can pay and doesn't remember anyone's face." }));
+        }
+    } else if (bs.archetype === "calling") {
+        if (isChapel) {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "the altar at " + place,
+                text: "The altar at " + place + " is older than the chapel built around it, and some say it answers those who come with a real question.",
+                distorted: "Something at the altar of " + place + " answers questions, if the questioner is willing to hear the answer." }));
+        } else {
+            out.push(Object.assign({}, base, { id: id, tiers: common, topic: "the old shrine below " + place,
+                text: "Below " + place + " is a shrine older than the building, and some say it answers those who come with a real question.",
+                distorted: "Something below " + place + " answers questions, if the questioner is willing to hear the answer." }));
+        }
+    }
+    out.forEach(function (f) { f.text = _spCap(f.text); });
+    return out;
+}
+
+// The concrete first step the guide suggests (used by the "Ask what to do
+// first" conversation option and the guide's prompt line).
+// A string, or an object keyed by lead building type with a "default".
+const ARCHETYPE_PLAN_TEXT = {
+    "coming-of-age": "Go to {leadPlace} and ask after a teacher or a guild willing to take you on. {mentorHint}",
+    "revenge": {
+        "default": "Ask around at {leadPlace}, starting with whoever keeps the place, and keep quiet about who is asking. Someone tied to {quarry} was seen there not long ago.",
+        "Guildhall": "Ask the guildmaster at {leadPlace} who has been hiring, and keep quiet about who is asking. Someone tied to {quarry} was seen there not long ago."
+    },
+    "redemption": {
+        "default": "Go down to the shrine below {leadPlace} and sit with it, then ask around town who could use an honest hand.",
+        "Chapel": "Go to {leadPlace}, speak with the priest and kneel at the altar, then ask around town who could use an honest hand."
+    },
+    "missing-kin": "Ask the clerk at {leadPlace} to look through the arrivals ledger for {who}.",
+    "fortune": {
+        "default": "Ask the bartender at {leadPlace} who is hiring, and take the first honest job that pays.",
+        "Guildhall": "Read the job board at {leadPlace}, ask the guildmaster which contracts pay, and take the first honest one."
+    },
+    "exile": {
+        "default": "Keep to {leadPlace}, give no true name, and listen for anyone asking after you.",
+        "Chapel": "Keep to {leadPlace}, where nobody asks a penitent's name, and listen for anyone asking after you."
+    },
+    "calling": {
+        "default": "Go down to the old shrine below {leadPlace} and see whether it answers you.",
+        "Chapel": "Go to {leadPlace}, kneel at the altar and see whether it answers you."
+    }
+};
+
+function getGuidePlanText(backstory) {
+    if (!backstory) return "";
+    const leadStage = backstory.guide && backstory.guide.leadStage ? backstory.guide.leadStage : 0;
+    if (leadStage >= 1 && typeof getLeadStage === "function") {
+        const st = getLeadStage(backstory, 1);
+        if (leadStage >= 2) return st ? st.done : "";
+        if (st) return "Next, go to " + st.place + " and " + st.ask.charAt(0).toLowerCase() + st.ask.slice(1) + ".";
+    }
+    let tpl = ARCHETYPE_PLAN_TEXT[backstory.archetype] || "";
+    if (tpl && typeof tpl === "object") {
+        const lead = resolveGuideLeadPlace(backstory);
+        tpl = (lead && tpl[lead.type]) || tpl["default"] || "";
+    }
+    return _spFill(tpl, getBackstoryFillMap(backstory)).replace(/\s+/g, " ").trim();
+}
+
+// The guide asks whether to join the player's party, once, right after the
+// first step is laid out (see maybeOfferGuideParty in the engine). Lines are
+// scripted so the question is always asked the same clear way; the menu keeps
+// an "Ask them to come along" option afterwards for anyone who said no.
+const GUIDE_PARTY_OFFERS = {
+    "coming-of-age": "One more thing, {player}. I would not feel right watching you start out alone. Would you like me to come along, at least until you find your feet?",
+    "revenge": "I am not going to pretend I can stay out of this, {player}. Would you like me to travel with you? Two of us ask better questions than one.",
+    "redemption": "You do not have to carry this alone, {player}. Would you like me to join you? I will walk beside you as far as you let me.",
+    "missing-kin": "We are looking for the same person, {player}. Shall I come with you? I would rather we turned up the answer together.",
+    "fortune": "A good job goes better with a second pair of eyes, {player}. Shall I join you, and split whatever we find?",
+    "exile": "You have been alone long enough, {player}. Would you like me to come with you? I know how to keep my mouth shut.",
+    "calling": "Whatever has been calling you, {player}, I would like to see where it leads. May I come with you?"
+};
+const GUIDE_PARTY_REPLIES = [
+    { label: "Yes, come with me", say: "Yes. Come with me.", stance: "friendly", guideParty: "accept" },
+    { label: "Not just yet", say: "Not yet. Let me look around first.", stance: "guarded", guideParty: "later" },
+    { label: "I'll go alone for now", say: "I'd rather go on my own for now.", stance: "guarded", guideParty: "decline" }
+];
+const GUIDE_PARTY_RESPONSES = {
+    accept: "\"Good. Lead on, {player}. I'll be right behind you.\"",
+    later: "\"Take your time. Say the word whenever you want me with you.\"",
+    decline: "\"I understand. I'll wait here, and if you change your mind, you know where to find me.\"",
+    leave: "\"Alright. I'll stay here and keep my ears open. Come back for me when you need me.\""
+};
+
+// { line, replies } for the party offer, or null when the archetype has none.
+function getGuidePartyOffer(backstory) {
+    if (!backstory) return null;
+    const tpl = GUIDE_PARTY_OFFERS[backstory.archetype];
+    if (!tpl) return null;
+    const map = getBackstoryFillMap(backstory);
+    return {
+        line: _spFill(tpl, map),
+        replies: GUIDE_PARTY_REPLIES.map(function (r) { return Object.assign({}, r); })
+    };
+}
+
+function getGuidePartyResponse(backstory, kind) {
+    const tpl = GUIDE_PARTY_RESPONSES[kind] || "";
+    return _spFill(tpl, getBackstoryFillMap(backstory));
+}
+
+// ── LEAD STAGES ──────────────────────────────────────────────────
+// The guide's first lead is stage 0 (the building in arch.lead). Asking the
+// right question of someone there pays it off (see "lead-stage-ask" in
+// cyoaftw-npc-data.js and onGuideBeat "lead" in the engine) and opens stage 1,
+// a second building; paying that off completes the opening arc and points the
+// player out of town. G.player.backstory.guide.leadStage counts payoffs (0-2).
+// ask = the menu label, reveal = what the NPC is told to say, done = the story
+// line recorded. Only {leadPlace}, {who}, {quarry}, {class} are filled.
+const ARCHETYPE_LEADS = {
+    "coming-of-age": [
+        { ask: "Ask who could teach you",
+          reveal: "The player is a green {class} looking for a teacher. Tell them plainly that people here take on newcomers who show grit, and that a real start begins with honest tools: the smith is who to see about a first proper kit. Name only the smith as the next stop.",
+          done: "{leadPlace} will take you on, but first you need a proper kit. Try the smith." },
+        { building: "Smithy", ask: "Ask about a first proper kit",
+          reveal: "Size up the newcomer honestly. A first kit matters less than what they do with it. Apprentices prove themselves on the old road past the Gate, or in the cellar below the tavern where the way down begins. Wish them luck. Do not invent names.",
+          done: "Your apprenticeship begins in earnest: the old road past the Gate, or the way down under the tavern." }
+    ],
+    "revenge": [
+        { ask: "Ask about the stranger",
+          reveal: "Quietly confirm that someone matching the trail of {quarry} was here not long ago, asked who in town could mend a blade, and left toward the Gate. Say no more than that. Do not invent names.",
+          done: "The trail was here, and went looking for a smith." },
+        { building: "Smithy", ask: "Ask whom they mended a blade for",
+          reveal: "You mended a blade for a stranger tied to {quarry}. Describe them briefly, say they paid in old coin and asked the way to the old road beyond the Gate. Do not invent a name.",
+          done: "The trail leads out of the Gate and onto the old road." }
+    ],
+    "redemption": [
+        { ask: "Ask for guidance",
+          reveal: "Be gentle. Tell the player that amends are made in deeds, not words, and that the watch at the Town Hall never has enough honest hands. Name only the Town Hall as the next stop.",
+          done: "Amends are made in deeds. The Town Hall always needs honest hands." },
+        { building: "Town Hall", ask: "Ask about honest work",
+          reveal: "The player seeks honest work to make amends. Tell them the watch has patrols that never come back from the old road beyond the Gate, and that someone willing to scout it and return would be thanked. Do not invent names.",
+          done: "A task worth doing: scout the old road beyond the Gate and come back." }
+    ],
+    "missing-kin": [
+        { ask: "Ask about the ledger",
+          reveal: "Say the arrivals ledger does show {who}, or someone answering to them, passing through not long ago; they asked for a bed at the inn. Do not invent other details or names.",
+          done: "The ledger shows {who} passed through and asked for a bed at the inn." },
+        { building: "Inn", ask: "Ask about {who}",
+          reveal: "Say someone answering to {who} stayed one night, paid for a second they never used, and left before dawn by the Gate toward the old road. Do not invent other names.",
+          done: "{who} went out by the Gate toward the old road." }
+    ],
+    "fortune": [
+        { ask: "Ask who is hiring",
+          reveal: "Say there is steady work, and that the best standing job in town is the smith's commission board. Name only the smith as the next stop.",
+          done: "Steady work and coin: the smith's commission board is the place." },
+        { building: "Smithy", ask: "Ask about work",
+          reveal: "Tell the player the smith posts commissions on the board in the forge and pays fairly for ore and honest deliveries, and that the real money is out past the Gate where ore is scavenged, or down below the tavern. Do not invent names.",
+          done: "Work and coin wait out past the Gate, and below the tavern." }
+    ],
+    "exile": [
+        { ask: "Ask who has been asking questions",
+          reveal: "Say, quietly, that someone has been asking after a stranger answering the player's description, and that you told them nothing. Advise talking to the bartender, who hears everything. Name only the tavern as the next stop.",
+          done: "Someone has been asking after you. The tavern hears everything." },
+        { building: "Tavern", ask: "Ask what people are saying",
+          reveal: "Say the person asking left town by the Gate after being told nothing, and that the road out is where trouble waits; staying put is safer for now. Do not invent names.",
+          done: "Whoever was asking has gone out the Gate. You can hide here, or go after them." }
+    ],
+    "calling": [
+        { ask: "Ask about the shrine",
+          reveal: "Say the shrine answers those who listen, and lately it has been restless. Those who keep it say the old way beneath the tavern's cellar leads down to where it began. Do not invent names.",
+          done: "The shrine has been restless. The old way down, under the tavern, is where it began." },
+        { building: { Cleric: "Tavern", "default": "Chapel" }, ask: "Ask what the shrine has said",
+          reveal: "Say others have heard the same call. It points downward, to the old works under the town, reached through the cellar below the tavern. Do not invent names.",
+          done: "The calling points down, to the way below the tavern's cellar." }
+    ]
+};
+
+const GUIDE_LEAD_ARRIVE_LINES = [
+    "This is the place, {player}. Ask quietly, and let's see who here will talk.",
+    "Here, then. Same as before: ask quietly, and watch how they answer."
+];
+const LEAD_STAGE_FALLBACK_TYPES = ["Inn", "Smithy", "Tavern", "Town Hall"];
+
+// idx 0 = first lead, 1 = second. Returns { idx, type, building, place,
+// ask, reveal, done } resolved against the live town, or null.
+function getLeadStage(backstory, idx) {
+    const arch = backstory ? PLAYER_ARCHETYPES[backstory.archetype] : null;
+    const list = arch ? ARCHETYPE_LEADS[backstory.archetype] : null;
+    const data = list ? list[idx] : null;
+    if (!data) return null;
+    const first = resolveGuideLeadPlace(backstory);
+    let type, building;
+    if (idx === 0) {
+        type = first.type;
+        building = first.building;
+    } else {
+        let spec = data.building;
+        if (spec && typeof spec === "object") spec = spec[backstory.cls] || spec["default"];
+        type = spec;
+        building = findTownBuilding(type);
+        const firstId = first && first.building ? first.building.id : null;
+        if (!building || building.id === firstId) {
+            building = null;
+            for (let i = 0; i < LEAD_STAGE_FALLBACK_TYPES.length && !building; i++) {
+                const b = findTownBuilding(LEAD_STAGE_FALLBACK_TYPES[i]);
+                if (b && b.id !== firstId) { building = b; type = LEAD_STAGE_FALLBACK_TYPES[i]; }
+            }
+        }
+    }
+    const map = getBackstoryFillMap(backstory);
+    map.leadPlace = building ? building.name : GUIDE_FALLBACK_PLACE;
+    return {
+        idx: idx,
+        type: type,
+        building: building,
+        place: map.leadPlace,
+        ask: _spFill(data.ask, map),
+        reveal: _spFill(data.reveal, map),
+        done: _spCap(_spFill(data.done, map))
+    };
+}
+
+// The stage the player is working on now (0 or 1), or null once both are done.
+function getCurrentLeadStage(backstory) {
+    if (!backstory || !backstory.guide) return null;
+    const n = backstory.guide.leadStage || 0;
+    return n >= 2 ? null : getLeadStage(backstory, n);
+}
+
+// What the guide says on entering a place (once per place type per game),
+// only while travelling with the player. {player} is filled.
+const GUIDE_ROOM_REMARKS = {
+    "Chapel": ["Quiet in here. Whatever else happens, this is a good place to think.", "Chapels are never quite empty, are they? Someone always seems to be listening."],
+    "Guildhall": ["Listen to that yard. Hard to tell whether to be impressed or nervous.", "Plenty of steel in here, and every one of them is sizing you up."],
+    "Smithy": ["Smell that? Hot iron and honest work. The kind of place that tells you a lot about a town.", "A forge keeps a town honest. Folk who can mend a blade hear everything."],
+    "Tavern": ["Every town's real news is poured in a place like this, {player}. Keep your ears open.", "If anyone in town talks too much, it will be here."],
+    "Inn": ["Travellers pass through here from all over. Somebody has always seen something worth knowing."],
+    "Town Hall": ["The watch keeps its eye on the door. Be polite, and be ready to be looked over."],
+    "Training Yard": ["Straw dummies and bruised pride. I like it already."],
+    "Council Chamber": ["Careful now. Rooms like this are where decisions get made about people like us."],
+    "Gate": ["Beyond that is everything we do not know yet. Stay close, {player}."],
+    "Cellar": ["Cold air, old stone. This cellar goes down further than it should, I think."]
+};
+
+function getGuideRoomRemark(room, seedText) {
+    if (!room) return null;
+    const key = GUIDE_ROOM_REMARKS[room.buildingType] && room.isEntrance ? room.buildingType : (GUIDE_ROOM_REMARKS[room.type] ? room.type : null);
+    if (!key) return null;
+    const lines = GUIDE_ROOM_REMARKS[key];
+    let h = 0;
+    const seed = String(seedText || "") + key;
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 9973;
+    return { key: key, line: lines[h % lines.length] };
+}
+
+// Real building names for the guide to talk about when asked about the town.
+function getGuideTownSummary() {
+    const names = [];
+    ["Tavern", "Inn", "Smithy", "Town Hall", "Guildhall", "Chapel"].forEach(function (type) {
+        const b = findTownBuilding(type);
+        if (b) names.push(b.name + " (" + type.toLowerCase() + ")");
+    });
+    return names.join(", ");
+}
+
+if (typeof window !== "undefined") {
+    window.PLAYER_ARCHETYPES = PLAYER_ARCHETYPES;
+    window.CLASS_CRAFT_QUESTIONS = CLASS_CRAFT_QUESTIONS;
+    window.APPROACH_QUESTION_POOL = APPROACH_QUESTION_POOL;
+    window.APPROACH_QUESTION_COUNT = APPROACH_QUESTION_COUNT;
+    window.GUIDE_ARRIVAL_TURN = GUIDE_ARRIVAL_TURN;
+    window.getArchetypeIdsForClass = getArchetypeIdsForClass;
+    window.buildPlayerBackstory = buildPlayerBackstory;
+    window.getBackstoryFillMap = getBackstoryFillMap;
+    window.getGuideOpeningLine = getGuideOpeningLine;
+    window.getBackstoryLoreFacts = getBackstoryLoreFacts;
+    window.resolveGuideLeadPlace = resolveGuideLeadPlace;
+    window.getGuidePlanText = getGuidePlanText;
+    window.getLeadStage = getLeadStage;
+    window.getCurrentLeadStage = getCurrentLeadStage;
+    window.getGuideRoomRemark = getGuideRoomRemark;
+    window.GUIDE_LEAD_ARRIVE_LINES = GUIDE_LEAD_ARRIVE_LINES;
+    window.getGuidePartyOffer = getGuidePartyOffer;
+    window.getGuidePartyResponse = getGuidePartyResponse;
+    window.getGuideTownSummary = getGuideTownSummary;
+    window.findTownBuilding = findTownBuilding;
 }

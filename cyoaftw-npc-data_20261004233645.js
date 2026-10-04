@@ -615,6 +615,9 @@ function recordNPCConversationChoice(npc, choice) {
             npc.memory.loreTold[choice.loreFactId] = true;
             state.lastLoreFactId = choice.loreFactId;
         }
+        // A guide option moves the opening story along (e.g. "plan" marks the
+        // guide as having oriented the player).
+        if (choice.guideBeat && typeof onGuideBeat === "function") onGuideBeat(npc, choice.guideBeat);
         // ask-about-topic labels read "Ask about <topic>"; remember the topic
         // so a follow-up ("press-topic") can refer to it.
         if (optionId === "ask-about-topic" && typeof choice.label === "string") {
@@ -948,7 +951,7 @@ function _loreNpcKey(npc) {
 
 // Knowledge tiers an NPC can draw on, from role and species.
 const NPC_LORE_ROLE_TIERS = [
-    { match: ["guard", "scout", "watch", "raider", "adventurer", "soldier", "mercenary"], tiers: ["military", "local"] },
+    { match: ["guard", "scout", "watch", "raider", "adventurer", "soldier", "mercenary", "guildmaster"], tiers: ["military", "local"] },
     { match: ["priest", "pilgrim", "cultist"], tiers: ["faith", "local"] },
     { match: ["archivist", "scholar", "librarian"], tiers: ["scholar", "faith"] },
     { match: ["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "cook", "servant"], tiers: ["trade", "local"] },
@@ -1050,6 +1053,11 @@ function getNPCKnownLoreFacts(npc, ctx) {
     let allFacts = typeof getPlaceLoreFacts === "function"
         ? WORLD_LORE_FACTS.concat(getPlaceLoreFacts())
         : WORLD_LORE_FACTS;
+    // First-lead facts from the player's backstory (see getBackstoryLoreFacts in
+    // cyoaftw-world-data.js): what the guide hints at is what asking around finds.
+    if (typeof getBackstoryLoreFacts === "function") {
+        allFacts = allFacts.concat(getBackstoryLoreFacts());
+    }
     // Wanted thieves (see getCrimeLoreFacts in the engine) are live gossip.
     // A fact carrying aboutId is never told by the person it is about.
     if (typeof getCrimeLoreFacts === "function") {
@@ -1284,6 +1292,69 @@ function _npcWillIntroduce(npc, ctx) {
 function _npcIntroNote(npc, ctx) {
     if (!_npcWillIntroduce(npc, ctx)) return "";
     return "You have warmed to the player. Introduce yourself by name in this reply, naturally and in your own voice: your name is " + getNPCSelfName(npc) + ". Do not invent a different name.";
+}
+
+// ── GUIDE HELPERS ───────────────────────────────────────────────
+// The guide is the NPC who joins the player after character creation (see
+// startGuideArrival in the engine and PLAYER_ARCHETYPES in
+// cyoaftw-world-data.js). Their menu entries below are gated on npc.guide and
+// read the player's backstory, so what they say follows the player's own
+// answers. All wording comes from AI replies steered by these notes; the
+// facts in them are the only ones the guide is told to use.
+function _npcIsGuide(npc) {
+    return !!(npc && npc.guide && npc.guide.active);
+}
+
+// True once the guide has laid out the first step or asked about the party.
+function _guideOrientedOrOffered() {
+    const bs = typeof getPlayerBackstory === "function" ? getPlayerBackstory() : null;
+    return !!(bs && bs.guide && (bs.guide.state === "oriented" || bs.guide.partyOffered));
+}
+
+// The current lead stage if this NPC (not the guide) is in that stage's
+// building and the guide's plan has been heard; otherwise null. Pass null for
+// npc to skip the NPC checks (used by the prompt note).
+function _leadStageFor(npc) {
+    const bs = typeof getPlayerBackstory === "function" ? getPlayerBackstory() : null;
+    if (!bs || !bs.guide || bs.guide.state !== "oriented") return null;
+    if (typeof window.getCurrentLeadStage !== "function") return null;
+    const st = window.getCurrentLeadStage(bs);
+    if (!st || !st.building) return null;
+    if (npc) {
+        if (npc.guide || npc.isHumanoid === false) return null;
+        const room = typeof G !== "undefined" ? G.activeRoom : null;
+        if (!room || room.buildingId !== st.building.id) return null;
+    }
+    return st;
+}
+
+// The guide's party question is on screen (its canned replies are showing).
+function _guideOfferPending(npc) {
+    const p = npc && npc.memory ? npc.memory.pendingResponse : null;
+    return !!(p && p.needed && Array.isArray(p.options) && p.options.some(function (o) { return o && o.guideParty; }));
+}
+
+function _guideNote(kind) {
+    const bs = typeof getPlayerBackstory === "function" ? getPlayerBackstory() : null;
+    if (!bs) return "";
+    if (kind === "plan") {
+        const plan = typeof getGuidePlanText === "function" ? getGuidePlanText(bs) : "";
+        return "You are the player's guide. Tell them plainly what to do first, in your own voice: " + plan +
+            " Name the place, give one reason, and keep it to a few sentences. Do not invent other named people or places.";
+    }
+    if (kind === "past") {
+        return "The player asks how the two of you came to be here. Recount, briefly and in your own voice, this shared history without adding new facts or names: " + bs.text;
+    }
+    if (kind === "town") {
+        const places = typeof getGuideTownSummary === "function" ? getGuideTownSummary() : "";
+        return "The player asks what you make of the town. Give an honest first impression in your own voice, mentioning only places that really exist here" +
+            (places ? " (" + places + ")" : "") + ". Do not invent other named places or people.";
+    }
+    if (kind === "trust") {
+        const plan = typeof getGuidePlanText === "function" ? getGuidePlanText(bs) : "";
+        return "The player asks how sure you are about the lead (" + plan + "). Be honest in your own voice: say what you actually know and what is only a hunch or hearsay. Do not invent new facts.";
+    }
+    return "";
 }
 
 const NPC_CONVERSATION_CATALOGUE = [
@@ -2163,6 +2234,135 @@ const NPC_CONVERSATION_CATALOGUE = [
             excludedActionTags: ["win-them-over"]
         }
     },
+    // ===== GUIDE =====
+    // Only the opening-guide NPC (npc.guide) gets these. They float to the top
+    // of the menu (rankBoost) until the player has what they need.
+    {
+        id: "guide-first-step",
+        priority: 1,
+        rankBoost: 90,
+        repeat: "session",
+        resetTimer: { turns: 4 },
+        label: (npc, ctx) => ctx.storyFlags && ctx.storyFlags["guide-oriented"] ? "Ask about the plan again" : "Ask what to do first",
+        textVariants: [
+            "You ask what you should do first.",
+            "You ask where the two of you should begin.",
+            "You ask what the plan is."
+        ],
+        guideBeat: "plan",
+        contextNote: () => _guideNote("plan"),
+        cacheSig: (npc, ctx) => ctx.storyFlags && ctx.storyFlags["guide-oriented"] ? "oriented" : "new",
+        intent: "curious",
+        relationshipImpact: { mood: 1, favor: 2, intent: "curious", markMet: true, actionTag: "guide-plan" },
+        conditions: { custom: (npc) => _npcIsGuide(npc) }
+    },
+    {
+        id: "guide-about-town",
+        priority: 2,
+        rankBoost: 70,
+        repeat: "session",
+        resetTimer: { turns: 8 },
+        label: "Ask what they make of the town",
+        textVariants: [
+            "You ask what they make of the town so far.",
+            "You ask for their first impression of the place.",
+            "You ask whether the town is what they expected."
+        ],
+        contextNote: () => _guideNote("town"),
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "guide-town" },
+        conditions: { custom: (npc) => _npcIsGuide(npc) }
+    },
+    {
+        id: "guide-shared-past",
+        priority: 3,
+        rankBoost: 60,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Talk about how you got here",
+        textVariants: [
+            "You ask them to remind you how the two of you ended up here.",
+            "You say it feels strange to be here, and ask how it all began.",
+            "You ask whether they ever thought it would come to this."
+        ],
+        contextNote: () => _guideNote("past"),
+        intent: "empathy",
+        relationshipImpact: { mood: 1, favor: 2, intent: "empathy", markMet: true, actionTag: "guide-past" },
+        conditions: { custom: (npc) => _npcIsGuide(npc) }
+    },
+    {
+        id: "guide-how-sure",
+        priority: 4,
+        rankBoost: 80,
+        repeat: "session",
+        label: "Ask how sure they are",
+        textVariants: [
+            "You ask how sure they are about that lead.",
+            "You ask what they actually know, and what is only talk.",
+            "You ask whether they would stake anything on it."
+        ],
+        contextNote: () => _guideNote("trust"),
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "guide-trust" },
+        conditions: {
+            requiredSessionOptionIds: ["guide-first-step"],
+            custom: (npc) => _npcIsGuide(npc)
+        }
+    },
+    // Lead payoff: with the guide's plan heard, asking the current lead's
+    // question of someone in that lead's building moves the opening arc along
+    // (see ARCHETYPE_LEADS in cyoaftw-world-data.js, onLeadPayoff in the
+    // engine). Any civil local can answer; the reveal text is the only fact
+    // they are told to give.
+    {
+        id: "lead-stage-ask",
+        priority: 1,
+        rankBoost: 95,
+        repeat: "session",
+        resetTimer: { turns: 6 },
+        label: (npc, ctx) => { const st = _leadStageFor(npc); return st ? st.ask : "Ask around"; },
+        textVariants: [
+            "You ask what you came here to find out.",
+            "You lower your voice and ask what you came to ask.",
+            "You say you were told this was the place to ask."
+        ],
+        guideBeat: "lead",
+        contextNote: () => { const st = _leadStageFor(null); return st ? "The player asks something you can answer. Answer in your own voice, briefly: " + st.reveal : ""; },
+        cacheSig: () => { const st = _leadStageFor(null); return "lead" + (st ? st.idx : "x"); },
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "lead-ask" },
+        conditions: { maxHostility: 49, custom: (npc, ctx) => !!_leadStageFor(npc) }
+    },
+    // Party: the guide asks once after the first step (see maybeOfferGuideParty
+    // in the engine); these two are the standing way to change your mind. Both
+    // are answered by scripted lines (handleGuidePartyChoice).
+    {
+        id: "guide-join-party",
+        priority: 6,
+        rankBoost: 65,
+        repeat: "always",
+        label: "Ask them to come along",
+        text: "You ask whether they would travel with you.",
+        textVariants: ["You ask whether they would travel with you."],
+        guideParty: "accept",
+        intent: "talk",
+        relationshipImpact: { mood: 1, favor: 2, intent: "talk", markMet: true, actionTag: "guide-party" },
+        conditions: { custom: (npc) => _npcIsGuide(npc) && !npc._inParty && _guideOrientedOrOffered() && !_guideOfferPending(npc) }
+    },
+    {
+        id: "guide-leave-party",
+        priority: 7,
+        rankBoost: 5,
+        kind: "action",
+        repeat: "always",
+        label: "Ask them to wait here",
+        text: "You ask them to wait here until you come back.",
+        textVariants: ["You ask them to wait here until you come back."],
+        guideParty: "leave",
+        intent: "talk",
+        relationshipImpact: { mood: 0, favor: 0, intent: "talk", markMet: true, actionTag: "guide-party" },
+        conditions: { custom: (npc) => _npcIsGuide(npc) && !!npc._inParty }
+    },
     // Free-text bridge. When the NPC's last line expects an answer the engine
     // shows this as "Respond..." (kind "reply", with any canned replies from the
     // reply JSON next to it); otherwise it stays available as a quiet
@@ -2662,7 +2862,10 @@ function buildConversationOption(entry, npc, ctx) {
         // Intimacy system additions
         intimacyAction: entry.intimacyAction,
         startEncounter: entry.startEncounter,
-        phase: entry.phase
+        phase: entry.phase,
+        // Opening-guide story beat (see onGuideBeat in the engine).
+        guideBeat: entry.guideBeat,
+        guideParty: entry.guideParty
     };
 }
 

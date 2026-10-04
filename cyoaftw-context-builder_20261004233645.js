@@ -83,6 +83,20 @@ function deriveRoomContext(room) {
         ctx.function = "work";
     }
 
+    if (is("training yard")) {
+        ctx.privacy = "public";
+        ctx.noise = "loud";
+        ctx.socialExpectation = "casual";
+        ctx.function = "training";
+    }
+
+    if (is("chapel") || is("vestry")) {
+        ctx.privacy = is("vestry") ? "private" : "semi-private";
+        ctx.noise = "quiet";
+        ctx.socialExpectation = "formal";
+        ctx.function = is("chapel") ? "ritual" : "work";
+    }
+
     if (is("shrine") || is("library")) {
         ctx.privacy = "private";
         ctx.noise = "quiet";
@@ -646,6 +660,9 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         ...smellLines,
         "- Conversation rules: answer the player directly, stay conversational, and do not volunteer atmospheric description unless it matters.",
         npc.backstory ? `- Backstory: ${String(npc.backstory).slice(0, 200)}` : "",
+        // The opening guide also knows the player's own backstory (engine:
+        // getGuideContextLine). Returns "" for every other NPC.
+        typeof window.getGuideContextLine === "function" ? window.getGuideContextLine(npc) : "",
         (currentState && currentState.gesture) || npc.action
             ? `- Currently: ${(currentState && currentState.gesture) || npc.action}`
             : ""
