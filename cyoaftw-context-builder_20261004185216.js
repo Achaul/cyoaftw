@@ -654,10 +654,82 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
     return lines.join("\n");
 }
 
+// ── PLAYER STANDING BLOCK ────────────────────────────────────────
+// What the world knows about the player right now: a bounty, a jail
+// sentence, hiding, or a poisoned blade. Every engine call is guarded so this
+// file still works without the engine. Returns "" when nothing applies.
+function buildPlayerStandingBlock(room, npc) {
+    const G = window.G;
+    if (!G || !G.player) return "";
+    const player = G.player;
+    const lines = [];
+    const isGuard = !!(npc && typeof isGuardNPC === "function" && isGuardNPC(npc));
+    const zone = room && room.zone ? room.zone : "";
+
+    if (typeof isPlayerJailed === "function" && isPlayerJailed()) {
+        const jail = player.jail || {};
+        let left = "";
+        if (typeof getCurrentStoryTurn === "function" && typeof jail.releaseTurn === "number") {
+            left = ` (about ${Math.max(0, jail.releaseTurn - getCurrentStoryTurn())} turns of the sentence remain)`;
+        }
+        lines.push(`- The player is a prisoner, locked up in a jail cell${left}. Their weapons and lockpicks were taken. Treat them as a prisoner, not a free traveller.`);
+        if (isGuard) lines.push("- You are a guard on duty: stay professional, stern and unbribable, and make no promises you cannot keep.");
+    } else if (zone && typeof getBounty === "function") {
+        const bounty = getBounty(zone);
+        const wantedAt = typeof BOUNTY_WANTED === "number" ? BOUNTY_WANTED : 40;
+        const attackAt = typeof BOUNTY_ATTACK === "number" ? BOUNTY_ATTACK : 100;
+        if (bounty >= attackAt) {
+            lines.push(`- The player is a known violent criminal in ${zone}, with a ${bounty} coin bounty. Word has spread.`);
+        } else if (bounty >= wantedAt) {
+            lines.push(`- The player is wanted in ${zone} for crimes, with a ${bounty} coin bounty.`);
+        }
+        if (bounty >= wantedAt) {
+            if (isGuard) {
+                lines.push("- You are a guard and know the bounty. Be stern and suspicious, and expect the player to pay it or submit. You may mention the amount.");
+            } else {
+                lines.push("- You have heard the player is wanted. Let that make you wary, curt or nervous as suits your temperament. Mention it only if it fits, and do not quote the exact amount.");
+            }
+        }
+    }
+
+    if (typeof isPlayerHidden === "function" && isPlayerHidden()) {
+        lines.push("- The player is hiding and has not been noticed. Do not address or acknowledge them unless you have just noticed them.");
+    }
+
+    const weapon = player.equipped && player.equipped.weapon ? player.equipped.weapon : null;
+    if (weapon && weapon.poisonHits > 0 && weapon.poison) {
+        lines.push("- The player's blade is coated with a poison (a faint, bitter smell). Only a perceptive or knowing speaker, such as a healer or a guard, would notice, and only if it fits.");
+    }
+
+    // Wanted NPCs: the speaker may be one, or a guard may know of them.
+    if (npc && typeof isNPCWanted === "function" && isNPCWanted(npc)) {
+        const rec = npc._wanted;
+        const what = typeof describeWantedCrime === "function" ? describeWantedCrime(rec) : "theft";
+        lines.push(`- You are wanted by the guards in ${rec.zone || zone || "the district"} for ${what}. You are wary of guards and of anyone who might report you. Do not confess unless it truly fits.`);
+    }
+    if (isGuard && zone && typeof getActiveWantedNPCs === "function") {
+        const wanted = getActiveWantedNPCs(zone).filter(function (e) { return e.npc !== npc; }).slice(0, 3);
+        if (wanted.length) {
+            const list = wanted.map(function (e) {
+                return `${e.npc.name || "someone"} (${typeof describeWantedCrime === "function" ? describeWantedCrime(e.rec) : "theft"}, reward ${e.rec.reward} coins)`;
+            }).join("; ");
+            lines.push(`- Wanted notices your post carries: ${list}. You may mention one if it fits. Do not invent other wanted people.`);
+        }
+    }
+
+    if (!lines.length) return "";
+    return "PLAYER STANDING:\n" + lines.join("\n");
+}
+
 // ── MASTER PROMPT BUILDER ────────────────────────────────────────
 function buildPrompt(room, npc, instruction, options = {}) {
     const locCtx = buildLocationNarrativeContext(room);
-    const sceneBlock = serializeSceneBlock(locCtx);
+    let sceneBlock = serializeSceneBlock(locCtx);
+    // An NPC who answered a knock stands beyond an open door, not in this
+    // room (see engageKnockAnswerer in the engine). Say so while that holds.
+    if (npc && npc._doorwayNote && room && Array.isArray(room.creatures) && room.creatures.indexOf(npc) < 0) {
+        sceneBlock += "\nDOORWAY: " + npc._doorwayNote;
+    }
     // Conversation replies stay on the player's question: the story block and
     // recent-news block pull unrelated events into answers, so they are only
     // included when an option carries its own fact (keepAwareness).
@@ -665,6 +737,7 @@ function buildPrompt(room, npc, instruction, options = {}) {
     const storyBlock = convoOnly ? "" : serializeStoryDirectorBlock(window.G ? window.G.story : null);
     const awarenessBlock = npc && (!convoOnly || options.keepAwareness) ? serializeNPCAwarenessBlock(npc) : "";
     const npcBlock = npc ? buildNPCPersonaBlock(npc, "SPEAKER CONTEXT", options) : "";
+    const standingBlock = buildPlayerStandingBlock(room, npc);
     const recentExchangeBlock = npc ? buildNPCRecentExchangeBlock(npc) : "";
     const overheardBlock = npc ? buildNPCOverheardBlock(npc) : "";
 
@@ -673,6 +746,7 @@ function buildPrompt(room, npc, instruction, options = {}) {
         storyBlock,
         awarenessBlock,
         npcBlock,
+        standingBlock,
         recentExchangeBlock,
         overheardBlock,
         `INSTRUCTION: ${instruction}`

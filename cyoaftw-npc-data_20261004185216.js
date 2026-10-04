@@ -1047,9 +1047,14 @@ function getNPCKnownLoreFacts(npc, ctx) {
     const out = [];
     // Named buildings of the town (see getPlaceLoreFacts in
     // cyoaftw-world-data.js) join the fixed facts.
-    const allFacts = typeof getPlaceLoreFacts === "function"
+    let allFacts = typeof getPlaceLoreFacts === "function"
         ? WORLD_LORE_FACTS.concat(getPlaceLoreFacts())
         : WORLD_LORE_FACTS;
+    // Wanted thieves (see getCrimeLoreFacts in the engine) are live gossip.
+    // A fact carrying aboutId is never told by the person it is about.
+    if (typeof getCrimeLoreFacts === "function") {
+        allFacts = allFacts.concat(getCrimeLoreFacts().filter(function (f) { return !f.aboutId || f.aboutId !== npc.id; }));
+    }
     const here = ctx && ctx.room && ctx.room.buildingId ? ctx.room.buildingId : null;
     allFacts.forEach(function (fact) {
         // Someone working inside a building knows it firsthand.
