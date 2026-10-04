@@ -407,7 +407,8 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "gate-doors",   name: "iron-bound doors", tags: ["barrier", "landmark"] },
             { id: "guard-post",   name: "guard post",       tags: ["formal", "danger"] },
-            { id: "portcullis",   name: "portcullis",       tags: ["barrier"] }
+            { id: "portcullis",   name: "portcullis",       tags: ["barrier"] },
+            { id: "practice-dummies", name: "battered practice dummies", tags: ["work", "training"] }
         ],
         imageKey: "Gate"
     },
@@ -808,7 +809,7 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "bookshelves",  name: "bookshelves",  tags: ["storage", "information"] },
-            { id: "reading-desk", name: "reading desk", tags: ["surface", "work"] },
+            { id: "reading-desk", name: "reading desk", tags: ["surface", "work", "lab"] },
             { id: "intact-tome",  name: "intact tome",  tags: ["information", "loot"] }
         ],
         imageKey: "Library"
@@ -1328,7 +1329,8 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "clerk-desk",  name: "clerk's desk",   tags: ["surface", "work", "formal"] },
-            { id: "pigeonholes", name: "pigeonholes of records", tags: ["storage", "information"] }
+            { id: "pigeonholes", name: "pigeonholes of records", tags: ["storage", "information"] },
+            { id: "writing-table", name: "writing table cluttered with ink and sand", tags: ["surface", "work", "lab"] }
         ],
         imageKey: "Library"
     },
