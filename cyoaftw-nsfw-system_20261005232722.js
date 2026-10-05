@@ -1548,11 +1548,13 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     // Once entered, the button becomes a continuation thrust so the entry
     // narration is not repeated.
     if (nsfwPlayerHasPenis() && nsfwRegionExposed(item, "mouth")) {
-      window.appendCombatGroup(el, "Oral", [
+      var oralButtons = [
         item.mouthUsed
-          ? window.createCombatButton("Thrust into mouth", () => thrustBody(item, "mouth"))
+          ? window.createCombatButton("Continue (their mouth)", () => thrustBody(item, "mouth"))
           : window.createCombatButton("Fuck mouth", () => fuckUnconsciousMouth(item))
-      ]);
+      ];
+      oralButtons.push(window.createCombatButton("Force deep (throat)", () => deepthroatBody(item)));
+      window.appendCombatGroup(el, "Oral", oralButtons);
     }
 
     // Penetrate group — finger and/or penis, gated by anatomy + exposure
@@ -1579,16 +1581,16 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     if (nsfwPlayerHasPenis()) {
       if (genitalType === "vagina" && nsfwRegionExposed(item, "genitals")) {
         penButtons.push(item.penetratedTarget === "vagina"
-          ? window.createCombatButton("Thrust into vagina", () => thrustBody(item, "vagina"))
+          ? window.createCombatButton("Continue (their vagina)", () => thrustBody(item, "vagina"))
           : window.createCombatButton("Penetrate vagina", () => penetrateBody(item, "vagina")));
       } else if (isCloaca && nsfwRegionExposed(item, "genitals")) {
         penButtons.push(item.penetratedTarget === "cloaca"
-          ? window.createCombatButton("Thrust into cloaca", () => thrustBody(item, "cloaca"))
+          ? window.createCombatButton("Continue (their cloaca)", () => thrustBody(item, "cloaca"))
           : window.createCombatButton("Penetrate cloaca", () => penetrateBody(item, "cloaca")));
       }
       if (hasAnus && nsfwRegionExposed(item, "anus")) {
         penButtons.push(item.penetratedTarget === "anus"
-          ? window.createCombatButton("Thrust into anus", () => thrustBody(item, "anus"))
+          ? window.createCombatButton("Continue (their anus)", () => thrustBody(item, "anus"))
           : window.createCombatButton("Penetrate anus", () => penetrateBody(item, "anus")));
       }
     }
@@ -1792,6 +1794,12 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       involuntary: "Reflexive only: weak sphincter flutters, body tension, a flinch on deep strokes. No awareness, no conscious reaction.",
       anatomyKeys: ["anus"]
     },
+    "deepthroat mouth": {
+      label: "forced deepthroat (unconscious)",
+      difficulty: "The player seats their full length in the NPC's slack mouth and throat. The gag reflex still fires - it is brainstem, not conscious - so retching, throat spasms and messy slobber are constant. Coughing and tears are reflexive airway defenses: they appear ONLY if the player's cock is large enough to block the airway; otherwise the body only gags, flutters and drools, face lax throughout.",
+      involuntary: "Reflexive only: retches and throat spasms, glugging sounds, slobber running freely, faint convulsions of the limp body, and - ONLY with an airway-blocking girth - reflexive coughing and tears leaking from the corners of the eyes. No awareness, no conscious reaction.",
+      anatomyKeys: ["genitals"]
+    },
     "climax inside": {
       label: "climax inside an unconscious body",
       difficulty: "The player is buried in an unresisting hole and finishes. The body stays slack throughout; release meets no participation at all.",
@@ -1936,6 +1944,120 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   // Sentence describing a body part's lingering use-state (recorded by
   // recordBodyUse in intimacy-system.js on finger/penetrate/thrust/climax),
   // or "" when the part reads unused/faded. Used for insertion narration.
+  // ── Color & size flavor for body actions ────────────
+  // The same character-creation profile the intimacy penetration flavor
+  // reads (cock size/color from G.player.anatomy, materialized lazily via
+  // ensurePlayerIntimacyAnatomy) plus the body's own skin color/texture.
+
+  function nsfwBodyCockPhrase() {
+    var player = window.G && window.G.player;
+    if (player && typeof window.ensurePlayerIntimacyAnatomy === "function") {
+      window.ensurePlayerIntimacyAnatomy(player);
+    }
+    if (!player || !player.anatomy) return "cock";
+    var size = (typeof getPlayerCockSize === "function") ? getPlayerCockSize(player) : "medium";
+    var color = (typeof getPlayerCockColorWord === "function") ? getPlayerCockColorWord(player) : "";
+    var sizeWord = size === "large" ? "thick" : size === "small" ? "slender" : "";
+    return ((sizeWord ? sizeWord + " " : "") + (color ? color + " " : "") + "cock").replace(/\s+/g, " ").trim();
+  }
+
+  function nsfwBodySkinPhrase(item) {
+    var body = item && item.nsfwTraits && item.nsfwTraits.anatomy && item.nsfwTraits.anatomy.body;
+    if (!body) return "";
+    var color = String(body.color || "").toLowerCase().trim();
+    var texture = String(body.texture || "").toLowerCase().trim();
+    if (!color) return "";
+    return color + (texture ? " " + texture : "") + " skin";
+  }
+
+  // Player cock size vs the body's orifice - the same small/medium/large
+  // comparison the intimacy penetration fit uses (getPenetrationFit), read
+  // from the body's own nsfwTraits anatomy.
+  function nsfwBodyFit(item, target) {
+    var player = window.G && window.G.player;
+    if (!player) return "";
+    if (typeof window.ensurePlayerIntimacyAnatomy === "function") window.ensurePlayerIntimacyAnatomy(player);
+    var cock = (typeof getPlayerCockSize === "function") ? getPlayerCockSize(player) : "medium";
+    var a = item && item.nsfwTraits && item.nsfwTraits.anatomy;
+    if (!a) return "";
+    var anat;
+    if (target === "vagina") anat = a.vagina || {};
+    else if (target === "anus" || target === "cloaca") anat = a.anus || {};
+    else return "";
+    var orifice = ({ tight: "small", snug: "small", firm: "medium", supple: "medium", loose: "large", gaping: "large", stretchy: "large" })[String(anat.size || "").toLowerCase()] || String(anat.sizeCategory || "").toLowerCase();
+    if (["small", "medium", "large"].indexOf(orifice) === -1) return "";
+    if (cock === "large") return orifice === "small" ? "resistance" : orifice === "medium" ? "stretched" : "";
+    if (cock === "small") return orifice === "large" ? "easy" : "";
+    return "";
+  }
+
+  // Depth ladder for the Continue mechanic: each continuation thrust works
+  // deeper, 1 (just the head) to 5 (bottomed out). Keyed to the hole in
+  // use; entering a different hole resets it.
+  function nsfwBodyDepthTier(item, target) {
+    var d = (item && item.bodyDepthTarget === target) ? (item.bodyDepth || 0) : 0;
+    if (d >= 5) return "bottomed out - every drive grinds hips to hips";
+    if (d >= 3) return "deep - most of the length works in with each stroke";
+    if (d >= 1) return "shallow - only the first inches are in, working deeper with each push";
+    return "not yet entered";
+  }
+
+  function nsfwBodyHasLoad(item, target) {
+    var u = item && item.bodyUse && item.bodyUse[target];
+    return !!(u && u.loadKey);
+  }
+
+  function nsfwBodyCreampieClause(item, target) {
+    if (!nsfwBodyHasLoad(item, target)) return "";
+    var label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "vent") : target;
+    return pickFrom([
+      " Your earlier load stirs inside them with every stroke, slicking the way; a white froth works out around your shaft.",
+      " Each drive squelches through the seed you left in their " + label + ", the used hole grown wet and easy around you."
+    ]);
+  }
+
+  // COLOR AND SIZE block for the body-action polish prompt - the same
+  // facts the intimacy penetration prompts carry, tailored to body acts.
+  function nsfwBodyFlavorPromptNote(item, actionDesc) {
+    var desc = String(actionDesc || "");
+    var lines = [];
+    var player = window.G && window.G.player;
+    var isPenisAct = /(penetrate|thrust|climax|fuck mouth|finish|deepthroat)/i.test(desc);
+    if (isPenisAct && player && typeof window.ensurePlayerIntimacyAnatomy === "function") {
+      window.ensurePlayerIntimacyAnatomy(player);
+    }
+    if (isPenisAct && player && player.anatomy) {
+      var size = (typeof getPlayerCockSize === "function") ? getPlayerCockSize(player) : "medium";
+      var color = (typeof getPlayerCockColorWord === "function") ? getPlayerCockColorWord(player) : "";
+      if (size !== "medium" || color) {
+        lines.push("- The player's cock: " + (size === "large" ? "large and thick" : size === "small" ? "small and slender" : "average-sized") + (color ? ", " + color + "-skinned" : "") + '. Name its size and color when it appears - e.g. "your ' + (size === "large" ? "thick " : size === "small" ? "slender " : "") + (color || "") + ' cock".');
+      }
+    }
+    var skin = nsfwBodySkinPhrase(item);
+    if (skin) {
+      lines.push("- The body's skin: " + skin + ". Mention the color/texture whenever their flesh is described.");
+    }
+    var m = desc.match(/\b(vagina|cloaca|anus|mouth)\b/i);
+    if (m) {
+      var target = m[1].toLowerCase();
+      var fit = nsfwBodyFit(item, target);
+      if (fit) {
+        var fitDesc = fit === "resistance"
+          ? "the hole is small relative to the player's girth - entry and every stroke drag and resist"
+          : fit === "stretched"
+          ? "the player's girth stretches the hole wide - it reads stuffed and strained"
+          : "the hole is roomy relative to the player's slender cock - it yields easily";
+        lines.push("- Fit: " + fitDesc + ".");
+      }
+      lines.push("- Depth: " + nsfwBodyDepthTier(item, target) + ".");
+      if (nsfwBodyHasLoad(item, target)) {
+        lines.push("- The player already finished inside this " + (target === "cloaca" ? "vent" : target) + " earlier: describe the used, cum-filled state - wet, slick, with sloppy sounds.");
+      }
+    }
+    if (!lines.length) return "";
+    return "\nCOLOR AND SIZE (physical facts - weave them naturally into the polish where the relevant body part appears):\n" + lines.join("\n");
+  }
+
   function nsfwBodyUseClause(item, target) {
     if (typeof window.getBodyUseDescriptor !== "function") return "";
     var desc = window.getBodyUseDescriptor(item, target);
@@ -2009,10 +2131,11 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       : "";
     var bodyUseNote = nsfwBodyUsePromptNote(item, actionDesc);
     var reflexNote = nsfwBodyReflexNote(item);
+    var flavorNote = nsfwBodyFlavorPromptNote(item, actionDesc);
 
     var prompt = [
 "You are polishing a player action description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote + reflexNote,
+"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote + reflexNote + flavorNote,
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and sensory.",
@@ -2023,6 +2146,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 "- The NPC is unconscious — describe their limp, unresponsive state where relevant.",
 "- Use the clothing + exposure context above: only reference anatomy that is listed as exposed and visible in this pose. Do not describe what is covered.",
 "- Use direct, physical language. No metaphors, no purple prose.",
+"- COLOR AND SIZE: if a COLOR AND SIZE note is present, weave its facts (player cock size/color, the body's skin color, fit, depth, prior loads) naturally into the polish. A resistant fit reads tight and slow to open; an easy one yields. Respect the depth - shallow thrusts stay shallow.",
 "- Keep it to 1-2 sentences. Match the length of the base text.",
 "- Do NOT add NPC dialogue, speech, or conscious reaction. The NPC is unconscious and cannot participate.",
 "- Involuntary physical responses ARE allowed where physically plausible (reflexive clenches, drooling, gag reflex, a flinch, shallow breathing) — but only as reflex, never as awareness or participation." + (involuntaryNote ? involuntaryNote : ""),
@@ -2285,11 +2409,63 @@ anatomyNote,
     if (!nsfwPlayerHasPenis()) return;
 
     item.mouthUsed = true;
+    item.bodyDepth = 1;
+    item.bodyDepthTarget = "mouth";
     const name = nsfwGetEntityName(item);
-    const baseText = `You hold ${name}'s slack head and guide your cock past their unresisting lips, thrusting into their limp mouth. Their jaw hangs slack; saliva pools and drools from the corner of their lips.`;
+    var mouthCock = nsfwBodyCockPhrase();
+    var mouthSkin = nsfwBodySkinPhrase(item);
+    const baseText = pickFrom([
+      `You hold ${name}'s slack head and guide your ${mouthCock} past their unresisting lips${mouthSkin ? `, their ${mouthSkin} cool and limp under your grip` : ""}. Their jaw hangs open; saliva pools immediately and drools from the corner of their lips.`,
+      `You rub the head of your ${mouthCock} across ${name}'s lax lower lip, then push slowly into the warm, passive wetness of their mouth. They offer nothing back — only the slow breath through their nose and the soft give of a sleeping face.`,
+      `You part ${name}'s limp lips with your thumb and feed your ${mouthCock} into the slack warmth of their mouth${mouthSkin ? `, watching their ${mouthSkin} stay utterly expressionless as it takes you` : ""}.`
+    ]);
     const actionDesc = "fuck mouth";
     polishBodyNarration(item, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} fucked ${name}'s mouth while they were unconscious.`, 7);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Force the full length into the unconscious body's mouth and down
+  // its throat. The gag reflex still fires (it is brainstem, not
+  // conscious), so gagging, retching and messy slobber always read -
+  // but coughing and tearing are reflexive airway defenses and appear
+  // ONLY when the member is large enough to block the airway.
+  function deepthroatBody(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwRegionExposed(item, "mouth")) return;
+    if (!nsfwPlayerHasPenis()) return;
+
+    item.mouthUsed = true;
+    item.bodyDepth = 5;
+    item.bodyDepthTarget = "mouth";
+    const name = nsfwGetEntityName(item);
+    var cock = nsfwBodyCockPhrase();
+    var player = window.G && window.G.player;
+    if (player && typeof window.ensurePlayerIntimacyAnatomy === "function") {
+      window.ensurePlayerIntimacyAnatomy(player);
+    }
+    var cockSize = (typeof getPlayerCockSize === "function" && player) ? getPlayerCockSize(player) : "medium";
+    var skin = nsfwBodySkinPhrase(item);
+    var airwayBlocked = cockSize === "large";
+
+    var baseText;
+    if (airwayBlocked) {
+      baseText = pickFrom([
+        "You force your " + cock + " past " + name + "'s slack lips and straight down their throat, seating yourself to the root in one slow, relentless push. Their jaw stretches wide and a bulge swells in their throat. The gag reflex fires hard and brainless — retch after retch clamps around your girth while the limp body convulses faintly beneath you, heels drumming once against the floor. Slobber froths out around your shaft, and reflexive tears leak from the corners of their unseeing eyes" + (skin ? "; their " + skin + " shines with it" : "") + ".",
+        "You hold " + name + "'s head still and feed your " + cock + " all the way into their throat until your hips rest flush against their face. Their air is cut off — the body knows it, even unconscious. The throat spasms in raw, rhythmic retches, the chest heaves, and wet choking sounds gurgle around you while drool runs unchecked down their chin. When you finally ease back an inch, the body coughs — a harsh, reflexive spasm — and tears spill from the corners of its eyes."
+      ]);
+    } else {
+      baseText = pickFrom([
+        "You push your " + cock + " deep into " + name + "'s slack mouth and into their throat, seating yourself fully. The gag reflex flutters around you in weak, brainless waves — clench, release, clench — but the unconscious body gives nothing else: no coughing, no tears, only slobber pooling and running steadily from the corners of its lips" + (skin ? " onto its " + skin : "") + ".",
+        "You feed your " + cock + " down " + name + "'s limp throat inch by inch until you are hilted. Their throat grips in soft reflexive flutters, and the only sounds are wet glugs and the slow drip of drool from their slack chin. The face stays lax throughout — whatever the throat does, it does it asleep."
+      ]);
+    }
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, "mouth", { useKind: "penetrate" });
+    nsfwBodyAddStimulus(item, 2);
+    const actionDesc = "deepthroat mouth";
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", window.G.player.name + " forced their cock down " + name + "'s unconscious throat.", 8);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
   }
@@ -2301,14 +2477,21 @@ anatomyNote,
     var label;
     var baseText;
 
+    var fingerSkin = nsfwBodySkinPhrase(item);
     if (target === "vagina" || target === "cloaca") {
       if (!nsfwRegionExposed(item, "genitals")) return;
       label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina";
-      baseText = `You spread ${name}'s limp legs apart and ease a finger into their exposed ${label}. Without arousal the opening is dry and stiff; you work the finger in slowly against the uncooperative body.`;
+      baseText = pickFrom([
+        `You spread ${name}'s limp legs apart and ease a finger into their exposed ${label}. Without arousal the opening is dry and stiff; you work the finger in slowly against the uncooperative body.`,
+        `You part ${name}'s unresisting thighs${fingerSkin ? `, their ${fingerSkin} warm under your palm` : ""}, and circle their bare ${label} with one fingertip before pressing it in, inch by inch, into the dry passage.`
+      ]);
     } else if (target === "anus") {
       if (!nsfwRegionExposed(item, "anus")) return;
       label = "anus";
-      baseText = `You work a finger against ${name}'s tight, unresisting ${label}, slowly pushing past the resistant ring.`;
+      baseText = pickFrom([
+        `You work a finger against ${name}'s tight, unresisting ${label}, slowly pushing past the resistant ring.`,
+        `You spread ${name}'s limp cheeks with one hand${fingerSkin ? `, baring the ${fingerSkin.replace(" skin", "")} pucker beneath` : ""} and work a fingertip into the clenched ring, taking your time with the sleeping body.`
+      ]);
     } else return;
 
     item.fingered = true;
@@ -2329,19 +2512,41 @@ anatomyNote,
     var label;
 
     var baseText;
+    var cock = nsfwBodyCockPhrase();
+    var skin = nsfwBodySkinPhrase(item);
 
     if (target === "vagina" || target === "cloaca") {
       if (!nsfwRegionExposed(item, "genitals")) return;
       label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina";
-      baseText = `You spread ${name}'s limp legs apart and guide your cock into their exposed ${label}. The body offers no cooperation — you hold the hips still and push against the unresisting opening, working your way in.` + nsfwBodyUseClause(item, target);
+      var fit = nsfwBodyFit(item, target);
+      var entry = fit === "resistance"
+        ? `The unresisting opening fights your girth — you work forward inch by stubborn inch, the unconscious body tensing faintly as it is forced to adjust to your size.`
+        : fit === "easy"
+        ? `Their relaxed, roomy opening yields easily — you slide home in one slow push until you are seated deep.`
+        : `The body offers no cooperation — you hold the hips still and push against the unresisting opening, working your way in.`;
+      baseText = pickFrom([
+        `You spread ${name}'s limp legs apart and guide your ${cock} into their exposed ${label}. ${entry}` + nsfwBodyUseClause(item, target),
+        `You position ${name}'s slack hips with both hands${skin ? `, their ${skin} warm under your palms` : ""} and press your ${cock} against their ${label}, feeding yourself in bit by bit while the unconscious body takes you in silence. ${entry}` + nsfwBodyUseClause(item, target)
+      ]);
     } else if (target === "anus") {
       if (!nsfwRegionExposed(item, "anus")) return;
       label = "anus";
-      baseText = `You press your cock against ${name}'s tight, unresisting anus. The sphincter clenches reflexively against the intrusion; you work it open slowly, forcing past the resistant ring as the unconscious body tenses beneath you.` + nsfwBodyUseClause(item, target);
+      var fitA = nsfwBodyFit(item, target);
+      var entryA = fitA === "resistance"
+        ? `The sphincter clenches hard against your girth; you force it open a fraction at a time, the ring stretching wide around your crown until the head finally lodges past with an audible pop.`
+        : fitA === "easy"
+        ? `The relaxed ring gives way with barely any resistance; you sink in smoothly until your hips rest flush against them.`
+        : `The sphincter clenches reflexively against the intrusion; you work it open slowly, forcing past the resistant ring as the unconscious body tenses beneath you.`;
+      baseText = pickFrom([
+        `You press your ${cock} against ${name}'s tight, unresisting anus. ${entryA}` + nsfwBodyUseClause(item, target),
+        `You spread ${name}'s limp cheeks with your thumbs and set the head of your ${cock} against their unresisting pucker, easing forward while the unconscious body only flinches in its sleep. ${entryA}` + nsfwBodyUseClause(item, target)
+      ]);
     } else return;
 
     item.penetrated = true;
     item.penetratedTarget = target;
+    item.bodyDepth = 1;
+    item.bodyDepthTarget = target;
     if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
     const actionDesc = "penetrate " + label;
     polishBodyNarration(item, actionDesc, baseText);
@@ -2353,6 +2558,12 @@ anatomyNote,
   // Continuation thrusting after the initial penetration, so the entry
   // narration is told once per hole and repeated clicks read as ongoing sex
   // instead of re-entering. target: "vagina" | "cloaca" | "anus" | "mouth"
+  // Continuation thrusting after the initial penetration, so the entry
+  // narration is told once per hole and repeated clicks read as ongoing
+  // sex instead of re-entering. Each continuation works deeper along a
+  // 1-5 depth ladder (item.bodyDepth), and the narration carries the
+  // same color/size/fit/creampie flavor the intimacy system uses.
+  // target: "vagina" | "cloaca" | "anus" | "mouth"
   function thrustBody(item, target) {
     if (!item || item.bodyState !== "unconscious") return;
     if (!nsfwPlayerHasPenis()) return;
@@ -2360,31 +2571,81 @@ anatomyNote,
 
     var label;
     var baseText;
+    var cock = nsfwBodyCockPhrase();
+    var skin = nsfwBodySkinPhrase(item);
+    var creampie = nsfwBodyCreampieClause(item, target);
 
     if (target === "mouth") {
       if (!item.mouthUsed) return;
       if (!nsfwRegionExposed(item, "mouth")) return;
       label = "mouth";
-      baseText = pickFrom([
-        `You hold ${name}'s slack head and fuck their limp mouth with steady strokes, sinking a little deeper with each push. Their jaw hangs loose around you; drool runs steadily from the corner of their lips.`,
-        `You pump into ${name}'s unresisting mouth, their head rocking in your grip with every drive. Their throat flutters in a reflexive gag each time you push deep.`
-      ]);
+      var dM = (item.bodyDepthTarget === "mouth") ? Math.min(5, (item.bodyDepth || 1) + 1) : 2;
+      item.bodyDepth = dM;
+      item.bodyDepthTarget = "mouth";
+      if (dM >= 5) {
+        baseText = pickFrom([
+          `You bury your ${cock} in ${name}'s slack mouth to the root with every stroke, hips flush against their face. Saliva has soaked their chin${skin ? `; their ${skin} is flushed and slick with it` : ""}, and their throat works reflexively each time you grind in.`,
+          `You ride ${name}'s limp mouth in full-length strokes, your ${cock} plunging from lips to throat and back. Their jaw hangs loose and dripping; the only sounds are the wet, rhythmic slap of your hips against their face.`
+        ]);
+      } else if (dM >= 3) {
+        baseText = pickFrom([
+          `You drive deeper into ${name}'s limp mouth, the head of your ${cock} nudging into their throat with each thrust. Wet sounds rise from the unresisting wetness, and their chest rises and falls in quick, shallow breaths around you.`,
+          `You pump into ${name}'s unresisting mouth with growing depth, their head rocking in your grip with every drive. Their throat flutters in a reflexive gag each time you push too far.`
+        ]);
+      } else {
+        baseText = pickFrom([
+          `You fuck ${name}'s slack mouth in shallow strokes, your ${cock} working a little deeper with each push. Drool runs steadily from the corner of their lips.`,
+          `You rock into ${name}'s unresisting mouth, their head cradled in your hands as you feed them the first inches of your ${cock} again and again. Their jaw hangs wide and passive around you.`
+        ]);
+      }
     } else if (target === "vagina" || target === "cloaca") {
       if (item.penetratedTarget !== target) return;
       if (!nsfwRegionExposed(item, "genitals")) return;
       label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina";
-      baseText = pickFrom([
-        `You thrust into ${name}'s unresisting ${label}, their limp hips rocking with each drive as you set your pace. Their hole clenches around you in irregular, involuntary flutters.`,
-        `You pump into ${name}'s slack ${label}, the unconscious body shifting beneath you with every push. The only answer from the body is a reflexive grip.`
-      ]);
+      var dV = (item.bodyDepthTarget === target) ? Math.min(5, (item.bodyDepth || 1) + 1) : 2;
+      item.bodyDepth = dV;
+      item.bodyDepthTarget = target;
+      var fitV = nsfwBodyFit(item, target);
+      if (dV >= 5) {
+        baseText = pickFrom([
+          `You bottom out in ${name}'s limp ${label} with every drive, hips flush against them${skin ? `, their ${skin} jolting with each impact` : ""}. Their hole flutters weakly around the root of your ${cock}, purely reflex.` + creampie,
+          `You grind hips to hips against ${name}'s unconscious body, your ${cock} sheathed to the root in their slack ${label} with every stroke. The body only rocks with your rhythm, taking you without a trace of awareness.` + creampie
+        ]);
+      } else if (dV >= 3) {
+        baseText = pickFrom([
+          `You pump into ${name}'s slack ${label} with long, steady strokes, most of your ${cock} working in and out of the unconscious body. Their hole clenches in irregular, involuntary flutters around you.` + creampie,
+          `You thrust deep into ${name}'s unresisting ${label}, their limp hips rocking with each drive as you claim more of them with every push.` + creampie
+        ]);
+      } else {
+        baseText = fitV === "resistance"
+          ? `You work the first few inches of your ${cock} into ${name}'s limp ${label} again and again, loosening the too-tight grip by force. The unconscious body only flutters weakly around your girth.`
+          : fitV === "easy"
+          ? `You slide in and out of ${name}'s relaxed ${label} in easy strokes, your ${cock} moving with no resistance at all; the body rocks limply with each push.`
+          : `You thrust into ${name}'s unresisting ${label}, their limp hips rocking with each drive as you set your pace. Their hole flutters around you in irregular, involuntary grips.`;
+      }
     } else if (target === "anus") {
       if (item.penetratedTarget !== "anus") return;
       if (!nsfwRegionExposed(item, "anus")) return;
       label = "anus";
-      baseText = pickFrom([
-        `You drive into ${name}'s loosened anus with even strokes, their limp body jarring forward with each thrust. The ring flutters weakly around you, purely reflexive.`,
-        `You fuck ${name}'s unresisting anus, bottoming out again and again. Their cheeks flex faintly each time you push home; the body gives nothing but reflex.`
-      ]);
+      var dA = (item.bodyDepthTarget === "anus") ? Math.min(5, (item.bodyDepth || 1) + 1) : 2;
+      item.bodyDepth = dA;
+      item.bodyDepthTarget = "anus";
+      var fitA2 = nsfwBodyFit(item, target);
+      if (dA >= 5) {
+        baseText = pickFrom([
+          `You sheathe your ${cock} to the root in ${name}'s anus with every thrust, hips grinding flush against their limp body. The loosened ring grips weakly, and the body jolts with each full-length drive.` + creampie,
+          `You pound ${name}'s unresisting anus in full strokes, pulling out to the crown and driving home to the root. Their cheeks flex faintly on every impact; the body gives nothing but reflex.` + creampie
+        ]);
+      } else if (dA >= 3) {
+        baseText = pickFrom([
+          `You fuck deep into ${name}'s unresisting anus, their limp cheeks flexing faintly each time you push home. The body gives nothing but reflex around your ${cock}.` + creampie,
+          `You drive into ${name}'s loosened anus with even strokes, their limp body jarring forward with each thrust. The ring flutters weakly around you, purely reflexive.` + creampie
+        ]);
+      } else {
+        baseText = fitA2 === "resistance"
+          ? `You work your ${cock} into the first inches of ${name}'s clenching anus, forcing the tight ring to stretch around you with each shallow drive. The unconscious body tenses beneath you, purely reflexive.`
+          : `You ease your ${cock} in and out of ${name}'s loosened anus in careful strokes, letting the sleeping body take a little more of you with each push.`;
+      }
     } else return;
 
     item.thrustCount = (item.thrustCount || 0) + 1;
@@ -2420,12 +2681,23 @@ anatomyNote,
     } else return;
 
     var baseText;
+    var climaxCock = nsfwBodyCockPhrase();
+    var priorLoad = nsfwBodyHasLoad(item, target);
     if (label === "mouth") {
-      baseText = `You bury yourself to the hilt in ${name}'s slack mouth and come, spilling down their throat. It works one involuntary swallow around you; excess drains from the corner of their lips as you pull out.`;
+      baseText = pickFrom([
+        `You bury your ${climaxCock} to the hilt in ${name}'s slack mouth and come, spilling straight down their throat. It works one involuntary swallow around you; excess drains from the corner of their lips as you pull out.`,
+        `You hold ${name}'s head still and empty yourself into their limp mouth, pulse after pulse across their passive tongue. They swallow once by reflex; the rest overflows, running down their chin${priorLoad ? " and mixing with the seed already drying there" : ""}.`
+      ]);
     } else if (label === "anus") {
-      baseText = `You sheathe yourself fully in ${name}'s anus and come, spilling deep inside the unresisting body. The ring gives one last reflexive clench around you as you empty yourself into them.`;
+      baseText = pickFrom([
+        `You sheathe your ${climaxCock} fully in ${name}'s anus and come, spilling deep inside the unresisting body. The ring gives one last reflexive clench around you as you empty yourself into them${priorLoad ? ", your new load churning into the mess already pooled inside" : ""}.`,
+        `You grind your hips flush against ${name}'s limp body and finish, painting their insides with your release. Their hole milks weakly at your ${climaxCock}, purely reflex, as you drain yourself into the unconscious body.`
+      ]);
     } else {
-      baseText = `You hilt yourself in ${name}'s ${label} and come, spilling your release deep inside the unconscious body. Their passage flutters weakly around you, purely reflex, as you drain yourself into them.`;
+      baseText = pickFrom([
+        `You hilt your ${climaxCock} in ${name}'s ${label} and come, spilling your release deep inside the unconscious body. Their passage flutters weakly around you, purely reflex, as you drain yourself into them${priorLoad ? ", adding to the load already pooled inside" : ""}.`,
+        `You bury yourself to the root in ${name}'s slack ${label} and let go, thick spurts flooding the unresisting passage. The body only flutters around your ${climaxCock}; whatever it cannot hold slowly seeps out around you.`
+      ]);
     }
 
     item.bodyClimaxCount = (item.bodyClimaxCount || 0) + 1;
