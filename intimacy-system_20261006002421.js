@@ -2726,6 +2726,12 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         return response;
     }
 
+    // Physical acts cost the player a little stamina (see
+    // spendIntimacyStamina near getPlayerCockSize). Raging Bull makes it
+    // free via the engine-side guard in spendEntityStamina - no
+    // special-casing needed here.
+    spendIntimacyStamina(player, INTIMACY_STAMINA_COST_PER_ACT, true);
+
     // Handle penetration actions
     if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE || act.type === ACT_TYPES.END) {
         handlePenetrationAction(npc, player, act, intimacy, actId);
@@ -3179,6 +3185,7 @@ function handleClimax(npc, player, act, intimacy) {
         intimacy.arousal.player = Math.max(0, intimacy.arousal.player - (AROUSAL_CONFIG.ORGASM_THRESHOLD * 0.7));
         intimacy.climax.playerOrgasms++;
         intimacy.climax.lastPlayerClimax = Date.now();
+        spendIntimacyStamina(player, INTIMACY_STAMINA_COST_CLIMAX, true);
         
         // Apply cooldown for males
         if (playerGender === "male") {
@@ -3195,6 +3202,7 @@ function handleClimax(npc, player, act, intimacy) {
         intimacy.arousal.npc = Math.max(0, intimacy.arousal.npc - (AROUSAL_CONFIG.ORGASM_THRESHOLD * 0.7));
         intimacy.climax.npcOrgasms++;
         intimacy.climax.lastNPCClimax = Date.now();
+        spendIntimacyStamina(npc, INTIMACY_STAMINA_COST_CLIMAX, false);
         
         // Apply cooldown for male NPCs
         if (npcGender === "male") {
@@ -11657,13 +11665,50 @@ function getPlayerCockColorWord(player) {
 }
 
 /**
+ * True while the Raging Bull potion effect (STATUS_EFFECT_DEFINITIONS
+ * .ragingBull in cyoaftw-engine-CORE.js) is active on the entity. Works for
+ * the player or an NPC - drinking it maxes stamina and, for 15 story turns,
+ * no action costs stamina; the male-endowment flavor below reads it too.
+ */
+function isRagingBullActive(entity) {
+    if (!entity) return false;
+    try {
+        if (typeof hasActiveStatusEffect === "function") return hasActiveStatusEffect(entity, "ragingBull");
+    } catch (err) { /* fall through to the direct read */ }
+    return !!(Array.isArray(entity.statusEffects) && entity.statusEffects.some(function (e) {
+        return e && e.key === "ragingBull";
+    }));
+}
+
+// Intimacy stamina costs (engine's spendEntityStamina does the actual
+// spending - strain/exhaustion states included). Per-act is the small
+// exertion of any physical act; climax is the big payout of an
+// orgasm/ejaculation. Raging Bull makes both free: spendEntityStamina
+// no-ops while the effect is active, so no extra guard is needed here.
+var INTIMACY_STAMINA_COST_PER_ACT = 1;
+var INTIMACY_STAMINA_COST_CLIMAX = 4;
+
+function spendIntimacyStamina(entity, amount, isPlayer) {
+    if (typeof spendEntityStamina !== "function") return;
+    try { spendEntityStamina(entity, amount, [], { isPlayer: !!isPlayer }); } catch (err) { /* engine absent */ }
+}
+
+/**
  * Player cock size category ("small" | "medium" | "large") from the profile.
+ * While Raging Bull is active the reported category is one step larger than
+ * the profile's, so every consumer of this helper (fit calculation, AI size
+ * context, deepthroat templates) sees the engorged state.
  */
 function getPlayerCockSize(player) {
     var a = player && player.anatomy;
     if (!a) return "medium";
     var size = (a.penis && a.penis.sizeCategory) || (a.genitalSize && a.genitalSize.sizeCategory) || "medium";
-    return String(size).toLowerCase();
+    size = String(size).toLowerCase();
+    if (isRagingBullActive(player)) {
+        if (size === "small") size = "medium";
+        else if (size === "medium") size = "large";
+    }
+    return size;
 }
 
 /**
@@ -11728,6 +11773,10 @@ function getColorSizeContext(player, npc, action) {
     var lines = [];
     var size = getPlayerCockSize(player);
     var color = getPlayerCockColorWord(player);
+    if (isRagingBullActive(player)) {
+        lines.push("- The player's penis is unnaturally engorged - flushed and straining, larger than usual (Raging Bull potion in effect). Name that engorged look when it appears.");
+    }
+OLD_D_MARKER
     if (size !== "medium" || color) {
         var sizeDesc = size === "large" ? "large and thick" : size === "small" ? "small and slender" : "average-sized";
         var example = size === "large" ? "your thick " : size === "small" ? "your slender " : "your ";

@@ -1466,6 +1466,37 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
     {
+        // Offering a drink (any alcohol in the player's inventory - see
+        // TAVERN_DRINK_TEMPLATES / offerDrinkToNPC in cyoaftw-engine-CORE.js)
+        // is a scripted action, not an AI turn: the engine consumes the
+        // drink, stacks the NPC's "drunk" status effect and loosens their
+        // inhibitions (memory.disinhibition - the same pool the
+        // min/maxDisinhibition conditions above read). The function-action
+        // path in chooseChatOption fires the action and shows its own chat
+        // lines, skipping npcRespond.
+        id: "offer-drink",
+        priority: 26,
+        repeat: "session",
+        resetTimer: { turns: 4 },
+        label: "Offer them a drink",
+        textVariants: [
+            "You offer them something to drink.",
+            "You hold out a drink for them.",
+            "You suggest sharing a drink together."
+        ],
+        intent: "gift",
+        conditions: {
+            maxHostility: 60,
+            custom: (npc, ctx) =>
+                ctx.isHumanoid &&
+                typeof playerHasAlcohol === "function" &&
+                playerHasAlcohol()
+        },
+        action: (npc) => {
+            if (typeof offerDrinkToNPC === "function") offerDrinkToNPC(npc);
+        }
+    },
+    {
         id: "ask-about-event",
         priority: 28,
         rankBoost: 20,
