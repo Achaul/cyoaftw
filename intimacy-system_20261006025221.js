@@ -6930,29 +6930,6 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     // (continueAll flag; the engine runs each engaged act). Falls back to
     // the legacy single lastAction continue when nothing is engaged.
     const engagedIds = getEngagedActIds(npc);
-    const pushContinueButton = function () {
-        if (engagedIds.length > 0) {
-            menu.unshift({
-                type: "continue",
-                label: engagedIds.length === 1
-                    ? `Continue (${getNaturalLabel(engagedIds[0], npc, player)})`
-                    : `Continue (${engagedIds.length} acts)`,
-                actionId: engagedIds[engagedIds.length - 1],
-                continueAll: true,
-                description: engagedIds.length === 1
-                    ? `Continue ${getNaturalLabel(engagedIds[0], npc, player)}`
-                    : "Continue all engaged acts"
-            });
-            return;
-        }
-        if (!lastAction || !lastAction.actId) return;
-        menu.unshift({
-            type: "continue",
-            label: `Continue (${getNaturalLabel(lastAction.actId, npc, player)})`,
-            actionId: lastAction.actId,
-            description: `Continue ${lastActionDetails.desc || 'the previous action'}`
-        });
-    };
 
     // Add Continue and Pull out/Pull Away buttons if there's a last action
     const lastAction = npc && npc.intimacy && npc.intimacy.lastAction;
@@ -6975,6 +6952,31 @@ function getMenuActions(npc, player, room = null, positionId = null) {
             // Check if the last action is still valid for current phase
             const filteredLastAction = filterActionsByPhase([lastActionDetails], phase);
             if (filteredLastAction.length > 0) {
+                // Defined in this block so lastActionDetails is in scope for
+                // the legacy single-action Continue fallback.
+                const pushContinueButton = function () {
+                    if (engagedIds.length > 0) {
+                        menu.unshift({
+                            type: "continue",
+                            label: engagedIds.length === 1
+                                ? `Continue (${getNaturalLabel(engagedIds[0], npc, player)})`
+                                : `Continue (${engagedIds.length} acts)`,
+                            actionId: engagedIds[engagedIds.length - 1],
+                            continueAll: true,
+                            description: engagedIds.length === 1
+                                ? `Continue ${getNaturalLabel(engagedIds[0], npc, player)}`
+                                : "Continue all engaged acts"
+                        });
+                        return;
+                    }
+                    if (!lastAction || !lastAction.actId) return;
+                    menu.unshift({
+                        type: "continue",
+                        label: `Continue (${getNaturalLabel(lastAction.actId, npc, player)})`,
+                        actionId: lastAction.actId,
+                        description: `Continue ${lastActionDetails.desc || 'the previous action'}`
+                    });
+                };
                 // Check if we should show ejaculation options instead of Continue
                 if (justPulledOut && isNearClimax && playerHasPenis) {
                     // Determine which ejaculation options to show based on what was penetrated
