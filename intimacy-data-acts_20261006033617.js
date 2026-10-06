@@ -6,8 +6,8 @@
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-10-03-001";
-    console.log("[Intimacy Acts] Loaded v2026-10-03-001 - external ejaculation acts retyped from impact to continue (penetration family)");
+    window.INTIMACY_ACTS_VERSION = "2026-10-05-001";
+    console.log("[Intimacy Acts] Loaded v2026-10-05-001 - added spit-on acts (vagina/cock/anus/breasts, Other section)");
 }
 
 // ============================================================================
@@ -573,7 +573,17 @@ var SEX_ACTS = {
     pee_on_back_f: { id: "pee_on_back_f", tool: "vagina", target: "back", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on back", desc: "Urinate on their back", arousal: { p: 0, n: -5 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
     pee_on_thighs_f: { id: "pee_on_thighs_f", tool: "vagina", target: "thighs", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on thighs", desc: "Urinate on their thighs", arousal: { p: 0, n: -5 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
     pee_on_pussy_f: { id: "pee_on_pussy_f", tool: "vagina", target: "vagina", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on pussy", desc: "Urinate on their pussy", arousal: { p: 0, n: -12 }, pos: ["Standing", "Perched", "Missionary", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
-    pee_on_feet_f: { id: "pee_on_feet_f", tool: "vagina", target: "feet", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on feet", desc: "Urinate on their feet", arousal: { p: 0, n: -5 }, pos: ["Standing", "Kneeling"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" }
+    pee_on_feet_f: { id: "pee_on_feet_f", tool: "vagina", target: "feet", verb: "pee on", type: ACT_TYPES.WATERSPORT, label: "Pee on feet", desc: "Urinate on their feet", arousal: { p: 0, n: -5 }, pos: ["Standing", "Kneeling"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, consequence: "urine" },
+
+    // ── SPIT (saliva) ────────────────────────────────────────────────────
+    // One-shot utility acts: slick a part with spit (vagina/anus gain lube
+    // via handleLubeFromAction) or spit on the chest/cock. They never
+    // occupy an engaged-act slot (oneShot) and render in the menu's
+    // "Other" section (menuSection) instead of Foreplay.
+    spit_on_vagina: { id: "spit_on_vagina", tool: "mouth", target: "vagina", verb: "spit on", type: ACT_TYPES.TEASE, label: "Spit on pussy", desc: "Spit on their pussy to slick it up", arousal: { p: 4, n: 8 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Astride Lap", "Doggy", "Bent Over", "Spooning", "Kneeling Over", "Cowgirl", "Reverse Cowgirl", "Against Wall", "Sixty-Nine", "Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true, oneShot: true, menuSection: "Other", objectDialogueTags: ["spat on"] },
+    spit_on_anus: { id: "spit_on_anus", tool: "mouth", target: "anus", verb: "spit on", type: ACT_TYPES.TEASE, label: "Spit on anus", desc: "Spit on their anus to slick it up", arousal: { p: 3, n: 6 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Astride Lap", "Doggy", "Bent Over", "Spooning", "Kneeling Over", "Cowgirl", "Reverse Cowgirl", "Against Wall", "Against Wall From Behind", "Sixty-Nine", "Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, oneShot: true, menuSection: "Other", objectDialogueTags: ["spat on"] },
+    spit_on_cock: { id: "spit_on_cock", tool: "mouth", target: "penis", verb: "spit on", type: ACT_TYPES.TEASE, label: "Spit on cock", desc: "Spit on their cock to slick it up", arousal: { p: 4, n: 6 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling", "Kneeling Over", "Cowgirl", "Reverse Cowgirl", "Sixty-Nine", "Oral Service", "Squatting Before"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcMale: true, oneShot: true, menuSection: "Other", objectDialogueTags: ["spat on"] },
+    spit_on_breasts: { id: "spit_on_breasts", tool: "mouth", target: "breasts", verb: "spit on", type: ACT_TYPES.TEASE, label: "Spit on breasts", desc: "Spit on their bare breasts", arousal: { p: 3, n: 5 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Astride Lap", "Against Wall", "Doggy", "Bent Over", "Spooning", "Kneeling", "Kneeling Over", "Cowgirl"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF, oneShot: true, menuSection: "Other", objectDialogueTags: ["spat on"] }
 };
 
 // ============================================================================
