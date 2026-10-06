@@ -7073,6 +7073,18 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                         pullLabel = (livePen.tool === "penis" || livePen.tool === "cock") ? "Pull Off" : "Pull Away";
                         pullDesc = "Pull yourself free";
                     }
+                    // Pull Away: full act reset WITHOUT ending the
+                    // encounter. Engine-side (pull_away_acts) it clears
+                    // every engaged act and plays the pull_out_generic
+                    // withdrawal narration when the player's penis is
+                    // currently inside. Unshifted first so the pull-out
+                    // button stays above it in the menu.
+                    menu.unshift({
+                        type: "end",
+                        label: "Pull Away",
+                        actionId: "pull_away_acts",
+                        description: "Stop all current actions without ending the encounter"
+                    });
                     menu.unshift({
                         type: "end",
                         label: pullLabel,
@@ -7081,12 +7093,19 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                     });
                 } else {
                     // Engaged but not penetrated (fingering, receiving
-                    // oral, grinding): one generic disengage button.
+                    // oral, grinding): a full act reset that keeps the
+                    // encounter going, plus the session ender.
+                    menu.unshift({
+                        type: "end",
+                        label: "End session",
+                        actionId: "stop",
+                        description: "Stop and end the intimacy session"
+                    });
                     menu.unshift({
                         type: "end",
                         label: "Pull Away",
-                        actionId: "stop",
-                        description: "Stop current action and pull away"
+                        actionId: "pull_away_acts",
+                        description: "Stop all current actions without ending the encounter"
                     });
                 }
             }
