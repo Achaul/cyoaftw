@@ -1334,6 +1334,27 @@ const ROOM_TEMPLATES = [
         ],
         imageKey: "Library"
     },
+    // The Town Portal: a waygate the council keeps behind the Hall Corridor.
+    // Placed only by the Town Hall blueprint (never rolled). Its "portal"
+    // tagged fixture opens the pay-and-step-through card (see TOWN PORTAL in
+    // cyoaftw-engine-CORE.js).
+    {
+        type: "Portal Chamber",
+        zone: "Town",
+        role: "interior",
+        displayName: "Portal Chamber",
+        noNpcs: true,
+        baseDescription: "A round, windowless chamber of old grey stone, its floor inlaid with rings of worn brass. A tall arch of fitted black stone stands against the far wall, and the air inside it shimmers like heat over a road.",
+        allowedZones: ["town"],
+        parentCluster: ["square"],
+        isConnector: false,
+        structural: [
+            { id: "town-portal", name: "shimmering waygate", tags: ["landmark", "portal"],
+              examineText: "A tall arch of black stone holds a pane of shimmering air. Through it you glimpse a street you do not know, under a different sky. Brass rings in the floor hum faintly whenever someone stands near, and a plaque beside the arch states the council's fee for passage." },
+            { id: "brass-rings", name: "inlaid brass rings", tags: ["landmark"] }
+        ],
+        imageKey: "Town Hall"
+    },
 
     // ── GUILDHALL & CHAPEL ─────────────────────────────────────────
     // Two more public buildings (see BUILDING_BLUEPRINTS). Never rolled
@@ -1804,11 +1825,15 @@ const BUILDING_BLUEPRINTS = {
         rooms: [
             { key: "corridor", type: "Hall Corridor",   floor: 0, at: [0, 0] },
             { key: "chamber",  type: "Council Chamber", floor: 0, at: [0, 1] },
-            { key: "records",  type: "Records Office",  floor: 0, at: [1, 0], minNpcs: 1 }
+            { key: "records",  type: "Records Office",  floor: 0, at: [1, 0], minNpcs: 1 },
+            // The Town Portal (always present; west of the corridor, open
+            // archway, never locked).
+            { key: "portal",   type: "Portal Chamber",  floor: 0, at: [-1, 0] }
         ],
         links: [
             ["corridor", "chamber", "door"],
-            ["corridor", "records", "door", { chance: 0.7, level: 3 }]
+            ["corridor", "records", "door", { chance: 0.7, level: 3 }],
+            ["corridor", "portal", "arch"]
         ]
     },
     // The street-facing hall holds the Guildmaster and the job board; an
@@ -2406,7 +2431,7 @@ function getPlaceLoreFacts() {
                     const origin = seed && seed.townOrigin === "crown"
                         ? "It began as the Crown grain depot's counting house."
                         : "It began as the Free Banners' muster hall.";
-                    return "The Town Hall stands " + where + ". " + origin + " The guards keep the front hall, the council sits in the chamber at the back, and the records office off the corridor is kept locked when the clerk is out.";
+                    return "The Town Hall stands " + where + ". " + origin + " The guards keep the front hall, the council sits in the chamber at the back, and the records office off the corridor is kept locked when the clerk is out. West of the corridor the council keeps a waygate in its own chamber, and it will carry anyone who can pay the fee to another town far from here.";
                 },
                 distorted: "The Town Hall is where the council meets, and the council answers to whoever pays the guards."
             }));

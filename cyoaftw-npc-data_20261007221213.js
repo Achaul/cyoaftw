@@ -3693,7 +3693,7 @@ function revealNPCName(npc) {
     if (!npc.memory) npc.memory = {};
     npc.memory.nameKnown = true;
     npc.descriptorName = npc.descriptorName || npc.name || "";
-    npc.name = npc.givenName;
+    npc.name = (npc.boss && npc.boss.epithet) ? npc.givenName + " " + npc.boss.epithet : npc.givenName;
     return npc;
 }
 

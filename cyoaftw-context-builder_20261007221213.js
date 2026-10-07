@@ -65,7 +65,7 @@ function deriveRoomContext(room) {
         ctx.function = "rest";
     }
 
-    if (is("council chamber") || is("records office") || is("hall corridor")) {
+    if (is("council chamber") || is("records office") || is("hall corridor") || is("portal chamber")) {
         ctx.privacy = "semi-private";
         ctx.noise = "quiet";
         ctx.socialExpectation = "formal";
@@ -679,6 +679,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         reactionNotes.length ? `- Reaction biases: ${reactionNotes.join("; ")}` : "",
         motive ? `- Current motive: ${motive}` : "",
         `- Mood: ${mood}`,
+        (npc && npc.boss) ? `- Rank: you are known as ${npc.boss.epithet || "the ruler"}, ruler of this area. Your power comes from a magical relic (${npc.boss.relicName || "relic"}) you carry; you are proud, dangerous and aware of it.${npc.boss.demeanor ? " Demeanor: " + npc.boss.demeanor + "." : ""}${npc.boss.quirk ? " Quirk: " + npc.boss.quirk + "." : ""}` : "",
         buildNPCDeliveryNote(npc, window.G ? window.G.activeRoom : null, mood, favorability),
         `- Familiarity with player: ${metPlayer ? "already acquainted; do not treat this as a first introduction" : "first meeting or not yet properly introduced"}`,
         `- Relationship to player: ${relationship}`,
