@@ -1497,6 +1497,273 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
     {
+        // A follower who has just said they are leaving (see tickFollowerAutonomy
+        // in the engine) can be asked to stay, once. Scripted, no AI turn.
+        id: "follower-ask-stay",
+        priority: 1,
+        repeat: "always",
+        label: "Ask them to stay",
+        text: "You ask them to stay a while longer.",
+        intent: "help",
+        conditions: {
+            custom: (npc, ctx) =>
+                typeof getFollowerLeaving === "function" &&
+                !!getFollowerLeaving(npc) &&
+                !getFollowerLeaving(npc).asked
+        },
+        action: (npc) => {
+            if (typeof askFollowerToStay === "function") askFollowerToStay(npc);
+        }
+    },
+    {
+        // A party member can be asked to settle the loot rule again (engine:
+        // "LOOSE ENDS"). Scripted, no AI turn.
+        id: "party-loot-revisit",
+        priority: 27,
+        repeat: "session",
+        resetTimer: { turns: 40 },
+        label: "Talk again about splitting loot",
+        text: "You suggest it is time to talk again about how the party splits loot.",
+        intent: "talk",
+        conditions: {
+            custom: (npc, ctx) =>
+                typeof canReopenPartyLootVote === "function" && canReopenPartyLootVote(npc)
+        },
+        action: (npc) => {
+            if (typeof reopenPartyLootVote === "function") reopenPartyLootVote(npc);
+        }
+    },
+    {
+        // Someone who walked out on the party (over loot, a crime, a fight, or
+        // just boredom) can be asked about it once. Scripted, no AI turn.
+        id: "departed-acknowledge",
+        priority: 26,
+        repeat: "always",
+        label: "Bring up why they left",
+        text: "You bring up why they left.",
+        intent: "talk",
+        conditions: {
+            maxHostility: 60,
+            custom: (npc, ctx) =>
+                typeof getDepartedKind === "function" && !!getDepartedKind(npc)
+        },
+        action: (npc) => {
+            if (typeof acknowledgeDepartedNPC === "function") acknowledgeDepartedNPC(npc);
+        }
+    },
+    // ---- Finding a teacher (engine: "FINDING TEACHERS") ----
+    // Scripted, no AI turn. The NPC names a real trainer in town and where to
+    // find them, and the player's sheet remembers it. Hidden once that class
+    // is at Adept or better (your own class always is).
+    {
+        id: "ask-teacher-arcane",
+        priority: 29,
+        repeat: "session",
+        resetTimer: { turns: 30 },
+        label: "Ask where you could learn magic",
+        text: "You ask whether anyone in town could teach you magic.",
+        intent: "talk",
+        conditions: {
+            maxHostility: 60,
+            custom: (npc, ctx) =>
+                ctx.isHumanoid &&
+                typeof askNPCAboutTeacher === "function" &&
+                typeof G !== "undefined" && !!G.player &&
+                getClassSkillRank(G.player, "wizard") < 3
+        },
+        action: (npc) => {
+            if (typeof askNPCAboutTeacher === "function") askNPCAboutTeacher(npc, "wizard");
+        }
+    },
+    {
+        id: "ask-teacher-faith",
+        priority: 29,
+        repeat: "session",
+        resetTimer: { turns: 30 },
+        label: "Ask who could teach you the faith",
+        text: "You ask who in town could teach you the faith.",
+        intent: "talk",
+        conditions: {
+            maxHostility: 60,
+            custom: (npc, ctx) =>
+                ctx.isHumanoid &&
+                typeof askNPCAboutTeacher === "function" &&
+                typeof G !== "undefined" && !!G.player &&
+                getClassSkillRank(G.player, "cleric") < 3
+        },
+        action: (npc) => {
+            if (typeof askNPCAboutTeacher === "function") askNPCAboutTeacher(npc, "cleric");
+        }
+    },
+    {
+        id: "ask-teacher-roguery",
+        priority: 29,
+        repeat: "session",
+        resetTimer: { turns: 30 },
+        label: "Ask who could teach you the quiet arts",
+        text: "You ask, quietly, who could teach you the quiet arts.",
+        intent: "talk",
+        conditions: {
+            maxHostility: 60,
+            custom: (npc, ctx) =>
+                ctx.isHumanoid &&
+                typeof askNPCAboutTeacher === "function" &&
+                typeof G !== "undefined" && !!G.player &&
+                getClassSkillRank(G.player, "rogue") < 3
+        },
+        action: (npc) => {
+            if (typeof askNPCAboutTeacher === "function") askNPCAboutTeacher(npc, "rogue");
+        }
+    },
+    // ---- Sharing food and drink (engine: "SHARING FOOD AND DRINK") ----
+    // An NPC with a reason (friendly, has coin, in a tavern, or plain warmth)
+    // may offer to stand the player a drink or a meal when a chat opens, and
+    // an NPC seen eating or drinking can be joined. Accepting or joining opens
+    // a short "sharing a table" window in which the options below appear.
+    // Everything is guarded so the catalogue still works if the engine block
+    // is absent.
+    {
+        id: "accept-share-offer",
+        priority: 2,
+        repeat: "always",
+        label: (npc) => {
+            const o = typeof getNPCShareOffer === "function" ? getNPCShareOffer(npc) : null;
+            return o && o.kind === "meal" ? "Accept the meal" : "Accept the drink";
+        },
+        text: "You accept the offer gladly.",
+        intent: "gift",
+        conditions: {
+            custom: (npc, ctx) => typeof getNPCShareOffer === "function" && !!getNPCShareOffer(npc)
+        },
+        action: (npc) => {
+            if (typeof acceptNPCShareOffer === "function") acceptNPCShareOffer(npc);
+        }
+    },
+    {
+        id: "decline-share-offer",
+        priority: 3,
+        repeat: "always",
+        label: "Decline politely",
+        text: "You thank them, but decline.",
+        intent: "calm",
+        conditions: {
+            custom: (npc, ctx) => typeof getNPCShareOffer === "function" && !!getNPCShareOffer(npc)
+        },
+        action: (npc) => {
+            if (typeof declineNPCShareOffer === "function") declineNPCShareOffer(npc);
+        }
+    },
+    {
+        id: "join-their-table",
+        priority: 5,
+        repeat: "always",
+        label: (npc) => {
+            const m = typeof getNPCMealActivity === "function" ? getNPCMealActivity(npc) : null;
+            return m && m.kind === "meal" ? "Join them for a meal" : "Join them for a drink";
+        },
+        text: "You walk over and ask if the seat beside them is taken.",
+        intent: "talk",
+        conditions: {
+            maxHostility: 40,
+            custom: (npc, ctx) =>
+                typeof getNPCMealActivity === "function" &&
+                !!getNPCMealActivity(npc) &&
+                !(typeof getNPCShareOffer === "function" && getNPCShareOffer(npc)) &&
+                !(typeof getNPCSharing === "function" && getNPCSharing(npc))
+        },
+        action: (npc) => {
+            if (typeof joinNPCMeal === "function") joinNPCMeal(npc);
+        }
+    },
+    {
+        id: "meal-small-talk",
+        priority: 6,
+        repeat: "session",
+        resetTimer: { turns: 3 },
+        label: "Talk over the meal",
+        textVariants: [
+            "You settle in and make easy conversation.",
+            "You trade a few idle words while you eat and drink.",
+            "You lean back and ask how their day has gone."
+        ],
+        contextNote: (npc) => typeof getNPCSharingNote === "function"
+            ? getNPCSharingNote(npc, "Chat easily about the day, the place, or whatever is on your mind.") : "",
+        cacheSig: (npc) => "meal-talk-" + (npc._sharing ? npc._sharing.since : 0),
+        intent: "talk",
+        relationshipImpact: { mood: 1, favor: 1, intent: "talk", markMet: true, actionTag: "meal-talk" },
+        conditions: {
+            custom: (npc, ctx) => typeof getNPCSharing === "function" && !!getNPCSharing(npc)
+        }
+    },
+    {
+        id: "meal-ask-around",
+        priority: 7,
+        repeat: "session",
+        resetTimer: { turns: 4 },
+        label: "Ask what's going on around here",
+        textVariants: [
+            "You ask what news and rumours have been going around.",
+            "You ask what they have heard lately, if anything.",
+            "You ask what a stranger ought to know about this place."
+        ],
+        contextNote: (npc) => typeof getNPCSharingNote === "function"
+            ? getNPCSharingNote(npc, "Share what you honestly know or have heard locally, freely, as one does over a meal. Do not invent facts beyond what your character would know.") : "",
+        cacheSig: (npc) => "meal-around-" + (npc._sharing ? npc._sharing.since : 0),
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "meal-ask-around" },
+        conditions: {
+            custom: (npc, ctx) => typeof getNPCSharing === "function" && !!getNPCSharing(npc)
+        }
+    },
+    {
+        id: "meal-ask-about-them",
+        priority: 8,
+        repeat: "session",
+        resetTimer: { turns: 5 },
+        label: "Ask about them",
+        textVariants: [
+            "You ask how they came to be here.",
+            "You ask what brought them to this table.",
+            "You ask about their life, and let them take their time."
+        ],
+        contextNote: (npc) => typeof getNPCSharingNote === "function"
+            ? getNPCSharingNote(npc, "Open up a little about yourself, true to your background and temperament. Reveal only what you would tell a pleasant table companion.") : "",
+        cacheSig: (npc) => "meal-them-" + (npc._sharing ? npc._sharing.since : 0),
+        intent: "curious",
+        relationshipImpact: { mood: 1, favor: 2, intent: "curious", markMet: true, actionTag: "meal-ask-about-them" },
+        conditions: {
+            custom: (npc, ctx) => typeof getNPCSharing === "function" && !!getNPCSharing(npc)
+        }
+    },
+    {
+        id: "meal-buy-round",
+        priority: 9,
+        repeat: "always",
+        label: "Buy the next round",
+        text: "You order another round.",
+        intent: "gift",
+        conditions: {
+            custom: (npc, ctx) => typeof canBuyNPCRound === "function" && canBuyNPCRound(npc)
+        },
+        action: (npc) => {
+            if (typeof buyNPCRound === "function") buyNPCRound(npc);
+        }
+    },
+    {
+        id: "meal-leave-table",
+        priority: 10,
+        repeat: "always",
+        label: "Thank them and leave the table",
+        text: "You thank them and push back from the table.",
+        intent: "goodbye",
+        conditions: {
+            custom: (npc, ctx) => typeof getNPCSharing === "function" && !!getNPCSharing(npc)
+        },
+        action: (npc) => {
+            if (typeof endNPCSharing === "function") endNPCSharing(npc);
+        }
+    },
+    {
         id: "ask-about-event",
         priority: 28,
         rankBoost: 20,
@@ -2953,7 +3220,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
             // "stop-following" is companion management, not small talk — an
             // NPC who is actively following can always be dismissed, even
             // before the session greeting.
-            const isCompanionManagement = entry.id === "stop-following";
+            const isCompanionManagement = entry.id === "stop-following" || entry.id === "follower-ask-stay";
             return isGreeting || isDisengage || isCompanionManagement;
         });
     }

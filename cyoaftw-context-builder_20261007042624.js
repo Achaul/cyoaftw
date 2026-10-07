@@ -378,6 +378,53 @@ function buildNPCOverheardBlock(npc, maxEntries = 3) {
     ].join("\n");
 }
 
+// ── DELIVERY NOTE ────────────────────────────────────────────────
+// One short line on HOW the NPC speaks right now, built from mood, warmth,
+// what they were doing and whether a fight just happened. It never makes an
+// NPC say more or speak first; it only colors the reply. Returns "" when
+// nothing stands out. Guarded so this file works without the engine.
+const DELIVERY_MOOD_RULES = [
+    { re: /tired|weary|exhaust|drained|sleepy/, text: "words come slowly, with the odd sigh or a trailing-off" },
+    { re: /angry|furious|irritat|annoy|agitat|resent|bitter/, text: "short, clipped sentences with an edge" },
+    { re: /nervous|anxious|afraid|fear|scared|uneasy|jumpy|worried/, text: "quick and a little halting, eyes drifting to the door" },
+    { re: /cheer|happy|joy|content|upbeat|amused|merry|playful|jovial/, text: "lighter and quicker, ready to smile or joke" },
+    { re: /sad|grief|melanchol|gloom|sorrow|dejected|mourn/, text: "quiet and flat, with long pauses" },
+    { re: /suspicious|wary|guarded|distrust/, text: "guarded and measured, answering carefully" },
+    { re: /curious|intrigued|eager|interested/, text: "leaning in, ready to ask a small question back" },
+    { re: /bored|distracted|impatient|restless/, text: "half-attentive, plainly wanting to get on" }
+];
+
+function buildNPCDeliveryNote(npc, room, mood, favorability) {
+    if (!npc) return "";
+    const parts = [];
+    const moodText = String(mood || "").toLowerCase();
+    for (let i = 0; i < DELIVERY_MOOD_RULES.length; i++) {
+        if (DELIVERY_MOOD_RULES[i].re.test(moodText)) { parts.push(DELIVERY_MOOD_RULES[i].text); break; }
+    }
+    if (!parts.length) {
+        if (favorability >= 60) parts.push("easy familiarity, a comfortable turn of phrase");
+        else if (favorability <= -20) parts.push("cool and minimal, giving little away");
+    }
+
+    const G = window.G;
+    const action = String((npc.currentState && npc.currentState.gesture) || npc.action || "").trim();
+    const sharing = typeof window.getNPCSharing === "function" && window.getNPCSharing(npc);
+    if (action && !sharing && /^(is|was) /.test(action) && !/(waiting|idle|standing|here)\b/.test(action)) {
+        parts.push("you were just " + action.replace(/^(is|was) /, "") + ", so attention may stray back to it");
+    }
+
+    if (G && typeof G._lastCombatTurn === "number" && typeof getCurrentStoryTurn === "function" &&
+        room && G._lastCombatRoom === (room.id || room.name || "") &&
+        getCurrentStoryTurn() - G._lastCombatTurn <= 6) {
+        parts.push("fighting broke out in this room moments ago, so you are still a little keyed up");
+    }
+
+    if (!parts.length) return "";
+    let line = "- Delivery right now: " + parts.join("; ") + ". Let this show in rhythm and word choice only; do not announce it.";
+    if (Math.random() < 0.25) line += " You may add one brief physical beat (a glance, a gesture) if it fits; skip it most replies.";
+    return line;
+}
+
 function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
     if (!npc) return "";
     const config = options && typeof options === "object" ? options : {};
@@ -632,6 +679,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         reactionNotes.length ? `- Reaction biases: ${reactionNotes.join("; ")}` : "",
         motive ? `- Current motive: ${motive}` : "",
         `- Mood: ${mood}`,
+        buildNPCDeliveryNote(npc, window.G ? window.G.activeRoom : null, mood, favorability),
         `- Familiarity with player: ${metPlayer ? "already acquainted; do not treat this as a first introduction" : "first meeting or not yet properly introduced"}`,
         `- Relationship to player: ${relationship}`,
         playerDemeanorLine ? `- Player's general demeanor: ${playerDemeanorLine}` : "",
@@ -706,6 +754,14 @@ function buildPlayerStandingBlock(room, npc) {
             } else {
                 lines.push("- You have heard the player is wanted. Let that make you wary, curt or nervous as suits your temperament. Mention it only if it fits, and do not quote the exact amount.");
             }
+        }
+    }
+
+    // How hurt the player looks: anyone looking at them can see it.
+    if (typeof describePlayerVisibleCondition === "function") {
+        const condition = describePlayerVisibleCondition(player);
+        if (condition) {
+            lines.push(`- The player is ${condition}. Anyone looking at them can see it; react as someone who sees it would, if it fits, and never quote HP numbers.`);
         }
     }
 
