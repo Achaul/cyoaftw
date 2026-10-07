@@ -1588,8 +1588,8 @@ function _teaseDisinhibitionThreshold(act) {
 // Penetration ladder: deep oral < vaginal < anal.
 function _penetrationDisinhibitionThreshold(act) {
     const target = String(act.target || "").toLowerCase();
-    if (target === "vagina" || target === "pussy") return 30;
-    if (target === "anus" || target === "ass") return 40;
+    if (target === "vagina" || target === "pussy") return 40;
+    if (target === "anus" || target === "ass") return 50;
     if (target === "mouth" || target === "lips") return 25;
     return 35;
 }
@@ -1845,6 +1845,21 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         }
     }
 
+    // ── CONSENT GATE ─────────────────────────────────────────────
+    // Disinhibition is long-term comfort; arousal is in-the-moment
+    // willingness. Intercourse needs BOTH: a freshly stripped NPC cannot
+    // be penetrated seconds later no matter how much skin is showing.
+    // Her arousal is built by the consent-hint beats and foreplay acts.
+    if (!act.playerIsBottom && act.type === ACT_TYPES.PENETRATE) {
+        var _cgTarget = String(act.target || "").toLowerCase();
+        if (_cgTarget === "vagina" || _cgTarget === "pussy" || _cgTarget === "anus" || _cgTarget === "ass") {
+            var _cgArousal = (npc && npc.intimacy && npc.intimacy.arousal) ? npc.intimacy.arousal.npc : 0;
+            if (_cgArousal < NPC_CONSENT_AROUSAL) {
+                return { valid: false, reason: "not aroused enough" };
+            }
+        }
+    }
+
     // ── PENETRATION GATING ───────────────────────────────────────
     // Gate penetration-related actions based on the current penetration state:
     // 1. CONTINUE actions require an active penetration of the same target+tool
@@ -1866,6 +1881,7 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
                 return { valid: false, reason: "wrong orifice" };
             }
         }
+
 
         // 2. PENETRATE (enter) actions: blocked if same tool+target already active
         //    (you're already inside — use continue actions instead)
@@ -2562,6 +2578,152 @@ var NPC_INTERCOURSE_REQUEST_SAMPLES = {
  * clothing/position gate). Anti-spam: 45s minimum gap, 3 asks max per
  * encounter, 35% roll.
  */
+// ── CONSENT HINTS ───────────────────────────────────────────────────────
+// In-scene willingness beats: the NPC visibly reacts to intimate
+// touches — hesitant when barely touched, warming as she is worked
+// up, openly welcoming when ready. Fires on the first intimate
+// touch of the scene, the first touch of each body category, and
+// each arousal band crossing — beats, not spam. Together with the
+// arousal consent gate above, this paces progression: the player
+// SEES her hesitancy melt instead of skipping straight to
+// intercourse on a stripped body.
+var NPC_CONSENT_AROUSAL = 250;
+
+var CONSENT_HINT_POOLS = {
+    0: { // barely touched - hesitant
+        neutral: [
+            "{npcS} goes still under your touch, a held breath slowly releasing.",
+            "{npcS} tenses for a heartbeat, then makes {npcp}self stay put for it."
+        ],
+        shy: [
+            "{npcS} bites {npcp} lip, letting you continue but not quite meeting your eyes.",
+            "A small, nervous sound escapes {npcp} throat; {npcs} doesn't pull away, but {npcs} doesn't breathe either."
+        ],
+        bold: [
+            "{npcS} huffs a small laugh, covering {npcp} flinch. \"Bold,\" {npcs} murmurs — but {npcs} doesn't stop you.",
+            "{npcS} holds {npcp} ground, watching your hand with open, curious attention."
+        ]
+    },
+    1: { // warming up
+        neutral: [
+            "{npcS} exhales, {npcp} shoulders easing under your hand.",
+            "A little sound escapes {npcp} throat; {npcs} shifts closer instead of away."
+        ],
+        shy: [
+            "{npcS} flushes, but {npcp} hips tilt minutely toward your touch.",
+            "{npcS} hides {npcp} face a little — but {npcp} body leans into your palm."
+        ],
+        bold: [
+            "\"Mm,\" {npcs} hums, pressing into your hand without pretense.",
+            "{npcS} makes no effort to hide that {npcs} likes it, {npcp} breath already deeper."
+        ]
+    },
+    2: { // welcoming
+        neutral: [
+            "{npcS} melts into the touch, {npcp} breath deepening.",
+            "{npcp} back arches faintly, chasing your hand as it moves."
+        ],
+        shy: [
+            "{npcS} shivers, eyes closing, giving in to the warmth spreading through {npcp}.",
+            "The last of the tension drains out of {npcp}; {npcs} is soft and pliant under you now."
+        ],
+        bold: [
+            "\"Don't stop,\" {npcs} breathes, hips pressing up into your touch.",
+            "{npcS} grips your wrist — not to pull it away, but to hold it exactly where it is."
+        ]
+    },
+    3: { // eager, ready for more
+        neutral: [
+            "{npcS} is trembling with it now, {npcp} body asking for more than your hands.",
+            "{npcp} breath comes in short, wanting bursts — {npcs} is past ready."
+        ],
+        shy: [
+            "{npcS} can't hold {npcp} sounds in anymore, each touch drawing something soft and desperate.",
+            "{npcS} is flushed from {npcp} chest to {npcp} ears, trembling on the edge of asking."
+        ],
+        bold: [
+            "{npcS} is slick and aching under your touch, well past patience — {npcs} wants more, and {npcs} isn't subtle about it.",
+            "\"More,\" {npcs} demands, {npcp} hips rolling against your hand. \"Now.\""
+        ]
+    }
+};
+
+/**
+ * One consent-hint line for an intimate foreplay beat, or null.
+ * Fires on: first intimate touch of the encounter, first touch of a
+ * body category, or an arousal band crossing.
+ */
+// ── FULL-DEPTH MOANS ─────────────────────────────────────────────────────
+// Bottoming out draws sound out of her: pounding is loud and raw,
+// thrusting groans, fucking hums. Fires on continue acts at depth 5,
+// with variety (pickUnique) and a skip chance so it stays a beat,
+// not wallpaper.
+var FULL_DEPTH_MOAN_POOLS = {
+    pound: [
+        "{npcS} is loud with it now — wailing into every full-depth slam, all composure gone.",
+        "A raw, ragged moan tears out of {npcp} with each pounding stroke, {npcp} voice breaking on the deepest ones.",
+        "{npcS} cries out at every bottoming-out slam, the sound bouncing off the walls."
+    ],
+    thrust: [
+        "Deep, throaty moans punch out of {npcp} each time you sink to the root.",
+        "{npcS} groans shamelessly at every hilt-deep thrust, {npcp} hips tilting to take more.",
+        "Each full-length stroke drags a wanton moan up out of {npcp} chest."
+    ],
+    fuck: [
+        "A soft moan escapes {npcp} each time you fill {npcp} completely.",
+        "{npcS} sighs into your rhythm, humming a gentle moan at the deepest point of each stroke.",
+        "{npcp} breath catches and melts into a moan whenever you press flush against {npcp}."
+    ]
+};
+
+function maybeFullDepthMoan(npc, act, intimacy) {
+    if (!npc || !act || !intimacy) return null;
+    if (act.playerIsBottom === true) return null;
+    if (act.type !== ACT_TYPES.CONTINUE) return null;
+    var pen = intimacy.penetration;
+    if (!pen || !pen.active || (pen.depth || 0) < 5) return null;
+    var target = String(pen.target || "").toLowerCase();
+    if (target !== "vagina" && target !== "pussy" && target !== "anus" && target !== "ass") return null;
+    var verb = String(act.verb || "").toLowerCase();
+    var pool = FULL_DEPTH_MOAN_POOLS[verb];
+    if (!pool) return null;
+    if (Math.random() > 0.65) return null;
+    return applyNPCPronouns(npc, pickUnique(pool, intimacy, "full-depth-moan-" + verb));
+}
+
+function maybeConsentHint(npc, act, intimacy) {
+    if (!npc || !act || !intimacy) return null;
+    if (act.playerIsBottom === true) return null;
+    if (act.type !== ACT_TYPES.TEASE) return null;
+    var target = String(act.target || "").toLowerCase();
+    var intimate = ["vagina", "pussy", "anus", "ass", "breasts", "nipples", "penis", "cock", "neck", "buttocks"].indexOf(target) !== -1;
+    if (!intimate) return null;
+    if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
+    var hints = intimacy.encounterFlags.consentHints;
+    if (!hints) hints = intimacy.encounterFlags.consentHints = { cats: {}, band: -1, touched: false };
+    var cat = (target === "vagina" || target === "pussy") ? "vagina"
+        : (target === "anus" || target === "ass") ? "anus"
+        : (target === "breasts" || target === "nipples") ? "breasts"
+        : (target === "penis" || target === "cock") ? "penis" : "other";
+    var arousal = intimacy.arousal ? intimacy.arousal.npc : 0;
+    var band = arousal < 150 ? 0 : arousal < 300 ? 1 : arousal < 500 ? 2 : 3;
+    var firstTouchOfCat = !hints.cats[cat];
+    hints.cats[cat] = true;
+    var bandCrossed = band > hints.band;
+    if (bandCrossed) hints.band = band;
+    var firstTouch = !hints.touched;
+    if (!firstTouch && !firstTouchOfCat && !bandCrossed) return null;
+    hints.touched = true;
+    var temperament = String(npc.temperament || "").toLowerCase();
+    var register = (temperament === "forward" || temperament === "bold" || temperament === "lustful") ? "bold"
+        : (temperament === "shy" || temperament === "timid" || temperament === "reserved") ? "shy"
+        : "neutral";
+    var pool = (CONSENT_HINT_POOLS[band] && CONSENT_HINT_POOLS[band][register]) ||
+        (CONSENT_HINT_POOLS[band] && CONSENT_HINT_POOLS[band].neutral) || [];
+    if (!pool.length) return null;
+    return applyNPCPronouns(npc, pickRandom(pool));
+}
+
 function maybeNpcIntercourseRequest(npc, player, act, intimacy) {
     if (!npc || !act || !intimacy) return null;
     // Only after foreplay on HER body — she asks while being worked up.
@@ -2576,7 +2738,10 @@ function maybeNpcIntercourseRequest(npc, player, act, intimacy) {
     if (playerGender === "male" && climaxState.playerCooldownUntil && Date.now() < climaxState.playerCooldownUntil) return null;
     // "Enough lust" + genuinely worked up.
     var lust = (npc.memory && typeof npc.memory.lust === "number") ? npc.memory.lust : 0;
-    if (lust < 45) return null;
+    // Long-term lust OR in-the-moment heat: a thoroughly worked-up NPC
+    // asks for it even if the relationship stat is still low — the
+    // in-scene consent is what matters here.
+    if (lust < 45 && scaleArousal(intimacy.arousal ? intimacy.arousal.npc : 0) < 50) return null;
     if (scaleArousal(intimacy.arousal ? intimacy.arousal.npc : 0) < 35) return null;
     // Anti-spam: gap, per-encounter cap.
     if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
@@ -3161,6 +3326,19 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         else if (_messC === "external_semen") _messKind = "semen";
         else if (_messC === "female_ejaculate") _messKind = "squirt";
         if (_messKind) addRoomMess(G.activeRoom, _messKind);
+    }
+
+    // ── CONSENT HINTS ─────────────────────────────────────────────────
+    // Her visible reaction to intimate touching - hesitant, warming,
+    // welcoming - paced to fire on first touches and band crossings.
+    var _consentHint = maybeConsentHint(npc, act, intimacy);
+    if (_consentHint && response) {
+        response.responseText = ((response.responseText || "") + " " + _consentHint).trim();
+    }
+    // Bottomed-out thrusts/fucks/pounds draw moans out of her.
+    var _depthMoan = maybeFullDepthMoan(npc, act, intimacy);
+    if (_depthMoan && response) {
+        response.responseText = ((response.responseText || "") + " " + _depthMoan).trim();
     }
 
     // ── NPC INITIATIVE ─────────────────────────────────────────────
@@ -7467,6 +7645,7 @@ function getDisabledHintText(reason) {
         "wrong gender": "(wrong gender)",
         "prior required": "(requires prior action)",
         "no lube": "(no lube)",
+        "not aroused enough": "(she is not ready — more foreplay)",
         "": ""
     };
     
@@ -7898,6 +8077,16 @@ function endPenetrationWithNarration(npc, player, intimacy, reason = "transition
                 pullOutNarrative += pickRandom([
                     ` As you withdraw, a thick stream of cum dribbles from her stretched hole, running down her thighs. ${subjPronoun} lets out a shaky breath. "So full..."`,
                     ` Your cum leaks from her loosened sphincter in a steady trickle, pooling between her legs. ${subjPronoun} shivers, bowels full and heavy with your load.`
+                ]);
+            } else if (analCum >= 2) {
+                // Well-bred hole: two-plus loads come back out in a
+                // messy gush - the regular pull-out earns its filthy
+                // finish, with variations.
+                pullOutNarrative += pickRandom([
+                    ` The moment you pull free, ${posPronoun} well-bred ass gives the loads back — a thick, glutting squirt that splatters ${posPronoun} cheeks and thighs, followed by cum bubbling out in loud, wet gurgles as the loosened ring fails to clench shut.`,
+                    ` Your withdrawal unstoppers ${posPronoun}: the packed loads escape in one obscene gush, streaking ${posPronoun} crack, and ${subjLower} groans as the mess keeps coming — bubbling and farting lewdly out of ${posPronoun} overworked rim.`,
+                    ` Cum follows your cock out in ropes, then in a flood — ${posPronoun} puffy rim twitching uselessly as the overflow pools beneath ${posPronoun}, and ${subjLower} can only moan at the wet, obscene sounds of it draining.`,
+                    ` Her ass surrenders the loads in messy waves — first a hot squirt across the bedding, then a slow, bubbling ooze that keeps coming long after you are out, leaving a soiled puddle beneath ${posPronoun} hips.`,``
                 ]);
             } else if (hasCreampie) {
                 var anusAnat = (npc.anatomy && npc.anatomy.anus) || {};
@@ -9716,7 +9905,11 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     // gulping, internal release) must not be flattened into a
     // one-line transition ("You make contact, your penis ejaculate...").
     var _isClimaxAct = !!act.triggersClimax;
-    if (transitionNarrative && !_isEntryAct && !_isClimaxAct) {
+    // Spit acts too: their dedicated pool (buildSpitOnNarratives) reads
+    // far better than the initial-contact line, and "your mouth spit on
+    // her anus" confused the act with oral.
+    var _isSpitOnAct = String(act.verb || "").toLowerCase() === "spit on";
+    if (transitionNarrative && !_isEntryAct && !_isClimaxAct && !_isSpitOnAct) {
         var t = transitionNarrative.trim();
         if (!t.match(/[.!?]$/)) t += ".";
         finalNarrative = t;
@@ -12212,19 +12405,22 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
                     `You ${verbPresent} into ${posPronoun} ass to the hilt, your hips hammering ${posPronoun} cheeks, the root of your ${shaftState} shaft ground by ${posPronoun} stretched ring${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
                     `You pound the full length home with every stroke, bottoming out in ${posPronoun} bowels while ${subjectPronoun.toLowerCase()} grunts at each impact${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
                     `You bottom out on every stroke and hold there a beat, marveling at the vise-like heat gripping your full length, ${posPronoun} sphincter slightly puffy where it drags at your root. ${subjectPronoun} lets out a squeal each time your hips slap home${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
-                    `You hammer ${posPronoun} ass in full strokes, your thighs slapping ${posPronoun} cheeks with each drive, ${posPronoun} stretched pucker dragging along your shaft like a suction cup on every withdrawal${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                    `You hammer ${posPronoun} ass in full strokes, your thighs slapping ${posPronoun} cheeks with each drive, ${posPronoun} stretched pucker dragging along your shaft like a suction cup on every withdrawal${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You sheathe yourself to the root on every stroke and pound into ${posPronoun} rectum, each slam punching deep into ${posPronoun} bowels${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
                 ]);
                 if (_ad >= 3) return pickRandom([
                     `You ${verbPresent} in long, deep strokes, withdrawing until only the head stays clamped in ${posPronoun} ring, then driving back in${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
                     `You work deeper with each thrust, ${posPronoun} heat loosening around you as more of your ${shaftState} shaft slides in${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
                     `You take ${posPronoun} ass in slow, deliberate strokes, gaining a little more depth each time as ${posPronoun} inner walls give way and accept you. "So full..." ${subjectPronoun.toLowerCase()} breathes, planting a hand on your thigh to slow you${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
                     `You hold ${posPronoun} hips steady and ${verbPresent} with growing confidence, ${posPronoun} loosening ring easing open a fraction more with every pass${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
-                    `You ${verbPresent} with steady pressure, ${posPronoun} ring gripping you in a slow burn each time you sink home, the friction building heat where the tightness drags hardest${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                    `You ${verbPresent} with steady pressure, ${posPronoun} ring gripping you in a slow burn each time you sink home, the friction building heat where the tightness drags hardest${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You work the full length of your ${shaftState} shaft through ${posPronoun} rectum in long strokes, ${posPronoun} bowels clenching around you with every pass${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
                 ]);
                 return pickRandom([
                     `You ${verbPresent} into ${posPronoun} ass, the tight heat gripping your ${shaftState} shaft${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
                     `You keep to shallow strokes, just the first few inches moving in ${posPronoun} clenching passage, opening ${posPronoun} up bit by bit${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
-                    `You hold most of your length back and ${verbPresent} carefully, the freshly-stretched ring clamping hot and tight around your crown each time you press a little deeper${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                    `You hold most of your length back and ${verbPresent} carefully, the freshly-stretched ring clamping hot and tight around your crown each time you press a little deeper${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You work just the head of your ${shaftState} shaft past ${posPronoun} rim and stroke shallowly, letting ${posPronoun} rectum grip and release you in slow pulls${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
                 ]);
             })() : null,
         verbBase === 'ejaculate' || verbBase === 'ejaculate on' ?
