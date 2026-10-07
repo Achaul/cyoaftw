@@ -3183,7 +3183,11 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // recently fucked reads differently in later insertion descriptors
     // (see getBodyUseDescriptor/recordBodyUse above). Internal/oral semen
     // and urine count as a lingering load on the part.
-    if (act.playerIsBottom !== true) {
+    // Spit acts are lubrication, not use of the hole - recording them
+    // made the target read as orally used on the next act.
+    var _isSpitAct = String(act.verb || "").toLowerCase() === "spit on" ||
+        String(act.id || "").indexOf("spit_on") === 0;
+    if (act.playerIsBottom !== true && !_isSpitAct) {
         const bodyPart = normalizeBodyUsePart(act.target);
         if (bodyPart) {
             const consequence = String(act.consequence || "");
@@ -4528,7 +4532,11 @@ var SENSORY_FRAGMENTS = {
             ", the ribbed passage squeezing tight",
             ", the dry friction giving way to slickness",
             ", the muscular walls clamping hot and tight",
-            ", the tight friction sending sparks through you"
+            ", the tight friction sending sparks through you",
+            ", the ring pinching tight behind your crown with every stroke",
+            ", the grip so snug every stroke turns to friction-heat",
+            ", her heat sealing around you, tight enough to ache",
+            ", the tight drag building heat where the ring grips hardest",
         ],
         mouth: [
             ", the wet warmth of {npcP} mouth enveloping you",
@@ -6785,8 +6793,8 @@ function generateEndResponse(npc, player, act) {
         // Lead the response with an erotic description of the penis sliding out
         // of the orifice, before the NPC reaction and ejaculation/scent details.
         const analWithdrawalLead = pickRandom([
-            `You slide your ${tool} out of ${possessivePronoun} stretched ass inch by inch, the swollen ring gripping your shaft the whole way out. The head tugs at the rim a moment, then pops free with a soft sound.`,
-            `You withdraw your ${tool} from ${possessivePronoun} depths one slow inch at a time, the tight ring dragging along your length with a wet suck. The muscle flutters as it tries to clench shut behind you.`,
+            `You slide your ${tool} out of ${possessivePronoun} stretched ass inch by inch, the swollen ring gripping your shaft the whole way out, the drag friction-hot against the rim. The head tugs at the rim a moment, then pops free with a soft sound.`,
+            `You withdraw your ${tool} from ${possessivePronoun} depths one slow inch at a time, the tight ring dragging along your length with a wet suck, the friction of it burning around your crown. The muscle clamps down hard behind you, slow to let go.`,
             `You ease your ${tool} free of ${possessivePronoun} ass, the heat peeling off you in layers until the crown stretches the rim wide and slips out. The loosened ring twitches in the open air.`,
             `You pull back until only the head of your ${tool} remains clamped in ${possessivePronoun} ring, pausing there, then draw it out with one last stretch and a quiet pop.`
         ]);
@@ -7818,7 +7826,7 @@ function endPenetrationWithNarration(npc, player, intimacy, reason = "transition
             var leavesGape = Math.random() < Math.min(gapeChance, 0.85);
             var gapeDesc = leavesGape
                 ? pickRandom([
-                    ` The loosened ring stays open a moment - a round gape that flutters as it slowly remembers its shape.`,
+                    ` The loosened ring stays open a moment - a round gape that clenches in weak twitches as it slowly remembers its shape.`,
                     ` Her sphincter is left open, puffy and slack, winking each time it tries to pucker shut.`,
                     ` A gape remains where you were, the stretched rim quivering in the open air before it finally begins to close.`
                 ])
@@ -7845,7 +7853,7 @@ function endPenetrationWithNarration(npc, player, intimacy, reason = "transition
             } else {
                 pullOutNarrative = pickRandom([
                     `You pull out from ${posPronoun} anus inch by inch, the stretched ring gripping your ${tool} on the whole slow ride out. The swollen rim clings to your crown, stretches, then releases it with a soft pop.`,
-                    `You withdraw your ${tool} from her depths one careful inch at a time, the heat sliding off you in layers. Her ring flutters and cinches as each inch clears it, and when the head finally tugs free, the muscle quivers shut behind you.`,
+                    `You withdraw your ${tool} from her depths one careful inch at a time, the friction-heat sliding off you in layers. Her ring grips and cinches as each inch clears it, the drag along your length almost burning, and when the head finally tugs free, the muscle clamps shut behind you.`,
                     isShallow
                         ? `You ease out of ${posPronoun} ass after only the first few inches - her rim drags lightly at your crown, then puckers quickly closed as you go.`
                         : `You drag your ${tool} back out of the depths you had reached, her rim stretched wide and clinging the entire way until the crown pops loose at last.`
@@ -9257,7 +9265,10 @@ var BODY_USE_PART_MAP = {
     vagina: "vagina", pussy: "vagina", cloaca: "vagina",
     anus: "anus", butthole: "anus",
     mouth: "mouth", lips: "mouth", face: "mouth",
-    breasts: "breasts", chest: "breasts"
+    breasts: "breasts", chest: "breasts",
+    // Their cock: stroked/handled or ridden - reads as used, never as a
+    // "fucked hole" (part-aware wording in getBodyUseDescriptor).
+    penis: "penis", cock: "penis"
 };
 
 function normalizeBodyUsePart(part) {
@@ -9298,6 +9309,10 @@ function recordBodyUse(entity, part, options) {
     if (options && options.loadKey) {
         state.loadKey = options.loadKey;
         state.loadTurn = turn;
+        // Volume tracking: repeated internal finishes tier the
+        // narration (a single load reads very differently from bowels
+        // packed with three).
+        state.loadCount = (state.loadCount || 0) + 1;
     }
 }
 
@@ -9340,12 +9355,18 @@ function getBodyUseDescriptor(entity, part) {
         var kind = state.useKind || "penetrate"; // legacy records predate useKind
         if (kind === "finger") return "still slick and sensitive from your recent fingering";
         if (kind === "mouth") return "wet and sensitive from your recent oral attention";
+        if (kind === "hand") return "stiff and slick from your recent handling";
+        // A recorded use of their penis reads as used/stiff, never as
+        // a "fucked hole" (that wording is anatomically wrong there).
+        if (part === "penis") return "slick and stiff from its recent use";
         return "stretched and slick from a recent fucking, easy to enter";
     }
     if (sinceUse <= BODY_USE_STALE_TURNS) {
         var staleKind = state.useKind || "penetrate";
         if (staleKind === "finger") return "faintly sensitive from your earlier fingering";
         if (staleKind === "mouth") return "faintly sensitive from your earlier oral attention";
+        if (staleKind === "hand") return "faintly sensitive from your earlier handling";
+        if (part === "penis") return "faintly slick from its earlier use";
         return "noticeably loosened, though the recent use is fading";
     }
     return null;
@@ -10011,7 +10032,7 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
             withdrawPart = posPronoun + " anus";
             withdrawDetail = pickRandom([
                 ", the stretched rim slowly clenching shut",
-                ", the ring of muscle fluttering as it tries to close",
+                ", the ring of muscle clamping down, still hot from the friction",
                 ", leaving a gape that slowly puckers back",
                 ", the loosened sphincter twitching in the open air",
                 ", the slick entrance slowly tightening"
@@ -11089,7 +11110,7 @@ function buildStagedVaginalEntry(npc, o) {
         ]));
         beats.push(pickRandom([
             `Halfway in you stop and let ${her} adjust, stuffed open on you and breathing in shallow bursts.`,
-            `You pause at half your length, feeling ${her} walls flutter as they fight to make room.`
+            `You pause at half your length, feeling ${her} walls clamp down around you, the grip so tight it borders on burning.`
         ]));
         if (Math.random() < 0.6) {
             beats.push(pickRandom([
@@ -11756,7 +11777,7 @@ function buildStagedAnalEntry(npc, o) {
         ]));
         beats.push(pickRandom([
             `You grip your shaft and wiggle the cockhead against ${her} hole, smearing precum over the clenched muscle until it starts to give.`,
-            `You take your shaft in hand and work the head against the ring in slow circles, the smear of precum slicking ${her} pucker until the muscle flutters.`,
+            `You take your shaft in hand and work the head against the ring in slow circles, the smear of precum slicking ${her} pucker until the stranglehold of the muscle begins to ease.`,
             `You hold the crown against the resisting ring and rock your hips, working precum into ${her} pucker until it loosens a fraction.`
         ]));
     }
@@ -12004,7 +12025,7 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
                 return [
                     `You press the head of your ${cockState} cock to ${anatomyDesc} and it gives almost at once - the ring already broken open, ${_aNPhrase}. You feed the length in through your own spend, and the mess squelches back out around your shaft in a warm rush, dripping down over ${posPronoun} taint. ${subjectPronoun} groans at the re-entry, too used to do anything but take it${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
                     `You slide back into the ass you already ruined. There is no resistance worth the name - just heat, slickness, and the thick squelch of the load you left, forced out around your cock as you bury yourself to the root. ${posPronoun} pucker is ${_aNPhrase} around you, drooling your earlier cum down ${posPronoun} crack while you settle deep${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`,
-                    `One slow push takes you all the way in. The muscle barely flutters - it knows your shape by now - and the mess inside greets you, cum welling up around your ${cockState} shaft and matting everything it touches. ${subjectPronoun} lets out a shaky breath, ${_aNPhrase} and utterly open${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`
+                    `One slow push takes you all the way in. The muscle yields without much fight - it knows your shape by now, wrapping you in one long, sweltering clench - and the mess inside greets you, cum welling up around your ${cockState} shaft and matting everything it touches. ${subjectPronoun} lets out a shaky breath, ${_aNPhrase} and utterly open${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.${deterrenceDesc ? ' ' + deterrenceDesc + '.' : ''}`
                 ];
             }
             return [
@@ -12083,12 +12104,13 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
                     `You ${verbPresent} in long, deep strokes, withdrawing until only the head stays clamped in ${posPronoun} ring, then driving back in${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
                     `You work deeper with each thrust, ${posPronoun} heat loosening around you as more of your ${shaftState} shaft slides in${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
                     `You take ${posPronoun} ass in slow, deliberate strokes, gaining a little more depth each time as ${posPronoun} inner walls give way and accept you. "So full..." ${subjectPronoun.toLowerCase()} breathes, planting a hand on your thigh to slow you${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
-                    `You hold ${posPronoun} hips steady and ${verbPresent} with growing confidence, ${posPronoun} loosening ring easing open a fraction more with every pass${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                    `You hold ${posPronoun} hips steady and ${verbPresent} with growing confidence, ${posPronoun} loosening ring easing open a fraction more with every pass${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
+                    `You ${verbPresent} with steady pressure, ${posPronoun} ring gripping you in a slow burn each time you sink home, the friction building heat where the tightness drags hardest${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
                 ]);
                 return pickRandom([
                     `You ${verbPresent} into ${posPronoun} ass, the tight heat gripping your ${shaftState} shaft${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
                     `You keep to shallow strokes, just the first few inches moving in ${posPronoun} clenching passage, opening ${posPronoun} up bit by bit${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`,
-                    `You hold most of your length back and ${verbPresent} carefully, the freshly-stretched ring fluttering around your crown each time you press a little deeper${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
+                    `You hold most of your length back and ${verbPresent} carefully, the freshly-stretched ring clamping hot and tight around your crown each time you press a little deeper${getAnalSound()}${scentDesc ? ', ' + scentDesc : ''}.`
                 ]);
             })() : null,
         verbBase === 'ejaculate' || verbBase === 'ejaculate on' ?

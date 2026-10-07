@@ -1807,13 +1807,13 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     "thrust cloaca": {
       label: "continued cloacal sex (unconscious)",
       difficulty: "The player is already inside the vent. The muscular opening grips passively; the player sets the whole pace against the limp body.",
-      involuntary: "Reflexive only: vent flutters and clenches around the shaft, a faint hip twitch. No awareness, no conscious reaction.",
+      involuntary: "Reflexive only: the vent clenches and grips around the shaft, a faint hip twitch. No awareness, no conscious reaction.",
       anatomyKeys: ["genitals", "anus"]
     },
     "thrust anus": {
       label: "continued anal sex (unconscious)",
       difficulty: "The player is already inside. The loosened ring offers little resistance now; the body jolts forward with each thrust, entirely passive.",
-      involuntary: "Reflexive only: weak sphincter flutters, body tension, a flinch on deep strokes. No awareness, no conscious reaction.",
+      involuntary: "Reflexive only: weak sphincter clenches, body tension, a flinch on deep strokes. No awareness, no conscious reaction.",
       anatomyKeys: ["anus"]
     },
     "deepthroat mouth": {
@@ -1825,7 +1825,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     "climax inside": {
       label: "climax inside an unconscious body",
       difficulty: "The player is buried in an unresisting hole and finishes. The body stays slack throughout; release meets no participation at all.",
-      involuntary: "Reflexive only: one last clench or flutter around the shaft, a faint hip twitch, an involuntary swallow if in the mouth. No awareness, no conscious reaction.",
+      involuntary: "Reflexive only: one last clench or grip around the shaft, a faint hip twitch, an involuntary swallow if in the mouth. No awareness, no conscious reaction.",
       anatomyKeys: ["genitals", "anus"]
     },
     "grope breasts": {
@@ -1855,7 +1855,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     "lick anus": {
       label: "anilingus (unconscious)",
       difficulty: "The cheeks must be spread by hand — the body gives no help. The player laps and circles the unmoved pucker at their own pace.",
-      involuntary: "Reflexive only: the pucker may flutter under the tongue, a faint clench. No awareness, no conscious reaction.",
+      involuntary: "Reflexive only: the pucker may clench under the tongue, a faint grip. No awareness, no conscious reaction.",
       anatomyKeys: ["anus"]
     },
     "stroke cock": {
@@ -2029,9 +2029,26 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     return !!(u && u.loadKey);
   }
 
+  // How many internal finishes the target carries (recordBodyUse loadCount).
+  // Tiers the filth: one load spills, two slop and bubble, three-plus reads
+  // as bowels packed full.
+  function nsfwBodyLoadCount(item, target) {
+    var u = item && item.bodyUse && item.bodyUse[target];
+    return (u && u.loadCount) || 0;
+  }
+
   function nsfwBodyCreampieClause(item, target) {
     if (!nsfwBodyHasLoad(item, target)) return "";
     var label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "vent") : target;
+    var loads = nsfwBodyLoadCount(item, target);
+    // Overfilled hole: repeated loads slop, bubble and gurgle.
+    if (loads >= 2) {
+      return pickFrom([
+        " Each drive churns through the packed loads inside, the used hole squelching and bubbling, froth working out around your shaft with every stroke.",
+        " Their " + label + " is a sloppy, overfilled mess - each thrust squelches the seed back out around you, the body too slack to hold it in.",
+        " The packed heat of " + (loads >= 3 ? "bowels full of spent seed" : "the churning loads") + " greets every stroke; the used passage slurps and bubbles around your shaft."
+      ]);
+    }
     return pickFrom([
       " Your earlier load stirs inside them with every stroke, slicking the way; a white froth works out around your shaft.",
       " Each drive squelches through the seed you left in their " + label + ", the used hole grown wet and easy around you."
@@ -2153,11 +2170,19 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       : "";
     var bodyUseNote = nsfwBodyUsePromptNote(item, actionDesc);
     var reflexNote = nsfwBodyReflexNote(item);
+    var _bodySmell = "";
+    if (typeof window.getActiveSmellNotes === "function") {
+      var _sm = window.getActiveSmellNotes(item);
+      if (_sm && _sm.length) {
+        _bodySmell = "\nSMELL (the body carries this scent - reference it where relevant): " +
+          _sm.map(function (n) { return n && n.text; }).filter(Boolean).join("; ") + ".";
+      }
+    }
     var flavorNote = nsfwBodyFlavorPromptNote(item, actionDesc);
 
     var prompt = [
 "You are polishing a player action description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote + reflexNote + flavorNote,
+"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote + reflexNote + flavorNote + _bodySmell,
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and sensory.",
@@ -2483,10 +2508,13 @@ anatomyNote,
         "You feed your " + cock + " down " + name + "'s limp throat inch by inch until you are hilted. Their throat grips in soft reflexive flutters, and the only sounds are wet glugs and the slow drip of drool from their slack chin. The face stays lax throughout — whatever the throat does, it does it asleep."
       ]);
     }
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, "mouth", { useKind: "penetrate" });
     nsfwBodyAddStimulus(item, 2);
     const actionDesc = "deepthroat mouth";
     polishBodyNarration(item, actionDesc, baseText);
+    // Record AFTER the polish prompt is built (it assembles
+    // synchronously inside polishBodyNarration): the act's own use
+    // must not feed the prompt as if it were a PREVIOUS act's state.
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, "mouth", { useKind: "penetrate" });
     window.rememberStoryEvent("combat", window.G.player.name + " forced their cock down " + name + "'s unconscious throat.", 8);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
@@ -2518,9 +2546,10 @@ anatomyNote,
 
     item.fingered = true;
     item.fingerTarget = target;
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "finger" });
     const actionDesc = "finger " + label;
     polishBodyNarration(item, actionDesc, baseText);
+    // Record AFTER the polish prompt is built - see deepthroatBody.
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "finger" });
     window.rememberStoryEvent("combat", `${window.G.player.name} inserted a finger into ${name}'s ${label} while they were unconscious.`, 6);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
@@ -2555,7 +2584,7 @@ anatomyNote,
       label = "anus";
       var fitA = nsfwBodyFit(item, target);
       var entryA = fitA === "resistance"
-        ? `The sphincter clenches hard against your girth; you force it open a fraction at a time, the ring stretching wide around your crown until the head finally lodges past with an audible pop.`
+        ? `The sphincter clenches hard against your girth; you force it open a fraction at a time, the ring stretching wide around your crown, its stranglehold burning, until the head finally lodges past with an audible pop.`
         : fitA === "easy"
         ? `The relaxed ring gives way with barely any resistance; you sink in smoothly until your hips rest flush against them.`
         : `The sphincter clenches reflexively against the intrusion; you work it open slowly, forcing past the resistant ring as the unconscious body tenses beneath you.`;
@@ -2569,9 +2598,10 @@ anatomyNote,
     item.penetratedTarget = target;
     item.bodyDepth = 1;
     item.bodyDepthTarget = target;
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
     const actionDesc = "penetrate " + label;
     polishBodyNarration(item, actionDesc, baseText);
+    // Record AFTER the polish prompt is built - see deepthroatBody.
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
     window.rememberStoryEvent("combat", `${window.G.player.name} penetrated ${name}'s ${label} with their cock while they were unconscious.`, 8);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
@@ -2630,20 +2660,20 @@ anatomyNote,
       var fitV = nsfwBodyFit(item, target);
       if (dV >= 5) {
         baseText = pickFrom([
-          `You bottom out in ${name}'s limp ${label} with every drive, hips flush against them${skin ? `, their ${skin} jolting with each impact` : ""}. Their hole flutters weakly around the root of your ${cock}, purely reflex.` + creampie,
+          `You bottom out in ${name}'s limp ${label} with every drive, hips flush against them${skin ? `, their ${skin} jolting with each impact` : ""}. Their hole grips weakly around the root of your ${cock}, purely reflex.` + creampie,
           `You grind hips to hips against ${name}'s unconscious body, your ${cock} sheathed to the root in their slack ${label} with every stroke. The body only rocks with your rhythm, taking you without a trace of awareness.` + creampie
         ]);
       } else if (dV >= 3) {
         baseText = pickFrom([
-          `You pump into ${name}'s slack ${label} with long, steady strokes, most of your ${cock} working in and out of the unconscious body. Their hole clenches in irregular, involuntary flutters around you.` + creampie,
+          `You pump into ${name}'s slack ${label} with long, steady strokes, most of your ${cock} working in and out of the unconscious body. Their hole clenches in irregular, involuntary grips around you.` + creampie,
           `You thrust deep into ${name}'s unresisting ${label}, their limp hips rocking with each drive as you claim more of them with every push.` + creampie
         ]);
       } else {
         baseText = fitV === "resistance"
-          ? `You work the first few inches of your ${cock} into ${name}'s limp ${label} again and again, loosening the too-tight grip by force. The unconscious body only flutters weakly around your girth.`
+          ? `You work the first few inches of your ${cock} into ${name}'s limp ${label} again and again, loosening the too-tight grip by force. The unconscious body only clenches weakly around your girth.`
           : fitV === "easy"
           ? `You slide in and out of ${name}'s relaxed ${label} in easy strokes, your ${cock} moving with no resistance at all; the body rocks limply with each push.`
-          : `You thrust into ${name}'s unresisting ${label}, their limp hips rocking with each drive as you set your pace. Their hole flutters around you in irregular, involuntary grips.`;
+          : `You thrust into ${name}'s unresisting ${label}, their limp hips rocking with each drive as you set your pace. Their hole grips you in irregular, involuntary clenches.`;
       }
     } else if (target === "anus") {
       if (item.penetratedTarget !== "anus") return;
@@ -2661,7 +2691,7 @@ anatomyNote,
       } else if (dA >= 3) {
         baseText = pickFrom([
           `You fuck deep into ${name}'s unresisting anus, their limp cheeks flexing faintly each time you push home. The body gives nothing but reflex around your ${cock}.` + creampie,
-          `You drive into ${name}'s loosened anus with even strokes, their limp body jarring forward with each thrust. The ring flutters weakly around you, purely reflexive.` + creampie
+          `You drive into ${name}'s loosened anus with even strokes, their limp body jarring forward with each thrust. The ring grips weakly around you, purely reflexive, the friction of it burning where you drag.` + creampie
         ]);
       } else {
         baseText = fitA2 === "resistance"
@@ -2672,9 +2702,10 @@ anatomyNote,
 
     item.thrustCount = (item.thrustCount || 0) + 1;
     item.thrustTarget = target;
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
     const actionDesc = "thrust " + label;
     polishBodyNarration(item, actionDesc, baseText);
+    // Record AFTER the polish prompt is built - see deepthroatBody.
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
     window.rememberStoryEvent("combat", `${window.G.player.name} continued thrusting into ${name}'s ${label} while they were unconscious.`, 6);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
@@ -2705,6 +2736,7 @@ anatomyNote,
     var baseText;
     var climaxCock = nsfwBodyCockPhrase();
     var priorLoad = nsfwBodyHasLoad(item, target);
+    var loadsAfter = (nsfwBodyLoadCount(item, target) || 0) + 1;
     if (label === "mouth") {
       baseText = pickFrom([
         `You bury your ${climaxCock} to the hilt in ${name}'s slack mouth and come, spilling straight down their throat. It works one involuntary swallow around you; excess drains from the corner of their lips as you pull out.`,
@@ -2715,18 +2747,35 @@ anatomyNote,
         `You sheathe your ${climaxCock} fully in ${name}'s anus and come, spilling deep inside the unresisting body. The ring gives one last reflexive clench around you as you empty yourself into them${priorLoad ? ", your new load churning into the mess already pooled inside" : ""}.`,
         `You grind your hips flush against ${name}'s limp body and finish, painting their insides with your release. Their hole milks weakly at your ${climaxCock}, purely reflex, as you drain yourself into the unconscious body.`
       ]);
+      // Volume tiers: the second load churns, the third-plus packs the
+      // bowels full - repeated finishes should READ as accumulating.
+      if (label === "anus") {
+        if (loadsAfter >= 3) {
+          baseText += ` Their bowels are packed full now — you can feel the thick heat of all that spent seed through the slack of their belly, and every pulse of your ${climaxCock} squelches through the mess.`;
+        } else if (loadsAfter === 2) {
+          baseText += " The second load churns into the first; the passage is already sloppy and bubbling around you.";
+        }
+      }
     } else {
       baseText = pickFrom([
-        `You hilt your ${climaxCock} in ${name}'s ${label} and come, spilling your release deep inside the unconscious body. Their passage flutters weakly around you, purely reflex, as you drain yourself into them${priorLoad ? ", adding to the load already pooled inside" : ""}.`,
-        `You bury yourself to the root in ${name}'s slack ${label} and let go, thick spurts flooding the unresisting passage. The body only flutters around your ${climaxCock}; whatever it cannot hold slowly seeps out around you.`
+        `You hilt your ${climaxCock} in ${name}'s ${label} and come, spilling your release deep inside the unconscious body. Their passage clenches weakly around you, purely reflex, as you drain yourself into them${priorLoad ? ", adding to the load already pooled inside" : ""}.`,
+        `You bury yourself to the root in ${name}'s slack ${label} and let go, thick spurts flooding the unresisting passage. The body only clenches weakly around your ${climaxCock}; whatever it cannot hold slowly seeps out around you.`
       ]);
     }
 
     item.bodyClimaxCount = (item.bodyClimaxCount || 0) + 1;
     item.bodyClimaxTarget = target;
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { loadKey: "semen", useKind: "penetrate" });
     const actionDesc = "climax inside " + label;
     polishBodyNarration(item, actionDesc, baseText);
+    // Record AFTER the polish prompt is built - the just-deposited
+    // load must not read as an EARLIER load in the prompt.
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { loadKey: "semen", useKind: "penetrate" });
+    // The finish leaves a lingering reek on the body (examine, later
+    // polish prompts, and the Care group all read it back).
+    if (typeof window.addSmellMark === "function") {
+      window.addSmellMark(item, "semen");
+      if (target === "anus" || target === "cloaca") window.addSmellMark(item, "anal");
+    }
     window.rememberStoryEvent("combat", `${window.G.player.name} ejaculated into ${name}'s ${label} while they were unconscious.`, 8);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
@@ -2791,24 +2840,41 @@ anatomyNote,
           `You pull your ${cock} from ${name}'s clenching anus, the reflexive ring gripping you to the very last inch before you slip free.`,
           isDeep
             ? `You draw the full length of your ${cock} out of ${name}'s depths, the slow drag ending only when the head clears their rim and the unconscious body settles.`
-            : `You ease your ${cock} out of ${name}'s anus with a slow, careful pull, their hole fluttering weakly around you until you are gone.`
+            : `You ease your ${cock} out of ${name}'s anus with a slow, careful pull, their hole gripping weakly around you until you are gone.`
         ]);
       }
-      // Gape is EARNED: a bottomed-out session, a size mismatch, or a
-      // stretched rim leave the limp ring slow to close (same math as the
-      // awake intimacy system's anal pull-out).
-      var gapeChance = (isDeep ? 0.45 : 0.15) + (fit === "resistance" ? 0.25 : 0) + (fit === "stretched" ? 0.15 : 0);
-      baseText += (Math.random() < Math.min(gapeChance, 0.85))
-        ? pickFrom([
-            ` The ring stays open behind you — a round, soft gape that closes only slowly, the unconscious muscle too slack to pucker shut.`,
-            ` Their hole is left open, winking each time it tries and fails to clench shut, your shape printed into the limp ring.`
-          ])
-        : ` The ring cinches shut behind you almost at once, clenching once around nothing.`;
-      if (loaded) {
-        baseText += pickFrom([
-          ` The moment you withdraw, the load you left comes with you — a slow, slick spill from their loosened hole that pools beneath their limp hips.`,
-          ` Their unresisting ring squeezes a thick glob of your release out after your ${cock}, and it drools down their crack while they sleep on.`
-        ]);
+      var analLoads = nsfwBodyLoadCount(item, target) || 0;
+      if (loaded && analLoads >= 3) {
+        // Heavily bred hole: the full filthy withdrawal - puffy matted
+        // ring, squirting overflow, failed clench, bubbles and farts,
+        // the soiled puddle, and the revulsion-to-admiration beat.
+        baseText = `You slowly pull your spent ${cock} out of ${name}'s puffy, swollen sphincter, the rim matted and dark with cum and froth. As your cockhead slides free, a loud squirt of cum streams out of the distended hole — the pink flex of their bowels visible as the opening reflexively tries to tighten closed, and fails. Cum bubbles and lewd, wet farts follow as the stream tapers off, leaving a broad puddle of soiled, brown-streaked semen pooling beneath their limp hips. The reek of raw, spent sex hangs over the body. You feel a short moment of revulsion that quickly gives way to a strange admiration for the filthy mess this session has left.`;
+      } else {
+        // Gape is EARNED: a bottomed-out session, a size mismatch, or a
+        // stretched rim leave the limp ring slow to close (same math as the
+        // awake intimacy system's anal pull-out).
+        var gapeChance = (isDeep ? 0.45 : 0.15) + (fit === "resistance" ? 0.25 : 0) + (fit === "stretched" ? 0.15 : 0);
+        baseText += (Math.random() < Math.min(gapeChance, 0.85))
+          ? pickFrom([
+              ` The ring stays open behind you — a round, soft gape that closes only slowly, the unconscious muscle too slack to pucker shut.`,
+              ` Their hole is left open, winking each time it tries and fails to clench shut, your shape printed into the limp ring.`
+            ])
+          : ` The ring cinches shut behind you almost at once, clenching once around nothing.`;
+        if (loaded) {
+          if (analLoads >= 2) {
+            // Double-loaded: heavy, obscene overflow.
+            baseText += pickFrom([
+              ` The moment you withdraw, the packed load comes with you — a thick, glutting squirt that splatters their cheeks and thighs, the slack ring too loose to hold any of it back.`,
+              ` Their loosened hole gives up the packed mess immediately: cum bubbles out in loud, wet gurgles, frothing at the ruined rim and pooling beneath their hips.`,
+              ` Your withdrawal unstoppers them — the double load escapes in one obscene gush, streaking their crack and landing wetly on the surface beneath.`
+            ]);
+          } else {
+            baseText += pickFrom([
+              ` The moment you withdraw, the load you left comes with you — a slow, slick spill from their loosened hole that pools beneath their limp hips.`,
+              ` Their unresisting ring squeezes a thick glob of your release out after your ${cock}, and it drools down their crack while they sleep on.`
+            ]);
+          }
+        }
       }
     } else {
       // Vagina / cloaca
@@ -2821,16 +2887,16 @@ anatomyNote,
         ]);
       } else {
         baseText = pickFrom([
-          `You draw your ${cock} out of ${name}'s slack ${label} in one slow pull, the unresisting flesh gliding slickly along you until you slip free. Their hole flutters once, purely reflex, then settles.`,
+          `You draw your ${cock} out of ${name}'s slack ${label} in one slow pull, the unresisting flesh gliding slickly along you until you slip free. Their hole clenches once, purely reflex, then settles.`,
           isDeep
             ? `You drag the full length of your ${cock} from ${name}'s depths, their passage clinging weakly the whole way out until the head clears their entrance with a quiet, wet sound.`
-            : `You slip your ${cock} from ${name}'s limp ${label}; the unconscious body offers nothing but one last reflexive flutter as you leave it.`
+            : `You slip your ${cock} from ${name}'s limp ${label}; the unconscious body offers nothing but one last reflexive clench as you leave it.`
         ]);
       }
       if (loaded) {
         baseText += pickFrom([
           ` Your load follows you out: as soon as you clear the entrance, a slow white trickle spills from their ${label}, running down toward their ass while the body sleeps on.`,
-          ` Their entrance flutters as you withdraw, squeezing a thick ribbon of your release out after your ${cock}; it drools lazily from the slack hole.`,
+          ` Their entrance clenches as you withdraw, squeezing a thick ribbon of your release out after your ${cock}; it drools lazily from the slack hole.`,
           ` The moment you pull free, the seed you left inside seeps out of their unclenching ${label}, pooling warm beneath their limp hips.`
         ]);
       }
@@ -2946,17 +3012,18 @@ anatomyNote,
       if (!nsfwBodyHasAnus(item) || !nsfwRegionExposed(item, "anus")) return;
       label = "anus";
       baseText = pickFrom([
-        `You spread ${name}'s cheeks with both hands and drag your tongue over their unmoved pucker, circling it slow. The ring flutters once against your tongue — the body's only answer.`,
+        `You spread ${name}'s cheeks with both hands and drag your tongue over their unmoved pucker, circling it slow. The ring clamps down once against your tongue — the body's only answer.`,
         `You rim ${name}'s unconscious body thoroughly, their limp form giving no reaction but the occasional reflexive clench under your tongue.`
       ]);
     } else return;
 
     nsfwBodyAddStimulus(item);
     item.licked = true;
+    polishBodyNarration(item, "lick " + label, baseText);
+    // Record AFTER the polish prompt is built - see deepthroatBody.
     if (target !== "nipples" && typeof window.recordBodyUse === "function") {
       window.recordBodyUse(item, target, { useKind: "mouth" });
     }
-    polishBodyNarration(item, "lick " + label, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} licked ${name}'s ${label} while they were unconscious.`, 5);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
@@ -2979,8 +3046,9 @@ anatomyNote,
     nsfwBodyAddStimulus(item);
     item.bodyCockStiff = true;
     item.cockStroked = true;
-    if (!wasStiff && typeof window.recordBodyUse === "function") window.recordBodyUse(item, "penis", { useKind: "hand" });
     polishBodyNarration(item, "stroke cock", baseText);
+    // Record AFTER the polish prompt is built - see deepthroatBody.
+    if (!wasStiff && typeof window.recordBodyUse === "function") window.recordBodyUse(item, "penis", { useKind: "hand" });
     window.rememberStoryEvent("combat", `${window.G.player.name} stroked ${name}'s cock while they were unconscious.`, 5);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
@@ -3005,8 +3073,9 @@ anatomyNote,
     nsfwBodyAddStimulus(item);
     item.bodyRidden = true;
     item.rideCount = ((item && item.rideCount) || 0) + 1;
-    if (!wasRiding && typeof window.recordBodyUse === "function") window.recordBodyUse(item, "penis", { useKind: "penetrate" });
     polishBodyNarration(item, wasRiding ? "ride cock" : "mount cock", baseText);
+    // Record AFTER the polish prompt is built - see deepthroatBody.
+    if (!wasRiding && typeof window.recordBodyUse === "function") window.recordBodyUse(item, "penis", { useKind: "penetrate" });
     window.rememberStoryEvent("combat", `${window.G.player.name} ${wasRiding ? "continued riding" : "mounted and rode"} ${name}'s cock while they were unconscious.`, 7);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
@@ -3235,7 +3304,7 @@ anatomyNote,
     // been done to the body - not just what it looks like fresh.
     var bodyUseLines = [];
     if (typeof window.getBodyUseDescriptor === "function") {
-      ["vagina", "anus", "mouth", "breasts"].forEach(function (part) {
+      ["vagina", "anus", "mouth", "breasts", "penis"].forEach(function (part) {
         var d = window.getBodyUseDescriptor(item, part);
         if (d) bodyUseLines.push("their " + part + " " + d);
       });
@@ -3820,7 +3889,7 @@ stateInstr,
 
     var bodyUseLines = [];
     if (typeof window.getBodyUseDescriptor === "function") {
-      ["vagina", "anus", "mouth", "breasts"].forEach(function (part) {
+      ["vagina", "anus", "mouth", "breasts", "penis"].forEach(function (part) {
         var d = window.getBodyUseDescriptor(npc, part);
         if (d) bodyUseLines.push("their " + part + " " + d);
       });
@@ -3831,7 +3900,7 @@ stateInstr,
 
     return [
 "You are polishing a player 'examine' description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", currently the player's BOUND CAPTIVE — wrists lashed with rope, defeated, forced to wait on the player's mercy. They are awake, aware, and afraid." + speciesNote + woundNote + exposureNote + bodyUseNote,
+"The NPC is " + name + ", a " + species + " " + gender + ", currently the player's BOUND CAPTIVE — wrists lashed with rope, defeated, forced to wait on the player's mercy. They are awake, aware, and afraid." + speciesNote + woundNote + exposureNote + bodyUseNote + smellNote,
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Make it vivid, sensory, and intimate — the player is looking their captive over.",
