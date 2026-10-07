@@ -1621,6 +1621,28 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       window.appendCombatGroup(el, "Their cock", cockButtons);
     }
 
+    // Pull out group — withdraw from a hole the player is inside. This is
+    // the only route to the withdrawal narration: the aftermath of an
+    // internal ejaculation (the load dripping back out) and the anal gape
+    // scenes play here, not on the climax beats.
+    if (nsfwPlayerHasPenis()) {
+      var pullOutButtons = [];
+      if ((item.penetratedTarget === "vagina" || item.penetratedTarget === "cloaca") && nsfwRegionExposed(item, "genitals")) {
+        pullOutButtons.push(window.createCombatButton(
+          "Pull out (" + (nsfwGenitalLabel(item) || item.penetratedTarget) + ")",
+          () => pullOutBody(item, item.penetratedTarget)
+        ));
+      } else if (item.penetratedTarget === "anus" && nsfwRegionExposed(item, "anus")) {
+        pullOutButtons.push(window.createCombatButton("Pull out (anus)", () => pullOutBody(item, "anus")));
+      }
+      if (item.mouthUsed && nsfwRegionExposed(item, "mouth")) {
+        pullOutButtons.push(window.createCombatButton("Pull out (mouth)", () => pullOutBody(item, "mouth")));
+      }
+      if (pullOutButtons.length) {
+        window.appendCombatGroup(el, "Pull out", pullOutButtons);
+      }
+    }
+
     // Climax group — surfaced once the player is inside one or more holes.
     // Lists a finish button for every hole currently in use and still
     // accessible in this pose.
@@ -2022,7 +2044,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     var desc = String(actionDesc || "");
     var lines = [];
     var player = window.G && window.G.player;
-    var isPenisAct = /(penetrate|thrust|climax|fuck mouth|finish|deepthroat)/i.test(desc);
+    var isPenisAct = /(penetrate|thrust|climax|fuck mouth|finish|deepthroat|pull out)/i.test(desc);
     if (isPenisAct && player && typeof window.ensurePlayerIntimacyAnatomy === "function") {
       window.ensurePlayerIntimacyAnatomy(player);
     }
@@ -2710,6 +2732,130 @@ anatomyNote,
     nsfwRenderBodyMenu(item);
   }
 
+  // Withdraw from a hole the player is currently inside (penetratedTarget
+  // or mouthUsed). This is the only place the unconscious flow narrates a
+  // pull-out — and therefore the only place an internal ejaculation gets
+  // its aftermath: the load dripping back out, and (for anal, earned by
+  // depth/fit) a gape the limp ring is too slack to close.
+  // target: "vagina" | "cloaca" | "anus" | "mouth"
+  function pullOutBody(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwPlayerHasPenis()) return;
+    const name = nsfwGetEntityName(item);
+
+    var label;
+    if (target === "vagina" || target === "cloaca") {
+      if (item.penetratedTarget !== target) return;
+      if (!nsfwRegionExposed(item, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloaca") : "vagina";
+    } else if (target === "anus") {
+      if (item.penetratedTarget !== "anus") return;
+      if (!nsfwRegionExposed(item, "anus")) return;
+      label = "anus";
+    } else if (target === "mouth") {
+      if (!item.mouthUsed) return;
+      if (!nsfwRegionExposed(item, "mouth")) return;
+      label = "mouth";
+    } else return;
+
+    var cock = nsfwBodyCockPhrase();
+    var fit = nsfwBodyFit(item, target);
+    var isDeep = item.bodyDepthTarget === target && (item.bodyDepth || 0) >= 4;
+    var loaded = nsfwBodyHasLoad(item, target);
+
+    var baseText;
+    if (label === "mouth") {
+      baseText = pickFrom([
+        `You slide your ${cock} from ${name}'s slack mouth, their lips drifting closed over nothing. A thread of spit stretches and snaps between you and their chin; they breathe on, oblivious.`,
+        `You withdraw from ${name}'s limp mouth with one slow pull, your crown dragging across their lolling tongue before it clears their lips. The body swallows once, purely reflex.`
+      ]);
+      if (loaded) {
+        baseText += pickFrom([
+          ` The seed pooled on their tongue seeps past their slack lips as you leave, running from the corner of their mouth in a thin white line.`,
+          ` They never stir as your load dribbles out after your ${cock}, a slow trickle over their lower lip that they are too deep under to feel.`
+        ]);
+      }
+    } else if (label === "anus") {
+      if (fit === "resistance") {
+        baseText = pickFrom([
+          `You drag your ${cock} out of ${name}'s tight anus a stubborn inch at a time — the reflexive ring clings to you the whole way, gripping without an owner behind it, and you finally wrench free with a soft, wet pop.`,
+          `The unconscious ring fights your exit exactly as it fought your entry: you pull back slowly, feeling the clench drag along every inch of your ${cock}, until the head pops loose and ${name} stays exactly as they were.`
+        ]);
+      } else if (fit === "easy") {
+        baseText = pickFrom([
+          `Your ${cock} slides from ${name}'s loosened anus with barely any resistance at all, the well-used hole simply letting you go.`,
+          `You slip free of ${name}'s slack anus in one easy pull, the stretched passage too relaxed to hold you.`
+        ]);
+      } else {
+        baseText = pickFrom([
+          `You pull your ${cock} from ${name}'s clenching anus, the reflexive ring gripping you to the very last inch before you slip free.`,
+          isDeep
+            ? `You draw the full length of your ${cock} out of ${name}'s depths, the slow drag ending only when the head clears their rim and the unconscious body settles.`
+            : `You ease your ${cock} out of ${name}'s anus with a slow, careful pull, their hole fluttering weakly around you until you are gone.`
+        ]);
+      }
+      // Gape is EARNED: a bottomed-out session, a size mismatch, or a
+      // stretched rim leave the limp ring slow to close (same math as the
+      // awake intimacy system's anal pull-out).
+      var gapeChance = (isDeep ? 0.45 : 0.15) + (fit === "resistance" ? 0.25 : 0) + (fit === "stretched" ? 0.15 : 0);
+      baseText += (Math.random() < Math.min(gapeChance, 0.85))
+        ? pickFrom([
+            ` The ring stays open behind you — a round, soft gape that closes only slowly, the unconscious muscle too slack to pucker shut.`,
+            ` Their hole is left open, winking each time it tries and fails to clench shut, your shape printed into the limp ring.`
+          ])
+        : ` The ring cinches shut behind you almost at once, clenching once around nothing.`;
+      if (loaded) {
+        baseText += pickFrom([
+          ` The moment you withdraw, the load you left comes with you — a slow, slick spill from their loosened hole that pools beneath their limp hips.`,
+          ` Their unresisting ring squeezes a thick glob of your release out after your ${cock}, and it drools down their crack while they sleep on.`
+        ]);
+      }
+    } else {
+      // Vagina / cloaca
+      if (fit === "resistance") {
+        baseText = `You work your ${cock} out of ${name}'s tight ${label} inch by stubborn inch — the unconscious grip clings even without an owner behind it — and you pop free of the reluctant entrance to a soft, wet sound.`;
+      } else if (fit === "stretched") {
+        baseText = pickFrom([
+          `You ease your ${cock} from ${name}'s stretched ${label}, the slack entrance slow to remember its shape as your girth leaves it.`,
+          `Your ${cock} slides out of ${name}'s well-stretched ${label}, the used opening left soft and open around the empty air.`
+        ]);
+      } else {
+        baseText = pickFrom([
+          `You draw your ${cock} out of ${name}'s slack ${label} in one slow pull, the unresisting flesh gliding slickly along you until you slip free. Their hole flutters once, purely reflex, then settles.`,
+          isDeep
+            ? `You drag the full length of your ${cock} from ${name}'s depths, their passage clinging weakly the whole way out until the head clears their entrance with a quiet, wet sound.`
+            : `You slip your ${cock} from ${name}'s limp ${label}; the unconscious body offers nothing but one last reflexive flutter as you leave it.`
+        ]);
+      }
+      if (loaded) {
+        baseText += pickFrom([
+          ` Your load follows you out: as soon as you clear the entrance, a slow white trickle spills from their ${label}, running down toward their ass while the body sleeps on.`,
+          ` Their entrance flutters as you withdraw, squeezing a thick ribbon of your release out after your ${cock}; it drools lazily from the slack hole.`,
+          ` The moment you pull free, the seed you left inside seeps out of their unclenching ${label}, pooling warm beneath their limp hips.`
+        ]);
+      }
+    }
+
+    // Clear the inside state; the recorded internal load (bodyUse) stays —
+    // the dripping mess it leaves is what the examine/dried-load narration
+    // and later acts keep referencing.
+    if (target === "mouth") {
+      item.mouthUsed = false;
+    } else {
+      item.penetratedTarget = null;
+    }
+    if (item.bodyDepthTarget === target) {
+      item.bodyDepth = 0;
+      item.bodyDepthTarget = null;
+    }
+
+    const actionDesc = "pull out of their " + label;
+    polishBodyNarration(item, actionDesc, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} pulled out of ${name}'s ${label} while they were unconscious.`, 2);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
   // target: "mouth" | "breasts" | "genitals" | "anus"
   function spitOnBody(item, target) {
     if (!item || item.bodyState !== "unconscious") return;
@@ -2906,6 +3052,18 @@ anatomyNote,
     var baseText = inside
       ? `You pull out of ${name}'s ${inside} and strip off, stroking yourself over their limp body. You come across their ${label}, the release striping unconscious flesh that doesn't flinch.`
       : `You stand over ${name}'s unconscious body and work yourself, eyes on their slack face. You come across their ${label}, the release landing on flesh that doesn't flinch.`;
+    // The inside text narrates the withdrawal - clear the inside state so
+    // the menu stops offering continuation/finish-inside for a hole the
+    // player already left (pullOutBody owns the withdrawal narration when
+    // the player stays; this is the pull-out bundled with an external
+    // finish).
+    if (inside === "mouth") {
+      item.mouthUsed = false;
+      if (item.bodyDepthTarget === "mouth") { item.bodyDepth = 0; item.bodyDepthTarget = null; }
+    } else if (inside) {
+      item.penetratedTarget = null;
+      if (item.bodyDepthTarget === inside) { item.bodyDepth = 0; item.bodyDepthTarget = null; }
+    }
     item.bodyMarks = ((item && item.bodyMarks) || 0) + 1;
     item.marksTarget = label;
     polishBodyNarration(item, "finish on " + label, baseText);
