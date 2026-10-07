@@ -2170,6 +2170,13 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       : "";
     var bodyUseNote = nsfwBodyUsePromptNote(item, actionDesc);
     var reflexNote = nsfwBodyReflexNote(item);
+    var _roomMess = "";
+    if (typeof window.getRoomMessNotes === "function" && window.G && window.G.activeRoom) {
+      var _rm = window.getRoomMessNotes(window.G.activeRoom);
+      if (_rm && _rm.length) {
+        _roomMess = "\nROOM MESS (puddles staining the area - reference subtly where relevant): " + _rm.join("; ") + ".";
+      }
+    }
     var _bodySmell = "";
     if (typeof window.getActiveSmellNotes === "function") {
       var _sm = window.getActiveSmellNotes(item);
@@ -2182,7 +2189,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
     var prompt = [
 "You are polishing a player action description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote + reflexNote + flavorNote + _bodySmell,
+"The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote + reflexNote + flavorNote + _bodySmell + _roomMess,
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and sensory.",
@@ -2750,6 +2757,11 @@ anatomyNote,
       // Volume tiers: the second load churns, the third-plus packs the
       // bowels full - repeated finishes should READ as accumulating.
       if (label === "anus") {
+        // Overfilled bowels seep around the shaft - the leak pools in
+        // the room and persists (addRoomMess/getRoomMessNotes).
+        if (loadsAfter >= 2 && typeof window.addRoomMess === "function" && window.G && window.G.activeRoom) {
+          window.addRoomMess(window.G.activeRoom, "semen");
+        }
         if (loadsAfter >= 3) {
           baseText += ` Their bowels are packed full now — you can feel the thick heat of all that spent seed through the slack of their belly, and every pulse of your ${climaxCock} squelches through the mess.`;
         } else if (loadsAfter === 2) {
@@ -2811,6 +2823,12 @@ anatomyNote,
     var fit = nsfwBodyFit(item, target);
     var isDeep = item.bodyDepthTarget === target && (item.bodyDepth || 0) >= 4;
     var loaded = nsfwBodyHasLoad(item, target);
+    // A loaded pull-out leaks - the puddle persists in this room for
+    // ~20 turns (addRoomMess/getRoomMessNotes). Oral loads are
+    // swallowed, not dripped.
+    if (loaded && target !== "mouth" && typeof window.addRoomMess === "function" && window.G && window.G.activeRoom) {
+      window.addRoomMess(window.G.activeRoom, "semen");
+    }
 
     var baseText;
     if (label === "mouth") {

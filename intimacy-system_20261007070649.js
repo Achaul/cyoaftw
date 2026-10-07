@@ -2680,6 +2680,7 @@ function buildIntercourseRequestPrompt(npc, target, canned) {
         "- Rewrite the REQUEST below in this NPC's OWN voice: same meaning and intent, their exact vocabulary, dialect, rhythm, and verbal habits.",
         "- Keep it SHORT: one or two sentences total, at most one quoted line of dialogue.",
         "- Third person; dialogue in double quotes; never use their name — pronouns only (" + subj.toLowerCase() + "/" + pos + ").",
+        "- The player is 'you' (your cock, your hips) — never 'him' or 'his'.",
         "- Match the VOICE block exactly. Do NOT change their speech style. Do NOT use words like: I cannot, as an AI.",
         "",
         "REQUEST (the meaning to keep, not the phrasing):",
@@ -2969,6 +2970,11 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
 
     // Handle watersports actions
     if (act.type === ACT_TYPES.WATERSPORT) {
+        // Watersports early-returns below, so record the room puddle here:
+        // the piss lands in this room and persists ~20 turns.
+        if (act.playerIsBottom !== true && typeof G !== "undefined" && G.activeRoom && String(act.consequence || "") === "urine") {
+            addRoomMess(G.activeRoom, "urine");
+        }
         // Update arousal (negative for NPC)
         updateArousal(npc, player, act.arousal);
         // Track fluid consequence
@@ -3143,6 +3149,19 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // category disinhibition so this act counts toward unlocking more
     // advanced acts in the same category. See _grantIntimacyProgression.
     _grantIntimacyProgression(npc, player, act);
+
+    // ── ROOM MESS: puddles persist where they land ───────────────────
+    // Watersports, external finishes and squirting leave a puddle in the
+    // room for ~20 turns (see addRoomMess); internal loads surface when
+    // they leak back out (endPenetrationWithNarration).
+    if (act.playerIsBottom !== true && typeof G !== "undefined" && G.activeRoom) {
+        var _messKind = null;
+        var _messC = String(act.consequence || "");
+        if (_messC === "urine") _messKind = "urine";
+        else if (_messC === "external_semen") _messKind = "semen";
+        else if (_messC === "female_ejaculate") _messKind = "squirt";
+        if (_messKind) addRoomMess(G.activeRoom, _messKind);
+    }
 
     // ── NPC INITIATIVE ─────────────────────────────────────────────
     // After foreplay, a lustful NPC may ask the player for intercourse
@@ -3775,7 +3794,12 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // Check LLM enhancement cache for non-penetration sexual acts.
     // Penetration acts already checked above (penetration cache).
     // Purge after use so responses don't repeat.
-    if (isSexualAct(act) && intimacy && finalResponse === templateResponse) {
+    // NPC-led pleasure-loop beats are EXEMPT: the cache is keyed per
+    // act+position, so back-to-back loop beats of the same act kept
+    // replaying one polished line instead of rotating the varied
+    // canned samples. The loop plays on the canned pool directly.
+    var _isPleasureLoopBeat = !!(intimacy && intimacy.npcPleasureLoop && intimacy.npcPleasureLoop.active);
+    if (!_isPleasureLoopBeat && isSexualAct(act) && intimacy && finalResponse === templateResponse) {
         initializeLLMEnhancement(intimacy);
         const cachedEnhancement = getCachedLLMEnhancement(intimacy, act.id, currentPosition);
         if (cachedEnhancement) {
@@ -3831,7 +3855,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // AND when we just consumed a cached AI response, so the cache is re-armed
     // for the next occurrence instead of leaving the act to alternate between
     // polished and raw output.
-    if (_ai && isSexualAct(act) && intimacy && (finalResponse === templateResponse || _consumedCache)) {
+    if (_ai && !_isPleasureLoopBeat && isSexualAct(act) && intimacy && (finalResponse === templateResponse || _consumedCache)) {
         (async function() {
             try {
                 var prompt = buildIntimacyPrompt(context);
@@ -7720,6 +7744,11 @@ function endPenetrationWithNarration(npc, player, intimacy, reason = "transition
     var isShallow = depth <= 2;
     var climaxState = intimacy.climax || {};
     var hasCreampie = !!(climaxState.hasInternalEjaculation && climaxState.lastInternalEjaculation === target);
+    // The leaking load leaves a persistent puddle in the room (oral
+    // loads are swallowed, not dripped - no mess for those).
+    if (hasCreampie && target !== "mouth" && typeof G !== "undefined" && G.activeRoom) {
+        addRoomMess(G.activeRoom, "semen");
+    }
     var analCum = (intimacy.encounterFlags && intimacy.encounterFlags.analEjaculationCount) || 0;
 
     var pullOutNarrative = null;
@@ -9427,6 +9456,84 @@ if (typeof window !== 'undefined') {
     window.initializeIntimacyState = initializeIntimacyState;
     window.addSmellMark = addSmellMark;
     window.getActiveSmellNotes = getActiveSmellNotes;
+
+// ── ROOM MESS MARKS ──────────────────────────────────────────────────────
+// Pee and cum puddles persist where they were made: wet and spreading
+// for the first dozen turns, tacky and drying until MESS_TURNS, then
+// gone. Stored on the room object (saved with the game state); the
+// display text is authored here (NSFW side) and the engine only renders
+// it through getRoomMessNotes.
+var MESS_TURNS = 20;
+var MESS_WET_TURNS = 12;
+
+function addRoomMess(room, kind) {
+    if (!room || typeof room !== "object") return;
+    kind = String(kind || "").toLowerCase();
+    if (["semen", "urine", "squirt"].indexOf(kind) === -1) return;
+    var turn = (typeof window.getCurrentStoryTurn === "function") ? window.getCurrentStoryTurn() : 0;
+    if (!Array.isArray(room.messMarks)) room.messMarks = [];
+    // Same-kind mess in the same turn merges into a bigger puddle.
+    for (var i = 0; i < room.messMarks.length; i++) {
+        if (room.messMarks[i].kind === kind && room.messMarks[i].turn === turn) {
+            room.messMarks[i].count = (room.messMarks[i].count || 1) + 1;
+            return;
+        }
+    }
+    room.messMarks.push({ kind: kind, turn: turn, count: 1 });
+}
+
+function _roomMessSurface(room) {
+    // A bed fixture means the mess soaked the bedding, not the floor.
+    try {
+        var structural = (room && Array.isArray(room.structural)) ? room.structural : [];
+        for (var i = 0; i < structural.length; i++) {
+            if (structural[i] && /bed/i.test(String(structural[i].name || structural[i].label || ""))) {
+                return "the bedding";
+            }
+        }
+    } catch (e) {}
+    return "the floor";
+}
+
+// Prune expired marks on read, then describe the survivors.
+function getRoomMessNotes(room) {
+    if (!room || !Array.isArray(room.messMarks) || !room.messMarks.length) return [];
+    var now = (typeof window.getCurrentStoryTurn === "function") ? window.getCurrentStoryTurn() : 0;
+    var active = room.messMarks.filter(function (m) { return (now - m.turn) < MESS_TURNS; });
+    if (active.length !== room.messMarks.length) room.messMarks = active;
+    if (!active.length) return [];
+    var surface = _roomMessSurface(room);
+    var out = [];
+    active.forEach(function (m) {
+        var since = now - m.turn;
+        var big = (m.count || 1) >= 2;
+        if (m.kind === "semen") {
+            out.push(since <= MESS_WET_TURNS
+                ? (big
+                    ? "Broad puddles of fresh cum glisten on " + surface + ", still slowly spreading."
+                    : "A white puddle of fresh cum stains " + surface + ".")
+                : (big
+                    ? "Tacky, half-dried streaks of cum darken " + surface + "."
+                    : "A faint, dried cum-stain marks " + surface + "."));
+        } else if (m.kind === "urine") {
+            out.push(since <= MESS_WET_TURNS
+                ? (big
+                    ? "Dark puddles of piss spread across " + surface + ", sharp-smelling."
+                    : "A dark puddle of piss spreads across " + surface + ", its smell sharp.")
+                : (big
+                    ? "Faint, mostly-dried piss-stains darken " + surface + "."
+                    : "A faint, dried piss-stain marks " + surface + "."));
+        } else if (m.kind === "squirt") {
+            out.push(since <= MESS_WET_TURNS
+                ? "A splattered patch of wetness soaks " + surface + "."
+                : "A dried patch of wetness marks " + surface + ".");
+        }
+    });
+    return out;
+}
+
+    window.addRoomMess = addRoomMess;
+    window.getRoomMessNotes = getRoomMessNotes;
     window.getIntimacySmellKey = getIntimacySmellKey;
     window.normalizeBodyUsePart = normalizeBodyUsePart;
     window.recordBodyUse = recordBodyUse;
@@ -9435,6 +9542,7 @@ if (typeof window !== 'undefined') {
     window.resetIntimacyState = resetIntimacyState;
     window.startIntimacyEncounter = startIntimacyEncounter;
     window.endIntimacyEncounter = endIntimacyEncounter;
+    window.handleClimax = handleClimax;
     window.executeIntimacyAction = executeIntimacyAction;
     window.getMenuActions = getMenuActions;
     window.getIntimacyActionAccent = getIntimacyActionAccent;
@@ -9604,7 +9712,11 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     // ("You position yourself, guiding your cock to her vagina"), so for
     // those the entry narrative wins.
     var _isEntryAct = act.type === "penetrate" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.PENETRATE);
-    if (transitionNarrative && !_isEntryAct) {
+    // Climax acts are exempt too: their full staged narrative (mouth
+    // gulping, internal release) must not be flattened into a
+    // one-line transition ("You make contact, your penis ejaculate...").
+    var _isClimaxAct = !!act.triggersClimax;
+    if (transitionNarrative && !_isEntryAct && !_isClimaxAct) {
         var t = transitionNarrative.trim();
         if (!t.match(/[.!?]$/)) t += ".";
         finalNarrative = t;
@@ -10235,7 +10347,7 @@ function buildReceiveNarrative(npc, act, context) {
 
     return [
         `You ask ${objPronoun} to ${shortDesc}.`,
-        `You tell ${subjLower} you want ${objPronoun} to ${shortDesc}.`,
+        `You tell ${objPronoun} you want ${objPronoun} to ${shortDesc}.`,
         `You lean close and murmur your request — you want ${objPronoun} to ${shortDesc}.`,
         `You make your desires clear, asking ${objPronoun} to ${shortDesc}.`
     ];
@@ -10285,10 +10397,11 @@ var NPC_ORAL_SERVICING_SAMPLES = {
 var NPC_HAND_SERVICING_SAMPLES = {
     base: [
         "{npcS} wraps {npcp} hand around your shaft and strokes you with slow, twisting pulls, {npcp} grip snug at the base and lighter at the crown. {npcS} spreads the beading pre-cum down your length with {npcp} thumb until your whole cock is slick.",
-        "{npcS} pumps your cock in long, deliberate strokes, {npcp} other hand cradling your balls and tugging them gently in counterpoint. {npcS} pauses at the top of every stroke to run {npcp} palm over your cockhead.",
+        "{npcS} pumps your cock in long, deliberate strokes, {npcp} other hand cradling your balls and tugging them gently in counterpoint. {npcS} pauses at the top of every stroke to twist {npcp} wrist over the crown.",
         "{npcS} holds your shaft in both hands, one stacked above the other, and works them in alternating waves so the grip never leaves your length. {npcS} leans in close, {npcp} breath hot on your glans.",
         "{npcS} strokes you with a loose fist gliding over your tip and a tight one at your base, swapping the rhythm whenever your hips start to move with {npcp}.",
-        "{npcS} milks your cock with slow, full strokes from base to tip, pausing at the top to swirl {npcp} palm over your drooling cockhead before sliding all the way back down."
+        "{npcS} milks your cock with slow, full strokes from base to tip, pausing at the top to swirl {npcp} palm over your drooling cockhead before sliding all the way back down.",
+        "{npcS} wraps both hands around you and twists them in opposite directions as {npcs} strokes, the opposing spirals dragging along every inch of your cock."
     ],
     high: [
         "{npcS} strokes you fast and tight, {npcp} fist flying over your slick shaft while {npcp} other hand works your balls, {npcp} eyes fixed on the way your cock twitches in {npcp} grip.",
@@ -10618,6 +10731,7 @@ function buildReceiveAgreementPrompt(npc, act, player, accepted, template) {
             ? "- " + subj + " AGREES. Write " + subj.toLowerCase() + " agreeing in character — optionally one short line of dialogue in angle brackets <like this> — and clearly taking the lead."
             : "- " + subj + " DECLINES. Write " + subj.toLowerCase() + " refusing in character — kind but firm, true to " + pos + " temperament.",
         "- Third person, 1-2 sentences. No narration of the act itself — this is only " + (accepted ? pos + " answer and taking charge." : pos + " answer."),
+        "- The player is 'you' — when " + subj.toLowerCase() + " touches or takes hold of them, say 'your' (her hand closes around YOUR...), never 'him/his/her'.",
         "- Match personality, species and mood. A shy halfling speaks differently from a bold orc.",
         "- Never use " + npcName + "'s name in the response — pronouns only (" + subj.toLowerCase() + "/" + pos + ").",
         "- Do NOT use words like: I cannot, I'm unable, as an AI.",
@@ -12230,7 +12344,9 @@ function buildMouthNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, 
             `You climax in ${anatomyDesc}, your ejaculation ${isMultipleEjaculation ? 'joining what is already there, the thick mixture pooling on ' + posPronoun + ' tongue' : 'coating ' + posPronoun + ' tongue and throat'}, the taste of your release filling ${posPronoun} mouth${scentDesc ? ', ' + scentDesc : ''}.`,
             `Your ${penisState} penis ejaculates into ${anatomyDesc}, ${isMultipleEjaculation ? 'more semen mixing with the existing pool, ' + posPronoun + ' throat working to swallow it all down' : 'thick spurts of cum filling ' + posPronoun + ' oral cavity'}, the warm fluid slick on ${posPronoun} palate${scentDesc ? ', ' + scentDesc : ''}.`,
             `You fill ${anatomyDesc} with your seed, ${posPronoun} ${isMultipleEjaculation ? 'struggling to contain the growing volume, some spilling past ' + posPronoun + ' lips' : 'gulping down your release, ' + posPronoun + ' throat bobbing with each swallow'}.`,
-            `Your ${cockState} cock pulses into ${anatomyDesc}, ${isMultipleEjaculation ? 'another hot load for ' + posPronoun + ' already-filled mouth, the excess dripping down ' + posPronoun + ' chin' : 'hot jets of semen shooting into ' + posPronoun + ' eager mouth'}.`
+            `Your ${cockState} cock pulses into ${anatomyDesc}, ${isMultipleEjaculation ? 'another hot load for ' + posPronoun + ' already-filled mouth, the excess dripping down ' + posPronoun + ' chin' : 'hot jets of semen shooting into ' + posPronoun + ' eager mouth'}.`,
+            `You erupt in ${anatomyDesc} and ${subjectPronoun.toLowerCase()} takes it all — cheeks hollowing, throat working in quick gulps as ${subjectPronoun.toLowerCase()} swallows every pulse of you, not spilling a drop.`,
+            `You come in ${posPronoun} mouth and ${subjectPronoun.toLowerCase()} holds still for it, gulping your release down in slow, deliberate swallows, ${posPronoun} throat bobbing with each one.`
         ];
     }
     
