@@ -2859,10 +2859,10 @@ function getNPCConversationContext(npc, extraContext = {}) {
             ? String(getRelationshipLabel(npc) || "").toLowerCase()
             : "neutral",
         isHumanoid: npc.isHumanoid === true,
-        // True for a civilized NPC generated inside a shrine room, who was
-        // assigned that shrine's deity as their own (npc.deity - see
-        // spawnNPCsForRoom in cyoaftw-engine-CORE.js). Gates "ask-their-deity".
-        hasOwnDeity: !!npc.deity,
+        // True when the NPC follows a deity: a shrine devotee, any cleric, or
+        // a civilized NPC who rolled as devout the first time this was asked
+        // (ensureNPCDeity in cyoaftw-engine-CORE.js). Gates "ask-their-deity".
+        hasOwnDeity: !!(typeof ensureNPCDeity === "function" ? ensureNPCDeity(npc) : npc.deity),
         romanceEligible: typeof isAdultHumanoidNPC === "function" ? isAdultHumanoidNPC(npc) : false,
         tradeAvailable: typeof shouldShowPostReplyTradeAction === "function" ? shouldShowPostReplyTradeAction(npc) : false,
         actionTags,
