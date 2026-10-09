@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-09-17-001";
+window.__INTIMACY_SYSTEM_VERSION = "2026-10-08-001";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -4458,6 +4458,89 @@ RESPOND with only the polished text, nothing else:`;
 
     return prompt;
 }
+
+// No-system mode prompt (engine sidebar checkbox "No system"): the engine
+// sends the ENTIRE system-generated beat — the player's action narration
+// plus the NPC's reaction — as a description/sample, and the AI writes the
+// full scene from it. context is the per-act context returned by
+// generateActionResponse (may be null for combined multi-act beats, where
+// only the NPC is known).
+window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
+    if (!npc || !sampleText) return "";
+    const action = (context && context.action) || {};
+    const ctxIntimacy = (context && context.intimacy) || (npc.intimacy || null);
+    const position = (context && context.position) || null;
+    const playerIsBottom = action.playerIsBottom === true;
+
+    var _species = String(npc.species || "Human");
+    var _speciesLower = _species.toLowerCase();
+    var _isUncivilized = _speciesLower && typeof isCivilizedSpecies === "function" && !isCivilizedSpecies(_speciesLower);
+    var _speciesContext = "";
+    if (_isUncivilized) {
+        _speciesContext = "\nSPECIES NOTE: This NPC is uncivilized (" + _species + "). Their speech is simple, direct, possibly broken. Prefer body language over eloquent dialogue; do NOT make them speak eloquently.";
+    } else if (_speciesLower && _speciesLower !== "human") {
+        _speciesContext = "\nSPECIES NOTE: This NPC is a " + _species + ". Keep their reactions consistent with their species characteristics.";
+    }
+    var _anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    if (_anatomyType === "reptilian") {
+        _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\", not \"vagina\" or \"anus\".";
+    } else if (_anatomyType === "mixed") {
+        _speciesContext += "\nANATOMY NOTE: This species has mixed anatomy — humanoid genitals with scaly texture. Mention scales in descriptions.";
+    }
+    if (typeof hasNPCTail === "function" && hasNPCTail(npc)) {
+        _speciesContext += "\nThis NPC has a tail. Mention it in descriptions when relevant (brushing, curling, twitching).";
+    }
+
+    var _arousalNpc = (ctxIntimacy && ctxIntimacy.arousal && ctxIntimacy.arousal.npc) || 0;
+    var _arousalPlayer = (ctxIntimacy && ctxIntimacy.arousal && ctxIntimacy.arousal.player) || 0;
+    var _arousalContext = "Arousal: " + describeArousalLevel(_arousalNpc) + " (NPC), " + describeArousalLevel(_arousalPlayer) + " (Player).";
+    var _positionContext = position && position.label ? "Position: " + position.label + "." : "";
+    var _pen = (ctxIntimacy && ctxIntimacy.penetration) || null;
+    var _penetrationContext = (_pen && _pen.active)
+        ? "Currently penetrating: " + (_pen.tool || "") + " in " + (_pen.target || "") + ". Depth: " + (_pen.depth || 1) + "/5."
+        : "Not currently penetrating.";
+    var _anatomyContext = (npc.anatomy && Object.keys(npc.anatomy).length)
+        ? "Anatomy: " + JSON.stringify(npc.anatomy)
+        : "";
+    var _recentBeats = (ctxIntimacy && Array.isArray(ctxIntimacy._recentScene))
+        ? ctxIntimacy._recentScene.slice(-3) : [];
+    var _recentBlock = _recentBeats.length
+        ? "RECENT BEATS (what was just narrated — do NOT reuse their imagery or phrasing):\n" +
+          _recentBeats.map(function (b) { return "- " + b; }).join("\n") +
+          "\nThis beat should PROGRESS the scene, not restate a recent beat."
+        : "";
+    var _actLine = action && action.tool
+        ? "ACT: " + action.tool + " " + (action.verb || "") + " " + (action.target || "") +
+          (playerIsBottom ? " (the NPC acts on the player)" : "")
+        : "";
+
+    const prompt = `
+You are writing ONE beat of an ongoing sex scene in a text adventure game.
+The NPC is ${npc.name || "the NPC"}, a ${_species} ${npc.gender || "female"}.${npc.temperament ? " Temperament: " + npc.temperament + "." : ""}${npc.personalityTraits && npc.personalityTraits.length ? " Traits: " + npc.personalityTraits.join(", ") + "." : ""}${_speciesContext}
+
+The SYSTEM DESCRIPTION below is a canned outline of this beat: the player's action and the NPC's reaction. Keep its FACTS — the same act, the same body parts, the same sensations and the same outcome — but write the whole beat fresh, as clean prose in a published novel.
+
+INSTRUCTIONS:
+- Write the FULL scene beat: what the player does (second person, "You ...") and how the NPC reacts (third person, pronouns only).${playerIsBottom ? "\n- In this beat the NPC is the one acting on the player: narrate their action on you, then your sensation." : ""}
+- NEVER refer to the NPC by name. Use pronouns only (she/her or he/his, matching the NPC's gender).
+- Stay consistent with the sample: same act, same body parts, same sensations and outcome. You may add vivid physical detail drawn from the ANATOMY and STATE, but never contradict it and do not invent new acts.
+- Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them.
+- Three to six complete, grammatical sentences. Under 90 words.
+- Literal, direct language ("press", "grip", "slide", "clench", "yield"). No metaphors, no purple prose, no fragments.
+
+STATE:
+${_positionContext} ${_arousalContext} ${_penetrationContext}
+${_anatomyContext}
+${_recentBlock}
+
+${_actLine}
+
+SYSTEM DESCRIPTION (facts to keep, phrasing to rewrite):
+"${sampleText}"
+
+Output ONLY the scene text — no explanations, no commentary, no meta-discussion.`;
+    return prompt;
+};
 
 /**
  * Build continuity context from action history
