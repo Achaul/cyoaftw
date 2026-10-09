@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-10-08-001";
+window.__INTIMACY_SYSTEM_VERSION = "2026-10-08-006";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2795,6 +2795,152 @@ function maybeNpcIntercourseRequest(npc, player, act, intimacy) {
     return line;
 }
 
+// NEGLECT DEMAND (SotB-style NPC initiative): beats that are all about
+// the player's pleasure (receive acts, near-zero arousal
+// gain for the NPC) extend a neglect streak. A worked-up NPC who has been
+// neglected too long pulls away and demands attention - the turn-based
+// equivalent of SotB's real-time hercooldown/lchangeup.
+var NPC_NEGLECT_DEMAND_SAMPLES = {
+    bold: [
+        "{npcS} pulls back, breathing hard. <That's enough of me spoiling you. My turn now - and you'd better make it worth my while.>",
+        "{npcS} plants a hand flat on your chest and stops you. <I've been doing all the work here, {player}. Time you returned the favor.>",
+        "{npcS} pushes you down, eyes blazing. <You've had your fun. Now get to work on me.>"
+    ],
+    shy: [
+        "{npcS} eases away, cheeks flushed. <C-could you... touch me too? Please. I've been... I need it.>",
+        "{npcS} catches your hand and guides it lower, barely meeting your eyes. <It's... it's my turn, isn't it?>"
+    ],
+    neutral: [
+        "{npcS} draws back with a frustrated sigh. <My turn now. Fair is fair.>",
+        "{npcS} stills your hips and gives you a pointed look. <You're not the only one who wants attention here.>"
+    ],
+    crude: [
+        "{npcS} shoves you back and growls. <Me now. You do me.>",
+        "{npcS} grabs your hand, pressing it where {npcp} wants it. <There. Work.>"
+    ]
+};
+
+function updateNeglectStreak(npc, act, intimacy, arousalGainN, hadNpcClimax) {
+    if (!intimacy) return;
+    if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
+    if (hadNpcClimax || (typeof arousalGainN === "number" && arousalGainN >= 20)) {
+        intimacy.encounterFlags.neglectStreak = 0;
+        return;
+    }
+    if (act && (act.playerIsBottom === true || (typeof arousalGainN === "number" && arousalGainN <= 10))) {
+        intimacy.encounterFlags.neglectStreak = (intimacy.encounterFlags.neglectStreak || 0) + 1;
+    }
+}
+
+// EARLY-ANAL RESISTANCE: a cold attempt at anal penetration is not
+// something an NPC just accepts. She needs coaxing - prep beats this
+// encounter (fingers, mouth, lube), very high arousal with a bold
+// temperament, long-term lust, or an already-experienced anatomy.
+var NPC_ANAL_REBUFF_SAMPLES = {
+    bold: [
+        "{npcS} tenses as you press against {npcp} asshole, then reaches back and pushes your hip away. <Nope. Not yet. Work me open first - fingers, mouth, patience. Then we talk.>",
+        "{npcS} glances back at you, unimpressed. <Nobody just walks through the back door, {player}. Coax me first or forget it.>"
+    ],
+    shy: [
+        "{npcS} flinches forward with a sharp gasp as you nudge against {npcp} tense hole. <I... I can't - not like that. You have to... go slow. Warm me up first...>",
+        "{npcS} pulls away, cheeks burning. <Th-that's too much, too fast... please, not yet.>"
+    ],
+    neutral: [
+        "{npcS} tenses hard as you press against {npcp} tightly puckered hole, and {npcp} hand firmly pushes you back. <Not there. Not yet - you need to get me ready first.>",
+        "{npcS} shifts {npcp} hips away from you, breathing tense. <Slow down. That needs... more than you're giving it.>"
+    ],
+    crude: [
+        "{npcS} jerks away and growls. <No. Hole closed. You open first.>",
+        "{npcS} slaps your hand away. <Wrong hole. You work first.>"
+    ]
+};
+
+function analReadinessPassed(npc, act, intimacy) {
+    if (!npc || !intimacy) return true;
+    var temperament = String(npc.temperament || "").toLowerCase();
+    var anusAnat = (npc.anatomy && npc.anatomy.anus) || {};
+    if (["supple", "loose", "stretchy", "gaping"].indexOf(anusAnat.size) !== -1) return true;
+    var lust = (npc.memory && typeof npc.memory.lust === "number") ? npc.memory.lust : 0;
+    if (lust >= 70) return true;
+    var herArousal = intimacy.arousal ? intimacy.arousal.npc : 0;
+    if (herArousal >= 550 && (temperament === "forward" || temperament === "bold" || temperament === "lustful")) return true;
+    // Otherwise count anal prep beats from this encounter: tease acts on
+    // her anus/ass (fingers, mouth, tongue, spit, hotdog).
+    var prep = 0;
+    if (Array.isArray(intimacy.actionHistory)) {
+        for (var i = 0; i < intimacy.actionHistory.length; i++) {
+            var h = intimacy.actionHistory[i];
+            if (!h || !h.actId) continue;
+            if (act && h.actId === act.id) continue;
+            var ha = (typeof getAct === "function") ? getAct(h.actId) : null;
+            if (!ha || ha.playerIsBottom === true) continue;
+            if (ha.type !== ACT_TYPES.TEASE) continue;
+            var aid = String(h.actId).toLowerCase();
+            if (aid.indexOf("anus") !== -1 || aid.indexOf("ass") !== -1 || aid === "hotdog") prep++;
+        }
+    }
+    var hasLube = intimacy.lube && intimacy.lube.anus && intimacy.lube.anus.hasLube;
+    return prep >= 2 || (prep >= 1 && hasLube);
+}
+
+function buildAnalRebuffLine(npc, player, intimacy) {
+    var temperament = String(npc.temperament || "").toLowerCase();
+    var register = (temperament === "forward" || temperament === "bold" || temperament === "lustful") ? "bold"
+        : (temperament === "shy" || temperament === "timid" || temperament === "reserved") ? "shy"
+        : "neutral";
+    var _species = String(npc.species || "").toLowerCase();
+    if (typeof isCivilizedSpecies === "function" && !isCivilizedSpecies(_species)) {
+        register = "crude";
+    }
+    var pool = NPC_ANAL_REBUFF_SAMPLES[register] || NPC_ANAL_REBUFF_SAMPLES.neutral;
+    var line = applyNPCPronouns(npc, pickUnique(pool, intimacy, "anal-rebuff"));
+    var _pname = (player && player.name) ? String(player.name).trim() : "";
+    if (_pname) {
+        line = line.split("{player}").join(_pname);
+    } else {
+        line = line.split("{player},").join(" ").split("{player}").join(" you");
+        line = line.split(" ").filter(function (w) { return w.length > 0; }).join(" ").trim();
+    }
+    return line;
+}
+
+function maybeNpcNeglectDemand(npc, player, intimacy) {
+    if (!npc || !intimacy) return null;
+    if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
+    var flags = intimacy.encounterFlags;
+    var streak = flags.neglectStreak || 0;
+    var herArousal = intimacy.arousal ? intimacy.arousal.npc : 0;
+    if (streak < 3 || herArousal < 350) return null;
+    var demand = flags.neglectDemand || null;
+    if (demand && (demand.count || 0) >= 2) return null;
+    if (demand && demand.at && (Date.now() - demand.at) < 90000) return null;
+    // Being penetrated IS attention; never fire mid-penetration or while
+    // she is servicing the player in the pleasure loop.
+    if (intimacy.penetration && intimacy.penetration.active) return null;
+    if (_npcPleasureLoopActive(npc)) return null;
+
+    flags.neglectDemand = { at: Date.now(), count: (demand ? (demand.count || 0) : 0) + 1 };
+    flags.neglectStreak = 0;
+
+    var temperament = String(npc.temperament || "").toLowerCase();
+    var register = (temperament === "forward" || temperament === "bold" || temperament === "lustful") ? "bold"
+        : (temperament === "shy" || temperament === "timid" || temperament === "reserved") ? "shy"
+        : "neutral";
+    var _species = String(npc.species || "").toLowerCase();
+    if (typeof isCivilizedSpecies === "function" && !isCivilizedSpecies(_species)) {
+        register = "crude";
+    }
+    var pool = NPC_NEGLECT_DEMAND_SAMPLES[register] || NPC_NEGLECT_DEMAND_SAMPLES.neutral;
+    var line = applyNPCPronouns(npc, pickRandom(pool));
+    var _pname = (player && player.name) ? String(player.name).trim() : "";
+    if (_pname) {
+        line = line.split("{player}").join(_pname);
+    } else {
+        line = line.replace(new RegExp("[" + String.fromCharCode(92, 115) + "]*[{]player[}],?[" + String.fromCharCode(92, 115) + "]*", "g"), " ").replace(new RegExp("[" + String.fromCharCode(92, 115) + "]+"), " ").trim();
+    }
+    return line;
+}
+
 /**
  * Assemble this NPC's speech/voice facts (speechProfile, speech
  * pattern, enrichment articulation/voice/dialect, synthesized persona
@@ -3159,6 +3305,34 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
 
     // Handle penetration actions
     if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE || act.type === ACT_TYPES.END) {
+        // EARLY-ANAL RESISTANCE: a cold attempt at anal sex is rebuffed
+        // with a tense push-back instead of quiet acceptance. Coaxing
+        // (prep beats, lube, very high arousal, experience) lifts the
+        // gate. Finger/tongue entry is itself prep, so only the cock
+        // is gated.
+        var _toolLower = String(act.tool || "").toLowerCase();
+        var _targetLower = String(act.target || "").toLowerCase();
+        if (act.type === ACT_TYPES.PENETRATE && act.playerIsBottom !== true &&
+            (_toolLower === "penis" || _toolLower === "cock") &&
+            (_targetLower === "anus" || _targetLower === "ass") &&
+            !analReadinessPassed(npc, act, intimacy)) {
+            if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
+            intimacy.encounterFlags.analRebuffCount = (intimacy.encounterFlags.analRebuffCount || 0) + 1;
+            // The failed attempt is not continuable and not engaged.
+            intimacy.lastAction = null;
+            if (Array.isArray(intimacy.engagedActs)) {
+                intimacy.engagedActs = intimacy.engagedActs.filter(function (e) { return e && e.actId !== actId; });
+            }
+            // Pushing again after she has said no sours the mood a little.
+            if (intimacy.encounterFlags.analRebuffCount > 1 && intimacy.arousal) {
+                intimacy.arousal.npc = Math.max(0, (intimacy.arousal.npc || 0) - 20);
+            }
+            var _rebuff = buildAnalRebuffLine(npc, player, intimacy);
+            if (!Array.isArray(intimacy._recentScene)) intimacy._recentScene = [];
+            intimacy._recentScene.push(String(_rebuff).trim());
+            intimacy._recentScene = intimacy._recentScene.slice(-4);
+            return { action: actId, type: act.type, responseText: _rebuff };
+        }
         handlePenetrationAction(npc, player, act, intimacy, actId);
         
         // Check for accidental peeing during anal (only once per encounter, after first penetration)
@@ -3358,6 +3532,18 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         response.responseText = ((response.responseText || "") + " " + _sexRequest).trim();
         if (!Array.isArray(intimacy._recentScene)) intimacy._recentScene = [];
         intimacy._recentScene.push(String(_sexRequest).trim());
+        intimacy._recentScene = intimacy._recentScene.slice(-4);
+    }
+    // NEGLECT DEMAND (SotB-style NPC initiative): track beats where her
+    // pleasure is ignored; at high arousal she pulls away and demands
+    // attention. Appended after the response gate so the demand plays
+    // even on suppressed beats.
+    updateNeglectStreak(npc, act, intimacy, (adjustedArousal && adjustedArousal.n) || 0, !!(climaxResult && climaxResult.npcClimax));
+    var _neglectDemand = maybeNpcNeglectDemand(npc, player, intimacy);
+    if (_neglectDemand && response) {
+        response.responseText = ((response.responseText || "") + " " + _neglectDemand).trim();
+        if (!Array.isArray(intimacy._recentScene)) intimacy._recentScene = [];
+        intimacy._recentScene.push(String(_neglectDemand).trim());
         intimacy._recentScene = intimacy._recentScene.slice(-4);
     }
 
@@ -4392,6 +4578,24 @@ function buildIntimacyPrompt(context) {
         ? ctxIntimacy._recentScene.slice(-3) : [];
     var _isContinuation = action.type === "continue" ||
         (ctxIntimacy && ctxIntimacy.lastAction && ctxIntimacy.lastAction.actId === (action.actId || action.id));
+    // Repetition-based tempo escalation (SotB-style): the Nth performance
+    // of the same act should read faster/harder than the first.
+    var _repeatCount = 0;
+    if (ctxIntimacy && Array.isArray(ctxIntimacy.actionHistory) && action) {
+        var _rid = action.actId || action.id;
+        if (_rid) {
+            for (var i = 0; i < ctxIntimacy.actionHistory.length; i++) {
+                if (ctxIntimacy.actionHistory[i] && ctxIntimacy.actionHistory[i].actId === _rid) _repeatCount++;
+            }
+        }
+    }
+    var _repeatBlock = _repeatCount > 1
+        ? "REPETITION: the player has performed this exact act " + _repeatCount + " times this encounter. ESCALATE the tempo - never restate the previous beat: 2nd time slow and savouring, 3rd steady and deeper, 4th and beyond faster, rougher, more vocal. Same act, same body parts."
+        : "";
+    var _playerName = (player && player.name) ? String(player.name).trim() : "";
+    var _nameBlock = _playerName
+        ? "PLAYER NAME: " + _playerName + ". At high arousal the NPC may cry out or moan the player's name in dialogue (<angle brackets>) - sparingly, at most once, never in narration."
+        : "";
     var _recentSceneBlock = "";
     if (_recentBeats.length) {
         _recentSceneBlock = "RECENT BEATS (what was just narrated — do NOT reuse their imagery or phrasing):\n" +
@@ -4437,7 +4641,7 @@ ${positionContext} | ${clothingContext} | ${arousalContext} | ${penetrationConte
 ${anatomyContext ? "\n" + anatomyContext : ""}
 ${getSizeContext(player, npc) ? "\n" + getSizeContext(player, npc) : ""}
 ${getColorSizeContext(player, npc, action) ? "\n" + getColorSizeContext(player, npc, action) : ""}
-${_recentSceneBlock ? "\n" + _recentSceneBlock + "\n" : ""}
+${_recentSceneBlock ? "\n" + _recentSceneBlock + "\n" : ""}${_repeatBlock ? "\n" + _repeatBlock + "\n" : ""}${_nameBlock ? "\n" + _nameBlock + "\n" : ""}
 
 ${_baseLabel}:
 "${templateResponse || ""}"
@@ -4471,6 +4675,20 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
     const ctxIntimacy = (context && context.intimacy) || (npc.intimacy || null);
     const position = (context && context.position) || null;
     const playerIsBottom = action.playerIsBottom === true;
+    const player = (context && context.player) || null;
+    var _isPenetrationBeat = (String(action.type || "").toLowerCase() === "penetrate" ||
+        String(action.type || "").toLowerCase() === "continue" ||
+        !!(ctxIntimacy && ctxIntimacy.penetration && ctxIntimacy.penetration.active));
+    // Insertive tease acts (fingers sliding in, tongue parting the
+    // opening) get the same slow-motion treatment - the act itself
+    // described in physical detail, not just the reaction. Mirrors the
+    // isInsertive logic in buildIntimacyPrompt.
+    var _isInsertiveTease = (!_isPenetrationBeat &&
+        ((String(action.tool || "").toLowerCase() === "fingers" &&
+            ["finger", "enter"].indexOf(String(action.verb || "").toLowerCase()) !== -1) ||
+        (["mouth", "tongue"].indexOf(String(action.tool || "").toLowerCase()) !== -1 &&
+            String(action.verb || "").toLowerCase() === "penetrate")));
+    var _pos = (typeof getPossessivePronoun === "function" && npc) ? getPossessivePronoun(npc) : "their";
 
     var _species = String(npc.species || "Human");
     var _speciesLower = _species.toLowerCase();
@@ -4509,6 +4727,30 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
           _recentBeats.map(function (b) { return "- " + b; }).join("\n") +
           "\nThis beat should PROGRESS the scene, not restate a recent beat."
         : "";
+    var _playerSizeContext = "";
+    var _playerFitContext = "";
+    if (player) {
+        try {
+            if (typeof getSizeContext === "function") _playerSizeContext = getSizeContext(player, npc) || "";
+            if (typeof getColorSizeContext === "function") _playerFitContext = getColorSizeContext(player, npc, action) || "";
+        } catch (e) { _playerSizeContext = ""; _playerFitContext = ""; }
+    }
+    var _repeatCount = 0;
+    if (ctxIntimacy && Array.isArray(ctxIntimacy.actionHistory) && action) {
+        var _rid = action.actId || action.id;
+        if (_rid) {
+            for (var i = 0; i < ctxIntimacy.actionHistory.length; i++) {
+                if (ctxIntimacy.actionHistory[i] && ctxIntimacy.actionHistory[i].actId === _rid) _repeatCount++;
+            }
+        }
+    }
+    var _repeatBlock = _repeatCount > 1
+        ? "REPETITION: the player has performed this exact act " + _repeatCount + " times this encounter. ESCALATE the tempo - never restate the previous beat: 2nd time slow and savouring, 3rd steady and deeper, 4th and beyond faster, rougher, more vocal. Same act, same body parts."
+        : "";
+    var _playerName = (player && player.name) ? String(player.name).trim() : "";
+    var _nameBlock = _playerName
+        ? "PLAYER NAME: " + _playerName + ". At high arousal the NPC may cry out or moan the player's name in dialogue (<angle brackets>) - sparingly, at most once, never in narration."
+        : "";
     var _actLine = action && action.tool
         ? "ACT: " + action.tool + " " + (action.verb || "") + " " + (action.target || "") +
           (playerIsBottom ? " (the NPC acts on the player)" : "")
@@ -4524,14 +4766,19 @@ INSTRUCTIONS:
 - Write the FULL scene beat: what the player does (second person, "You ...") and how the NPC reacts (third person, pronouns only).${playerIsBottom ? "\n- In this beat the NPC is the one acting on the player: narrate their action on you, then your sensation." : ""}
 - NEVER refer to the NPC by name. Use pronouns only (she/her or he/his, matching the NPC's gender).
 - Stay consistent with the sample: same act, same body parts, same sensations and outcome. You may add vivid physical detail drawn from the ANATOMY and STATE, but never contradict it and do not invent new acts.
+- Do NOT copy the sample's phrasing. Every sentence must be freshly written - if a phrase from the sample survives unchanged, rewrite it. The sample is a factual outline, not prose to preserve.
 - Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them.
-- Three to six complete, grammatical sentences. Under 90 words.
+${(_isPenetrationBeat || _isInsertiveTease) ? "- Four to eight complete, grammatical sentences. Spend most of the beat describing the act itself in explicit, physical detail. Up to 140 words." : "- Three to six complete, grammatical sentences. Under 90 words."}${_isPenetrationBeat ? (playerIsBottom ? `\nPENETRATION DETAIL - the NPC's cock is entering YOU; describe the act itself, slowly and vividly, not just the reaction:\n- Describe it from the receiving side: the head of their cock pressing against your opening, the slow push past your resistant ring, the stretch as you take it inch by inch.\n- Describe what your body does: your opening yielding, clenching around the shaft, gripping it, the fullness deepening with every inch they sink in.\n- Describe depth and contact: how deep it sits, their hips meeting your flesh, their weight pressing flush against you.\n- Slow the motion down on entry and withdrawal - describe each stage, not just the end state.` : `\nPENETRATION DETAIL - this beat is penetration; describe the ACT ITSELF, slowly and vividly, not just the reaction:\n- Describe the mechanics of entry and withdrawal: your cock pressing against the opening, the slow slide in, the stretched ring gripping the shaft, the wrinkled skin dragging along it on the pull-back.\n- Name the cock with its size and color words from the STATE.\n- Describe depth and body contact: how deep it goes, your hips meeting the soft warm flesh of ${_pos} buttocks, pressing flush against ${_pos}.\n- Slow the motion down on entry and withdrawal - describe what you see and feel at each stage, not just the end state.`) : ""}${_isInsertiveTease ? `\nINSERTION DETAIL - this beat slides something of yours into them; describe the insertion itself, slowly and vividly, not just the reaction:\n- Describe the mechanics: your fingers or tongue pressing against the opening, the slow push past the resistant ring, the warm grip closing around you as you slide deeper.\n- Describe what the opening does: stretching, yielding, clinging, the wrinkled skin smoothing out as it is filled.\n- Describe depth and contact: how far in you go, ${_pos} flesh dimpling or spreading under the pressure, ${_pos} body opening around you.\n- Slow the motion down - describe what you see and feel at each stage, not just the end state.` : ""}
 - Literal, direct language ("press", "grip", "slide", "clench", "yield"). No metaphors, no purple prose, no fragments.
 
 STATE:
 ${_positionContext} ${_arousalContext} ${_penetrationContext}
 ${_anatomyContext}
+${_playerSizeContext}
+${_playerFitContext}
 ${_recentBlock}
+${_repeatBlock}
+${_nameBlock}
 
 ${_actLine}
 
@@ -5499,7 +5746,7 @@ function buildTeaseResponse(npc, player, act, intimacy, subjectPronoun, possessi
         }
     }
 
-    let response = pickRandom(templates);
+    let response = pickUnique(templates, intimacy, "tease-" + String(act.id || act.target || "x"));
 
     // Add verbal dialog from tags (CoT-style) - skipped for oral-service
     // samples, which already carry their own in-character dialogue.
@@ -6107,7 +6354,7 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
         };
     }
     
-    let response = pickRandom(templates[phase] || templates.enter);
+    let response = pickUnique(templates[phase] || templates.enter, intimacy, "pen-" + String(act.id || "x") + "-" + phase);
 
     // ── SIZE-AWARE AUDIO CUES ────────────────────────────────────
     // Non-bold/forward NPCs produce involuntary sounds during penetration.
@@ -6474,6 +6721,18 @@ function generateNPCClimaxReaction(npc, npcGender, intimacy) {
         }
     }
     
+    // Repeat climaxes read differently: her body is more sensitive and
+    // each further orgasm hits harder (SotB-style "coming again" beats).
+    var _orgasmCount = (intimacy && intimacy.climax && typeof intimacy.climax.npcOrgasms === "number")
+        ? intimacy.climax.npcOrgasms : 1;
+    if (_orgasmCount > 1) {
+        var repeatClimaxTemplates = [
+            `comes again, ${possessivePronoun} oversensitive body seizing harder than before as another climax tears through ${objectPronoun}.`,
+            `shakes through yet another orgasm, ${possessivePronoun} spent body trembling harder with every wave.`,
+            `cries out once more, the repeat release ripping through ${objectPronoun} with doubled force.`
+        ];
+        return pickRandom(repeatClimaxTemplates);
+    }
     return pickRandom(templates);
 }
 
@@ -6575,7 +6834,7 @@ function buildImpactResponse(npc, player, act, intimacy, subjectPronoun, possess
         ];
     }
 
-    let response = pickRandom(templates);
+    let response = pickUnique(templates, intimacy, "impact-" + String(act.id || "x"));
 
     // Add verbal dialog from tags (CoT-style) — only when not over tolerance
     if (dialogueLine && !response.includes('"')) {
@@ -6687,7 +6946,7 @@ function buildGenericResponse(npc, subjectPronoun, possessivePronoun, objectPron
         `lets out a ${vocalization}.`
     ];
     
-    let response = pickRandom(templates);
+    let response = pickUnique(templates, intimacy, "ws-" + String(act.id || "x"));
     
     // Add verbal dialog from tags (CoT-style)
     if (dialogueLine) {
