@@ -71,6 +71,8 @@ const ZONE_TEMPLATES = [
 const SPECIES_TEMPLATES = [
     {
         species: "Human",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "a human face", negatives: "pointed ears, elf ears, fangs, scales, tusks" },
         isHumanoid: true,
         size: "medium",
         isCivilized: true,
@@ -95,6 +97,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Elf",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "long pointed ears, high cheekbones, angular delicate face, almond-shaped eyes", negatives: "round ears, tusks, stocky, heavy jaw" },
         isHumanoid: true,
         size: "medium",
         isCivilized: true,
@@ -119,6 +123,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Dwarf",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "rounded ears, broad nose, strong square jaw, wide heavy-browed face", negatives: "pointed ears, elf ears, slender, narrow face, delicate" },
         isHumanoid: true,
         size: "small",
         isCivilized: true,
@@ -143,6 +149,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Halfling",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "rounded ears, small button nose, soft round youthful face", negatives: "pointed ears, elf ears, gaunt, heavy jaw", sizeWord: "short" },
         isHumanoid: true,
         size: "small",
         isCivilized: true,
@@ -167,6 +175,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Goblin",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "rounded ears, pointed nose, narrow jaw, wide mouth with sharp small teeth", negatives: "handsome, elf, human face", sizeWord: "short" },
         isHumanoid: true,
         isCivilized: false,
         size: "small",
@@ -192,6 +202,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Orc",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "heavy brow, broad flat nose, massive square jaw, small lower tusks, rounded ears", negatives: "pointed ears, elf ears, delicate, slender, handsome" },
         isHumanoid: true,
         isCivilized: false,
         size: "large",
@@ -217,6 +229,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Skeleton",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "bare skull, hollow eye sockets, exposed teeth, no skin or flesh", negatives: "skin, flesh, hair, lips, eyelids, living human face" },
         isHumanoid: false,
         isCivilized: false,
         size: "medium",
@@ -240,6 +254,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Rat",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "rat head, long snout, whiskers, fur-covered face", negatives: "human face, human nose, elf ears" },
         isHumanoid: false,
         isCivilized: false,
         size: "tiny",
@@ -263,6 +279,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Ghost",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "translucent spectral face, faint wispy edges, hollow glowing eyes", negatives: "solid skin, opaque, vivid colors" },
         isHumanoid: false,
         isCivilized: false,
         // Immune to regular physical damage (weapons with no elemental
@@ -293,6 +311,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Dragonborn",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "draconic reptilian head with a blunt snout, scales across the face, small horns, no hair, no external ears", negatives: "hat, helmet, fire, flames, smoke, breathing fire, open mouth, jaw spikes, wings, fur, human face, pointed ears, elf ears" },
         isHumanoid: true,
         size: "large",
         isCivilized: true,
@@ -321,6 +341,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Lizardfolk",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "reptilian lizard head, long snout, slitted pupils, fine scales, no hair, no external ears", negatives: "human face, ears, fur, hair, flames, wings, horns" },
         isHumanoid: true,
         size: "medium",
         isCivilized: false,
@@ -349,6 +371,8 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Kobold",
+        // Used for NPC portrait prompts: face/head detail and species-specific negatives.
+        portraitProfile: { face: "small reptilian snout, scaly skin, large eyes, small horns, no hair", negatives: "human face, elf ears, fur, flames, wings", sizeWord: "short" },
         isHumanoid: true,
         size: "tiny",
         isCivilized: false,
