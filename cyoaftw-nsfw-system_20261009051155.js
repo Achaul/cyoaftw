@@ -1,6 +1,6 @@
 // === cyoaftw-nsfw-system.js === - v2026-09-11-002
 // Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, make-a-move, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply
-window.__NSFW_SYSTEM_VERSION = "2026-10-08-001";
+window.__NSFW_SYSTEM_VERSION = "2026-10-08-002";
 console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
 try {
 (function() {
@@ -3884,9 +3884,13 @@ stateInstr,
     var name = nsfwGetEntityName(npc);
     var wounds = typeof window.describeCombatWounds === "function"
       ? window.describeCombatWounds(npc) : "";
-    var base = name + " stands roped at the wrists, " +
-      (wounds ? "wincing against their wounds" : "shaking with exhaustion") +
-      ", eyes down but never leaving you for long. Whatever they see in your face makes them go very still.";
+    var base = npc.captiveProne
+      ? name + " lies hog-tied on the ground, wrists lashed to ankles, " +
+        (wounds ? "wincing against their wounds" : "shaking with exhaustion") +
+        ". They can only twist their head to follow you, cheek against the floor, utterly at your mercy."
+      : name + " stands roped at the wrists, " +
+        (wounds ? "wincing against their wounds" : "shaking with exhaustion") +
+        ", eyes down but never leaving you for long. Whatever they see in your face makes them go very still.";
     return base;
   }
 
@@ -3918,7 +3922,7 @@ stateInstr,
 
     return [
 "You are polishing a player 'examine' description from a text adventure game.",
-"The NPC is " + name + ", a " + species + " " + gender + ", currently the player's BOUND CAPTIVE — wrists lashed with rope, defeated, forced to wait on the player's mercy. They are awake, aware, and afraid." + speciesNote + woundNote + exposureNote + bodyUseNote + smellNote,
+"The NPC is " + name + ", a " + species + " " + gender + ", currently the player's BOUND CAPTIVE — wrists lashed with rope, defeated, forced to wait on the player's mercy. They are awake, aware, and afraid." + speciesNote + woundNote + (npc.captiveProne ? "\\nThe NPC is hog-tied PRONE on the ground (wrists lashed to ankles, cheek to the floor) - describe them in that helpless position, not standing." : "") + exposureNote + bodyUseNote + smellNote,
 "",
 "INSTRUCTIONS:",
 "- Polish the BASE TEXT below. Make it vivid, sensory, and intimate — the player is looking their captive over.",

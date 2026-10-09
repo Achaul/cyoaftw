@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-10-08-006";
+window.__INTIMACY_SYSTEM_VERSION = "2026-10-08-008";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -2126,6 +2126,11 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         // on an already-bare zone get the undressing credited against the
         // ladder.
         var _disinhibThreshold = _effectiveActDisinhibitionThreshold(act);
+        // A collared slave (npc.enslaved) or a bound captive does as they
+        // are told: the disinhibition ladder does not gate commanded acts.
+        if (npc && (npc.enslaved || (npc.bound && npc.surrendered))) {
+            _disinhibThreshold = 0;
+        }
         if (_disinhibThreshold > 0 && typeof window !== "undefined" &&
             typeof window.getActDisinhibition === "function" &&
             typeof window.getActionCategory === "function") {
@@ -2832,6 +2837,41 @@ function updateNeglectStreak(npc, act, intimacy, arousalGainN, hadNpcClimax) {
     }
 }
 
+// SLAVE SUBMISSION FLAVOR: with a collared slave (npc.enslaved) the
+// player's acts are commands. Compliance is voiced per temperament -
+// HOW they submit varies, WHETHER they submit does not.
+var NPC_SLAVE_SUBMISSION_SAMPLES = {
+    bold: [
+        "{npcS} holds your gaze while {npcp} obeys, something defiant burning under the compliance. <As you wish... master.>",
+        "{npcS} does exactly as ordered, slow and deliberate, making you watch. <Happy now?>"
+    ],
+    shy: [
+        "{npcS} trembles but does not resist, eyes lowered. <Y-yes... as you command.>",
+        "{npcS} whimpers softly and yields completely, waiting for the next order."
+    ],
+    neutral: [
+        "{npcS} nods once and complies without protest. <Understood.>",
+        "{npcS} submits to the order, breath quickening, offering no resistance."
+    ],
+    crude: [
+        "{npcS} grunts and obeys, palms flat, waiting.",
+        "{npcS} bares and holds still. <Yes. Do.>"
+    ]
+};
+
+function buildSlaveSubmissionLine(npc) {
+    var temperament = String(npc.temperament || "").toLowerCase();
+    var register = (temperament === "forward" || temperament === "bold" || temperament === "lustful") ? "bold"
+        : (temperament === "shy" || temperament === "timid" || temperament === "reserved") ? "shy"
+        : "neutral";
+    var _species = String(npc.species || "").toLowerCase();
+    if (typeof isCivilizedSpecies === "function" && !isCivilizedSpecies(_species)) {
+        register = "crude";
+    }
+    var pool = NPC_SLAVE_SUBMISSION_SAMPLES[register] || NPC_SLAVE_SUBMISSION_SAMPLES.neutral;
+    return applyNPCPronouns(npc, pickUnique(pool, npc.intimacy, "slave-submission"));
+}
+
 // EARLY-ANAL RESISTANCE: a cold attempt at anal penetration is not
 // something an NPC just accepts. She needs coaxing - prep beats this
 // encounter (fingers, mouth, lube), very high arousal with a bold
@@ -3315,7 +3355,10 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         if (act.type === ACT_TYPES.PENETRATE && act.playerIsBottom !== true &&
             (_toolLower === "penis" || _toolLower === "cock") &&
             (_targetLower === "anus" || _targetLower === "ass") &&
-            !analReadinessPassed(npc, act, intimacy)) {
+            !analReadinessPassed(npc, act, intimacy) &&
+            // A bound captive cannot push back; the rebuff gate is for
+            // free NPCs who need coaxing.
+            !(npc.bound && npc.surrendered)) {
             if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
             intimacy.encounterFlags.analRebuffCount = (intimacy.encounterFlags.analRebuffCount || 0) + 1;
             // The failed attempt is not continuable and not engaged.
@@ -3488,6 +3531,16 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // category disinhibition so this act counts toward unlocking more
     // advanced acts in the same category. See _grantIntimacyProgression.
     _grantIntimacyProgression(npc, player, act);
+
+    // SLAVE SUBMISSION FLAVOR: the player's acts on a collared slave
+    // are commands; compliance is voiced per temperament. Fired at half
+    // frequency so it seasons the scene rather than wallpapering it.
+    if (npc.enslaved && act.playerIsBottom !== true && Math.random() < 0.5) {
+        var _submission = buildSlaveSubmissionLine(npc);
+        if (_submission && response) {
+            response.responseText = ((response.responseText || "") + " " + _submission).trim();
+        }
+    }
 
     // ── ROOM MESS: puddles persist where they land ───────────────────
     // Watersports, external finishes and squirting leave a puddle in the
@@ -4596,6 +4649,11 @@ function buildIntimacyPrompt(context) {
     var _nameBlock = _playerName
         ? "PLAYER NAME: " + _playerName + ". At high arousal the NPC may cry out or moan the player's name in dialogue (<angle brackets>) - sparingly, at most once, never in narration."
         : "";
+    var _slaveBlock = (npc.enslaved)
+        ? "OWNERSHIP: the NPC is the player's collared slave. The player's acts are commands the slave obeys. Temperament flavors HOW they submit (defiant, eager, frightened, resigned) - never whether. Dialogue may address the player as master/mistress."
+        : ((npc.bound && npc.surrendered)
+            ? "CAPTIVE: the NPC is the player's bound captive. They are helpless and compliance is not optional; fear, resentment or wary curiosity flavor the reaction."
+            : "");
     var _recentSceneBlock = "";
     if (_recentBeats.length) {
         _recentSceneBlock = "RECENT BEATS (what was just narrated — do NOT reuse their imagery or phrasing):\n" +
@@ -4641,7 +4699,7 @@ ${positionContext} | ${clothingContext} | ${arousalContext} | ${penetrationConte
 ${anatomyContext ? "\n" + anatomyContext : ""}
 ${getSizeContext(player, npc) ? "\n" + getSizeContext(player, npc) : ""}
 ${getColorSizeContext(player, npc, action) ? "\n" + getColorSizeContext(player, npc, action) : ""}
-${_recentSceneBlock ? "\n" + _recentSceneBlock + "\n" : ""}${_repeatBlock ? "\n" + _repeatBlock + "\n" : ""}${_nameBlock ? "\n" + _nameBlock + "\n" : ""}
+${_recentSceneBlock ? "\n" + _recentSceneBlock + "\n" : ""}${_repeatBlock ? "\n" + _repeatBlock + "\n" : ""}${_nameBlock ? "\n" + _nameBlock + "\n" : ""}${_slaveBlock ? "\n" + _slaveBlock + "\n" : ""}
 
 ${_baseLabel}:
 "${templateResponse || ""}"
@@ -4751,6 +4809,23 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
     var _nameBlock = _playerName
         ? "PLAYER NAME: " + _playerName + ". At high arousal the NPC may cry out or moan the player's name in dialogue (<angle brackets>) - sparingly, at most once, never in narration."
         : "";
+    var _slaveBlock = (npc.enslaved)
+        ? "OWNERSHIP: the NPC is the player's collared slave. The player's acts are commands the slave obeys. Temperament flavors HOW they submit (defiant, eager, frightened, resigned) - never whether. Dialogue may address the player as master/mistress."
+        : ((npc.bound && npc.surrendered)
+            ? "CAPTIVE: the NPC is the player's bound captive. They are helpless and compliance is not optional; fear, resentment or wary curiosity flavor the reaction."
+            : "");
+    var _detailBlock = "";
+    if (_isPenetrationBeat) {
+        _detailBlock = playerIsBottom
+            ? "\nPENETRATION DETAIL - the NPC's cock is entering YOU; spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: the entry, the stretch, the grip, the drag on each withdrawal - what both bodies are actually doing.\n- Vary the camera between beats: your body's response, the depth and rhythm, the sound and feel of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh."
+            : "\nPENETRATION DETAIL - spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: depth on each stroke, speed, grip, drag, friction, flesh against flesh - what both bodies are actually doing.\n- Vary the camera between beats: sometimes your cock and their grip, sometimes their body's response, sometimes the rhythm or the sound of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.";
+    } else if (_isInsertiveTease) {
+        _detailBlock = "\nINSERTION DETAIL - spend most of the beat on the insertion itself:\n- Show it physically and concretely: the push past the resistance, the grip closing around your fingers or tongue, how their flesh yields and spreads.\n- Vary the camera between beats - the opening, their reaction, your view of it.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.";
+    }
+
+    var _lengthRule = (_isPenetrationBeat || _isInsertiveTease)
+        ? "- Four to eight complete, grammatical sentences. Spend most of the beat describing the act itself in physical, concrete detail. Up to 140 words."
+        : "- Three to six complete, grammatical sentences. Under 90 words.";
     var _actLine = action && action.tool
         ? "ACT: " + action.tool + " " + (action.verb || "") + " " + (action.target || "") +
           (playerIsBottom ? " (the NPC acts on the player)" : "")
@@ -4760,7 +4835,7 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
 You are writing ONE beat of an ongoing sex scene in a text adventure game.
 The NPC is ${npc.name || "the NPC"}, a ${_species} ${npc.gender || "female"}.${npc.temperament ? " Temperament: " + npc.temperament + "." : ""}${npc.personalityTraits && npc.personalityTraits.length ? " Traits: " + npc.personalityTraits.join(", ") + "." : ""}${_speciesContext}
 
-The SYSTEM DESCRIPTION below is a canned outline of this beat: the player's action and the NPC's reaction. Keep its FACTS — the same act, the same body parts, the same sensations and the same outcome — but write the whole beat fresh, as clean prose in a published novel.
+The SYSTEM DESCRIPTION below is a canned outline of this beat: the player's action and the NPC's reaction. Keep its FACTS — the same act, the same body parts, the same sensations and the same outcome — but write the whole beat fresh, as clean prose in a published novel. This is a rewrite for QUALITY, not a summary: the output must read better than the input - more concrete, more physical, better rhythm - while keeping exactly the same facts.
 
 INSTRUCTIONS:
 - Write the FULL scene beat: what the player does (second person, "You ...") and how the NPC reacts (third person, pronouns only).${playerIsBottom ? "\n- In this beat the NPC is the one acting on the player: narrate their action on you, then your sensation." : ""}
@@ -4768,8 +4843,16 @@ INSTRUCTIONS:
 - Stay consistent with the sample: same act, same body parts, same sensations and outcome. You may add vivid physical detail drawn from the ANATOMY and STATE, but never contradict it and do not invent new acts.
 - Do NOT copy the sample's phrasing. Every sentence must be freshly written - if a phrase from the sample survives unchanged, rewrite it. The sample is a factual outline, not prose to preserve.
 - Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them.
-${(_isPenetrationBeat || _isInsertiveTease) ? "- Four to eight complete, grammatical sentences. Spend most of the beat describing the act itself in explicit, physical detail. Up to 140 words." : "- Three to six complete, grammatical sentences. Under 90 words."}${_isPenetrationBeat ? (playerIsBottom ? `\nPENETRATION DETAIL - the NPC's cock is entering YOU; describe the act itself, slowly and vividly, not just the reaction:\n- Describe it from the receiving side: the head of their cock pressing against your opening, the slow push past your resistant ring, the stretch as you take it inch by inch.\n- Describe what your body does: your opening yielding, clenching around the shaft, gripping it, the fullness deepening with every inch they sink in.\n- Describe depth and contact: how deep it sits, their hips meeting your flesh, their weight pressing flush against you.\n- Slow the motion down on entry and withdrawal - describe each stage, not just the end state.` : `\nPENETRATION DETAIL - this beat is penetration; describe the ACT ITSELF, slowly and vividly, not just the reaction:\n- Describe the mechanics of entry and withdrawal: your cock pressing against the opening, the slow slide in, the stretched ring gripping the shaft, the wrinkled skin dragging along it on the pull-back.\n- Name the cock with its size and color words from the STATE.\n- Describe depth and body contact: how deep it goes, your hips meeting the soft warm flesh of ${_pos} buttocks, pressing flush against ${_pos}.\n- Slow the motion down on entry and withdrawal - describe what you see and feel at each stage, not just the end state.`) : ""}${_isInsertiveTease ? `\nINSERTION DETAIL - this beat slides something of yours into them; describe the insertion itself, slowly and vividly, not just the reaction:\n- Describe the mechanics: your fingers or tongue pressing against the opening, the slow push past the resistant ring, the warm grip closing around you as you slide deeper.\n- Describe what the opening does: stretching, yielding, clinging, the wrinkled skin smoothing out as it is filled.\n- Describe depth and contact: how far in you go, ${_pos} flesh dimpling or spreading under the pressure, ${_pos} body opening around you.\n- Slow the motion down - describe what you see and feel at each stage, not just the end state.` : ""}
-- Literal, direct language ("press", "grip", "slide", "clench", "yield"). No metaphors, no purple prose, no fragments.
+${_lengthRule}${_detailBlock}
+- Literal, physical language: concrete anatomy ("sphincter", "pucker", "cheeks", "the root"), never abstractions like "clenching heat" or "her warmth".
+- NEVER write stat words in prose: no "medium", no size labels as adjectives, no color-word stacks ("deep brown cock"). Convey size or color naturally ("thick", "dark skin") or leave it out.
+- No adverb pairs or mechanic-speak ("frantic, rougher speed"). Pick the vivid concrete detail over the generic one every time.
+- Vary sentence openings and rhythm between beats - never start two beats the same way.
+- QUALITY BAR - match this register:
+  RIGHT: "You bottom out on every stroke and hold there for a beat, the vise-like heat gripping your full length, ${_pos} puffy sphincter dragging at your root."
+  RIGHT: "You hammer ${_pos} ass in full strokes, your thighs slapping ${_pos} cheeks with each drive, the ring pinching tight behind your crown on every withdrawal."
+  WRONG: "You drive your medium deep brown cock into ${_pos} clenching heat with a frantic, rougher speed."
+  Wrong means: stacked adjectives, stat words, adverb pairs, abstract nouns where anatomy belongs.
 
 STATE:
 ${_positionContext} ${_arousalContext} ${_penetrationContext}
@@ -4779,6 +4862,7 @@ ${_playerFitContext}
 ${_recentBlock}
 ${_repeatBlock}
 ${_nameBlock}
+${_slaveBlock}
 
 ${_actLine}
 
