@@ -1802,6 +1802,24 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
     {
+        id: "offer-to-buy-both-drinks",
+        priority: 12.5,
+        repeat: "always",
+        kind: "action",
+        label: (npc, ctx) => typeof getBuyDrinkOfferLabel === "function" ? getBuyDrinkOfferLabel(npc, true) : "Offer to buy you both a drink",
+        textVariants: [
+            "You offer to buy the two of you a drink.",
+            "You suggest having a drink together, your treat.",
+            "You nod toward the bar and offer to buy the two of you a drink."
+        ],
+        contextNote: (npc) => typeof getBuyDrinkOfferNote === "function" ? getBuyDrinkOfferNote(npc, true) : "",
+        cacheSig: (npc) => typeof getBuyDrinkOfferSig === "function" ? getBuyDrinkOfferSig(npc, true) : "",
+        intent: "talk",
+        conditions: {
+            custom: (npc, ctx) => typeof canOfferToBuyDrink === "function" && canOfferToBuyDrink(npc, true)
+        }
+    },
+    {
         id: "bar-order-refused",
         priority: 13,
         repeat: "always",
@@ -3624,7 +3642,9 @@ function buildNPCAppearanceHighlights(npc) {
 function buildNPCPhysicalSummary(npc) {
     if (!npc) return "";
     const highlights = buildNPCAppearanceHighlights(npc);
-    const identity = [npc.gender && npc.gender !== "none" ? npc.gender : "", npc.species || ""]
+    const ageDesc = typeof getNPCAgeDescriptor === "function" ? getNPCAgeDescriptor(npc) : null;
+    const ageWord = ageDesc ? String(ageDesc.label).toLowerCase() : "";
+    const identity = [ageWord, npc.gender && npc.gender !== "none" ? npc.gender : "", npc.species || ""]
         .filter(Boolean).join(" ");
 
     if (!identity && !highlights.length) return "";
@@ -4380,6 +4400,98 @@ function getNPCRevealedTypeHints(npc) {
     return prefs.slice(0, revealed).map(_npcDescribeTypePref).filter(Boolean);
 }
 
+// -- THE PLAYER'S OWN TASTE (likes & dislikes -> "you find them attractive") ----
+// The reverse of the NPC "type" above: the player picked likes and dislikes at
+// character creation (G.player.preferences, optional). Each liked trait an NPC
+// has scores +1, each disliked one -1, over species, age, gender, build, hair color, hair
+// style and eye color. The NPC's own Charisma shapes the result: charming NPCs
+// amplify what you like about them and soften what you dislike; low-Charisma
+// ones do the opposite. Only a clear result is reported - neutral returns
+// label "" so the panel stays quiet. Cosmetic only (no stat changes).
+const PLAYER_TASTE_THRESHOLD = 1.5;          // |adjusted score| needed to show anything
+const PLAYER_TASTE_CHARISMA_STEP = 0.15;     // scale change per NPC Charisma point from 3
+const PLAYER_TASTE_SCALE_MIN = 0.4;
+const PLAYER_TASTE_SCALE_MAX = 1.7;
+
+// Generic age bracket for display and for the player's likes/dislikes:
+// "young", "middle-aged" or "old" ("" when the NPC has no numeric age).
+// NPC ages are generated 18-80 for every humanoid species, read as a life
+// stage relative to the species (see NPC_AGE_DESCRIPTORS).
+const NPC_AGE_YOUNG_MAX = 35;
+const NPC_AGE_MIDDLE_MAX = 55;
+const NPC_AGE_LABELS = { "young": "Young", "middle-aged": "Middle-aged", "old": "Old" };
+
+// How each bracket reads in the panel, in descriptions and in portraits.
+// The numeric age is a LIFE STAGE on a human-equivalent scale for every
+// species (an "old" elf or dragonborn is old for their kind), so the number is
+// never shown to the player or the AI - only these descriptors are.
+const NPC_AGE_DESCRIPTORS = {
+    "young":       { label: "Young",       look: "looks young",               portrait: "young adult",             portraitNegatives: "elderly, wrinkled, aged" },
+    "middle-aged": { label: "Middle-aged", look: "is middle-aged",            portrait: "middle-aged, mature",     portraitNegatives: "" },
+    "old":         { label: "Old",         look: "is old, well on in years",  portrait: "elderly, aged, weathered", portraitNegatives: "youthful, smooth skin, young" }
+};
+
+function getNPCAgeBracket(npc) {
+    if (!npc || typeof npc.age !== "number") return "";
+    if (npc.age <= NPC_AGE_YOUNG_MAX) return "young";
+    if (npc.age <= NPC_AGE_MIDDLE_MAX) return "middle-aged";
+    return "old";
+}
+
+function getNPCAgeDescriptor(npc) {
+    var bracket = getNPCAgeBracket(npc);
+    return bracket ? NPC_AGE_DESCRIPTORS[bracket] : null;
+}
+
+function _npcTasteValue(npc, axis) {
+    if (axis === "gender") return String(npc.gender || "").toLowerCase();
+    if (axis === "age") return getNPCAgeBracket(npc);
+    if (axis === "species") return String(npc.species || "").toLowerCase();
+    if (axis === "build") return String(npc.bodyType || npc.build || "").toLowerCase();
+    return String(npc[axis] || "").toLowerCase();
+}
+
+function getPlayerTasteForNPC(npc) {
+    var result = { raw: 0, score: 0, label: "" };
+    if (!isAdultHumanoidNPC(npc)) return result;
+    var prefs = (typeof G === "object" && G && G.player) ? G.player.preferences : null;
+    if (!prefs) return result;
+    var likes = Array.isArray(prefs.likes) ? prefs.likes : [];
+    var dislikes = Array.isArray(prefs.dislikes) ? prefs.dislikes : [];
+    if (!likes.length && !dislikes.length) return result;
+
+    // Species gate: a non-human NPC can only read as attractive if the player
+    // actually picked their species as a like (so a charismatic dragonborn
+    // does not trigger by accident on eye color or build alone). Humans are
+    // the default. Dislikes always count.
+    var species = _npcTasteValue(npc, "species");
+    var speciesOpen = !species || species === "human" || likes.some(function (p) {
+        return p.axis === "species" && String(p.value).toLowerCase() === species;
+    });
+
+    var raw = 0;
+    likes.forEach(function (p) {
+        if (!speciesOpen) return;
+        var v = _npcTasteValue(npc, p.axis);
+        if (v && v === String(p.value).toLowerCase()) raw += 1;
+    });
+    dislikes.forEach(function (p) {
+        var v = _npcTasteValue(npc, p.axis);
+        if (v && v === String(p.value).toLowerCase()) raw -= 1;
+    });
+    result.raw = raw;
+    if (!raw) return result;
+
+    var charisma = (npc.stats && typeof npc.stats.charisma === "number") ? npc.stats.charisma : 3;
+    var edge = charisma - 3;
+    var scale = raw > 0 ? 1 + edge * PLAYER_TASTE_CHARISMA_STEP : 1 - edge * PLAYER_TASTE_CHARISMA_STEP;
+    scale = Math.max(PLAYER_TASTE_SCALE_MIN, Math.min(PLAYER_TASTE_SCALE_MAX, scale));
+    result.score = raw * scale;
+    if (result.score >= PLAYER_TASTE_THRESHOLD) result.label = "attractive";
+    else if (result.score <= -PLAYER_TASTE_THRESHOLD) result.label = "unattractive";
+    return result;
+}
+
 // -- FIRST IMPRESSION + TYPE-ALIGNED ACTIONS -----------------------------------
 // First encounter: an adult humanoid NPC starts with some attraction (or none)
 // based on how well the player fits their type and the player's CURRENT
@@ -4440,6 +4552,10 @@ if (typeof window !== "undefined") {
     window.ensureNPCTypePreferences = ensureNPCTypePreferences;
     window.getNPCTypeSummary = getNPCTypeSummary;
     window.getNPCRevealedTypeHints = getNPCRevealedTypeHints;
+    window.getPlayerTasteForNPC = getPlayerTasteForNPC;
+    window.getNPCAgeBracket = getNPCAgeBracket;
+    window.getNPCAgeDescriptor = getNPCAgeDescriptor;
+    window.NPC_AGE_LABELS = NPC_AGE_LABELS;
     window.migrateNPCRelationshipPool = migrateNPCRelationshipPool;
     window.ensureNPCOrientation = ensureNPCOrientation;
     window.computeNPCAttractionBase = computeNPCAttractionBase;

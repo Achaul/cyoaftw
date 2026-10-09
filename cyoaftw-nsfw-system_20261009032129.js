@@ -1,6 +1,6 @@
 // === cyoaftw-nsfw-system.js === - v2026-09-11-002
 // Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, make-a-move, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply
-window.__NSFW_SYSTEM_VERSION = "2026-09-24-001";
+window.__NSFW_SYSTEM_VERSION = "2026-10-08-001";
 console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
 try {
 (function() {
@@ -3992,6 +3992,39 @@ stateInstr,
   window.appendBoundCaptiveActions = function(npc, el) {
     if (!nsfwIsBoundCaptive(npc) || !el) return;
     appendBoundCaptiveGroups(npc, el);
+  };
+
+  // Portrait prompt terms for a topless NPC's chest. Called (typeof-guarded)
+  // by the SFW engine's buildNPCPortraitSubject only when the NSFW files are
+  // loaded and the NPC has nothing in the "upper" equipment slot. Returns ""
+  // when there is nothing to add, which leaves the SFW portrait prompt as-is.
+  window.getNsfwPortraitAnatomy = function(npc) {
+    if (!npc) return "";
+    const anatomy = npc.anatomy || {};
+    const breasts = anatomy.breasts || {};
+    const gender = String(npc.gender || "").toLowerCase();
+    const feminine = /female|woman|futa|herm/.test(gender) ||
+      (breasts.sizeCategory && breasts.sizeCategory !== "flat");
+    const parts = [];
+    parts.push("topless, bare chest, exposed upper body");
+    if (feminine) {
+      if (breasts.description) parts.push(breasts.description);
+      parts.push("bare breasts, exposed nipples");
+      const nipples = breasts.nipples || {};
+      const nippleBits = [];
+      if (nipples.color || nipples.size) {
+        nippleBits.push([nipples.color, nipples.size, "nipples"].filter(Boolean).join(" "));
+      } else {
+        nippleBits.push("detailed nipples");
+      }
+      if (nipples.texture) nippleBits.push(nipples.texture);
+      const areolas = breasts.areolas || {};
+      if (areolas.size) nippleBits.push(areolas.size + " areolas");
+      parts.push(nippleBits.join(", "));
+    } else {
+      parts.push("visible nipples");
+    }
+    return parts.join(", ");
   };
 
   initNSFWSystem();
