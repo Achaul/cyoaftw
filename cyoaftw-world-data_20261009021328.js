@@ -176,7 +176,7 @@ const SPECIES_TEMPLATES = [
     {
         species: "Goblin",
         // Used for NPC portrait prompts: face/head detail and species-specific negatives.
-        portraitProfile: { face: "rounded ears, pointed nose, narrow jaw, wide mouth with sharp small teeth", negatives: "handsome, elf, human face", sizeWord: "short" },
+        portraitProfile: { face: "grotesque goblin face, leathery wrinkled skin, very large long pointed ears, big crooked hooked nose, heavy brow ridge, deep-set sunken eyes, wide thin-lipped mouth, crooked yellow teeth with small lower tusks, sneering", negatives: "cute, pretty, beautiful, handsome, smooth skin, flawless, round ears, small ears, human face, elf, child, hood", sizeWord: "short" },
         isHumanoid: true,
         isCivilized: false,
         size: "small",
@@ -203,7 +203,7 @@ const SPECIES_TEMPLATES = [
     {
         species: "Orc",
         // Used for NPC portrait prompts: face/head detail and species-specific negatives.
-        portraitProfile: { face: "heavy brow, broad flat nose, massive square jaw, small lower tusks, rounded ears", negatives: "pointed ears, elf ears, delicate, slender, handsome" },
+        portraitProfile: { face: "brutish orc face, thick leathery weathered skin with scars, heavy protruding brow ridge, deep-set eyes, broad flat upturned nose, massive square underbite jaw, two large lower tusks jutting upward past the lip, thick neck, small rounded ears", negatives: "pointed ears, elf ears, cute, pretty, beautiful, handsome, smooth skin, delicate, slender, narrow jaw, small tusks, human face, child" },
         isHumanoid: true,
         isCivilized: false,
         size: "large",
