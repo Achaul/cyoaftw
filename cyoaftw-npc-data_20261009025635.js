@@ -1357,6 +1357,47 @@ function _guideNote(kind) {
     return "";
 }
 
+// Conversation entries for ordering from a barkeeper (one per menu drink) and
+// for buying a round for a table companion. Labels show the live price.
+function _barOrderEntry(tplId, priority) {
+    return {
+        id: "bar-order-" + tplId,
+        priority: priority,
+        repeat: "always",
+        kind: "action",
+        label: (npc, ctx) => typeof getBarOrderLabel === "function" ? getBarOrderLabel(npc, tplId) : "Order a drink",
+        textVariants: [
+            () => "You ask for " + (typeof getBarDrinkPhrase === "function" ? getBarDrinkPhrase(tplId) : "a drink") + ".",
+            () => "You slide a coin across and order " + (typeof getBarDrinkPhrase === "function" ? getBarDrinkPhrase(tplId) : "a drink") + "."
+        ],
+        intent: "talk",
+        conditions: {
+            custom: (npc, ctx) => typeof canOrderBarDrink === "function" && canOrderBarDrink(npc, tplId)
+        },
+        action: (npc) => {
+            if (typeof orderBarDrink === "function") orderBarDrink(npc, tplId);
+        }
+    };
+}
+
+function _barRoundEntry(tplId, priority) {
+    return {
+        id: "bar-round-" + tplId,
+        priority: priority,
+        repeat: "always",
+        kind: "action",
+        label: (npc, ctx) => typeof getBarRoundLabel === "function" ? getBarRoundLabel(tplId) : "Buy the next round",
+        text: "You order another round.",
+        intent: "gift",
+        conditions: {
+            custom: (npc, ctx) => typeof canOrderBarRound === "function" && canOrderBarRound(npc, tplId)
+        },
+        action: (npc) => {
+            if (typeof orderBarRound === "function") orderBarRound(npc, tplId);
+        }
+    };
+}
+
 const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "greet-intro",
@@ -1735,18 +1776,66 @@ const NPC_CONVERSATION_CATALOGUE = [
             custom: (npc, ctx) => typeof getNPCSharing === "function" && !!getNPCSharing(npc)
         }
     },
+    // Bar service (see BAR SERVICE in cyoaftw-engine-CORE.js). Orders come out
+    // of the barkeeper's real stock; rounds are for the table and need a tavern
+    // or inn room. All guarded with typeof so the file stands alone.
+    ...["mug-of-ale", "cheap-wine", "house-spirits"].map((tplId, i) => _barOrderEntry(tplId, 14 + i * 0.1)),
+    ...["mug-of-ale", "cheap-wine", "house-spirits"].map((tplId, i) => _barRoundEntry(tplId, 9 + i * 0.1)),
     {
-        id: "meal-buy-round",
-        priority: 9,
+        id: "offer-to-buy-drink",
+        priority: 12,
         repeat: "always",
-        label: "Buy the next round",
-        text: "You order another round.",
-        intent: "gift",
+        kind: "action",
+        label: (npc, ctx) => typeof getBuyDrinkOfferLabel === "function" ? getBuyDrinkOfferLabel(npc) : "Offer to buy them a drink",
+        textVariants: [
+            "You offer to buy them a drink.",
+            "You nod toward the bar and offer to stand them a drink.",
+            "You ask whether they would let you buy them a drink."
+        ],
+        // The NPC's own reply decides: the engine reads the reply's
+        // `affirmative` flag (see resolveBuyDrinkOffer).
+        contextNote: (npc) => typeof getBuyDrinkOfferNote === "function" ? getBuyDrinkOfferNote(npc) : "",
+        cacheSig: (npc) => typeof getBuyDrinkOfferSig === "function" ? getBuyDrinkOfferSig(npc) : "",
+        intent: "talk",
         conditions: {
-            custom: (npc, ctx) => typeof canBuyNPCRound === "function" && canBuyNPCRound(npc)
+            custom: (npc, ctx) => typeof canOfferToBuyDrink === "function" && canOfferToBuyDrink(npc)
+        }
+    },
+    {
+        id: "bar-order-refused",
+        priority: 13,
+        repeat: "always",
+        kind: "action",
+        label: "Ask for another drink",
+        textVariants: [
+            "You ask for another drink, a little too loudly.",
+            "You lean on the bar and ask for one more.",
+            "You wave for another round and nearly miss the counter."
+        ],
+        contextNote: (npc) => typeof getBarCutoffNote === "function" ? getBarCutoffNote(npc) : "",
+        cacheSig: (npc) => "bar-cutoff-" + (npc && npc._barVerdict ? npc._barVerdict.until : 0),
+        intent: "talk",
+        conditions: {
+            custom: (npc, ctx) => typeof isBarRefusing === "function" && isBarRefusing(npc)
+        }
+    },
+    {
+        id: "bar-ask-cellar",
+        priority: 17,
+        repeat: "always",
+        kind: "action",
+        label: "Ask them to fetch more from the cellar",
+        textVariants: [
+            "You ask whether there is more in the cellar.",
+            "You point out that the casks look low and ask them to fetch more."
+        ],
+        intent: "talk",
+        conditions: {
+            custom: (npc, ctx) => typeof needsBarRestock === "function" && needsBarRestock(npc) &&
+                !(typeof isBarRefusing === "function" && isBarRefusing(npc))
         },
         action: (npc) => {
-            if (typeof buyNPCRound === "function") buyNPCRound(npc);
+            if (typeof askBarkeepRestock === "function") askBarkeepRestock(npc);
         }
     },
     {
