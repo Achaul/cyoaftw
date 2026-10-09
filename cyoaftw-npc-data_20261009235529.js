@@ -4568,7 +4568,40 @@ function getPlayerTasteForNPC(npc) {
 // capped so nobody begins past "curious".
 const NPC_FIRST_IMPRESSION = { base: 6, perMatchPoint: 6, perCharisma: 1.5, max: 22, hostilityCutoff: 60 };
 
+// -- SPECIES FIRST REACTION ---------------------------------------------------
+// One-time favour shift when a humanoid NPC first deals with the player, from
+// the player's CURRENT species (player.appearance.species, so a Shapeshifter
+// form counts, and the memory flag is cleared when relationships reset). Kin
+// warm to kin; civilized folk can be wary of frightening or imposing forms;
+// individual species pairs have their own shades. Hostile NPCs skip it.
+// The table lives on PLAYER_SPECIES[...].social in the engine.
+const NPC_SPECIES_REACTION_HOSTILITY_CUTOFF = 60;
+
+function applyNPCSpeciesReaction(npc) {
+    if (!npc || npc.isHumanoid === false) return npc;
+    npc.memory = npc.memory || {};
+    if (npc.memory.speciesReactionDone) return npc;
+    npc.memory.speciesReactionDone = true;
+    if (typeof getPlayerSpeciesDef !== "function") return npc;
+    var def = getPlayerSpeciesDef();
+    if (!def || !def.social) return npc;
+    var hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
+    if (hostility >= NPC_SPECIES_REACTION_HOSTILITY_CUTOFF) return npc;
+    var playerKey = getPlayerSpeciesKey();
+    var npcKey = String(npc.species || "").toLowerCase();
+    var tpl = typeof getSpeciesTemplate === "function" ? getSpeciesTemplate(npc.species) : null;
+    var delta = 0;
+    if (npcKey && npcKey === playerKey) delta += def.social.kin || 0;
+    else if (tpl && tpl.isCivilized) delta += def.social.civilized || 0;
+    if (def.social.bySpecies && def.social.bySpecies[npcKey]) delta += def.social.bySpecies[npcKey];
+    if (!delta) return npc;
+    npc.memory.favorability = Math.max(-100, Math.min(100, (npc.memory.favorability || 0) + delta));
+    return npc;
+}
+if (typeof window !== "undefined") window.applyNPCSpeciesReaction = applyNPCSpeciesReaction;
+
 function applyNPCFirstImpression(npc) {
+    applyNPCSpeciesReaction(npc);
     if (!isAdultHumanoidNPC(npc)) return npc;
     npc.memory = npc.memory || {};
     if (npc.memory.firstImpressionDone) return npc;

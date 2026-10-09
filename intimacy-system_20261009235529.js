@@ -565,7 +565,7 @@ function prefetchClothingReveals(npc, player, intimacy) {
     if (!npc || !intimacy) return;
     if (typeof ai !== "function" && (typeof window === "undefined" || typeof window.ai !== "function")) return;
 
-    var _ai = typeof ai === "function" ? ai : (typeof window !== "undefined" && typeof window.ai === "function" ? window.ai : null);
+    var _ai = (typeof window !== "undefined" && typeof window.ai === "function") ? window.ai : (typeof ai === "function" ? ai : null);
     if (!_ai) return;
 
     var clothingState = intimacy.clothing;
@@ -825,7 +825,7 @@ function prefetchPenetrationContinue(npc, act, intimacy, player) {
         // Fire non-blocking AI call
         (async function() {
             try {
-                var result = await (typeof ai === "function" ? ai : window.ai)({
+                var result = await (typeof window !== "undefined" && typeof window.ai === "function" ? window.ai : ai)({
                     instruction: prompt,
                     startWith: "",
                     endButtons: "none",
@@ -886,7 +886,7 @@ async function requestLLMEnhancement(npc, act, intimacy, baseNarrative) {
     const enhancementPromise = (async () => {
         try {
             // Only proceed if AI function is available
-            var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
+            var _ai = (typeof window !== 'undefined' && typeof window.ai === 'function') ? window.ai : (typeof ai === 'function' ? ai : null);
             if (!_ai) {
                 return null;
             }
@@ -3049,8 +3049,8 @@ function buildIntercourseRequestPrompt(npc, target, canned) {
 async function voiceNpcIntercourseRequest(npc, target, canned) {
     var fallback = String(canned || "");
     try {
-        var _ai = typeof ai === "function" ? ai
-            : (typeof window !== "undefined" && typeof window.ai === "function" ? window.ai : null);
+        var _ai = (typeof window !== "undefined" && typeof window.ai === "function")
+            ? window.ai : (typeof ai === "function" ? ai : null);
         if (!_ai) return fallback;
         var prompt = buildIntercourseRequestPrompt(npc, target, fallback);
         var result = await Promise.race([
@@ -4232,7 +4232,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // at the same position/depth. This is the ONLY AI path — the old
     // requestLLMEnhancement system is disabled to prevent double-caching
     // and conflicting responses.
-    var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
+    var _ai = (typeof window !== 'undefined' && typeof window.ai === 'function') ? window.ai : (typeof ai === 'function' ? ai : null);
 
     // ── UNNATURAL-ACT BLOCKING GENERATION ──────────────────────────
     // For uncivilized species + watersports/anal penetration, the canned
@@ -8668,7 +8668,7 @@ function prefetchPullOutEnhancement(npc, player, intimacy, position, snapshot, b
     (async function() {
         try {
             var prompt = buildPullOutPrompt(npc, player, intimacy, position, snapshot, baseNarrative);
-            var result = await (typeof ai === "function" ? ai : window.ai)({
+            var result = await (typeof window !== "undefined" && typeof window.ai === "function" ? window.ai : ai)({
                 instruction: prompt,
                 startWith: "",
                 endButtons: "none",
@@ -10365,7 +10365,7 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     // reveal narration seeded by the NPC's visible descriptors and
     // the anatomy of the body part being uncovered.
     if (intimacy && act.type === ACT_TYPES.CLOTHING && act.target === "npc") {
-        var _clAi = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
+        var _clAi = (typeof window !== 'undefined' && typeof window.ai === 'function') ? window.ai : (typeof ai === 'function' ? ai : null);
         var _revealKey = buildClothingRevealKey(npc, act);
 
         var cachedReveal = getCachedClothingReveal(intimacy, _revealKey);
@@ -10412,7 +10412,7 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     // instead of alternating between polished and raw template output.
     // Same non-blocking pattern as the NPC response cache.
     if (intimacy && !act.playerIsBottom) {
-        var _ai = typeof ai === 'function' ? ai : (typeof window !== 'undefined' && typeof window.ai === 'function' ? window.ai : null);
+        var _ai = (typeof window !== 'undefined' && typeof window.ai === 'function') ? window.ai : (typeof ai === 'function' ? ai : null);
         var _currentPosition = (intimacy.position && intimacy.position.player) || "Unknown";
         // Keep the raw template for the prefetch — polishing an
         // already-polished cache hit compounds rewrites.
@@ -11384,8 +11384,8 @@ function buildReceiveAgreementPrompt(npc, act, player, accepted, template) {
 async function generateReceiveAgreement(npc, act, player, accepted, template) {
     var fallback = String(template || "");
     try {
-        var _ai = typeof ai === "function" ? ai
-            : (typeof window !== "undefined" && typeof window.ai === "function" ? window.ai : null);
+        var _ai = (typeof window !== "undefined" && typeof window.ai === "function")
+            ? window.ai : (typeof ai === "function" ? ai : null);
         if (!_ai) return fallback;
         var prompt = buildReceiveAgreementPrompt(npc, act, player, accepted, fallback);
         var result = await Promise.race([
