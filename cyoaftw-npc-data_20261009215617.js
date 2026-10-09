@@ -3510,6 +3510,72 @@ function generateNPCMotivation(npc, template, room) {
     return motive;
 }
 
+// ── SOMATOTYPE (BODY TYPE) ──────────────────────────────────────
+// A simple, tracked body-frame trait on NPCs/creatures and the player:
+// "ectomorph" (slight, narrow frame), "mesomorph" (muscular, athletic frame),
+// "endomorph" (soft, heavy, rounder frame). Stored as `somatotype` (NPCs:
+// npc.somatotype; player: player.appearance.somatotype). It is separate from
+// the free-text `build` / `bodyType` descriptor ("lean", "stout", ...), which
+// stays purely descriptive. No mechanical effect yet - this is the hook for
+// future systems (stamina, carry weight, heat/cold, attraction, descriptions).
+const SOMATOTYPES = ["ectomorph", "mesomorph", "endomorph"];
+const SOMATOTYPE_INFO = {
+    ectomorph: { label: "Ectomorph", plain: "slight", blurb: "Slender and light-framed; narrow shoulders, little bulk." },
+    mesomorph: { label: "Mesomorph", plain: "muscular", blurb: "Athletic and well-muscled; broad shoulders, solid frame." },
+    endomorph: { label: "Endomorph", plain: "heavyset", blurb: "Soft and sturdy; a rounder, heavier frame that carries weight easily." }
+};
+
+function isValidSomatotype(value) {
+    return SOMATOTYPES.indexOf(String(value || "").toLowerCase()) >= 0;
+}
+
+// Best-guess somatotype from a free-text build word ("wiry", "stout",
+// "athletic"...). Returns "" when the word gives no hint.
+function inferSomatotypeFromBuild(build) {
+    var b = String(build || "").toLowerCase();
+    if (!b) return "";
+    if (/soft(?!-featured)|round(?!-faced)|heavy|stout|thickset|plump|portly|stocky/.test(b)) return "endomorph";
+    if (/lean|slight|slender|willowy|lithe|graceful|narrow|wiry|thin|scrawny|bony|bare-boned|sinewy|elegant|fragile|faint|mist|tattered|tiny|small|knobby|scrappy|sleek|nimble|quick/.test(b)) return "ectomorph";
+    if (/athletic|sturdy|broad|powerful|muscular|imposing|tall|scarred|weathered|reptilian|compact/.test(b)) return "mesomorph";
+    return "";
+}
+
+// Pick a somatotype for a newly generated NPC/creature, steered by the build
+// word that was just rolled so the two never contradict each other.
+function rollNPCSomatotype(build) {
+    var inferred = inferSomatotypeFromBuild(build);
+    if (inferred) return inferred;
+    return SOMATOTYPES[Math.floor(Math.random() * SOMATOTYPES.length)];
+}
+
+// Sets npc.somatotype if missing/invalid (also migrates older saves). Safe to
+// call repeatedly. Returns the somatotype.
+function ensureNPCSomatotype(npc) {
+    if (!npc || typeof npc !== "object") return "";
+    if (isValidSomatotype(npc.somatotype)) return npc.somatotype;
+    var build = (npc.anatomy && npc.anatomy.build) || npc.bodyType || npc.build || "";
+    npc.somatotype = rollNPCSomatotype(build);
+    return npc.somatotype;
+}
+
+function getNPCSomatotype(npc) {
+    return ensureNPCSomatotype(npc);
+}
+
+function getSomatotypeLabel(value) {
+    var info = SOMATOTYPE_INFO[String(value || "").toLowerCase()];
+    return info ? info.label : "";
+}
+
+window.SOMATOTYPES = SOMATOTYPES;
+window.SOMATOTYPE_INFO = SOMATOTYPE_INFO;
+window.isValidSomatotype = isValidSomatotype;
+window.inferSomatotypeFromBuild = inferSomatotypeFromBuild;
+window.rollNPCSomatotype = rollNPCSomatotype;
+window.ensureNPCSomatotype = ensureNPCSomatotype;
+window.getNPCSomatotype = getNPCSomatotype;
+window.getSomatotypeLabel = getSomatotypeLabel;
+
 function generateNPCEnrichment(npc, room, zoneTemplate) {
     if (!npc) return null;
 
@@ -3593,6 +3659,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     npc.enrichment = enrichment;
     npc.size = anatomy.size;
     npc.bodyType = build;
+    npc.somatotype = rollNPCSomatotype(build);
     npc.skinTone = surfaceType === "skin" ? surfaceColor : "";
     npc.furColor = surfaceType === "fur" ? surfaceColor : "";
     npc.scaleColor = surfaceType === "scales" ? surfaceColor : "";
