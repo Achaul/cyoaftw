@@ -2027,11 +2027,58 @@ function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alle
     return { buildingId: buildingId, name: name, type: bpKey };
 }
 
-// Town: a street running east-west with a Square in the middle and a Gate at
-// the west end, buildings facing it from the north and south side, and a
-// back alley behind any building with a rear door. Closed to the east - the
-// Gate's outward exit is the only frontier (it always leads out to the
-// Ruins, see ZONE_LINKS).
+// Mirrors the street plane of a finished town plan east-west, so the Gate can
+// sit at either end of the main street. Only street-plane cells move (the
+// spine, Square, Gate, alleys and building entrances); interiors live on their
+// own planes at x >= BUILDING_PLANE_X0 and keep their coordinates. Every exit
+// target that points at a street cell is flipped, and E/W labels are swapped
+// on street rooms. N/S labels (front doors, back doors, alley bends) and
+// Up/Down are unchanged, so adjacency, portals and door/lock data stay valid.
+function _planMirrorStreetX(plan) {
+    const isStreet = function (coords) {
+        return Math.abs(Number(String(coords).split(",")[0])) < BUILDING_PLANE_X0 / 2;
+    };
+    const flip = function (coords) {
+        const p = String(coords).split(",");
+        return String(-Number(p[0]) + 0) + "," + p[1];
+    };
+    const swap = { E: "W", W: "E", NE: "NW", NW: "NE", SE: "SW", SW: "SE" };
+    const relabel = function (map) {
+        const out = {};
+        Object.keys(map || {}).forEach(function (dir) { out[swap[dir] || dir] = map[dir]; });
+        return out;
+    };
+    const rooms = {};
+    Object.keys(plan.rooms).forEach(function (key) {
+        const desc = plan.rooms[key];
+        const street = isStreet(key);
+        const exits = {};
+        Object.keys(desc.exits).forEach(function (dir) {
+            const target = desc.exits[dir];
+            const outDir = street ? (swap[dir] || dir) : dir;
+            exits[outDir] = isStreet(target) ? flip(target) : target;
+        });
+        desc.exits = exits;
+        if (street) {
+            desc.portals = relabel(desc.portals);
+            desc.doors = relabel(desc.doors);
+            desc.locks = relabel(desc.locks);
+            desc.coords = flip(key);
+        }
+        rooms[street ? desc.coords : key] = desc;
+    });
+    plan.rooms = rooms;
+    plan.buildings.forEach(function (b) {
+        if (b.entranceCoords) b.entranceCoords = flip(b.entranceCoords);
+    });
+}
+
+// Town: a street running east-west with a Square near the middle and a Gate
+// at one end (west or east, rolled), buildings facing it from the north and
+// south side, and a back alley behind any building with a rear door. Closed
+// at the far end - the Gate's outward exit is the only frontier (it always
+// leads out to the Ruins, see ZONE_LINKS). The plan is built with the Gate to
+// the west, then mirrored east-west about half the time.
 function planTownLayout(rngIn) {
     const rng = typeof rngIn === "function" ? rngIn : Math.random;
     const zone = "Town";
@@ -2111,6 +2158,10 @@ function planTownLayout(rngIn) {
         info.entranceCoords = entranceCoords;
         plan.buildings.push(info);
     });
+
+    // Gate side: drawn last so the rest of the layout rolls exactly as before
+    // for a given rng sequence. Half of all towns put the Gate on the east.
+    if (rng() < 0.5) _planMirrorStreetX(plan);
 
     // Where a new game can start, by the room type the player picked.
     Object.keys(plan.rooms).forEach(coords => {
@@ -3067,6 +3118,22 @@ function getGuideOpeningLine(backstory) {
     const seed = String(backstory.playerName || "") + backstory.archetype;
     for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 9973;
     return _spFill(variants[h % variants.length], getBackstoryFillMap(backstory));
+}
+
+// A second line from the guide right after the opening: death is permanent,
+// so new characters are told at once to get the free newcomer's blessing from
+// a shrine (see requestNewcomerBlessing in the engine).
+const GUIDE_NEWCOMER_ADVICE = [
+    "\"One thing before we go any further, {player}. Death is final in this country. Find a shrine as soon as you can, the Chapel has one, and ask for a newcomer's blessing. It costs nothing and binds you to no god, and it will pull you back from the edge once. Don't go anywhere dangerous without it.\"",
+    "\"Listen, {player}, this matters more than anything else I'll say today. Go to a shrine, the Chapel will do, and ask for a newcomer's blessing. Free, no oaths. It saves you from death one time. Get it before you go looking for trouble.\""
+];
+
+function getGuideNewcomerAdvice(backstory) {
+    if (!backstory) return "";
+    let h = 0;
+    const seed = String(backstory.playerName || "") + String(backstory.archetype || "");
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 9973;
+    return _spFill(GUIDE_NEWCOMER_ADVICE[h % GUIDE_NEWCOMER_ADVICE.length], getBackstoryFillMap(backstory));
 }
 
 // First-lead facts the world can answer. These join the lore pool (see

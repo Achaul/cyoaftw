@@ -593,6 +593,13 @@ function recordNPCConversationChoice(npc, choice) {
     const state = ensureNPCConversationState(npc);
     if (!state) return null;
 
+    // Remember when and where in the player's travels this last happened, so a
+    // repeat greeting can tell "still here" from "back after a while".
+    if (npc.memory && typeof G === "object" && G && G.player) {
+        npc.memory.lastTalkMoveSeq = G.player.moveSeq || 0;
+        npc.memory.lastTalkTurn = typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : 0;
+    }
+
     const optionId = String(choice.id || "").trim();
     // Typed / canned replies ("respond-...") are free-form: keep them out of
     // the used-option lists so they cannot push real option ids (like the
@@ -1140,6 +1147,82 @@ function buildNPCLoreNote(npc, ctx, entry, mode) {
         _loreLeaningLine(getNPCLoreLeaning(npc, ctx));
 }
 
+// ── CONVERSATION FACT SHEET ─────────────────────────────────────
+// A short list of real things this speaker can talk about, attached once per
+// reply prompt (see buildConversationBatchInstruction in the engine) so typed
+// and canned replies, and menu options with no fact of their own, have
+// something concrete to draw on instead of improvising. Facts are ranked by
+// word overlap with what the player just said; with no overlap, one local fact
+// still comes through so the reply is not generic. No AI call happens here.
+const NPC_FACT_STOPWORDS = ["the", "and", "are", "was", "who", "how", "why", "can", "for", "but", "not", "any", "has", "had", "his", "her", "its", "our", "out", "one", "did", "got", "get", "let", "may", "own", "too", "yes", "now", "about", "after", "again", "also", "around", "because", "been", "before", "could", "does", "from", "have", "here", "into", "just", "know", "like", "more", "much", "only", "really", "say", "should", "some", "tell", "than", "that", "them", "then", "there", "they", "this", "were", "what", "when", "where", "which", "while", "will", "with", "would", "your", "you"];
+
+function _npcFactWords(text) {
+    const seen = {};
+    const out = [];
+    String(text || "").toLowerCase().replace(/[^a-z0-9' ]+/g, " ").split(/\s+/).forEach(function (w) {
+        if (w.length > 2 && NPC_FACT_STOPWORDS.indexOf(w) < 0 && !seen[w]) { seen[w] = true; out.push(w); }
+    });
+    return out;
+}
+
+function _npcFactOverlap(words, text) {
+    if (!words.length) return 0;
+    const hay = " " + String(text || "").toLowerCase().replace(/[^a-z0-9' ]+/g, " ") + " ";
+    let hits = 0;
+    words.forEach(function (w) { if (hay.indexOf(" " + w) >= 0) hits += 1; });
+    return hits;
+}
+
+// Returns a multi-line string ("" when there is nothing to offer).
+// playerTexts: the player's lines this prompt answers (array of strings).
+function buildNPCConversationFactSheet(npc, ctx, playerTexts, room) {
+    if (!npc) return "";
+    const lines = [];
+    const words = _npcFactWords((playerTexts || []).join(" "));
+
+    // 1. Local knowledge: lore this NPC knows, best match for the player's words first.
+    if (ctx && typeof getNPCKnownLoreFacts === "function" && typeof getWorldLoreFactText === "function") {
+        const lore = typeof ensureWorldLore === "function" ? ensureWorldLore() : null;
+        const seed = lore ? lore.seed : null;
+        const told = npc.memory && npc.memory.loreTold ? npc.memory.loreTold : {};
+        const ranked = getNPCKnownLoreFacts(npc, ctx).map(function (entry) {
+            const text = getWorldLoreFactText(entry.fact, seed, entry.distorted);
+            const overlap = _npcFactOverlap(words, String(entry.fact.topic || "") + " " + text);
+            return { entry: entry, text: text, overlap: overlap, score: overlap * 3 + (entry.firsthand ? 1 : 0) - (told[entry.fact.id] ? 2 : 0) };
+        }).filter(function (r) { return r.text; }).sort(function (a, b) { return b.score - a.score; });
+        let picked = ranked.filter(function (r) { return r.overlap > 0; }).slice(0, 2);
+        if (!picked.length && typeof pickNPCLoreFact === "function") {
+            const fallback = pickNPCLoreFact(npc, ctx, "topic");
+            if (fallback) {
+                const text = getWorldLoreFactText(fallback.fact, seed, fallback.distorted);
+                if (text) picked = [{ entry: fallback, text: text }];
+            }
+        }
+        picked.forEach(function (r) {
+            lines.push("- Local knowledge (" + (r.entry.firsthand ? "knows firsthand" : "only heard secondhand") + "): " + String(r.text).slice(0, 260));
+        });
+    }
+
+    // 2. Recent events this speaker plausibly saw or heard about.
+    if (typeof getNPCAwareStoryEvents === "function") {
+        getNPCAwareStoryEvents(npc, { room: room || (ctx && ctx.room) }).slice(0, 2).forEach(function (ev) {
+            lines.push("- Recent event (" + (ev.here ? "happened here" : "word has reached them") + "): " + String(ev.text || "").slice(0, 160));
+        });
+    }
+
+    // 3. Who else is here, by name and trade.
+    const rm = room || (ctx && ctx.room) || null;
+    if (rm && Array.isArray(rm.creatures)) {
+        const others = rm.creatures.filter(function (c) {
+            return c && c !== npc && !c.dead && !c.unconscious && c.isHumanoid === true && (c.name || c.descriptorName);
+        }).slice(0, 3).map(function (c) { return (c.name || c.descriptorName) + (c.role ? " (" + c.role + ")" : ""); });
+        if (others.length) lines.push("- Others here: " + others.join(", "));
+    }
+
+    return lines.join("\n");
+}
+if (typeof window !== "undefined") window.buildNPCConversationFactSheet = buildNPCConversationFactSheet;
+
 function _loreLastHeardEntry(npc, ctx) {
     const state = npc && npc.memory && npc.memory.conversationState ? npc.memory.conversationState : null;
     const id = ctx && ctx.lastLoreFactId ? ctx.lastLoreFactId : (state ? state.lastLoreFactId : "");
@@ -1289,6 +1372,15 @@ function _npcWillIntroduce(npc, ctx) {
     if (!npc || !ctx || ctx.nameKnown) return false;
     return ctx.favor >= 25 && ctx.hostility <= 35;
 }
+// Extra steer for a repeat greeting: the player never left (just spoke a moment
+// ago) versus coming back after being away.
+function _npcGreetRepeatNote(npc, ctx) {
+    if (!ctx || !npc || !npc.memory || typeof npc.memory.lastTalkMoveSeq !== "number") return "";
+    if (ctx.stayedSinceLastTalk) {
+        return " The player has not left; you were talking with them moments ago. React to the quick repeat greeting lightly, with patience, humor or mild puzzlement as suits you. Do not re-introduce yourself and do not act as if you had not seen them for a while.";
+    }
+    return " You have not seen the player for a little while. Greet them like someone returning, and you may briefly note the time apart.";
+}
 function _npcIntroNote(npc, ctx) {
     if (!_npcWillIntroduce(npc, ctx)) return "";
     return "You have warmed to the player. Introduce yourself by name in this reply, naturally and in your own voice: your name is " + getNPCSelfName(npc) + ". Do not invent a different name.";
@@ -1427,6 +1519,7 @@ const NPC_CONVERSATION_CATALOGUE = [
                 return "Greet them warmly";
             }
             if (ctx.sessionUsedOptionIds.includes("greet-known")) return "Check in with them again";
+            if (ctx.stayedSinceLastTalk) return "Say hello again anyway";
             return "Greet them again";
         },
         textVariants: [
@@ -1438,16 +1531,27 @@ const NPC_CONVERSATION_CATALOGUE = [
                 : "You offer a familiar greeting and watch how they receive it this time.",
             (npc, ctx) => ctx.favor >= 35
                 ? "You greet them with easy familiarity, as though picking up a conversation already in motion."
-                : "You greet them again without making it sound like a first introduction."
+                : "You greet them again without making it sound like a first introduction.",
+            (npc, ctx) => ctx.stayedSinceLastTalk && ctx.hostility < 70
+                ? "You greet them again even though you only just spoke, with a half smile that admits it."
+                : "",
+            (npc, ctx) => ctx.stayedSinceLastTalk && ctx.hostility < 70
+                ? "You say hello once more, as if starting over, though you never left the room."
+                : ""
         ],
         intent: "greeting",
         relationshipImpact: (npc, ctx) => ctx.hostility >= 70
             ? { mood: 0, favor: 1, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" }
             : { mood: 1, favor: 2, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" },
-        contextNote: _npcIntroNote,
+        contextNote: (npc, ctx) => _npcIntroNote(npc, ctx) + _npcGreetRepeatNote(npc, ctx),
         revealsName: _npcWillIntroduce,
-        cacheSig: (npc, ctx) => _npcWillIntroduce(npc, ctx) ? "intro" : "",
-        conditions: { metPlayer: true }
+        cacheSig: (npc, ctx) => (_npcWillIntroduce(npc, ctx) ? "intro" : "") + (ctx.stayedSinceLastTalk ? "stay" : "away"),
+        conditions: {
+            metPlayer: true,
+            // The guide's opening line and a door-answerer's "Yes? Can I help
+            // you?" already are the greeting for this conversation.
+            custom: (npc, ctx) => !(ctx.sessionUsedOptionIds.includes("greet-knock-answer") || ctx.sessionUsedOptionIds.includes("greet-guide-opening"))
+        }
     },
     {
         id: "ask-name",
@@ -1854,6 +1958,22 @@ const NPC_CONVERSATION_CATALOGUE = [
         },
         action: (npc) => {
             if (typeof askBarkeepRestock === "function") askBarkeepRestock(npc);
+        }
+    },
+    // Jobs and quests (see JOBS AND QUESTS in cyoaftw-engine-CORE.js). One entry
+    // opens a small menu (showWorkMenu) listing the work and bounties this
+    // speaker can give, pay owed, and trophies to hand in. No AI call.
+    {
+        id: "ask-about-work",
+        priority: 46,
+        repeat: "always",
+        kind: "action",
+        label: (npc, ctx) => typeof getWorkMenuLabel === "function" ? getWorkMenuLabel(npc) : "Ask about work",
+        action: "workmenu",
+        intent: "talk",
+        conditions: {
+            maxHostility: 40,
+            custom: (npc, ctx) => typeof hasWorkTopics === "function" && hasWorkTopics(npc)
         }
     },
     {
@@ -2768,6 +2888,22 @@ const NPC_CONVERSATION_CATALOGUE = [
         relationshipImpact: { mood: 0, favor: 0, intent: "talk", markMet: true, actionTag: "guide-party" },
         conditions: { custom: (npc) => _npcIsGuide(npc) && !!npc._inParty }
     },
+    // Directions: opens a list of buildings this speaker knows and answers with a
+    // real route over the map (see showDirectionsMenu in the engine). No AI call.
+    {
+        id: "ask-directions",
+        priority: 47,
+        repeat: "always",
+        label: "Ask for directions",
+        action: "directions",
+        intent: "curious",
+        conditions: {
+            metPlayer: true,
+            maxHostility: 60,
+            minFavor: -20,
+            custom: (npc, ctx) => ctx.isHumanoid && typeof getDirectionsCandidates === "function" && getDirectionsCandidates(npc, ctx).length > 0
+        }
+    },
     // Free-text bridge. When the NPC's last line expects an answer the engine
     // shows this as "Respond..." (kind "reply", with any canned replies from the
     // reply JSON next to it); otherwise it stays available as a quiet
@@ -2851,6 +2987,9 @@ function getNPCConversationContext(npc, extraContext = {}) {
         metPlayer: !!(npc.memory && npc.memory.metPlayer),
         nameKnown: !!(npc.memory && npc.memory.nameKnown),
         everGreeted: !!(npc.memory && npc.memory.everGreeted),
+        // True when the player has not changed rooms since last talking to this NPC.
+        stayedSinceLastTalk: !!(npc.memory && typeof npc.memory.lastTalkMoveSeq === "number" &&
+            typeof G === "object" && G && G.player && npc.memory.lastTalkMoveSeq === (G.player.moveSeq || 0)),
         mood: String(npc.memory && npc.memory.lastMood || "neutral").toLowerCase(),
         disposition: typeof getCurrentNPCDisposition === "function"
             ? String(getCurrentNPCDisposition(npc) || "").toLowerCase()
