@@ -1,8 +1,8 @@
-// ── cyoaftw-npc-data.js v2026-10-03-0004 ── Typed replies carry relationship effects (playerTone)
+// ── cyoaftw-npc-data.js v2026-10-11-001 ── Species reaction now shifts hostility too, applied on room entry
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-09-11-001";
-    console.log("[NPC Data] Loaded v2026-09-11-001 - speech profile tone/style/language + temperament inflection");
+    window.NPC_DATA_VERSION = "2026-10-11-001";
+    console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
 // ── DATA ARRAYS ──────────────────────────────────────────────────
@@ -4712,9 +4712,17 @@ const NPC_FIRST_IMPRESSION = { base: 6, perMatchPoint: 6, perCharisma: 1.5, max:
 // the player's CURRENT species (player.appearance.species, so a Shapeshifter
 // form counts, and the memory flag is cleared when relationships reset). Kin
 // warm to kin; civilized folk can be wary of frightening or imposing forms;
-// individual species pairs have their own shades. Hostile NPCs skip it.
+// individual species pairs have their own shades. Already-hostile NPCs skip the
+// favour shift (hostility still shifts).
 // The table lives on PLAYER_SPECIES[...].social in the engine.
 const NPC_SPECIES_REACTION_HOSTILITY_CUTOFF = 60;
+// The same table also shifts HOSTILITY on that first meeting: every point of
+// favour shift moves hostility the opposite way by this many points (wary folk
+// bristle, kin and friendly pairs ease), capped per NPC. "Meaningful" tuning:
+// the worst civilized pairing is roughly +30, still under the ambush bar for a
+// calm townsperson, so species colours encounters without starting fights alone.
+const NPC_SPECIES_HOSTILITY_PER_FAVOR = 4;
+const NPC_SPECIES_HOSTILITY_MAX_SHIFT = 30;
 
 function applyNPCSpeciesReaction(npc) {
     if (!npc || npc.isHumanoid === false) return npc;
@@ -4725,7 +4733,6 @@ function applyNPCSpeciesReaction(npc) {
     var def = getPlayerSpeciesDef();
     if (!def || !def.social) return npc;
     var hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
-    if (hostility >= NPC_SPECIES_REACTION_HOSTILITY_CUTOFF) return npc;
     var playerKey = getPlayerSpeciesKey();
     var npcKey = String(npc.species || "").toLowerCase();
     var tpl = typeof getSpeciesTemplate === "function" ? getSpeciesTemplate(npc.species) : null;
@@ -4734,10 +4741,31 @@ function applyNPCSpeciesReaction(npc) {
     else if (tpl && tpl.isCivilized) delta += def.social.civilized || 0;
     if (def.social.bySpecies && def.social.bySpecies[npcKey]) delta += def.social.bySpecies[npcKey];
     if (!delta) return npc;
-    npc.memory.favorability = Math.max(-100, Math.min(100, (npc.memory.favorability || 0) + delta));
+    // Favour only moves for NPCs who are not already hostile; hostility itself
+    // shifts for everyone (kin can calm a hostile creature, wariness can sour
+    // a calm one).
+    if (hostility < NPC_SPECIES_REACTION_HOSTILITY_CUTOFF) {
+        npc.memory.favorability = Math.max(-100, Math.min(100, (npc.memory.favorability || 0) + delta));
+    }
+    var hostShift = Math.max(-NPC_SPECIES_HOSTILITY_MAX_SHIFT, Math.min(NPC_SPECIES_HOSTILITY_MAX_SHIFT, -delta * NPC_SPECIES_HOSTILITY_PER_FAVOR));
+    if (hostShift) npc.hostility = Math.max(0, Math.min(100, hostility + hostShift));
     return npc;
 }
 if (typeof window !== "undefined") window.applyNPCSpeciesReaction = applyNPCSpeciesReaction;
+
+// Apply the species reaction to everyone in a room as the player arrives, so
+// hostility is already adjusted before any ambush or greeting check. One-time
+// per NPC (memory.speciesReactionDone); skips the dead, hidden and downed.
+function applyNPCSpeciesReactionToRoom(room) {
+    if (!room || !Array.isArray(room.creatures)) return;
+    room.creatures.forEach(function (npc) {
+        if (!npc || npc.hp <= 0 || npc.hidden || npc.isHidden || npc.unconscious || npc.isUnconsciousBody) return;
+        if (npc._inParty) return;
+        if (typeof hydrateNPCSpeciesFlags === "function") hydrateNPCSpeciesFlags(npc);
+        applyNPCSpeciesReaction(npc);
+    });
+}
+if (typeof window !== "undefined") window.applyNPCSpeciesReactionToRoom = applyNPCSpeciesReactionToRoom;
 
 function applyNPCFirstImpression(npc) {
     applyNPCSpeciesReaction(npc);

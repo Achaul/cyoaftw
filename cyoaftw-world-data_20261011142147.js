@@ -1075,6 +1075,283 @@ const ROOM_TEMPLATES = [
         imageKey: "Altar"
     },
 
+    // ── STARTING HUB ROOMS ────────────────────────────────────────
+    // Rooms of the pre-built starting hubs (see ZONE_HUBS below). They are
+    // deliberately absent from every ZONE_TEMPLATES.roomTypes list, so the
+    // walk generator never rolls them; they only exist inside a hub.
+    // requiredRole / roleTable are read by determineNPCRole in the engine.
+    {
+        type: "Market Cavern", zone: "Underground City", role: "landmark",
+        displayName: "Market Cavern",
+        baseDescription: "A great vaulted cavern given over to trade. Stalls of cut stone and canvas ring a central well of lamplight, and the air smells of coal, tallow and bread.",
+        allowedZones: ["underground city"], parentCluster: ["cavern"], isConnector: false, minNpcs: 2,
+        requiredRole: "Vendor",
+        roleTable: [
+            { role: "Vendor", weight: 5, unique: true }, { role: "Townsfolk", weight: 5 },
+            { role: "Miner", weight: 2 }, { role: "Wandering Merchant", weight: 2, unique: true },
+            { role: "Stone Guard", weight: 1 }
+        ],
+        structural: [
+            { id: "market-stalls", name: "stone market stalls", tags: ["commerce", "social"] },
+            { id: "lamp-well",     name: "well of hanging lamps", tags: ["light", "landmark"] },
+            { id: "notice-board",  name: "notice board", tags: ["information", "commerce"] }
+        ],
+        imageKey: "Cavern"
+    },
+    {
+        type: "Lantern Hall", zone: "Underground City", role: "landmark",
+        displayName: "Lantern Hall",
+        baseDescription: "A low, warm hall hung with a hundred small lanterns, each one a debt paid or a promise kept. Long tables run beneath them, and a bar of polished slate fills the far wall.",
+        allowedZones: ["underground city"], parentCluster: ["cavern"], isConnector: false, minNpcs: 2,
+        requiredRole: "Bartender",
+        roleTable: [
+            { role: "Bartender", weight: 6, unique: true }, { role: "Patron", weight: 6 },
+            { role: "Miner", weight: 3 }, { role: "Townsfolk", weight: 2 }, { role: "Servant", weight: 1 }
+        ],
+        structural: [
+            { id: "bar",          name: "slate bar", tags: ["commerce", "social"] },
+            { id: "long-tables",  name: "long stone tables", tags: ["social"] },
+            { id: "lantern-rows", name: "rows of small lanterns", tags: ["light", "landmark"] }
+        ],
+        imageKey: "Taproom"
+    },
+    {
+        type: "Cavern Lodgings", zone: "Underground City", role: "landmark",
+        displayName: "Cavern Lodgings",
+        baseDescription: "Sleeping alcoves are cut into the rock in tiers, each hung with a heavy curtain. A keeper sits by the stair with a ledger and a ring of iron keys.",
+        allowedZones: ["underground city"], parentCluster: ["cavern"], isConnector: false, minNpcs: 1,
+        requiredRole: "Innkeeper",
+        roleTable: [
+            { role: "Innkeeper", weight: 6, unique: true }, { role: "Guest", weight: 5 },
+            { role: "Townsfolk", weight: 2 }, { role: "Miner", weight: 2 }
+        ],
+        structural: [
+            { id: "sleeping-alcoves", name: "curtained sleeping alcoves", tags: ["rest"] },
+            { id: "ledger-desk",      name: "keeper's desk", tags: ["commerce", "information"] },
+            { id: "foot-lockers",     name: "foot lockers", tags: ["storage"] }
+        ],
+        imageKey: "Inn"
+    },
+
+    {
+        type: "Warren Mouth", zone: "Dungeon", role: "landmark",
+        displayName: "Warren Mouth",
+        baseDescription: "A ragged opening in the rock, hung with bones, rags and crude warding totems. Fresh drag marks scar the floor, and smoke drifts out from somewhere deeper.",
+        allowedZones: ["dungeon"], parentCluster: ["gate"], isConnector: false, minNpcs: 1,
+        roleTable: [
+            { role: "Raider", weight: 5 }, { role: "Scout", weight: 3 }, { role: "Scavenger", weight: 2 }
+        ],
+        structural: [
+            { id: "bone-totems", name: "bone totems", tags: ["landmark", "danger"] },
+            { id: "lookout-ledge", name: "lookout ledge", tags: ["formal", "danger"] },
+            { id: "drag-marks", name: "drag marks", tags: ["information"] }
+        ],
+        imageKey: "Passage"
+    },
+    {
+        type: "Fire Hall", zone: "Dungeon", role: "landmark",
+        displayName: "Fire Hall",
+        baseDescription: "A wide, soot-black cave where the warren eats. A great cookfire burns in a ring of stones, with a spit above it and a keg or two rolled against the wall.",
+        allowedZones: ["dungeon"], parentCluster: ["chamber"], isConnector: false, minNpcs: 2,
+        requiredRole: "Bartender",
+        roleTable: [
+            { role: "Bartender", weight: 4, unique: true }, { role: "Cook", weight: 3, unique: true },
+            { role: "Raider", weight: 4 }, { role: "Patron", weight: 3 }
+        ],
+        structural: [
+            { id: "bar",        name: "keg bar", tags: ["commerce", "social"] },
+            { id: "cookfire",   name: "great cookfire", tags: ["heat", "light", "social"] },
+            { id: "gnawed-benches", name: "gnawed benches", tags: ["social"] }
+        ],
+        imageKey: "Chamber"
+    },
+    {
+        type: "Bunk Cave", zone: "Dungeon", role: "landmark",
+        displayName: "Bunk Cave",
+        baseDescription: "Heaps of straw, furs and stolen blankets are piled along the walls of this crowded cave. Someone has hung a tin cup on every nail.",
+        allowedZones: ["dungeon"], parentCluster: ["chamber"], isConnector: false, minNpcs: 1,
+        roleTable: [
+            { role: "Raider", weight: 4 }, { role: "Scavenger", weight: 3 }, { role: "Townsfolk", weight: 2 }
+        ],
+        structural: [
+            { id: "straw-bunks", name: "straw and fur bunks", tags: ["rest"] },
+            { id: "loot-sacks",  name: "stuffed loot sacks", tags: ["storage", "loot"] },
+            { id: "tin-cups",    name: "tin cups on nails", tags: ["social"] }
+        ],
+        imageKey: "Chamber"
+    },
+    {
+        type: "Fighting Pit", zone: "Dungeon", role: "landmark",
+        displayName: "Fighting Pit",
+        baseDescription: "A sunken ring of packed earth, ringed with tiers of rubble for a crowd. Old blood has darkened the dirt, and a rack of battered weapons stands by the entry.",
+        allowedZones: ["dungeon"], parentCluster: ["chamber"], isConnector: false, minNpcs: 1,
+        roleTable: [
+            { role: "Raider", weight: 6 }, { role: "Adventurer", weight: 2 }, { role: "Scout", weight: 2 }
+        ],
+        structural: [
+            { id: "pit-ring",     name: "packed-earth ring", tags: ["work", "training"] },
+            { id: "practice-dummies", name: "battered practice dummies", tags: ["work", "training"] },
+            { id: "weapon-rack",  name: "rack of battered weapons", tags: ["storage", "loot"] }
+        ],
+        imageKey: "Chamber"
+    },
+    {
+        type: "Scrap Stores", zone: "Dungeon", role: "landmark",
+        displayName: "Scrap Stores",
+        baseDescription: "Piles of salvage fill this long cave: bent blades, dented helms, rope, lamp oil, a surprising amount of boots. A scrawny trader squats in the middle of it all, keeping count.",
+        allowedZones: ["dungeon"], parentCluster: ["chamber"], isConnector: false, minNpcs: 1,
+        requiredRole: "Vendor",
+        roleTable: [
+            { role: "Vendor", weight: 5, unique: true }, { role: "Scavenger", weight: 4 }, { role: "Raider", weight: 2 }
+        ],
+        structural: [
+            { id: "salvage-heaps", name: "heaps of salvage", tags: ["commerce", "storage", "loot"] },
+            { id: "trade-blanket", name: "trade blanket", tags: ["commerce"] },
+            { id: "tally-sticks",  name: "tally sticks", tags: ["information"] }
+        ],
+        imageKey: "Armory"
+    },
+
+    {
+        type: "Boardwalk", zone: "Swamp", role: "spine",
+        displayName: "Stilt Boardwalk",
+        baseDescription: "Planks lashed to tall posts carry you above the black water. Lanterns of fish oil hang along the rail, and the whole walk sways gently underfoot.",
+        allowedZones: ["swamp"], parentCluster: ["marsh"], isConnector: true,
+        structural: [
+            { id: "plank-walk", name: "lashed plank walk", tags: ["passage"] },
+            { id: "oil-lanterns", name: "fish-oil lanterns", tags: ["light"] }
+        ],
+        imageKey: "Marsh"
+    },
+    {
+        type: "Stilt Hall", zone: "Swamp", role: "landmark",
+        displayName: "Stilt Hall",
+        baseDescription: "The village's gathering house stands on thick posts over the water. Smoke from a clay hearth hangs under the thatch, and a cask of something fermented sits by the door.",
+        allowedZones: ["swamp"], parentCluster: ["camp"], isConnector: false, minNpcs: 2,
+        requiredRole: "Bartender",
+        roleTable: [
+            { role: "Bartender", weight: 5, unique: true }, { role: "Cook", weight: 3, unique: true },
+            { role: "Patron", weight: 4 }, { role: "Scout", weight: 2 }
+        ],
+        structural: [
+            { id: "bar",    name: "cask bar", tags: ["commerce", "social"] },
+            { id: "clay-hearth", name: "clay hearth", tags: ["heat", "light", "social"] },
+            { id: "mat-floor",   name: "woven reed mats", tags: ["social", "rest"] }
+        ],
+        imageKey: "Swamp Camp"
+    },
+    {
+        type: "Reed Huts", zone: "Swamp", role: "landmark",
+        displayName: "Reed Huts",
+        baseDescription: "A cluster of small huts woven from reed and bound with wet cord, each on its own platform. Fishing nets dry on every rail.",
+        allowedZones: ["swamp"], parentCluster: ["camp"], isConnector: false, minNpcs: 1,
+        roleTable: [
+            { role: "Villager", weight: 5 }, { role: "Scout", weight: 2 }, { role: "Townsfolk", weight: 2 }
+        ],
+        structural: [
+            { id: "reed-beds", name: "reed sleeping mats", tags: ["rest"] },
+            { id: "drying-nets", name: "drying nets", tags: ["storage"] },
+            { id: "cook-pots", name: "clay cook pots", tags: ["storage"] }
+        ],
+        imageKey: "Swamp Camp"
+    },
+    {
+        type: "Hunters' Landing", zone: "Swamp", role: "landmark",
+        displayName: "Hunters' Landing",
+        baseDescription: "Flat-bottomed boats nose against a plank dock stacked with pelts, eel traps and smoked fish. A weathered trader haggles over all of it.",
+        allowedZones: ["swamp"], parentCluster: ["camp"], isConnector: false, minNpcs: 1,
+        requiredRole: "Vendor",
+        roleTable: [
+            { role: "Vendor", weight: 5, unique: true }, { role: "Scout", weight: 3 }, { role: "Villager", weight: 3 }
+        ],
+        structural: [
+            { id: "boat-dock", name: "plank dock", tags: ["landmark", "passage"] },
+            { id: "pelt-racks", name: "pelt racks", tags: ["commerce", "storage"] },
+            { id: "eel-traps",  name: "eel traps", tags: ["storage", "hazard"] }
+        ],
+        imageKey: "Marsh"
+    },
+
+    {
+        type: "Camp Fire Ring", zone: "Ruins", role: "landmark",
+        displayName: "Camp Fire Ring",
+        baseDescription: "A ring of fallen masonry, with a cookfire at its centre and bedrolls tucked against the broken walls. The crumbled skyline of old Aldermere stands black beyond the smoke.",
+        allowedZones: ["ruins"], parentCluster: ["camp"], isConnector: false, minNpcs: 2,
+        roleTable: [
+            { role: "Pilgrim", weight: 5 }, { role: "Scavenger", weight: 3 },
+            { role: "Adventurer", weight: 2 }, { role: "Townsfolk", weight: 2 }
+        ],
+        structural: [
+            { id: "camp-fire",   name: "cookfire in a stone ring", tags: ["heat", "light", "social"] },
+            { id: "bedrolls",    name: "bedrolls", tags: ["rest"] },
+            { id: "fallen-masonry", name: "fallen masonry seats", tags: ["social"] }
+        ],
+        imageKey: "Ruins Passage"
+    },
+    {
+        type: "Scavenger's Stall", zone: "Ruins", role: "landmark",
+        displayName: "Scavenger's Stall",
+        baseDescription: "A canvas awning stretched over a toppled column, laden with things pulled from the ruins: tarnished spoons, lamp glass, odd bits of armor. The seller keeps a cudgel within reach.",
+        allowedZones: ["ruins"], parentCluster: ["camp"], isConnector: false, minNpcs: 1,
+        requiredRole: "Vendor",
+        roleTable: [
+            { role: "Vendor", weight: 5, unique: true }, { role: "Scavenger", weight: 3 }, { role: "Pilgrim", weight: 2 }
+        ],
+        structural: [
+            { id: "canvas-awning", name: "canvas awning", tags: ["commerce"] },
+            { id: "salvage-table", name: "salvage table", tags: ["commerce", "storage", "loot"] },
+            { id: "price-slate",   name: "chalk price slate", tags: ["information"] }
+        ],
+        imageKey: "Hallway"
+    },
+    {
+        type: "Watch Post", zone: "Ruins", role: "landmark",
+        displayName: "Watch Post",
+        baseDescription: "A broken stair leads up to a fire-blackened platform where the camp keeps its lookout. A signal horn hangs on a hook, and a stack of spears leans against the parapet.",
+        allowedZones: ["ruins"], parentCluster: ["tower"], isConnector: false, minNpcs: 1,
+        roleTable: [
+            { role: "Scout", weight: 5 }, { role: "Adventurer", weight: 3 }, { role: "Pilgrim", weight: 1 }
+        ],
+        structural: [
+            { id: "signal-horn", name: "signal horn", tags: ["landmark", "formal"] },
+            { id: "spear-stack", name: "spear stack", tags: ["storage", "loot"] },
+            { id: "practice-dummies", name: "straw practice dummies", tags: ["work", "training"] }
+        ],
+        imageKey: "Tower"
+    },
+    {
+        type: "Lean-to Chapel", zone: "Ruins", role: "landmark",
+        displayName: "Lean-to Chapel",
+        baseDescription: "Pilgrims have roofed a broken apse with salvaged boards. A cracked altar stone is draped in candle-ends, and offerings of coin and bread sit in the cracks.",
+        allowedZones: ["ruins"], parentCluster: ["ruin"], isConnector: false, minNpcs: 1,
+        isShrine: true,
+        requiredRole: "Priest",
+        roleTable: [
+            { role: "Priest", weight: 4, unique: true }, { role: "Pilgrim", weight: 5 }
+        ],
+        structural: [
+            { id: "cracked-altar", name: "cracked altar stone", tags: ["ritual", "landmark"] },
+            { id: "candle-ends",   name: "candle-ends and offerings", tags: ["ritual"] },
+            { id: "board-roof",    name: "salvaged board roof", tags: ["cover"] }
+        ],
+        imageKey: "Altar"
+    },
+    {
+        type: "Collapsed Cellar", zone: "Ruins", role: "landmark",
+        displayName: "Collapsed Cellar",
+        baseDescription: "Steps lead down into a half-fallen cellar that the camp has shored up with timber. It is dry, defensible and just barely warm. Straw pallets line the one sound wall.",
+        allowedZones: ["ruins"], parentCluster: ["camp"], isConnector: false, minNpcs: 1,
+        roleTable: [
+            { role: "Pilgrim", weight: 4 }, { role: "Townsfolk", weight: 3 }, { role: "Scavenger", weight: 2 }
+        ],
+        structural: [
+            { id: "straw-pallets", name: "straw pallets", tags: ["rest"] },
+            { id: "timber-props",  name: "timber props", tags: ["structural"] },
+            { id: "supply-crates", name: "supply crates", tags: ["storage", "loot"] }
+        ],
+        imageKey: "Cellar"
+    },
+
     // ── ZONE-TRANSITION CORRIDOR TYPES ────────────────────────────
     // Zone-agnostic connector rooms used only by the zone-transition
     // corridor system in cyoaftw-engine-CORE.js (see
@@ -2172,8 +2449,165 @@ function planTownLayout(rngIn) {
 }
 
 // Registry: which zones have a planner (others still grow room by room).
+// ── STARTING HUBS ────────────────────────────────────────────────
+// Every non-Town zone starts a new game in a small pre-built hub (5-6 rooms)
+// instead of one lone room: a few places to eat, sleep, trade and train, with
+// open frontier exits that hand off to the walk generator. A hub is plain data:
+//   rooms     { key: { type, at:[x,y], minNpcs? } }
+//   links     [[keyA, keyB, doorKind?, lock?]]  - rooms must be grid neighbours
+//   name      (per room) themed display name overriding the template's
+//   zoneCast  (per room) keep the zone's own species list instead of the hub's (boss lairs)
+//   frontier  [[key, dir]]                - exit toward ground that does not exist yet
+//   starts    { roomType: key }           - what the new-game wizard offers
+//   npcSpecies  species pool for the hub's residents (overrides the zone list)
+//   hostilityCap  residents are never generated hotter than this
+//   vertical  { key: [linkIds] }          - Up/Down zone links on hub rooms
+// Hub rooms carry isPlannedHub (the engine keeps loops out of them) and
+// zoneOrdinal = their index, so zone links still need a full-size zone first.
+const ZONE_HUBS = {
+    "Underground City": {
+        name: "Lantern Quarter",
+        npcSpecies: ["Dwarf", "Dwarf", "Human", "Human", "Dragonborn", "Kobold", "Goblin"],
+        hostilityCap: 35,
+        rooms: {
+            gate:    { type: "Underground Gate",     at: [0, 0] },
+            market:  { type: "Market Cavern",        at: [1, 0] },
+            hall:    { type: "Lantern Hall",         at: [1, 1] },
+            lodge:   { type: "Cavern Lodgings",      at: [1, -1] },
+            hallway: { type: "Underground Hallway",  at: [2, 0] },
+            forge:   { type: "Deep Forge",           at: [0, 1] },
+            shrine:  { type: "Deep Well Shrine",     at: [2, 1] },
+            shaft:   { type: "Mine Shaft",           at: [3, 0], name: "Old Ore Shaft" },
+            vault:   { type: "Vault",                at: [3, -1], name: "Clan Treasury" },
+            chief:   { type: "Chieftain's Hall",     at: [3, 1], zoneCast: true }
+        },
+        links: [["gate", "market", "arch"], ["market", "hall", "arch"], ["market", "lodge", "door"], ["market", "hallway"], ["gate", "forge"], ["forge", "hall"],
+                ["hall", "shrine", "arch"], ["hallway", "shrine"], ["hallway", "shaft"], ["shaft", "vault", "door", { level: 1, freeFrom: "B" }], ["shaft", "chief", "door", { level: 2, freeFrom: "B" }]],
+        frontier: [["gate", "W"], ["shaft", "E"], ["lodge", "S"]],
+        vertical: { gate: ["uc-to-town"] },
+        starts: { "Underground Gate": "gate", "Lantern Hall": "hall", "Market Cavern": "market" }
+    },
+    "Dungeon": {
+        name: "The Warrens",
+        npcSpecies: ["Goblin", "Goblin", "Orc", "Orc", "Kobold", "Lizardfolk"],
+        hostilityCap: null,
+        rooms: {
+            mouth:  { type: "Warren Mouth",  at: [0, 0] },
+            fire:   { type: "Fire Hall",     at: [1, 0] },
+            bunk:   { type: "Bunk Cave",     at: [1, 1] },
+            pit:    { type: "Fighting Pit",  at: [2, 0] },
+            stores: { type: "Scrap Stores",  at: [1, -1] },
+            armory: { type: "Armory",        at: [2, 1], name: "Warband Arms Store" },
+            shrine: { type: "Buried Shrine", at: [2, -1] },
+            throne: { type: "Throne Room",   at: [3, 0], zoneCast: true, name: "The Warlord's Seat" }
+        },
+        links: [["mouth", "fire"], ["fire", "bunk"], ["fire", "pit"], ["fire", "stores"],
+                ["bunk", "armory", "door"], ["pit", "armory"], ["stores", "shrine", "arch"], ["pit", "throne", "door", { level: 2, freeFrom: "B" }]],
+        frontier: [["mouth", "W"], ["armory", "N"], ["bunk", "N"], ["stores", "S"], ["shrine", "S"]],
+        starts: { "Warren Mouth": "mouth", "Fire Hall": "fire", "Bunk Cave": "bunk" }
+    },
+    "Swamp": {
+        name: "Stilt Village",
+        npcSpecies: ["Lizardfolk", "Lizardfolk", "Kobold"],
+        hostilityCap: null,
+        rooms: {
+            walk:    { type: "Boardwalk",         at: [0, 0] },
+            hall:    { type: "Stilt Hall",        at: [1, 0] },
+            huts:    { type: "Reed Huts",         at: [1, 1] },
+            landing: { type: "Hunters' Landing",  at: [1, -1] },
+            chapel:  { type: "Sunken Chapel",     at: [2, 0] },
+            ruin:    { type: "Submerged Ruin",    at: [2, -1], name: "Drowned Stone House" },
+            lair:    { type: "Witch's Lair",      at: [2, 1], zoneCast: true }
+        },
+        links: [["walk", "hall"], ["hall", "huts"], ["hall", "landing"], ["hall", "chapel"],
+                ["landing", "ruin"], ["chapel", "ruin"], ["chapel", "lair", "door", { level: 2, freeFrom: "B" }]],
+        frontier: [["walk", "W"], ["chapel", "E"], ["huts", "N"], ["landing", "S"], ["ruin", "E"]],
+        starts: { "Boardwalk": "walk", "Stilt Hall": "hall", "Reed Huts": "huts" }
+    },
+    "Ruins": {
+        name: "Pilgrims' Camp",
+        npcSpecies: ["Human", "Human", "Dwarf", "Halfling", "Elf"],
+        hostilityCap: 40,
+        rooms: {
+            fire:   { type: "Camp Fire Ring",     at: [0, 0] },
+            stall:  { type: "Scavenger's Stall",  at: [1, 0] },
+            watch:  { type: "Watch Post",         at: [0, 1] },
+            chapel: { type: "Lean-to Chapel",     at: [1, 1] },
+            cellar: { type: "Collapsed Cellar",   at: [0, -1] },
+            library: { type: "Library",           at: [2, 0], name: "Burnt Archive" },
+            tower:  { type: "Tower",              at: [2, 1], name: "Broken Watchtower" },
+            sanctum: { type: "Inner Sanctum",     at: [3, 0], zoneCast: true, name: "The Regent's Sanctum" }
+        },
+        links: [["fire", "stall"], ["fire", "watch"], ["watch", "chapel"], ["stall", "chapel"], ["fire", "cellar", "arch"],
+                ["stall", "library", "arch"], ["chapel", "tower"], ["library", "tower"], ["library", "sanctum", "door", { level: 2, freeFrom: "B" }]],
+        frontier: [["fire", "W"], ["tower", "N"], ["chapel", "N"], ["cellar", "S"], ["library", "S"]],
+        starts: { "Camp Fire Ring": "fire", "Collapsed Cellar": "cellar", "Watch Post": "watch" }
+    }
+};
+
+// Wizard helper: the start rooms a zone offers, [{ value, label }]. Town is
+// the planned town (Tavern / Inn / Square); every other zone reads its hub.
+function getZoneStartOptions(zoneName) {
+    if (zoneName === "Town") {
+        return [{ value: "Tavern", label: "Tavern" }, { value: "Inn", label: "Inn" }, { value: "Square", label: "Town Square" }];
+    }
+    const hub = ZONE_HUBS[zoneName];
+    if (!hub) return [];
+    return Object.keys(hub.starts).map(function (type) {
+        const tpl = getRoomTemplate(type);
+        const key = hub.starts[type];
+        const own = hub.rooms[key] && hub.rooms[key].name;
+        return { value: type, label: own || (tpl && tpl.displayName ? tpl.displayName : type) };
+    });
+}
+
+function _planHubLayout(zoneName) {
+    const spec = ZONE_HUBS[zoneName];
+    const plan = { zone: zoneName, rooms: {}, buildings: [], startByType: {}, hubName: spec.name, defaultStart: null };
+    const keyCoords = {};
+    const keys = Object.keys(spec.rooms);
+    keys.forEach(function (key, idx) {
+        const r = spec.rooms[key];
+        const coords = r.at[0] + "," + r.at[1];
+        keyCoords[key] = coords;
+        const extra = { isPlannedHub: true, zoneOrdinal: idx };
+        // name: a themed display name for this hub (a dungeon armory is not
+        // "the Armory", a ruined library is a burnt archive).
+        if (r.name) { extra.displayName = r.name; extra.name = r.name; }
+        // zoneCast rooms (the boss lairs) keep the zone's own species list.
+        if (!r.zoneCast) {
+            extra.npcSpecies = spec.npcSpecies.slice();
+            if (typeof spec.hostilityCap === "number") extra.hostilityCap = spec.hostilityCap;
+        }
+        if (spec.vertical && spec.vertical[key]) extra.verticalLinks = spec.vertical[key].slice();
+        _planAddRoom(plan, coords, r.type, zoneName, extra);
+    });
+    spec.links.forEach(function (l) {
+        const a = spec.rooms[l[0]], b = spec.rooms[l[1]];
+        const dir = _dirFromDelta(b.at[0] - a.at[0], b.at[1] - a.at[1]);
+        if (!dir) return;
+        // l[3] = { level, freeFrom } locks the door; freeFrom "B" means the far
+        // room (l[1]) side opens it without a roll, so a lair locks from outside.
+        _planLink(plan, keyCoords[l[0]], keyCoords[l[1]], dir, l[2] || null, false, l[3] || null);
+    });
+    spec.frontier.forEach(function (f) {
+        const room = plan.rooms[keyCoords[f[0]]];
+        const delta = _DIR_DELTA[f[1]];
+        const base = spec.rooms[f[0]].at;
+        if (!room || !delta || room.exits[f[1]]) return;
+        room.exits[f[1]] = (base[0] + delta[0]) + "," + (base[1] + delta[1]);
+    });
+    Object.keys(spec.starts).forEach(function (type) { plan.startByType[type] = keyCoords[spec.starts[type]]; });
+    plan.defaultStart = plan.startByType[Object.keys(spec.starts)[0]];
+    return plan;
+}
+
 const ZONE_PLANNERS = {
-    "Town": planTownLayout
+    "Town": planTownLayout,
+    "Underground City": function () { return _planHubLayout("Underground City"); },
+    "Dungeon": function () { return _planHubLayout("Dungeon"); },
+    "Swamp": function () { return _planHubLayout("Swamp"); },
+    "Ruins": function () { return _planHubLayout("Ruins"); }
 };
 
 // ── WORLD LORE ("world bible") ───────────────────────────────────
