@@ -211,37 +211,45 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       }
       anatomy.genitalSize = { sizeCategory: genitalSizeCategory, description: "natural proportions", status: [], health: 100 };
 
-      // Pubic hair - civilized species have 40% chance of trimmed hair and no perianal hair
-      // Non-civilized always have unkept/messy hair
-      let pubicHairStyle, pubicHairDescription, hasPerianalHair;
-      
-      if (isCivilized) {
-        // 40% chance of trimmed/groomed, 60% chance of natural/thick
-        const isTrimmed = Math.random() < 0.4;
-        if (isTrimmed) {
-          pubicHairStyle = pickFrom(["smooth", "neatly trimmed", "closely cropped"]);
-          hasPerianalHair = false;
+      // Pubic hair - only generated for skin-covered creatures. Furred,
+      // scaled, feathered or chitinous surfaces have no distinct groin hair
+      // (their anatomy.body coverage already describes that surface), so the
+      // key is simply omitted from the profile - reference code only ever
+      // includes what the profile contains, and never invents it.
+      // For skin-covered species: civilized species have 40% chance of
+      // trimmed hair and no perianal hair; non-civilized always have
+      // unkept/messy hair.
+      if (surfaceType === "skin") {
+        let pubicHairStyle, pubicHairDescription, hasPerianalHair;
+
+        if (isCivilized) {
+          // 40% chance of trimmed/groomed, 60% chance of natural/thick
+          const isTrimmed = Math.random() < 0.4;
+          if (isTrimmed) {
+            pubicHairStyle = pickFrom(["smooth", "neatly trimmed", "closely cropped"]);
+            hasPerianalHair = false;
+          } else {
+            pubicHairStyle = pickFrom(["natural", "thick", "full"]);
+            hasPerianalHair = true;
+          }
         } else {
-          pubicHairStyle = pickFrom(["natural", "thick", "full"]);
+          // Non-civilized: always unkept/messy
+          pubicHairStyle = pickFrom(["a messy natural", "a unkept and thick", "a long thick and wild", "a tangled thicket of", "an untamed growth of"]);
           hasPerianalHair = true;
         }
-      } else {
-        // Non-civilized: always unkept/messy
-        pubicHairStyle = pickFrom(["a messy natural", "a unkept and thick", "a long thick and wild", "a tangled thicket of", "an untamed growth of"]);
-        hasPerianalHair = true;
+
+        let pubicHairColor = pickFrom(["dark", "brown", "black", "blonde", "auburn", "grey"]);
+        pubicHairDescription = pubicHairStyle === "smooth" ? "smooth and bare" : pubicHairStyle + " " + pubicHairColor + " hair";
+
+        anatomy.pubicHair = {
+          style: pubicHairStyle,
+          color: pubicHairColor,
+          description: pubicHairDescription,
+          hasPerianalHair: hasPerianalHair,
+          status: [],
+          health: 100
+        };
       }
-      
-      let pubicHairColor = pickFrom(["dark", "brown", "black", "blonde", "auburn", "grey"]);
-      pubicHairDescription = pubicHairStyle === "smooth" ? "smooth and bare" : pubicHairStyle + " " + pubicHairColor + " hair";
-      
-      anatomy.pubicHair = { 
-        style: pubicHairStyle, 
-        color: pubicHairColor, 
-        description: pubicHairDescription,
-        hasPerianalHair: hasPerianalHair,
-        status: [], 
-        health: 100 
-      };
       
       // Add natural scents based on civilization and species
       // Civilized: subtle, clean scents; Non-civilized: strong, pungent, animalistic
@@ -1096,7 +1104,16 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     if (typeof npc.coords !== "undefined") {
       npc.coords = targetCoords;
     }
-    
+
+    // Arriving in the room the player occupies: a lusty NPC who walks in on
+    // a bound or unconscious victim may take their chance in full view
+    // (live-witnessed free use). Party/follower moves never qualify — the
+    // actor checks in nsfwFreeUseOnNpcArrival exclude them.
+    if (window.G && targetRoom === window.G.activeRoom &&
+        typeof window.nsfwFreeUseOnNpcArrival === "function") {
+      window.nsfwFreeUseOnNpcArrival(npc, targetRoom);
+    }
+
     return true;
   }
 
@@ -1366,20 +1383,39 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     if (!item || !el) return;
     nsfwEnsureBodyTraits(item);
 
-    // Strip group — garments still worn can be worked off the body (they
-    // drop to the room floor and can be picked up later).
-    var stripButtons = [];
-    if (nsfwBodySlotPresent(item, "upper")) {
-      stripButtons.push(window.createCombatButton("Strip top", () => stripBodyGarment(item, "upper")));
+    // Clothing state: which garments still block the body. A bottom that
+    // has been lowered (item.bodyLowered — pulled down to the thighs, still
+    // worn) no longer blocks lower-body access.
+    var upperWorn = nsfwBodySlotPresent(item, "upper");
+    var lowerWorn = nsfwBodySlotPresent(item, "lower");
+    var lowerLowered = lowerWorn && !!item.bodyLowered;
+
+    // Clothing group — the only group shown while clothing is still in the
+    // way. Remove works the garment off into the player's inventory; Tear
+    // rips it off, leaving a ruined, unwearable scrap on the room floor;
+    // Lower bottoms pulls the bottom down to the thighs for access without
+    // full undressing.
+    var clothingButtons = [];
+    if (upperWorn) {
+      clothingButtons.push(window.createCombatButton("Remove top", () => removeBodyGarment(item, "upper")));
+      clothingButtons.push(window.createCombatButton("Tear top", () => tearBodyGarment(item, "upper")));
     }
-    if (nsfwBodySlotPresent(item, "lower")) {
-      stripButtons.push(window.createCombatButton("Strip bottom", () => stripBodyGarment(item, "lower")));
+    if (lowerWorn) {
+      clothingButtons.push(window.createCombatButton("Remove bottom", () => removeBodyGarment(item, "lower")));
+      clothingButtons.push(window.createCombatButton("Tear bottom", () => tearBodyGarment(item, "lower")));
+      if (!lowerLowered) {
+        clothingButtons.push(window.createCombatButton("Lower bottom", () => lowerBodyGarment(item)));
+      }
     }
-    if (stripButtons.length) {
-      window.appendCombatGroup(el, "Strip", stripButtons);
+    if (clothingButtons.length) {
+      window.appendCombatGroup(el, "Clothing", clothingButtons);
     }
 
-    // Kiss group (always available — mouth/cheek are never clothing-gated)
+    // While any garment still blocks the body (a worn top, or a bottom that
+    // is neither removed/torn nor lowered), no NSFW action groups render.
+    if (upperWorn || (lowerWorn && !lowerLowered)) return;
+
+    // Kiss group (clothing is out of the way by this point)
     window.appendCombatGroup(el, "Kiss", [
       window.createCombatButton("Kiss mouth", () => kissUnconsciousBody(item, "mouth")),
       window.createCombatButton("Kiss cheek", () => kissUnconsciousBody(item, "cheek"))
@@ -1757,9 +1793,21 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       anatomyKeys: ["genitals"]
     },
     "strip": {
-      label: "stripping an unconscious body",
+      label: "removing clothing from an unconscious body",
       difficulty: "The NPC is dead weight. Garments must be worked off limp limbs — arms flopping, hips lifting only when the player hauls them.",
       involuntary: "None beyond the body's passive flopping as it is handled. No awareness, no conscious reaction.",
+      anatomyKeys: []
+    },
+    "tear": {
+      label: "tearing clothing off an unconscious body",
+      difficulty: "The garment is ripped away by force — seams burst, fabric gives way under the wrench. The limp body jolts with the rough handling but offers no resistance.",
+      involuntary: "None beyond the body flopping with the wrenching. No awareness, no conscious reaction.",
+      anatomyKeys: []
+    },
+    "lower bottom": {
+      label: "lowering an unconscious body's lower garment",
+      difficulty: "The bottom is hauled down off the hips to the thighs without being removed — dead-weight hips must be lifted to work it past them.",
+      involuntary: "None beyond the body's dead weight shifting as it is handled. No awareness, no conscious reaction.",
       anatomyKeys: []
     },
     "spit": {
@@ -1788,7 +1836,9 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     var d = String(actionDesc || "").toLowerCase();
     if (d.indexOf("rider") !== -1) return BODY_ACT_CONTEXT["rider climax"];
     if (d.indexOf("finish on") !== -1) return BODY_ACT_CONTEXT["climax on body"];
-    if (d.indexOf("strip") !== -1) return BODY_ACT_CONTEXT["strip"];
+    if (d.indexOf("tear") !== -1) return BODY_ACT_CONTEXT["tear"];
+    if (d.indexOf("remove") !== -1 || d.indexOf("strip") !== -1) return BODY_ACT_CONTEXT["strip"];
+    if (d.indexOf("lower") !== -1) return BODY_ACT_CONTEXT["lower bottom"];
     if (d.indexOf("grope") !== -1) return BODY_ACT_CONTEXT["grope breasts"];
     if (d.indexOf("stroke") !== -1) return BODY_ACT_CONTEXT["stroke cock"];
     if (d.indexOf("ride") !== -1 || d.indexOf("mount") !== -1) return BODY_ACT_CONTEXT["ride cock"];
@@ -2011,7 +2061,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     return "\nREFLEX STATE (weave into the polish where relevant — involuntary only): " + notes.join("; ") + ".";
   }
 
-  function buildBodyActionPrompt(item, actionDesc, baseText) {
+  function buildBodyActionPrompt(item, actionDesc, baseText, varietyOpts) {
     const name = nsfwGetEntityName(item);
     const species = (item.species || "human").toLowerCase();
     const gender = item.gender || "unknown";
@@ -2061,6 +2111,17 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     }
     var flavorNote = nsfwBodyFlavorPromptNote(item, actionDesc);
 
+    // Narration variety (per-beat): a tone to color the prose, and the
+    // body's most recent printed lines as wording to avoid.
+    var variety = varietyOpts || {};
+    var toneNote = variety.tone
+      ? "TONE for this beat (let it color word choice, pacing and verbs — not the facts of the act): " + variety.tone
+      : "";
+    var avoidNote = Array.isArray(variety.recentLines) && variety.recentLines.length
+      ? "DO NOT REUSE PHRASING — these are the most recent narration lines for this same body. Use fresh wording and fresh imagery; do not repeat or lightly rephrase them:\n" +
+        variety.recentLines.map(function (l) { return '"' + l + '"'; }).join("\n")
+      : "";
+
     var prompt = [
 "You are polishing a player action description from a text adventure game.",
 "The NPC is " + name + ", a " + species + " " + gender + ", currently unconscious and lying on their " + position + "." + speciesNote + woundNote + exposureNote + actTypeLine + bodyUseNote + reflexNote + flavorNote + _bodySmell + _roomMess,
@@ -2080,6 +2141,8 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 "- Involuntary physical responses ARE allowed where physically plausible (reflexive clenches, drooling, gag reflex, a flinch, shallow breathing) — but only as reflex, never as awareness or participation." + (involuntaryNote ? involuntaryNote : ""),
 difficultyNote,
 anatomyNote,
+toneNote,
+avoidNote,
 "",
 "BASE TEXT (polish this — refine, make more vivid, keep same meaning and details):",
 "\"" + baseText + "\"",
@@ -2095,9 +2158,14 @@ anatomyNote,
   // Print body-interaction narration to the chat panel (the same channel
   // intimacy encounters use) instead of the narration bar. Falls back to
   // setNarration when the engine exposure is missing.
-  function nsfwPrintBodyNarration(text) {
+  function nsfwPrintBodyNarration(text, options) {
+    // Body-action narrations default to a brisker typewriter pace than the
+    // engine's slow 70ms dramatic default (climax lines); callers can still
+    // override with their own options.
+    var opts = options ? Object.assign({}, options) : {};
+    if (opts.msPerChar === undefined) opts.msPerChar = 40;
     if (typeof window.addIntimacyNarration === "function") {
-      window.addIntimacyNarration(text);
+      window.addIntimacyNarration(text, opts);
     } else {
       window.setNarration(text);
     }
@@ -2124,6 +2192,23 @@ anatomyNote,
     if (entry && entry.parentNode) entry.parentNode.removeChild(entry);
   }
 
+  // ── Narration variety ─────────────────────────────────────────
+  // A fresh tone directive per polish call keeps consecutive act
+  // narrations from converging on the same voice. The polish colors its
+  // wording with the picked attitude without changing what happens.
+  var BODY_NARRATION_TONES = [
+    "slow and savoring - the player takes their time, drinking in every detail",
+    "greedy and possessive - hungry, claiming, hands-on want",
+    "impatient and rough - the player wants more, faster, right now",
+    "calm and appraising - detached, almost clinical curiosity",
+    "reverent and careful - handling the body with something like admiration",
+    "brisk and businesslike - no ceremony, just the act itself"
+  ];
+
+  function pickBodyNarrationTone() {
+    return pickFrom(BODY_NARRATION_TONES);
+  }
+
   // Fire a background ai() call to polish the action narration, and print
   // only once the polished text returns — the plain base text is never
   // written first and then overwritten. A dimmed "..." placeholder sits in
@@ -2134,15 +2219,25 @@ anatomyNote,
   // the polish lands, the base text is printed so the event still reads in
   // the log. Non-blocking — same pattern as the intimacy system's
   // player-narrative prefetch.
-  function polishBodyNarration(item, actionDesc, baseText) {
+  function polishBodyNarration(item, actionDesc, baseText, printOptions) {
     var _ai = typeof window.ai === "function" ? window.ai : null;
     if (!_ai) { nsfwPrintBodyNarration(baseText); return; }
 
     var pendingEntry = nsfwShowBodyPendingNarration("...");
     (async function() {
       var polished = null;
+      // Narration variety: a fresh tone for this beat, plus the most recent
+      // lines printed for this same body so the polish avoids re-landing on
+      // the same phrasing ("limp and unresisting", etc).
+      var recent = Array.isArray(item._recentBodyNarration)
+        ? item._recentBodyNarration.slice()
+        : [];
+      var tone = pickBodyNarrationTone();
       try {
-        var prompt = buildBodyActionPrompt(item, actionDesc, baseText);
+        var prompt = buildBodyActionPrompt(item, actionDesc, baseText, {
+          tone: tone,
+          recentLines: recent
+        });
         var result = await _ai({
           instruction: prompt,
           startWith: "",
@@ -2168,7 +2263,15 @@ anatomyNote,
       // else (polish failed, or the player left this body) records the base.
       if (window.G && window.G.activeObject !== item) polished = null;
       nsfwRemoveBodyPendingNarration(pendingEntry);
-      nsfwPrintBodyNarration(polished ? polished.trim() : baseText);
+      var printedText = polished ? polished.trim() : baseText;
+      nsfwPrintBodyNarration(printedText, printOptions);
+      // Anti-repetition memory: keep the last two lines actually printed for
+      // this body, so the next polish is told what wording to avoid.
+      if (typeof printedText === "string" && printedText.trim()) {
+        item._recentBodyNarration = recent
+          .concat([printedText.trim()])
+          .slice(-2);
+      }
     })();
   }
 
@@ -2190,6 +2293,15 @@ anatomyNote,
     window.saveGameState();
     nsfwRenderBodyMenu(item);
   }
+
+  // Repositioning is a transitional beat, like the intimacy system's undress
+  // beats (see .intimacy-undress in the shell CSS): italic, and printed at
+  // the shared body-narration pace (nsfwPrintBodyNarration's 40ms default)
+  // instead of the slow 70ms engine default, so a flip doesn't crawl across
+  // the log.
+  var REPOSITION_PRINT_OPTIONS = {
+    className: "intimacy-narration intimacy-undress"
+  };
 
   // Reposition an unconscious body. Larger creatures (size "large") cannot
   // simply be turned; the player must pass a strength check
@@ -2219,7 +2331,7 @@ anatomyNote,
       const DC = 12;
       if (total < DC) {
         const failText = `You heave against ${name}, but ${name} is too heavy to budge — their bulk won't shift.`;
-        polishBodyNarration(item, "failed roll reposition", failText);
+        polishBodyNarration(item, "failed roll reposition", failText, REPOSITION_PRINT_OPTIONS);
         window.rememberStoryEvent("combat", `${window.G.player.name} tried to reposition ${name} but couldn't shift their weight.`, 3);
         window.saveGameState();
         nsfwRenderBodyMenu(item);
@@ -2230,7 +2342,7 @@ anatomyNote,
     item.bodyPosition = position;
     const baseText = `You grip ${name}'s limp body and heave them onto their ${label}. They're a dead weight — arms and head flopping passively as you roll them over, offering no help.`;
     const actionDesc = "roll onto " + label;
-    polishBodyNarration(item, actionDesc, baseText);
+    polishBodyNarration(item, actionDesc, baseText, REPOSITION_PRINT_OPTIONS);
     window.rememberStoryEvent("combat", `${window.G.player.name} repositioned ${name} onto their ${label}.`, 3);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
@@ -2314,7 +2426,8 @@ anatomyNote,
   // Check whether a body region is bare and accessible in the current pose.
   // Mirrors BODY_POSITION_VISIBLE / buildBodyExposureNote logic.
   // region: "mouth" | "breasts" | "genitals" | "anus"
-  // Pose access (garment for the region must also be gone):
+  // Pose access (garment for the region must also be gone, or — for the
+  // bottom — lowered out of the way via item.bodyLowered):
   //   back → mouth, chest/breasts, genitals
   //   side → mouth, breasts, genitals, anus
   //   face → anus only
@@ -2323,11 +2436,12 @@ anatomyNote,
     var position = item.bodyPosition || "back";
     var upperCovered = nsfwBodySlotPresent(item, "upper");
     var lowerCovered = nsfwBodySlotPresent(item, "lower");
+    var lowerAside = !lowerCovered || !!item.bodyLowered;
 
     if (region === "mouth") return position !== "face";
     if (region === "breasts") return !upperCovered && (position === "back" || position === "side");
-    if (region === "genitals") return !lowerCovered && (position === "back" || position === "side");
-    if (region === "anus") return !lowerCovered && (position === "side" || position === "face");
+    if (region === "genitals") return lowerAside && (position === "back" || position === "side");
+    if (region === "anus") return lowerAside && (position === "side" || position === "face");
     return false;
   }
 
@@ -3037,26 +3151,125 @@ anatomyNote,
     nsfwRenderBodyMenu(item);
   }
 
-  // Strip a garment off the body with handling narration; the item
-  // drops to the room floor like any discarded clothing. slot: "upper" | "lower".
-  function stripBodyGarment(item, slot) {
+  // Automatic raise-back: called by the SFW engine's leaveRoomObject() when
+  // the player ends their session with the body. If the bottom was lowered
+  // out of the way (item.bodyLowered), it is hauled back up over the hips so
+  // the body isn't left half-undressed. Printed directly (no AI polish): the
+  // engine clears activeObject right after this call, so an in-flight polish
+  // would be discarded anyway.
+  function restoreLoweredBodyGarment(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!item.bodyLowered) return;
+    if (!nsfwBodySlotPresent(item, "lower")) {
+      delete item.bodyLowered;
+      return;
+    }
+    delete item.bodyLowered;
+    const name = nsfwGetEntityName(item);
+    const garment = item.equipped.lower && item.equipped.lower.name
+      ? item.equipped.lower.name : "bottom";
+    const baseText = pickFrom([
+      `Before you step away, you haul ${name}'s ${garment} back up over their hips, leaving them covered and decent.`,
+      `You tug ${name}'s ${garment} back into place over their hips as you leave them lying there.`,
+      `On your way out, you pull ${name}'s ${garment} back up around their waist — no need to leave them bare.`
+    ]);
+    nsfwPrintBodyNarration(baseText, REPOSITION_PRINT_OPTIONS);
+    window.rememberStoryEvent("care", `${window.G.player.name} pulled ${name}'s ${garment} back up before stepping away.`, 2);
+    window.saveGameState();
+  }
+
+  // ── Clothing actions on the body ────────────────────────────────
+  // Three ways to get clothing out of the way. Remove works the garment
+  // off into the player's inventory (it stays wearable). Tear rips it
+  // off — the torn remains land on the room floor, flagged ruined so they
+  // can never be equipped again. Lower bottoms pulls the bottom down to
+  // the thighs: it stays worn (item.bodyLowered) but stops blocking
+  // lower-body access. slot: "upper" | "lower".
+
+  function removeBodyGarment(item, slot) {
     if (!item || item.bodyState !== "unconscious") return;
     if (slot !== "upper" && slot !== "lower") return;
     if (!nsfwBodySlotPresent(item, slot)) return;
     const name = nsfwGetEntityName(item);
-    var dropped = null;
+    const garment = item.equipped[slot];
+    let taken = null;
+    if (window.G && window.G.player && Array.isArray(window.G.player.inventory)) {
+      delete item.equipped[slot];
+      window.G.player.inventory.push(garment);
+      taken = garment;
+    } else if (typeof window.dropWornClothingToRoom === "function") {
+      // No player inventory available — fall back to the room floor.
+      taken = window.dropWornClothingToRoom(item, slot);
+    }
+    if (!taken) return;
+    if (slot === "lower") delete item.bodyLowered;
+    const garmentName = taken && taken.name ? taken.name : (slot === "upper" ? "top" : "bottom");
+    const baseText = pickFrom([
+      `You work ${name}'s ${garmentName} off their limp body, hauling dead-weight hips and flopping arms free of it, and fold it into your pack. They lie utterly passive as you strip them.`,
+      `You peel the ${garmentName} from ${name}'s unconscious form, their limbs flopping as you tug it free, and pocket it. The bared flesh underneath doesn't so much as stir.`
+    ]);
+    polishBodyNarration(item, "remove " + (slot === "upper" ? "top" : "bottom"), baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} removed the ${garmentName} from ${name}'s unconscious body and took it.`, 3);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  function tearBodyGarment(item, slot) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (slot !== "upper" && slot !== "lower") return;
+    if (!nsfwBodySlotPresent(item, slot)) return;
+    const name = nsfwGetEntityName(item);
+    let dropped = null;
     if (typeof window.dropWornClothingToRoom === "function") {
       dropped = window.dropWornClothingToRoom(item, slot);
-    } else if (item.equipped) {
-      delete item.equipped[slot];
     }
-    const garment = dropped && dropped.name ? dropped.name : (slot === "upper" ? "top" : "bottom");
+    if (!dropped) {
+      // Drop failed (no room available) — the tear still happens, the
+      // torn remains are simply lost rather than placed.
+      if (item.equipped && item.equipped[slot]) {
+        dropped = item.equipped[slot];
+        delete item.equipped[slot];
+        dropped = null;
+      } else {
+        return;
+      }
+    }
+    if (dropped) {
+      const tornName = (typeof window.getItemName === "function"
+        ? window.getItemName(dropped)
+        : (dropped.name || (slot === "upper" ? "top" : "bottom")));
+      dropped.name = "Torn " + tornName;
+      dropped.ruined = true;
+      if (typeof dropped.description === "string") {
+        dropped.description = "Ripped from " + name + "'s unconscious body. Too damaged to ever wear again.";
+      }
+    }
+    if (slot === "lower") delete item.bodyLowered;
+    const garment = slot === "upper" ? "top" : "bottom";
     const baseText = pickFrom([
-      `You work ${name}'s ${garment} off their limp body, hauling dead-weight hips and flopping arms free of it. They lie utterly passive as you strip them.`,
-      `You peel the ${garment} from ${name}'s unconscious form, their limbs flopping as you tug it free. The bared flesh underneath doesn't so much as stir.`
+      `You seize ${name}'s ${garment} and wrench it apart with both hands — seams burst, fabric shrieks, and the torn remains flutter to the floor. The flesh underneath is bared in one rough motion.`,
+      `You grip ${name}'s ${garment} and tear it straight off their limp body, the fabric giving way with a ragged rip. They don't stir as the ruined scraps fall away.`
     ]);
-    polishBodyNarration(item, "strip " + (slot === "upper" ? "top" : "bottom"), baseText);
-    window.rememberStoryEvent("combat", `${window.G.player.name} stripped the ${garment} off ${name}'s unconscious body.`, 3);
+    polishBodyNarration(item, "tear " + garment, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} tore the ${garment} off ${name}'s unconscious body, ruining it.`, 3);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  function lowerBodyGarment(item) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwBodySlotPresent(item, "lower")) return;
+    if (item.bodyLowered) return;
+    item.bodyLowered = true;
+    const name = nsfwGetEntityName(item);
+    const garment = item.equipped.lower && item.equipped.lower.name
+      ? item.equipped.lower.name : "bottom";
+    const baseText = pickFrom([
+      `You hook your fingers into ${name}'s ${garment} and haul it down off their hips to their thighs, baring them without pulling it free. Their limp body offers no resistance as you tug it into place.`,
+      `You tug ${name}'s ${garment} down past their hips, leaving it wadded at their thighs — half off, fully out of the way. They lie passive beneath your hands.`
+    ]);
+    polishBodyNarration(item, "lower bottom", baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} lowered ${name}'s ${garment} to their thighs.`, 3);
     window.saveGameState();
     nsfwRenderBodyMenu(item);
   }
@@ -3097,11 +3310,14 @@ anatomyNote,
   var BODY_POSITION_VISIBLE = {
     back: {   // front of the body faces up
       upper: ["breasts", "nipples"],
-      lower: ["pubicHair", "vagina", "penis"]
+      // No "pubicHair" here: grooming details must come from the creature's
+      // own anatomy profile (genital descriptions), never be force-exposed
+      // by pose alone.
+      lower: ["vagina", "penis"]
     },
     side: {   // profile; front and rear both reachable
       upper: ["breasts", "nipples"],
-      lower: ["pubicHair", "vagina", "penis", "buttocks"]
+      lower: ["vagina", "penis", "buttocks"]
     },
     face: {   // face-down; back and rear visible
       upper: [],            // back is bare but has no anatomy descriptor key
@@ -3115,13 +3331,17 @@ anatomyNote,
     var visibleMap = BODY_POSITION_VISIBLE[position] || BODY_POSITION_VISIBLE.back;
     var upperCovered = nsfwBodySlotPresent(item, "upper");
     var lowerCovered = nsfwBodySlotPresent(item, "lower");
+    // A lowered bottom (pulled down to the thighs, still worn) leaves the
+    // lower regions bare exactly like a missing garment does.
+    var lowerAside = !lowerCovered || !!item.bodyLowered;
 
-    // Collect the anatomy keys visible because their covering garment is gone.
+    // Collect the anatomy keys visible because their covering garment is
+    // gone (or lowered out of the way).
     var exposedKeys = [];
     if (!upperCovered && visibleMap.upper.length) {
       exposedKeys = exposedKeys.concat(visibleMap.upper);
     }
-    if (!lowerCovered && visibleMap.lower.length) {
+    if (lowerAside && visibleMap.lower.length) {
       exposedKeys = exposedKeys.concat(visibleMap.lower);
     }
 
@@ -3138,8 +3358,13 @@ anatomyNote,
     var clothingParts = [];
     if (upperCovered) clothingParts.push("upper garment on (chest covered)");
     else clothingParts.push("upper garment gone (chest/breasts bare)");
-    if (lowerCovered) clothingParts.push("lower garment on (groin/rear covered)");
-    else clothingParts.push("lower garment gone (groin/rear bare)");
+    if (lowerCovered && item.bodyLowered) {
+      clothingParts.push("lower garment lowered to their thighs, still worn but out of the way (groin/rear bare)");
+    } else if (lowerCovered) {
+      clothingParts.push("lower garment on (groin/rear covered)");
+    } else {
+      clothingParts.push("lower garment gone (groin/rear bare)");
+    }
     notes.push("Clothing: " + clothingParts.join("; ") + ".");
 
     // Position-specific note for poses the intimacy anatomy keys don't cover.
@@ -3305,6 +3530,214 @@ stateInstr,
     }
     appendUnconsciousBodyGroups(item, el);
     console.log("[BODY-DEBUG] NSFW appendUnconsciousBodyGroups done, child count:", el.children.length);
+  };
+
+  // Automatic raise-back hook for the SFW engine's leaveRoomObject():
+  // typeof-guarded no-op from the engine's side when NSFW is absent.
+  window.restoreLoweredBodyGarment = function(item) {
+    restoreLoweredBodyGarment(item);
+  };
+
+  // === Off-screen free-use opportunities ============================
+  // A hog-tied captive or an unconscious body left in a room is an open
+  // opportunity: a lusty NPC sharing that room may use them while the
+  // player is elsewhere. Runs from the engine's runNPCAutonomyTick
+  // (off-screen rooms only) via window.nsfwFreeUseOpportunityTick — the
+  // player never sees the act itself, they find the aftermath: bodyUse and
+  // smell marks on the victim (discovered through examine), and seed pooled
+  // on the floor through the room liquids system (a spatter per use that
+  // builds to a visible pool with repeats, then slowly dries).
+  // Opportunity, not certainty: gated by the actor's arousal/lust,
+  // temperament, penis anatomy, a per-use chance roll, and a cooldown per
+  // victim. A CLOTHED victim can only be used in the mouth — everything
+  // else is out of reach.
+  var FREE_USE_COOLDOWN_TURNS = 6;
+
+  function freeUseVictimList(room) {
+    var out = [];
+    if (!room) return out;
+    (Array.isArray(room.creatures) ? room.creatures : []).forEach(function (n) {
+      if (n && n.bound && n.captiveProne && !n.dead) out.push(n);
+    });
+    (Array.isArray(room.items) ? room.items : []).forEach(function (b) {
+      if (b && b.bodyState === "unconscious" && !b.dead) out.push(b);
+    });
+    return out;
+  }
+
+  function freeUseActorQualifies(n) {
+    if (!n || n.dead || n.unconscious || n.bound || n.surrendered) return false;
+    if (n.isHumanoid === false) return false;
+    if (n.objectType === "body") return false;
+    if ((window.G.partyMembers || []).indexOf(n) >= 0) return false;
+    if ((window.G.sessionFollowers || []).indexOf(n) >= 0) return false;
+    if (n.hidden || n.isHidden) return false;
+    nsfwEnsureBodyTraits(n);
+    return nsfwBodyGenitalType(n) === "penis";
+  }
+
+  function freeUseActorCandidates(room) {
+    return (Array.isArray(room.creatures) ? room.creatures : []).filter(freeUseActorQualifies);
+  }
+
+  // Victims not on use cooldown.
+  function freeUseCooldownVictims(room) {
+    var now = (typeof window.getCurrentStoryTurn === "function") ? window.getCurrentStoryTurn() : 0;
+    return freeUseVictimList(room).filter(function (victim) {
+      return !(typeof victim._lastFreeUseTurn === "number" && (now - victim._lastFreeUseTurn) < FREE_USE_COOLDOWN_TURNS);
+    });
+  }
+
+  function freeUseIsClothed(victim) {
+    return !!(victim.equipped && (victim.equipped.upper || victim.equipped.lower));
+  }
+
+  function freeUsePickPart(victim) {
+    // A clothed victim keeps everything but the mouth out of reach.
+    if (freeUseIsClothed(victim)) return "mouth";
+    nsfwEnsureBodyTraits(victim);
+    var parts = ["mouth"];
+    var gen = nsfwBodyGenitalType(victim);
+    if (gen === "vagina" || gen === "cloaca-vent") parts.push(gen === "vagina" ? "vagina" : "cloaca");
+    if (nsfwBodyHasAnus(victim)) parts.push("anus");
+    return pickFrom(parts);
+  }
+
+  function freeUseChance(actor) {
+    var memory = actor.memory || {};
+    var heat = (typeof memory.arousal === "number" ? memory.arousal : 0) +
+               (typeof memory.lust === "number" ? memory.lust : 0);
+    var chance = 0.05 + Math.min(0.35, heat / 500);
+    var temperament = String(actor.temperament || "").toLowerCase();
+    if (/bold|aggressive|reckless|fierce/.test(temperament)) chance *= 1.4;
+    if (/timid|wary|nervous|cautious/.test(temperament)) chance *= 0.5;
+    return chance;
+  }
+
+  // Shared aftermath: stamp the victim, spend the actor, mess the room.
+  function nsfwApplyFreeUse(actor, victim, room, part) {
+    victim._lastFreeUseTurn = (typeof window.getCurrentStoryTurn === "function") ? window.getCurrentStoryTurn() : 0;
+    if (typeof window.recordBodyUse === "function") {
+      window.recordBodyUse(victim, part, { loadKey: "semen", useKind: "penetrate" });
+    }
+    if (typeof window.addSmellMark === "function") {
+      window.addSmellMark(victim, "semen");
+      if (part === "anus" || part === "cloaca") window.addSmellMark(victim, "anal");
+    }
+    if (typeof window.addRoomLiquid === "function") {
+      window.addRoomLiquid(room, "seed", 1);
+    }
+    if (actor.memory) {
+      actor.memory.arousal = Math.max(0, (actor.memory.arousal || 0) - 40);
+      actor.memory.lust = Math.max(0, (actor.memory.lust || 0) - 40);
+    }
+  }
+
+  // Free use only happens outside combat — nobody takes a victim mid-fight.
+  function freeUseBlockedByCombat() {
+    return typeof window.getActiveEncounter === "function" && !!window.getActiveEncounter();
+  }
+
+  window.nsfwFreeUseOpportunityTick = function (room) {
+    if (!room || (window.G && room === window.G.activeRoom)) return;
+    if (freeUseBlockedByCombat()) return;
+    var victims = freeUseCooldownVictims(room);
+    if (!victims.length) return;
+    var actors = freeUseActorCandidates(room);
+    if (!actors.length) return;
+
+    // At most one use per room per tick.
+    for (var v = 0; v < victims.length; v++) {
+      var victim = victims[v];
+      for (var a = 0; a < actors.length; a++) {
+        var actor = actors[a];
+        if (actor === victim) continue;
+        if (Math.random() >= freeUseChance(actor)) continue;
+
+        var part = freeUsePickPart(victim);
+        nsfwApplyFreeUse(actor, victim, room, part);
+        var aName = nsfwGetEntityName(actor);
+        var vName = nsfwGetEntityName(victim);
+        window.rememberStoryEvent("combat",
+          aName + " used " + vName + (part === "mouth" ? "'s mouth" : "") +
+          " while they lay helpless in " + (room.name || "a room") + ".", 5);
+        if (typeof window.saveGameState === "function") window.saveGameState();
+        return;
+      }
+    }
+  };
+
+  // ── Live-witnessed variant ──────────────────────────────────────
+  // The same opportunity, but the player is standing right there: an NPC
+  // walking into the player's room, or already present when the player
+  // walks in, may take their chance in full view. Same chance roll,
+  // cooldown and clothed-victim rule as the off-screen tick; the
+  // difference is the beat is narrated live.
+  function freeUseWitnessedLine(actorName, victimName, part, victimIsUnconscious) {
+    if (part === "mouth") {
+      return victimIsUnconscious
+        ? pickFrom([
+            `${actorName} kneels over ${victimName}'s unconscious form, tips their slack head back and slides their cock into the unresisting mouth. They fuck it in slow strokes, gaze flicking up to meet yours without a shred of shame.`,
+            `Without a word, ${actorName} straddles ${victimName}'s chest and pushes past their slack lips, rocking into the warm, passive mouth right there in front of you.`
+          ])
+        : pickFrom([
+            `${actorName} crouches by ${victimName}'s hog-tied form, fists a hand in their hair and feeds their cock past their protests. Bound and muffled, ${victimName} can only endure it while you watch.`,
+            `${actorName} plants a boot beside ${victimName}'s head and pushes into their mouth, holding the hog-tied captive's jaw where they want it — making a show of it with you standing right there.`
+          ]);
+    }
+    return victimIsUnconscious
+      ? pickFrom([
+          `${actorName} lines up against ${victimName}'s limp, unconscious body and pushes in with a low groan, fucking them in slow, possessive strokes while you watch.`,
+          `${actorName} spreads ${victimName}'s slack thighs and seats themselves inside, setting a lazy pace — the unconscious body rocks with each thrust, utterly passive.`
+        ])
+      : pickFrom([
+          `${actorName} hauls ${victimName}'s hips up from the floor, still hog-tied and struggling, and thrusts home with a satisfied groan, using them right in front of you.`,
+          `${actorName} pins ${victimName}'s bound form down and takes them from behind, heedless of the muffled curses — or of you.`
+        ]);
+  }
+
+  // One witnessed use attempt: chance roll, effects, live narration.
+  // Returns true when the use happened.
+  function nsfwFreeUseWitnessedBeat(actor, victim, room) {
+    if (Math.random() >= freeUseChance(actor)) return false;
+    var part = freeUsePickPart(victim);
+    nsfwApplyFreeUse(actor, victim, room, part);
+    var aName = nsfwGetEntityName(actor);
+    var vName = nsfwGetEntityName(victim);
+    var victimIsUnconscious = victim.bodyState === "unconscious";
+    nsfwPrintBodyNarration(freeUseWitnessedLine(aName, vName, part, victimIsUnconscious));
+    window.rememberStoryEvent("combat",
+      aName + " used " + vName + (part === "mouth" ? "'s mouth" : "") +
+      " in front of " + (window.G.player && window.G.player.name || "the player") +
+      " while they lay helpless in " + (room.name || "a room") + ".", 6);
+    if (typeof window.saveGameState === "function") window.saveGameState();
+    return true;
+  }
+
+  // Hook A: an NPC just arrived in the room the player is in.
+  window.nsfwFreeUseOnNpcArrival = function (npc, room) {
+    if (!npc || !room || (window.G && room !== window.G.activeRoom)) return;
+    if (freeUseBlockedByCombat()) return;
+    if (!freeUseActorQualifies(npc)) return;
+    var victims = freeUseCooldownVictims(room);
+    if (!victims.length) return;
+    if (npc === victims[0]) return;
+    nsfwFreeUseWitnessedBeat(npc, victims[0], room);
+  };
+
+  // Hook B: the player just walked into a room where an actor and a victim
+  // are already present.
+  window.nsfwFreeUseOnPlayerArrival = function (room) {
+    if (!room || (window.G && room !== window.G.activeRoom)) return;
+    if (freeUseBlockedByCombat()) return;
+    var victims = freeUseCooldownVictims(room);
+    if (!victims.length) return;
+    var actors = freeUseActorCandidates(room);
+    for (var a = 0; a < actors.length; a++) {
+      var actor = actors[a];
+      if (actor === victims[0]) continue;
+      if (nsfwFreeUseWitnessedBeat(actor, victims[0], room)) return;
+    }
   };
 
   // === Bound captive interactions ====================================
