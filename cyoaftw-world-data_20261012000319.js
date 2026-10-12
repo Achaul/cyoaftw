@@ -3517,6 +3517,10 @@ function getBackstoryFillMap(backstory) {
     map.leadPlace = lead && lead.building ? lead.building.name : GUIDE_FALLBACK_PLACE;
     map.mentorHint = lead && lead.hint ? lead.hint : "";
     map.guideName = backstory && backstory.guide && backstory.guide.name ? backstory.guide.name : "your guide";
+    const guildB = typeof findTownBuilding === "function" ? findTownBuilding("Guildhall") : null;
+    map.guildPlace = guildB && guildB.name ? guildB.name : "the guildhall";
+    const chapelB = typeof findTownBuilding === "function" ? findTownBuilding("Chapel") : null;
+    map.chapelPlace = chapelB && chapelB.name ? chapelB.name : "the chapel";
     return map;
 }
 
@@ -3554,20 +3558,36 @@ function getGuideOpeningLine(backstory) {
     return _spFill(variants[h % variants.length], getBackstoryFillMap(backstory));
 }
 
-// A second line from the guide right after the opening: death is permanent,
-// so new characters are told at once to get the free newcomer's blessing from
-// a shrine (see requestNewcomerBlessing in the engine).
-const GUIDE_NEWCOMER_ADVICE = [
-    "\"One thing before we go any further, {player}. Death is final in this country. Find a shrine as soon as you can, the Chapel has one, and ask for a newcomer's blessing. It costs nothing and binds you to no god, and it will pull you back from the edge once. Don't go anywhere dangerous without it.\"",
-    "\"Listen, {player}, this matters more than anything else I'll say today. Go to a shrine, the Chapel will do, and ask for a newcomer's blessing. Free, no oaths. It saves you from death one time. Get it before you go looking for trouble.\""
+// After the opening line the guide says the shared mission (the same for every
+// archetype: get stronger, earn coin, follow your lead) and then the hard rule:
+// death is final, so ask for the free newcomer's blessing first (see
+// requestNewcomerBlessing in the engine). Folded into one bubble by
+// startGuideArrival.
+const GUIDE_MISSION_LINES = [
+    "\"Three things matter here, {player}. Get stronger: {guildPlace} has trainers, and a yard to practise in. Earn coin: take work and bounties. And follow your lead, which starts at {leadPlace}.\"",
+    "\"Here is how it works, {player}. Get stronger, because there are trainers at {guildPlace}. Earn coin from work and bounties. And chase your lead, which begins at {leadPlace}.\""
 ];
+
+const GUIDE_NEWCOMER_ADVICE = [
+    "\"Death is final in this country. So before anything else, find a shrine ({chapelPlace} has one) and ask for a newcomer's blessing. It is free, it binds you to no god, and it saves you once. After that, only a god you have served can pull you back, and only if they are strong enough.\"",
+    "\"One hard truth, {player}: dying here is for good. Ask for a newcomer's blessing at the shrine in {chapelPlace} first. It is free, no oaths, and it saves you one time. Past that, you need a patron god strong enough to answer.\""
+];
+
+function _guideSeedIndex(backstory, n) {
+    let h = 0;
+    const seed = String(backstory && backstory.playerName || "") + String(backstory && backstory.archetype || "");
+    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 9973;
+    return h % n;
+}
+
+function getGuideMissionLine(backstory) {
+    if (!backstory) return "";
+    return _spFill(GUIDE_MISSION_LINES[_guideSeedIndex(backstory, GUIDE_MISSION_LINES.length)], getBackstoryFillMap(backstory));
+}
 
 function getGuideNewcomerAdvice(backstory) {
     if (!backstory) return "";
-    let h = 0;
-    const seed = String(backstory.playerName || "") + String(backstory.archetype || "");
-    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 9973;
-    return _spFill(GUIDE_NEWCOMER_ADVICE[h % GUIDE_NEWCOMER_ADVICE.length], getBackstoryFillMap(backstory));
+    return _spFill(GUIDE_NEWCOMER_ADVICE[_guideSeedIndex(backstory, GUIDE_NEWCOMER_ADVICE.length)], getBackstoryFillMap(backstory));
 }
 
 // First-lead facts the world can answer. These join the lore pool (see
@@ -3895,6 +3915,539 @@ function getGuideTownSummary() {
     return names.join(", ");
 }
 
+// ── GUIDE KNOWLEDGE: basic, common knowledge of the world ───────────────
+// The guide is a local, not a rules expert. They know the town, how coin is
+// made, that the gods and the portal exist, and that death is final. Fine
+// points of a skill, weapon or craft belong to its trainer. Answers are
+// scripted (instant, always correct); numbers are read from the engine's
+// constants when they exist. A typed question is matched to a topic by
+// keyword (matchGuideTopic); no match falls through to the AI with
+// GUIDE_UNKNOWN_NOTE so the guide admits what they do not know.
+// Engine constants are file-level `const`s, not window properties, so they are
+// read through this table of getters (each guarded with typeof).
+// ============================================================================
+// SOCIETY SHEETS - nature and nurture for NPCs (see claude/species-culture-design.md)
+// Societies get a sheet: a group, a rank in it, how they got that rank, and four
+// stored facts (need, liking, worry, secret). Mobs (rats, skeletons, ghosts and
+// other non-humanoids) get none. The sheets are plain data; generateNPCSocial
+// (cyoaftw-npc-data.js) rolls one per NPC and the conversation options reveal
+// the facts. Texts are what the NPC says, first person, short.
+// Slots filled at generation: {group} {rank} {place} {house} {landlord} {zone}
+// ============================================================================
+const SOCIETY_BY_SPECIES = {
+    Orc: "orc-clan", Goblin: "goblin-tribe", Lizardfolk: "lizardfolk-tribe",
+    Kobold: "kobold", Dragonborn: "dragonborn-house",
+    Human: "realm", Elf: "realm", Dwarf: "realm", Halfling: "realm"
+};
+
+const DRAGONBORN_HOUSES = ["House Emberscale", "House Vaelthorn", "House Ironcrest", "House Ashmaw", "House Solgard"];
+
+const SOCIETY_SHEETS = {
+    "orc-clan": {
+        label: "clan",
+        groupNames: ["Skullsplitter", "Red Fang", "Ashhide", "Stonetusk", "Bloodmaw", "Blackbrand"],
+        groupPrefix: "Clan ",
+        leadership: "The strongest rules. A rank is held until someone stronger takes it.",
+        ranks: [
+            { key: "chieftain", label: "chieftain", tier: 4, weight: 2 },
+            { key: "war-leader", label: "war-leader", tier: 3, weight: 6 },
+            { key: "champion", label: "champion", tier: 2, weight: 14 },
+            { key: "warrior", label: "warrior", tier: 1, weight: 52 },
+            { key: "whelp", label: "untested whelp", tier: 0, weight: 18 },
+            { key: "outcast", label: "outcast", tier: 0, weight: 8 }
+        ],
+        standings: [
+            "I won this standing by beating a rival in a fair fight.",
+            "I lost a challenge once and have fought to climb back since.",
+            "I was born to the clan and I am still proving it.",
+            "I took the place of a fallen warrior and I have kept it.",
+            "The clan watches me. I am quicker to fight than to think."
+        ],
+        needs: [
+            { kind: "help", text: "A rival in {group} has been slighting me. I want a witness when I settle it, someone who will tell it straight." },
+            { kind: "item", text: "I need a good blade. Mine is notched past saving, and a warrior with a bad blade is a dead warrior." },
+            { kind: "coin", text: "I owe the clan a share of spoils and came home short. Coin would square it." },
+            { kind: "news", text: "I need word of where the next fight is. The clan sits idle, and idle clans eat their own." }
+        ],
+        likings: [
+            "A good fight. Win or lose, a clean one.",
+            "Fresh meat, rare, and plenty of it.",
+            "A scar with a story behind it.",
+            "Old war-songs, the loud kind."
+        ],
+        worries: [
+            "Someone stronger is coming up behind me. I feel it.",
+            "The clan is getting weak, and weak clans get eaten.",
+            "A foe I cannot beat has marked me, and I will not run from it.",
+            "I have fought too little lately. A warrior who does not fight fades."
+        ],
+        secrets: [
+            { text: "I lost to a smaller foe once and told no one. If it came out, my rank would go with it." },
+            { text: "I do not want to be chieftain. I only want to be left alone. In {group} that is the same as being weak." },
+            { text: "I kept spoils back from the clan. If they search my kit, I am done." }
+        ]
+    },
+    "goblin-tribe": {
+        label: "tribe",
+        groupNames: ["Gutter Rats", "Mirebiters", "Hollow Knives", "Sootclaw", "Greasy Thumb", "Lanternless"],
+        groupPrefix: "the ",
+        leadership: "A chieftain rules a large tribe, usually with magic-users (shamans) at the ear. They fear magic and keep its users close.",
+        ranks: [
+            { key: "chieftain", label: "chieftain", tier: 4, weight: 2 },
+            { key: "shaman", label: "shaman-advisor", tier: 3, weight: 5 },
+            { key: "boss", label: "warband boss", tier: 2, weight: 9 },
+            { key: "sneak", label: "sneak-thief", tier: 1, weight: 34 },
+            { key: "scrounger", label: "scrounger", tier: 1, weight: 34 },
+            { key: "runt", label: "runt", tier: 0, weight: 16 }
+        ],
+        standings: [
+            "I rose by selling out a rival, and I have looked over my shoulder since.",
+            "I know a useful secret about a boss, so I am not cheated much.",
+            "I am clever, but that is worth nothing unless the chief knows it.",
+            "I serve a boss who takes most of the haul and gives back scraps.",
+            "I am one bad week from being fed to the dogs, and I know it."
+        ],
+        needs: [
+            { kind: "coin", text: "Coin. Not for the tribe. For me. A little buried somewhere no boss can find." },
+            { kind: "item", text: "Something shiny to give my boss, enough to look useful. Ask no more than that." },
+            { kind: "help", text: "Someone is on my trail. Not a friend of yours, I hope. I need them to lose me." },
+            { kind: "news", text: "I need to know which way the chief's mood is blowing before I walk back into camp." }
+        ],
+        likings: [
+            "Shiny things, especially if nobody is counting them.",
+            "A good lie that works.",
+            "Stolen food. It tastes better.",
+            "Being the one who knows something."
+        ],
+        worries: [
+            "Magic. The shaman's magic, anyone's magic. It turns a man into a smear.",
+            "A boss who thinks I know too much.",
+            "Running short of someone to blame.",
+            "Dark corners that used to be empty and are not now."
+        ],
+        secrets: [
+            { text: "I sell what I overhear to the other tribes. If {group} learned it, I would be bait by dawn." },
+            { text: "I can do a little magic. A spark, a trick. If the shaman finds out, I am dead or I belong to him." },
+            { text: "I have a way out of the tribe's lair that no one else knows. I keep it for the day I need it." }
+        ]
+    },
+    "lizardfolk-tribe": {
+        label: "tribe",
+        groupNames: ["Reed-Tail", "Mire-Warden", "Slow-Water", "Sun-Scale", "Black-Pool", "Sedge-Hold"],
+        groupPrefix: "the ",
+        leadership: "Family units under the elders; the whole tribe shares food and labour and defends its ground to the death.",
+        ranks: [
+            { key: "elder", label: "elder", tier: 4, weight: 3 },
+            { key: "hunt-leader", label: "hunt-leader", tier: 3, weight: 8 },
+            { key: "warden", label: "warden of the territory", tier: 2, weight: 16 },
+            { key: "hunter", label: "hunter", tier: 1, weight: 38 },
+            { key: "forager", label: "forager", tier: 1, weight: 25 },
+            { key: "hatch-tender", label: "hatch-tender", tier: 1, weight: 10 }
+        ],
+        standings: [
+            "I was born to this stretch of water and have never wanted another.",
+            "I joined this family unit through marriage and have worked to be trusted.",
+            "I took over a fallen kin's duty and I carry it as my own.",
+            "I share what I catch without thinking, as everyone does, and I expect the same back.",
+            "I have driven intruders off the boundary more than once."
+        ],
+        needs: [
+            { kind: "help", text: "Intruders keep crossing our ground. Help me watch the boundary and the tribe will remember it." },
+            { kind: "item", text: "Salt and good fish-hooks. The tribe is short, and I would not ask if we were not." },
+            { kind: "coin", text: "Coin for the hatch-tenders. They need warm stone and fresh reed, and the stone is not free." },
+            { kind: "news", text: "Tell me what you saw on your road. A stranger in the water is a stranger at our nests." }
+        ],
+        likings: [
+            "Fresh fish, shared among the family.",
+            "Warm stone at midday, and quiet.",
+            "A good hunt with the whole family along.",
+            "Still water at dusk."
+        ],
+        worries: [
+            "Strangers settling on our ground.",
+            "The water going bad. It is the tribe's life.",
+            "A hatching going wrong this season.",
+            "The tribe splitting over food. It has happened before."
+        ],
+        secrets: [
+            { text: "I have been feeding a stranger outside the boundary. If {group} finds out, I am cast out." },
+            { text: "I do not hunt well anymore. My kin cover for me and say nothing, and it shames us both." },
+            { text: "I know where an old hoard lies under the mire. I have never told the elders. I have no idea why." }
+        ]
+    },
+    "kobold": {
+        label: "service",
+        groupNames: [],
+        groupPrefix: "",
+        leadership: "Every kobold belongs to a master or a patron, because without one they are nothing. Dragonborn are gods to them.",
+        // status decides the rank/standing/group wording; see generateNPCSocial.
+        statuses: {
+            bonded: { label: "bonded servant", tier: 2, group: "the {house} household", standing: "I serve {house}. It is the highest honour of my small life." },
+            feral: { label: "feral, seeking a master", tier: 0, group: "no master yet", standing: "I wander the dark looking for a dragonborn worthy of kneeling to." },
+            runaway: { label: "runaway", tier: 0, group: "the lower tunnels", standing: "I fled a cruel master. I still flinch at a raised hand." },
+            tribute: { label: "tribute-payer", tier: 1, group: "a stronger band", standing: "I pay tribute to a stronger band and do as I am told." },
+            worshipper: { label: "dragon's worshipper", tier: 1, group: "an unseen dragon's cult", standing: "I serve an unseen dragon whose name is never said aloud." }
+        },
+        needs: [
+            { kind: "help", only: ["feral", "runaway"], text: "I need a master. Someone strong, someone with fire in their blood. I will serve and ask for nothing." },
+            { kind: "item", text: "Something to offer for the dragon's altar. A coin, a gem, a bright thing. I came with empty hands." },
+            { kind: "coin", text: "Coin for my tribute. If I am short again, they will take it from my hide." },
+            { kind: "news", text: "Word of any great scaled one. Anything. I would walk a month for rumor of a dragon." }
+        ],
+        likings: [
+            "Warm stone and coal-light.",
+            "Stories of dragons, told reverently.",
+            "A kind word. Rare, so rare.",
+            "Bright metal, polished."
+        ],
+        worries: [
+            "Failing my master and being cast out.",
+            "Being found by hunters before I find a master.",
+            "The cold, and the dark, and no one to serve.",
+            "A rival kobold who is better liked by the one I serve."
+        ],
+        secrets: [
+            { only: ["bonded"], text: "I do not truly love my master. I fear them. I am too small to say it aloud." },
+            { only: ["bonded"], text: "I have been skimming a few bright things from my master's hoard. A few. I mean to return them." },
+            { text: "I am not sure the dragons are gods. I am too afraid to ask a dragonborn." }
+        ]
+    },
+    "dragonborn-house": {
+        label: "house",
+        groupNames: DRAGONBORN_HOUSES.slice(),
+        groupPrefix: "",
+        leadership: "Houses are ranked by purity of bloodline. The purest and oldest line rules; mixed blood ranks lower. Succession is contested.",
+        ranks: [
+            { key: "head", label: "head of the house", tier: 4, weight: 3 },
+            { key: "pure", label: "pure-blood of the house", tier: 3, weight: 14 },
+            { key: "thin", label: "thin-blood cadet", tier: 2, weight: 33 },
+            { key: "mixed", label: "mixed-blood retainer", tier: 1, weight: 35 },
+            { key: "oathless", label: "oathless exile", tier: 0, weight: 15 }
+        ],
+        standings: [
+            "I hold the position the house expects of the blood, and I will not be seen to falter.",
+            "My blood is thin. I work twice as hard to be thought worthy.",
+            "I carry an oath to the house that outranks anything I might want.",
+            "I was shamed once in the eyes of the house and have been rebuilding my name since.",
+            "I hold kobold retainers. They are a measure of standing."
+        ],
+        needs: [
+            { kind: "help", text: "I need a witness for a matter of honour. Someone with no tie to {house}, to say what they saw." },
+            { kind: "item", text: "Fine meat, properly hung. The cook here serves vegetables, as if I were a lowborn." },
+            { kind: "coin", text: "The house's tithe is due. I would not be seen short of it." },
+            { kind: "news", text: "Anything you hear of a rival house moving against {house}. Tell me first." }
+        ],
+        likings: [
+            "Meat, rare. Nothing else is food.",
+            "To be addressed correctly. Titles matter.",
+            "Old lineage-songs of the great dragons.",
+            "Competence, shown quietly."
+        ],
+        worries: [
+            "My blood being doubted.",
+            "A rival rising within the house.",
+            "Being forced to answer to someone beneath me.",
+            "Failing the oath I swore."
+        ],
+        secrets: [
+            { text: "I am not as pure as the house claims. A grandparent was not of the blood. If it came out, I would be cast down." },
+            { text: "I have been quietly buying kobold servants. I am not sure it is entirely lawful." },
+            { text: "I do not believe my line deserves to rule. I would never say so where {house} could hear." }
+        ]
+    },
+    "realm": {
+        label: "station",
+        groupNames: [],
+        groupPrefix: "",
+        leadership: "The Crown names nobles; nobles alone own land. Everyone else holds a trade and rents. Wealth, guild standing and royal grants move people up.",
+        castes: {
+            noble: [
+                { key: "lord", label: "head of a landed House", tier: 4, weight: 2 },
+                { key: "heir", label: "heir of a landed House", tier: 3, weight: 3 },
+                { key: "scion", label: "younger scion of a noble line", tier: 2, weight: 5 },
+                { key: "knight", label: "household knight", tier: 2, weight: 3 },
+                { key: "steward", label: "steward of an estate", tier: 2, weight: 3 }
+            ],
+            master: { key: "master", label: "master of their trade", tier: 2 },
+            tradesperson: { key: "trade", label: "tradesperson", tier: 1 },
+            wage: { key: "wage", label: "wage-earner", tier: 1 },
+            drifter: { key: "drifter", label: "drifter with no fixed trade", tier: 0 }
+        },
+        standingsByCaste: {
+            noble: [
+                "I was born to land and have never paid rent a day in my life.",
+                "My family holds an estate granted by the Crown.",
+                "I am waiting on a grant that would raise the family's name.",
+                "I am heavy with duties to the House and light on freedom."
+            ],
+            commoner: [
+                "I pay {landlord} rent each season and keep just enough over to live.",
+                "I earned my trade the hard way and mean to pass it on.",
+                "I came here new, like most, and I am still finding my place.",
+                "I work for others and rent from {landlord}, like nearly everyone in town.",
+                "I owe a debt that has hung over me longer than I like."
+            ]
+        },
+        needs: [
+            { kind: "coin", text: "Rent is due to {landlord} and I am short. Everything I earn goes to it." },
+            { kind: "help", text: "A small matter I cannot handle alone. I would pay, if the work was honest." },
+            { kind: "item", text: "Good tools, or something to trade. I am a few pieces short of doing my work properly." },
+            { kind: "news", text: "I am waiting on word from the {landlord} household. Tell me anything you hear." }
+        ],
+        likings: [
+            "A fair price and an honest word.",
+            "A warm meal after a long day.",
+            "Quiet, and a roof I can count on.",
+            "Good talk about the trade."
+        ],
+        worries: [
+            "Rent going up. It always does.",
+            "Losing my place to someone cheaper.",
+            "A debt I cannot clear.",
+            "What the nobles will do next. They never ask us."
+        ],
+        secrets: [
+            { text: "I am behind on rent more than anyone knows, and {landlord}'s agent has started to notice." },
+            { text: "I once cheated a customer badly, and I think about it. The debt is not only coin." },
+            { text: "I dream of owning land. They say it is not for the likes of us. I will not stop dreaming it." }
+        ]
+    }
+};
+
+// A staff/trade role's standing in the Realm.
+const REALM_MASTER_ROLES = ["Guildmaster", "Innkeeper", "Blacksmith", "Shopkeeper", "Healer", "Priest", "Archivist", "Enchanter", "Arcanist", "Reliquarian"];
+const REALM_TRADE_ROLES = ["Vendor", "Bartender", "Cook", "Scholar", "Merchant", "Trader"];
+const REALM_WAGE_ROLES = ["Servant", "Villager", "Townsfolk", "Miner", "Guard", "Scout", "Stone Guard"];
+
+// ============================================================================
+// THE KINGDOM AND ITS HOUSES
+// One kingdom, one crown. The crown grants nobility; nobles are a caste and
+// ONLY nobles own land. Everyone else rents: a home, a shop, a room. The town
+// is split between a few noble Houses, each with a seat (a manor or castle
+// outside the town streets). Crown holds the public buildings. Details of the
+// wider land are deliberately left open. Rename by editing KINGDOM_NAME.
+// ============================================================================
+const KINGDOM_NAME = "the Kingdom";
+const NOBLE_HOUSES = [
+    { id: "harrow", name: "House Harrow", seat: "Harrow Keep", seatKind: "castle", note: "old blood, holds the north of the town and the gate road" },
+    { id: "vane", name: "House Vane", seat: "Vane Manor", seatKind: "manor", note: "newer money, holds the market streets and most of the inns" },
+    { id: "corwin", name: "House Corwin", seat: "Corwin Hall", seatKind: "manor", note: "quiet and proud, holds the south side and the chapel lands" }
+];
+const CROWN_HELD_TYPES = ["Town Hall", "Guildhall", "Chapel"];
+
+function _hashString(str) {
+    let h = 0;
+    const s = String(str || "");
+    for (let i = 0; i < s.length; i++) h = ((h * 31) + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+}
+
+// Who owns the land a building stands on. Deterministic per building.
+// Returns { crown: true, name } or { crown: false, house }.
+function getBuildingLandholder(buildingId, buildingType) {
+    if (CROWN_HELD_TYPES.indexOf(buildingType) >= 0) return { crown: true, name: "the Crown" };
+    const house = NOBLE_HOUSES[_hashString(buildingId) % NOBLE_HOUSES.length];
+    return { crown: false, house: house, name: house.name };
+}
+
+function getKingdomSummary() {
+    return "Land in " + KINGDOM_NAME + " belongs to the noble Houses, whom the Crown names, and to the Crown itself. Only nobles may own land. Everyone else rents. Three Houses hold this district: " +
+        NOBLE_HOUSES.map(function (h) { return h.name + " at " + h.seat; }).join(", ") + ".";
+}
+
+function _guideConst(key) {
+    if (key === "portalFee") return typeof TOWN_PORTAL_BASE_COST === "number" ? TOWN_PORTAL_BASE_COST : 200;
+    if (key === "portalGrowth") return typeof TOWN_PORTAL_COST_GROWTH === "number" ? TOWN_PORTAL_COST_GROWTH : 2;
+    if (key === "maxBounties") return typeof QUEST_MAX_ACTIVE === "number" ? QUEST_MAX_ACTIVE : 3;
+    if (key === "deathOdds") return typeof PLAYER_DEATH_CHANCE === "number" && PLAYER_DEATH_CHANCE > 0 ? Math.round(1 / PLAYER_DEATH_CHANCE) : 4;
+    if (key === "reviveCost") return typeof DIVINE_REVIVAL_COST === "number" ? DIVINE_REVIVAL_COST : 10;
+    return 0;
+}
+
+const GUIDE_KNOWLEDGE = [
+    {
+        id: "next",
+        question: "What should I do next?",
+        keywords: ["next", "first", "start", "begin", "plan", "now", "should", "where do i go", "what do i do"],
+        answer: function (map, bs) { const st = getGuideNextStep(bs); return st ? st.text : ""; }
+    },
+    {
+        id: "stronger",
+        question: "How do I get stronger?",
+        keywords: ["stronger", "strong", "train", "trainer", "training", "learn", "level", "xp", "skill", "skills", "teacher", "practice", "practise", "improve", "better", "lesson", "lessons"],
+        answer: function (map) {
+            return "\"Find someone to teach you. " + map.guildPlace + " has trainers and a yard to practise in, and a teacher will take your coin and drill you properly. Cheaper, you can hammer the dummies in the yard. Fighting teaches you too, but it bites back. For the fine points of a weapon or a craft, ask the trainer who knows it. I only know the basics.\"";
+        }
+    },
+    {
+        id: "money",
+        question: "How do I make money?",
+        keywords: ["money", "coin", "coins", "gold", "earn", "job", "jobs", "find work", "get work", "need work", "looking for work", "any work", "odd jobs", "bounty", "bounties", "quest", "quests", "pay", "paid", "rich", "afford", "loot", "sell", "wage", "wages", "tip", "tips", "board"],
+        answer: function (map) {
+            return "\"Work for it or hunt for it. Innkeepers, bartenders and cooks hire hands, and the notice boards in the tavern, the inn and the Town Hall list jobs and bounties. You can carry up to " + _guideConst("maxBounties") + " bounties at once; most want pests culled, and you bring back a trophy as proof. Jobs cost stamina and time, and a day's work ends with you sleeping and then collecting your pay. Whatever you loot and sell adds up. You will need coin for trainers, and one day for the portal.\"";
+        }
+    },
+    {
+        id: "patron",
+        question: "What is a patron?",
+        keywords: ["patron", "god", "gods", "deity", "deities", "pray", "prayer", "praying", "shrine", "shrines", "faith", "priest", "divine", "worship", "pledge", "trickster", "titan", "healer", "guardian", "outcast"],
+        answer: function (map) {
+            return "\"There are five gods: the Trickster, the Titan, the Healer, the Guardian and the Outcast. Priests and their books will tell you about them. Pledge to one at a shrine and they are your patron for good, so choose with care. Serve them by praying and keeping their shrines. If you die, a patron with enough strength can pull you back, but you lose every coin and weapon you carried, and it costs them " + _guideConst("reviveCost") + " power to do it. With no patron, death is the end.\"";
+        }
+    },
+    {
+        id: "death",
+        question: "What happens if I die?",
+        keywords: ["die", "dies", "died", "dying", "death", "dead", "blessing", "blessed", "revive", "resurrect", "permadeath", "safe", "safety", "killed", "kill", "survive"],
+        answer: function (map) {
+            return "\"Death is final here. When a blow drops you to zero health there is about a one in " + _guideConst("deathOdds") + " chance it kills you outright. A newcomer's blessing, free at any shrine, saves you once with your gear intact. After that, only a patron god strong enough to answer can pull you back, and you lose everything you carried. Without one, you start over. Ask for the blessing at the shrine in " + map.chapelPlace + " before you take any risks.\"";
+        }
+    },
+    {
+        id: "portal",
+        question: "What is the portal for?",
+        keywords: ["portal", "portals", "waygate", "gate", "new town", "harder", "fee", "town hall", "tier"],
+        answer: function (map) {
+            return "\"Under the Town Hall is a portal chamber. For a fee, " + _guideConst("portalFee") + " gold the first time and doubling after that, it opens a new town: harder foes, better gear and richer purses. The old towns stay as you left them and the way back is free. Your bounties and any wanted status follow you through.\"";
+        }
+    },
+    {
+        id: "fighting",
+        question: "How do I fight?",
+        keywords: ["fight", "fighting", "combat", "battle", "attack", "weapon", "weapons", "enemy", "enemies", "monster", "monsters", "flee", "run", "spell", "spells", "magic", "armour", "armor", "sword"],
+        answer: function (map) {
+            return "\"Fights run in turns and the quicker side moves first. Mind your health and the warning shown under it, and break off before it turns bad. I know that much, not the fine points. The trainers at " + map.guildPlace + " know each weapon and craft far better than I do. Ask them how it is done.\"";
+        }
+    },
+    {
+        id: "lodging",
+        question: "Where can I sleep?",
+        keywords: ["sleep", "sleeping", "lodging", "room", "rooms", "rent", "renting", "landlord", "bed", "beds", "noble", "nobles", "own land", "owns", "stay the night", "somewhere to stay", "where do i stay", "house", "houses"],
+        answer: function (map) {
+            return "\"Nobody owns land here but the nobles, and the Crown names them. Everyone else rents, you included. The innkeeper lets rooms by the week. Pay, and you get a key to a room that is yours until the rent runs out, with a real bed. Friends with a place of their own may let you crash too. A proper bed heals you faster and clears your head.\"";
+        }
+    },
+    {
+        id: "rest",
+        question: "How do I heal?",
+        keywords: ["heal", "healing", "hurt", "wound", "wounds", "wounded", "bleed", "bleeding", "rest", "resting", "potion", "potions", "bandage", "bandages", "health", "hp", "stamina"],
+        answer: function () {
+            return "\"Rest somewhere safe, with no enemies close, and you will mend. Bind any bleeding wounds with a bandage, and keep a Potion of Health for the bad days. A bed at an inn is the best place to sleep a day off.\"";
+        }
+    },
+    {
+        id: "town",
+        question: "What is in this town?",
+        keywords: ["town", "place", "places", "building", "buildings", "tavern", "inn", "smithy", "smith", "chapel", "guildhall", "guild", "map", "directions", "around", "here", "where"],
+        answer: function () {
+            const places = typeof getGuideTownSummary === "function" ? getGuideTownSummary() : "";
+            return "\"" + (places ? "Here is what the town has: " + places + ". " : "") + "Anyone local can give you directions if you lose your way.\"";
+        }
+    },
+    {
+        id: "past",
+        question: "How did we end up here?",
+        keywords: ["past", "history", "remember", "before", "who are you", "why are we", "how did we", "how we", "ended up"],
+        answer: function (map, bs) {
+            return "\"" + (bs && bs.text ? bs.text : "It is a long story, and you were there for most of it.") + "\"";
+        }
+    }
+];
+
+// The guide's turn when asked something outside what they know.
+const GUIDE_UNKNOWN_NOTE = "You are a local with only common knowledge: the places in town, how people make coin, that gods and shrines exist, that a portal leads to harder towns, and that death is final. If the player asks about fighting technique, spells, weapons, stats or other fine rules, say plainly that you do not know the details and suggest asking the trainers at the guildhall. Never invent numbers, prices, odds or rules.";
+
+function getGuideTopic(id) {
+    for (let i = 0; i < GUIDE_KNOWLEDGE.length; i++) if (GUIDE_KNOWLEDGE[i].id === id) return GUIDE_KNOWLEDGE[i];
+    return null;
+}
+
+// Suggested questions for the menu: [{ id, question }].
+function getGuideSuggestedQuestions() {
+    return GUIDE_KNOWLEDGE.map(function (t) { return { id: t.id, question: t.question }; });
+}
+
+// Best topic for a typed question, or null. A keyword counts when it equals a
+// word in the text (or, for words of 4+ letters, when a word starts with it);
+// multi-word keywords match as a phrase. Ties go to the earlier topic.
+function matchGuideTopic(text) {
+    const raw = String(text || "").toLowerCase().replace(/[^a-z0-9' ]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!raw) return null;
+    const words = raw.split(" ");
+    let best = null;
+    let bestScore = 0;
+    GUIDE_KNOWLEDGE.forEach(function (t) {
+        let score = 0;
+        t.keywords.forEach(function (k) {
+            if (k.indexOf(" ") >= 0) {
+                if ((" " + raw + " ").indexOf(" " + k + " ") >= 0) score += 2;
+                return;
+            }
+            for (let i = 0; i < words.length; i++) {
+                const w = words[i];
+                if (w === k || (k.length >= 4 && w.indexOf(k) === 0)) { score += 1; break; }
+            }
+        });
+        if (score > bestScore) { best = t; bestScore = score; }
+    });
+    // A lone generic word ("now", "here", "where") is not enough to answer.
+    if (best && bestScore < 2) {
+        const generic = { now: 1, here: 1, where: 1, should: 1, better: 1, place: 1, around: 1, first: 1, start: 1, begin: 1 };
+        const hit = best.keywords.filter(function (k) { return words.indexOf(k) >= 0 || (k.length >= 4 && words.some(function (w) { return w.indexOf(k) === 0; })); });
+        if (hit.length && hit.every(function (k) { return generic[k]; })) return null;
+    }
+    return best;
+}
+
+// Resolved answer text for a topic (the guide's line), or "".
+function getGuideTopicAnswer(id, backstory) {
+    const t = getGuideTopic(id);
+    if (!t) return "";
+    const bs = backstory || (typeof getPlayerBackstory === "function" ? getPlayerBackstory() : null);
+    const map = getBackstoryFillMap(bs);
+    const text = t.answer(map, bs);
+    return _spFill(text, map).replace(/\s+/g, " ").trim();
+}
+
+// State-based "what should I do next?": the first unmet step wins.
+// Order: blessing -> trained -> earned -> patron -> lead -> keep growing.
+// Returns { key, text }.
+function getGuideNextStep(backstory) {
+    const bs = backstory || (typeof getPlayerBackstory === "function" ? getPlayerBackstory() : null);
+    const map = getBackstoryFillMap(bs);
+    const p = typeof G !== "undefined" && G ? G.player : null;
+    const flag = function (f) { return typeof hasStoryFlag === "function" && hasStoryFlag(f); };
+    let key = "grow";
+    let text = "";
+    if (p && !p.newcomerProtection) {
+        key = "blessing";
+        text = "\"First, " + map.player + ", get the newcomer's blessing. Go to the shrine in " + map.chapelPlace + " and ask for it. It costs nothing, and it is the only thing between you and the end until you have a god behind you.\"";
+    } else if (!flag("trained-once")) {
+        key = "train";
+        text = "\"Next, get stronger. Go to " + map.guildPlace + " and find a trainer, or work the dummies in the yard. Even a little training beats walking into a fight raw.\"";
+    } else if (p && !((p.jobs && p.jobs.done > 0) || (p.quests && p.quests.done > 0))) {
+        key = "earn";
+        text = "\"You will need coin. Read a notice board in the tavern, the inn or the Town Hall, or ask the innkeeper or bartender about work. Take something small and finish it.\"";
+    } else if (flag("slept-rough") && !(typeof getActiveLodging === "function" && getActiveLodging())) {
+        key = "lodging";
+        text = "\"You have been sleeping rough. Rent a room from the innkeeper by the week. A real bed heals you faster, and your things stay safe behind a locked door.\"";
+    } else if (p && !p.deity) {
+        key = "patron";
+        text = "\"Think about a patron. Ask priests about the gods, read what you find, then pledge to one at a shrine and keep it. Once your blessing is spent, a god you have served is your only way back.\"";
+    } else {
+        const stage = bs && bs.guide && typeof bs.guide.leadStage === "number" ? bs.guide.leadStage : 0;
+        const lead = typeof getGuidePlanText === "function" ? getGuidePlanText(bs) : "";
+        if (lead && stage < 2) {
+            key = "lead";
+            text = "\"Now your lead. " + lead + "\"";
+        } else {
+            key = "grow";
+            text = "\"You are on your feet now. Keep training, keep taking bounties, and save for the portal, which costs " + _guideConst("portalFee") + " gold and doubles each time. The rest is up to you.\"";
+        }
+    }
+    return { key: key, text: _spFill(text, map).replace(/\s+/g, " ").trim() };
+}
+
 if (typeof window !== "undefined") {
     window.PLAYER_ARCHETYPES = PLAYER_ARCHETYPES;
     window.CLASS_CRAFT_QUESTIONS = CLASS_CRAFT_QUESTIONS;
@@ -3908,6 +4461,24 @@ if (typeof window !== "undefined") {
     window.getBackstoryLoreFacts = getBackstoryLoreFacts;
     window.resolveGuideLeadPlace = resolveGuideLeadPlace;
     window.getGuidePlanText = getGuidePlanText;
+    window.getGuideMissionLine = getGuideMissionLine;
+    window.GUIDE_KNOWLEDGE = GUIDE_KNOWLEDGE;
+    window.GUIDE_UNKNOWN_NOTE = GUIDE_UNKNOWN_NOTE;
+    window.getGuideTopic = getGuideTopic;
+    window.getGuideSuggestedQuestions = getGuideSuggestedQuestions;
+    window.matchGuideTopic = matchGuideTopic;
+    window.getGuideTopicAnswer = getGuideTopicAnswer;
+    window.getGuideNextStep = getGuideNextStep;
+    window.SOCIETY_BY_SPECIES = SOCIETY_BY_SPECIES;
+    window.SOCIETY_SHEETS = SOCIETY_SHEETS;
+    window.DRAGONBORN_HOUSES = DRAGONBORN_HOUSES;
+    window.REALM_MASTER_ROLES = REALM_MASTER_ROLES;
+    window.REALM_TRADE_ROLES = REALM_TRADE_ROLES;
+    window.REALM_WAGE_ROLES = REALM_WAGE_ROLES;
+    window.KINGDOM_NAME = KINGDOM_NAME;
+    window.NOBLE_HOUSES = NOBLE_HOUSES;
+    window.getBuildingLandholder = getBuildingLandholder;
+    window.getKingdomSummary = getKingdomSummary;
     window.getLeadStage = getLeadStage;
     window.getCurrentLeadStage = getCurrentLeadStage;
     window.getGuideRoomRemark = getGuideRoomRemark;

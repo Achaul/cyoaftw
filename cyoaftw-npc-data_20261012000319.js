@@ -1,7 +1,7 @@
-// ── cyoaftw-npc-data.js v2026-10-11-001 ── Species reaction now shifts hostility too, applied on room entry
+// ── cyoaftw-npc-data.js v2026-10-11-007 ── Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-11-001";
+    window.NPC_DATA_VERSION = "2026-10-11-007";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -296,6 +296,7 @@ const NPC_ACTION_RELATION_WEIGHTS = {
     "tease-playful": 1,
     "tease-backfire": -2,
     "misread-flirt": -2,
+    "taken-deflect": -1,
     threat: -3,
     "sharp-question": -3,
     goodbye: 0,
@@ -370,6 +371,7 @@ function formatNPCActionTag(tag) {
         comfort: "tried to reassure you",
         "comfort-rebuffed": "pushed comfort at the wrong time",
         "misread-flirt": "misread the mood",
+        "taken-deflect": "flirted with someone who is spoken for",
         "flirt-tentative": "tested the waters gently",
         "flirt-received": "flirted warmly",
         "flirt-rejected": "pushed flirtation too far",
@@ -1180,6 +1182,17 @@ function buildNPCConversationFactSheet(npc, ctx, playerTexts, room) {
     const lines = [];
     const words = _npcFactWords((playerTexts || []).join(" "));
 
+    // 0. Their place in society, and anything they have already told the player.
+    if (typeof getNPCSocialPromptLines === "function") {
+        const socialLines = getNPCSocialPromptLines(npc);
+        if (socialLines) socialLines.split("\n").forEach(function (l) { if (l) lines.push(l); });
+    }
+    if (typeof getNPCPartner === "function" && getNPCPartner(npc)) {
+        lines.push(typeof npcShrugsOffRomance === "function" && npcShrugsOffRomance(npc)
+            ? "You are married. You politely turn aside flirting and do not respond to it."
+            : "You are married, but drink or mood has loosened you; you may respond to flirting, awkwardly.");
+    }
+
     // 1. Local knowledge: lore this NPC knows, best match for the player's words first.
     if (ctx && typeof getNPCKnownLoreFacts === "function" && typeof getWorldLoreFactText === "function") {
         const lore = typeof ensureWorldLore === "function" ? ensureWorldLore() : null;
@@ -1490,6 +1503,15 @@ function _barRoundEntry(tplId, priority) {
     };
 }
 
+// CATALOGUE RULE: every option must earn its place. It stays only if it
+//   (1) REVEALS a fact that is stored and used later (a need, a preference, a
+//       lead, a lore or story fact),
+//   (2) CHANGES something durable (an unlock, a quest, an item, standing, faith),
+//   (3) ROUTES into a mechanic (trade, work, teacher, directions, party, bar).
+// Tone options (compliment, comfort, push-for-answers...) count because they
+// feed the faith table (ACTION_FAITH_EFFECTS) and the relationship model. An
+// option that only makes the AI invent a paragraph and nudges favor by one
+// does not belong here. See claude/guide-simplification-notes.md.
 const NPC_CONVERSATION_CATALOGUE = [
     {
         id: "greet-intro",
@@ -1572,43 +1594,6 @@ const NPC_CONVERSATION_CATALOGUE = [
         // NPC is too hostile to bother introducing themselves.
         conditions: { maxHostility: 70, nameKnown: false },
         contextNote: (npc, ctx) => "Your name is " + getNPCSelfName(npc) + ". Tell the player your name in this reply, in your own voice (you may grudgingly or warmly, depending on your mood). Do not invent a different name."
-    },
-    {
-        id: "ask-place",
-        priority: 20,
-        repeat: "session",
-        label: (npc, ctx) => (ctx && ctx.roomType && ctx.roomType.length <= 22)
-            ? "Ask about the " + ctx.roomType
-            : "Ask about this place",
-        textVariants: [
-            "You ask about the area and let them frame it in their own terms.",
-            "You invite them to tell you what matters about this place.",
-            "You ask them to explain the place as they see it."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-place" }
-    },
-    {
-        id: "ask-seen",
-        priority: 30,
-        repeat: "session",
-        resetTimer: { turns: 4 },
-        label: "Ask what they have seen",
-        textVariants: [
-            "You ask what they have noticed nearby and listen for anything unusual.",
-            "You steer the conversation toward recent events and what they have seen.",
-            "You ask whether anything around here has seemed out of place."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-seen" },
-        // Only worth asking when something noteworthy happened that the NPC
-        // knows about (movement/conversation chatter does not count - see
-        // getNPCAwareStoryEvents), or the NPC watches the place for a living.
-        conditions: {
-            custom: (npc, ctx) =>
-                getNPCAwareStoryEvents(npc, { room: ctx.room }).length > 0 ||
-                _npcTextIncludesAny(ctx.role, ["guard", "scout", "keeper", "bartender", "watch"])
-        }
     },
     {
         // Offering a drink (any alcohol in the player's inventory - see
@@ -1820,66 +1805,6 @@ const NPC_CONVERSATION_CATALOGUE = [
             if (typeof joinNPCMeal === "function") joinNPCMeal(npc);
         }
     },
-    {
-        id: "meal-small-talk",
-        priority: 6,
-        repeat: "session",
-        resetTimer: { turns: 3 },
-        label: "Talk over the meal",
-        textVariants: [
-            "You settle in and make easy conversation.",
-            "You trade a few idle words while you eat and drink.",
-            "You lean back and ask how their day has gone."
-        ],
-        contextNote: (npc) => typeof getNPCSharingNote === "function"
-            ? getNPCSharingNote(npc, "Chat easily about the day, the place, or whatever is on your mind.") : "",
-        cacheSig: (npc) => "meal-talk-" + (npc._sharing ? npc._sharing.since : 0),
-        intent: "talk",
-        relationshipImpact: { mood: 1, favor: 1, intent: "talk", markMet: true, actionTag: "meal-talk" },
-        conditions: {
-            custom: (npc, ctx) => typeof getNPCSharing === "function" && !!getNPCSharing(npc)
-        }
-    },
-    {
-        id: "meal-ask-around",
-        priority: 7,
-        repeat: "session",
-        resetTimer: { turns: 4 },
-        label: "Ask what's going on around here",
-        textVariants: [
-            "You ask what news and rumours have been going around.",
-            "You ask what they have heard lately, if anything.",
-            "You ask what a stranger ought to know about this place."
-        ],
-        contextNote: (npc) => typeof getNPCSharingNote === "function"
-            ? getNPCSharingNote(npc, "Share what you honestly know or have heard locally, freely, as one does over a meal. Do not invent facts beyond what your character would know.") : "",
-        cacheSig: (npc) => "meal-around-" + (npc._sharing ? npc._sharing.since : 0),
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "meal-ask-around" },
-        conditions: {
-            custom: (npc, ctx) => typeof getNPCSharing === "function" && !!getNPCSharing(npc)
-        }
-    },
-    {
-        id: "meal-ask-about-them",
-        priority: 8,
-        repeat: "session",
-        resetTimer: { turns: 5 },
-        label: "Ask about them",
-        textVariants: [
-            "You ask how they came to be here.",
-            "You ask what brought them to this table.",
-            "You ask about their life, and let them take their time."
-        ],
-        contextNote: (npc) => typeof getNPCSharingNote === "function"
-            ? getNPCSharingNote(npc, "Open up a little about yourself, true to your background and temperament. Reveal only what you would tell a pleasant table companion.") : "",
-        cacheSig: (npc) => "meal-them-" + (npc._sharing ? npc._sharing.since : 0),
-        intent: "curious",
-        relationshipImpact: { mood: 1, favor: 2, intent: "curious", markMet: true, actionTag: "meal-ask-about-them" },
-        conditions: {
-            custom: (npc, ctx) => typeof getNPCSharing === "function" && !!getNPCSharing(npc)
-        }
-    },
     // Bar service (see BAR SERVICE in cyoaftw-engine-CORE.js). Orders come out
     // of the barkeeper's real stock; rounds are for the table and need a tavern
     // or inn room. All guarded with typeof so the file stands alone.
@@ -2061,110 +1986,6 @@ const NPC_CONVERSATION_CATALOGUE = [
             custom: (npc, ctx) => (ctx.lastOptionId === "ask-about-lore" || ctx.lastOptionId === "ask-rumor") && !!_loreLastHeardEntry(npc, ctx)
         }
     },
-    // ===== FOLLOW-UP CHAINS =====
-    // A follow-up appears only after its parent was used this conversation
-    // (requiredSessionOptionIds) and, via `replaces`, takes the parent's slot
-    // so the menu does not grow. Follow-ups rank above generic topics.
-    {
-        id: "ask-seen-who",
-        priority: 31,
-        repeat: "session",
-        label: "Ask who else was around",
-        textVariants: [
-            "You ask who else was nearby when they noticed it.",
-            "You ask whether anyone else might have seen the same thing.",
-            "You ask who they would trust to back up what they saw."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-seen-who" },
-        replaces: ["ask-seen"],
-        conditions: {
-            requiredSessionOptionIds: ["ask-seen"],
-            maxHostility: 65
-        }
-    },
-    {
-        id: "ask-background",
-        priority: 40,
-        repeat: "session",
-        label: "Ask what brought them here",
-        textVariants: [
-            "You ask what brought them here and leave the rest for them to fill in.",
-            "You invite them to share how they ended up in this place.",
-            "You ask about the path that led them here."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-background" },
-        conditions: {
-            metPlayer: true,
-            maxHostility: 75,
-            // Personal question: needs some rapport or a few exchanges first.
-            any: [
-                { minFavor: 10 },
-                { minInteractionCount: 4 }
-            ],
-            excludedActionTags: ["ask-background"]
-        }
-    },
-    {
-        id: "ask-family",
-        priority: 41,
-        repeat: "session",
-        label: "Ask about home and family",
-        textVariants: [
-            "You ask whether they have family or anyone waiting for them somewhere.",
-            "You ask about the home they came from and who they left there.",
-            "You ask who they think of when they think of home."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-family" },
-        replaces: ["ask-background"],
-        conditions: {
-            requiredSessionOptionIds: ["ask-background"],
-            minFavor: 8,
-            maxHostility: 65
-        }
-    },
-    {
-        id: "ask-about-topic",
-        priority: 45,
-        repeat: "always",
-        label: (npc, ctx) => `Ask about ${_npcPickAskAboutTopic(npc, ctx)}`,
-        text: (npc, ctx) => {
-            const topic = _npcPickAskAboutTopic(npc, ctx);
-            return _npcRand([
-                `You bring up ${topic} and see what they have to say.`,
-                `You steer the conversation toward ${topic}.`,
-                `You ask them directly about ${topic}.`
-            ]);
-        },
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-about-topic" },
-        conditions: {
-            metPlayer: true,
-            maxHostility: 70,
-            custom: (npc, ctx) => getContextualNPCTopics(npc, ctx).length > 0
-        }
-    },
-    {
-        id: "press-topic",
-        priority: 46,
-        repeat: "always",
-        label: (npc, ctx) => ctx && ctx.lastTopic ? `Press for more on ${ctx.lastTopic}` : "Press for more",
-        textVariants: [
-            (npc, ctx) => `You press for more detail on ${ctx && ctx.lastTopic ? ctx.lastTopic : "that"}.`,
-            (npc, ctx) => `You ask them to say more about ${ctx && ctx.lastTopic ? ctx.lastTopic : "that"}.`,
-            (npc, ctx) => `You stay on ${ctx && ctx.lastTopic ? ctx.lastTopic : "the subject"} and ask what they have not said yet.`
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "press-topic" },
-        rankBoost: 60,
-        // Only right after asking about a topic, so it never piles up.
-        conditions: {
-            maxHostility: 65,
-            custom: (npc, ctx) => ctx.lastOptionId === "ask-about-topic" && !!ctx.lastTopic
-        }
-    },
     {
         id: "offer-help",
         priority: 50,
@@ -2177,44 +1998,6 @@ const NPC_CONVERSATION_CATALOGUE = [
         ],
         intent: "help",
         relationshipImpact: { mood: 1, favor: 5, hostility: -1, intent: "help", markMet: true, actionTag: "offer-help" }
-    },
-    {
-        id: "rumor-source",
-        priority: 71,
-        repeat: "session",
-        label: "Ask who is behind it",
-        textVariants: [
-            "You ask who they think is behind it, and how much they actually know.",
-            "You ask where the talk started and who keeps it going.",
-            "You ask who stands to gain from people believing it."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-rumor-source" },
-        replaces: ["ask-rumor"],
-        conditions: {
-            requiredSessionOptionIds: ["ask-rumor"],
-            maxHostility: 59,
-            minFavor: -20
-        }
-    },
-    {
-        id: "rumor-proof",
-        priority: 72,
-        repeat: "session",
-        label: "Ask where you could learn more",
-        textVariants: [
-            "You ask where someone could confirm any of this for themselves.",
-            "You ask who else might be willing to talk about it.",
-            "You ask where you would start if you wanted proof."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-rumor-proof" },
-        replaces: ["rumor-source"],
-        conditions: {
-            requiredSessionOptionIds: ["rumor-source"],
-            maxHostility: 55,
-            minFavor: 5
-        }
     },
     {
         id: "keep-calm",
@@ -2276,46 +2059,109 @@ const NPC_CONVERSATION_CATALOGUE = [
             minFavor: -20
         }
     },
+    // SOCIAL FACTS: each reveals one stored fact from the NPC's social sheet
+    // (see generateNPCSocial). Scripted, no AI call. Each shows once, only when
+    // the NPC has that fact and trusts the player enough; the engine handler is
+    // handleSocialFact. Mobs and the guide have no sheet, so none show.
     {
-        id: "ask-work",
-        priority: 80,
-        repeat: "session",
-        label: npc => npc && npc.role ? `Ask about their work as ${npc.role}` : "Ask about their work",
-        textVariants: [
-            npc => npc && npc.role
-                ? `You ask what life is like in their role as ${npc.role}.`
-                : "You ask what kind of work fills their days.",
-            npc => npc && npc.role
-                ? `You invite them to talk about their work as ${npc.role}.`
-                : "You ask what keeps them busy around here.",
-            npc => npc && npc.role
-                ? `You ask how they came to this sort of work as ${npc.role}.`
-                : "You ask what sort of work they have made for themselves."
-        ],
+        id: "ask-standing",
+        priority: 46,
+        rankBoost: 30,
+        repeat: "always",
+        label: (npc) => getSocialFactLabel(npc, "standing"),
+        action: "socialfact",
+        socialFact: "standing",
         intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-work" },
         conditions: {
             metPlayer: true,
-            roleIncludes: ["guard", "keeper", "merchant", "trader", "bartender", "vendor", "healer", "priest", "archivist", "smith", "cook", "miner", "scout"],
-            excludedActionTags: ["ask-work"]
+            custom: (npc, ctx) => ctx.isHumanoid && socialFactAvailable(npc, "standing")
         }
     },
     {
-        id: "ask-work-hardest",
-        priority: 81,
-        repeat: "session",
-        label: "Ask what the hardest part is",
-        textVariants: [
-            "You ask what the hardest part of the work is that outsiders never see.",
-            "You ask what makes the job worse than it looks.",
-            "You ask what they would change about the work if they could."
-        ],
+        id: "ask-need",
+        priority: 47,
+        rankBoost: 30,
+        repeat: "always",
+        label: (npc) => getSocialFactLabel(npc, "need"),
+        action: "socialfact",
+        socialFact: "need",
         intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-work-hardest" },
-        replaces: ["ask-work"],
         conditions: {
-            requiredSessionOptionIds: ["ask-work"],
-            maxHostility: 65
+            metPlayer: true,
+            custom: (npc, ctx) => ctx.isHumanoid && socialFactAvailable(npc, "need")
+        }
+    },
+    {
+        id: "ask-worry",
+        priority: 45,
+        rankBoost: 30,
+        repeat: "always",
+        label: (npc) => getSocialFactLabel(npc, "worry"),
+        action: "socialfact",
+        socialFact: "worry",
+        intent: "curious",
+        conditions: {
+            metPlayer: true,
+            custom: (npc, ctx) => ctx.isHumanoid && socialFactAvailable(npc, "worry")
+        }
+    },
+    {
+        id: "ask-liking",
+        priority: 40,
+        rankBoost: 30,
+        repeat: "always",
+        label: (npc) => getSocialFactLabel(npc, "liking"),
+        action: "socialfact",
+        socialFact: "liking",
+        intent: "curious",
+        conditions: {
+            metPlayer: true,
+            custom: (npc, ctx) => ctx.isHumanoid && socialFactAvailable(npc, "liking")
+        }
+    },
+    {
+        id: "ask-secret",
+        priority: 48,
+        rankBoost: 30,
+        repeat: "always",
+        label: (npc) => getSocialFactLabel(npc, "secret"),
+        action: "socialfact",
+        socialFact: "secret",
+        intent: "curious",
+        conditions: {
+            metPlayer: true,
+            custom: (npc, ctx) => ctx.isHumanoid && socialFactAvailable(npc, "secret")
+        }
+    },
+    {
+        id: "ask-ties",
+        priority: 39,
+        rankBoost: 25,
+        repeat: "always",
+        label: (npc) => getSocialFactLabel(npc, "ties"),
+        action: "socialfact",
+        socialFact: "ties",
+        intent: "curious",
+        conditions: {
+            metPlayer: true,
+            custom: (npc, ctx) => ctx.isHumanoid && socialFactAvailable(npc, "ties")
+        }
+    },
+    // Lodging: the innkeeper lets guest rooms by the week (see showRentRoomMenu
+    // in the engine). Everyone but the nobles rents; the rent goes to whichever
+    // House holds the land. Routes to a mechanic (a persistent room and key).
+    {
+        id: "rent-room",
+        priority: 84,
+        repeat: "always",
+        label: "Ask about renting a room by the week",
+        action: "rentroom",
+        intent: "curious",
+        conditions: {
+            metPlayer: true,
+            roleIncludes: ["innkeeper"],
+            maxHostility: 79,
+            minFavor: -69
         }
     },
     {
@@ -2329,82 +2175,6 @@ const NPC_CONVERSATION_CATALOGUE = [
             roleIncludes: ["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "blacksmith"],
             maxHostility: 79,
             minFavor: -69
-        }
-    },
-    {
-        id: "ask-watch",
-        priority: 90,
-        repeat: "session",
-        label: "Ask who they are watching for",
-        textVariants: [
-            "You ask who or what they are keeping an eye on.",
-            "You draw attention to their vigilance and ask what has them watching so closely.",
-            "You ask what they are expecting to see before long."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-watch" },
-        conditions: {
-            roleIncludes: ["guard", "scout"],
-            maxHostility: 70,
-            excludedActionTags: ["ask-watch"]
-        }
-    },
-    {
-        id: "ask-remedies",
-        priority: 92,
-        repeat: "session",
-        label: "Ask about remedies and ailments",
-        textVariants: [
-            "You ask what's been going around and how they've been treating it.",
-            "You ask whether they've seen anything unusual sicken folk lately.",
-            "You ask what remedies they keep close at hand for the worst cases."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-remedies" },
-        conditions: {
-            roleIncludes: ["healer"],
-            maxHostility: 70,
-            excludedActionTags: ["ask-remedies"]
-        }
-    },
-    {
-        id: "ask-repairs",
-        priority: 94,
-        repeat: "session",
-        label: "Ask about repairs and craftsmanship",
-        textVariants: [
-            "You ask what it takes to keep gear from failing when it matters most.",
-            "You ask about the trickiest repair they've had to make lately.",
-            "You ask what separates a good repair from a rushed one."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-repairs" },
-        conditions: {
-            roleIncludes: ["blacksmith", "smith"],
-            maxHostility: 70,
-            excludedActionTags: ["ask-repairs"]
-        }
-    },
-    {
-        id: "ask-lore",
-        priority: 96,
-        repeat: "session",
-        label: (npc, ctx) => (ctx && ctx.role || "").includes("priest") ? "Ask about omens and old rites" : "Ask about the old records",
-        textVariants: [
-            (npc, ctx) => (ctx && ctx.role || "").includes("priest")
-                ? "You ask what omens or old rites still shape how people here live."
-                : "You ask what the old records say about how this place came to be.",
-            (npc, ctx) => (ctx && ctx.role || "").includes("priest")
-                ? "You ask what faith looks like for the people who actually live here."
-                : "You ask what's been lost, misfiled, or simply forgotten in the archives.",
-            "You ask what history they think outsiders always get wrong."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-lore" },
-        conditions: {
-            roleIncludes: ["priest", "archivist"],
-            maxHostility: 70,
-            excludedActionTags: ["ask-lore"]
         }
     },
     {
@@ -2447,86 +2217,6 @@ const NPC_CONVERSATION_CATALOGUE = [
             minFavor: 10,
             maxHostility: 70,
             excludedActionTags: ["ask-their-deity"]
-        }
-    },
-    {
-        id: "ask-recipe",
-        priority: 97,
-        repeat: "session",
-        label: "Ask about the local fare",
-        textVariants: [
-            "You ask what dish they're proudest of putting together.",
-            "You ask where they source the ingredients that are hardest to come by.",
-            "You ask what the locals actually order versus what's on the sign."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-recipe" },
-        conditions: {
-            roleIncludes: ["cook"],
-            maxHostility: 70,
-            excludedActionTags: ["ask-recipe"]
-        }
-    },
-    {
-        id: "ask-mines",
-        priority: 98,
-        repeat: "session",
-        label: "Ask about the tunnels and the work below",
-        textVariants: [
-            "You ask what it's like working the tunnels day after day.",
-            "You ask if they've struck anything worth talking about lately.",
-            "You ask what dangers they watch for underground that outsiders never think of."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-mines" },
-        conditions: {
-            roleIncludes: ["miner"],
-            maxHostility: 70,
-            excludedActionTags: ["ask-mines"]
-        }
-    },
-    {
-        id: "ask-need",
-        priority: 100,
-        repeat: "session",
-        label: "Ask what they need most",
-        textVariants: [
-            "You ask what they need most right now and let them decide how honest to be.",
-            "You follow up by asking what would actually help them.",
-            "You ask where help would matter most."
-        ],
-        intent: "help",
-        relationshipImpact: { mood: 1, favor: 3, hostility: -1, intent: "help", markMet: true, actionTag: "ask-need" },
-        conditions: {
-            requiredActionTags: ["offer-help"],
-            maxHostility: 70,
-            excludedActionTags: ["ask-need"]
-        }
-    },
-    {
-        id: "ask-people",
-        priority: 110,
-        repeat: "session",
-        label: npc => npc && npc.species ? `Ask about ${npc.species} customs` : "Ask about their people",
-        textVariants: [
-            npc => npc && npc.species
-                ? `You ask what someone unfamiliar with ${npc.species} customs ought to know.`
-                : "You ask what an outsider should understand about their people.",
-            npc => npc && npc.species
-                ? `You invite them to explain the customs of ${npc.species} in their own words.`
-                : "You ask how they would explain their people to a stranger.",
-            npc => npc && npc.species
-                ? `You ask about the habits and customs of ${npc.species} without pretending you already understand them.`
-                : "You ask about the customs they grew up with."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-people" },
-        conditions: {
-            metPlayer: true,
-            excludeSpecies: ["human"],
-            minFavor: 8,
-            maxHostility: 65,
-            excludedActionTags: ["ask-people"]
         }
     },
     {
@@ -2647,26 +2337,6 @@ const NPC_CONVERSATION_CATALOGUE = [
     // opportunities, so this reflects a clearly established personality
     // rather than a single coin-flip answer.
     {
-        id: "ask-details",
-        priority: 182,
-        repeat: "session",
-        resetTimer: { turns: 5 },
-        label: "Ask about the small details",
-        textVariants: [
-            "You ask about the small details most people would not think to mention.",
-            "You point out something easy to miss and ask them about it directly.",
-            "You press for specifics instead of letting the answer stay vague."
-        ],
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-details" },
-        conditions: {
-            metPlayer: true,
-            maxHostility: 70,
-            minPlayerTraits: { curiosity: 2 },
-            excludedActionTags: ["ask-details"]
-        }
-    },
-    {
         id: "listen-closely",
         priority: 184,
         repeat: "session",
@@ -2766,73 +2436,29 @@ const NPC_CONVERSATION_CATALOGUE = [
         id: "guide-first-step",
         priority: 1,
         rankBoost: 90,
-        repeat: "session",
-        resetTimer: { turns: 4 },
-        label: (npc, ctx) => ctx.storyFlags && ctx.storyFlags["guide-oriented"] ? "Ask about the plan again" : "Ask what to do first",
-        textVariants: [
-            "You ask what you should do first.",
-            "You ask where the two of you should begin.",
-            "You ask what the plan is."
-        ],
+        repeat: "always",
+        label: "What should I do next?",
+        text: "You ask what you should do next.",
+        textVariants: ["You ask what you should do next."],
+        action: "guideanswer",
+        guideAnswer: "next",
         guideBeat: "plan",
-        contextNote: () => _guideNote("plan"),
-        cacheSig: (npc, ctx) => ctx.storyFlags && ctx.storyFlags["guide-oriented"] ? "oriented" : "new",
         intent: "curious",
         relationshipImpact: { mood: 1, favor: 2, intent: "curious", markMet: true, actionTag: "guide-plan" },
         conditions: { custom: (npc) => _npcIsGuide(npc) }
     },
+    // Opens a list of suggested questions (see showGuideQuestionMenu in the
+    // engine). The player can also type any question; a keyword match gets the
+    // same scripted answer (see submitTypedResponse). No AI call for answers.
     {
-        id: "guide-about-town",
+        id: "guide-ask-question",
         priority: 2,
-        rankBoost: 70,
-        repeat: "session",
-        resetTimer: { turns: 8 },
-        label: "Ask what they make of the town",
-        textVariants: [
-            "You ask what they make of the town so far.",
-            "You ask for their first impression of the place.",
-            "You ask whether the town is what they expected."
-        ],
-        contextNote: () => _guideNote("town"),
+        rankBoost: 75,
+        repeat: "always",
+        label: "Ask a question",
+        action: "guidemenu",
         intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "guide-town" },
         conditions: { custom: (npc) => _npcIsGuide(npc) }
-    },
-    {
-        id: "guide-shared-past",
-        priority: 3,
-        rankBoost: 60,
-        repeat: "session",
-        resetTimer: { turns: 10 },
-        label: "Talk about how you got here",
-        textVariants: [
-            "You ask them to remind you how the two of you ended up here.",
-            "You say it feels strange to be here, and ask how it all began.",
-            "You ask whether they ever thought it would come to this."
-        ],
-        contextNote: () => _guideNote("past"),
-        intent: "empathy",
-        relationshipImpact: { mood: 1, favor: 2, intent: "empathy", markMet: true, actionTag: "guide-past" },
-        conditions: { custom: (npc) => _npcIsGuide(npc) }
-    },
-    {
-        id: "guide-how-sure",
-        priority: 4,
-        rankBoost: 80,
-        repeat: "session",
-        label: "Ask how sure they are",
-        textVariants: [
-            "You ask how sure they are about that lead.",
-            "You ask what they actually know, and what is only talk.",
-            "You ask whether they would stake anything on it."
-        ],
-        contextNote: () => _guideNote("trust"),
-        intent: "curious",
-        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "guide-trust" },
-        conditions: {
-            requiredSessionOptionIds: ["guide-first-step"],
-            custom: (npc) => _npcIsGuide(npc)
-        }
     },
     // Lead payoff: with the guide's plan heard, asking the current lead's
     // question of someone in that lead's building moves the opening arc along
@@ -3409,7 +3035,9 @@ function buildConversationOption(entry, npc, ctx) {
         phase: entry.phase,
         // Opening-guide story beat (see onGuideBeat in the engine).
         guideBeat: entry.guideBeat,
-        guideParty: entry.guideParty
+        guideParty: entry.guideParty,
+        guideAnswer: entry.guideAnswer,
+        socialFact: entry.socialFact
     };
 }
 
@@ -3707,6 +3335,21 @@ function getSomatotypeLabel(value) {
 }
 
 window.SOMATOTYPES = SOMATOTYPES;
+if (typeof window !== "undefined") {
+    window.generateNPCSocial = generateNPCSocial;
+    window.ensureNPCSocial = ensureNPCSocial;
+    window.socialFactAvailable = socialFactAvailable;
+    window.getSocialFactLabel = getSocialFactLabel;
+    window.getSocialFactAnswer = getSocialFactAnswer;
+    window.getSocialFactQuestion = getSocialFactQuestion;
+    window.getNPCSocialPromptLines = getNPCSocialPromptLines;
+    window.pickNPCTies = pickNPCTies;
+    window.finalizeNPCTies = finalizeNPCTies;
+    window.describeNPCTie = describeNPCTie;
+    window.getNPCTiesAnswer = getNPCTiesAnswer;
+window.getNPCPartner = getNPCPartner;
+window.npcShrugsOffRomance = npcShrugsOffRomance;
+}
 window.SOMATOTYPE_INFO = SOMATOTYPE_INFO;
 window.isValidSomatotype = isValidSomatotype;
 window.inferSomatotypeFromBuild = inferSomatotypeFromBuild;
@@ -3819,8 +3462,440 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     npc.tabooTopics = tabooTopics;
     npc.currentMotive = enrichment.currentMotive;
     npc.speechProfile = enrichment.speechProfile;
+    npc.social = generateNPCSocial(npc, room, zoneTemplate);
 
     return enrichment;
+}
+
+// ============================================================================
+// NPC SOCIAL SHEET (see SOCIETY_SHEETS in cyoaftw-world-data.js)
+// npc.social = { society, group, rank, tier, status?, caste?, standing,
+//                need, liking, worry, secret: { id, kind?, text, known } }
+// Mobs (non-humanoids) and the opening guide get none. Generated with the NPC,
+// or lazily for NPCs from older saves (ensureNPCSocial).
+// ============================================================================
+const SOCIAL_FACT_QUESTIONS = {
+    standing: { label: "Ask about their place in {group}", ask: "Tell me about your place in {group}." },
+    need: { label: "Ask what they need", ask: "Is there anything you need?" },
+    worry: { label: "Ask what is weighing on them", ask: "You look troubled. What is weighing on you?" },
+    liking: { label: "Ask what they enjoy", ask: "What do you enjoy, when you have the time?" },
+    secret: { label: "Ask what they are not saying", ask: "I think you are holding something back. Tell me." },
+    ties: { label: "Ask about the people in their life", ask: "Who are the people in your life?" }
+};
+const SOCIAL_FACT_MIN_FAVOR = { standing: -20, need: 0, worry: 5, liking: -20, secret: 40, ties: 5 };
+const SOCIAL_NOBLE_FACTS = {
+    needs: [
+        { kind: "help", text: "A matter of the House I cannot be seen to handle myself. Discretion would be rewarded." },
+        { kind: "news", text: "I am waiting on a grant from the Crown. Tell me anything you hear of the court." },
+        { kind: "item", text: "A gift worthy of a rival House, to smooth a quarrel that has gone on too long." }
+    ],
+    likings: ["Being addressed properly.", "A good hunt, a better table.", "Old songs of the House."],
+    worries: ["A rival House gaining the Crown's ear.", "Debts that the family name hides.", "The commons grumbling about rent."],
+    secrets: [
+        { text: "The House is deeper in debt than anyone knows. The land is mortgaged to a merchant." },
+        { text: "I would give up the title for a quieter life. I can say it to no one." }
+    ]
+};
+
+function _socialFill(text, fill) {
+    return String(text || "").replace(/\{(\w+)\}/g, function (m, k) { return fill[k] !== undefined ? fill[k] : m; });
+}
+
+function _socialWeightedPick(list) {
+    let total = 0;
+    list.forEach(function (e) { total += e.weight || 1; });
+    let roll = Math.random() * total;
+    for (let i = 0; i < list.length; i++) {
+        roll -= list[i].weight || 1;
+        if (roll <= 0) return list[i];
+    }
+    return list[list.length - 1];
+}
+
+function _socialPickFact(list, status, fill, kind) {
+    const usable = (list || []).filter(function (e) {
+        const entry = typeof e === "string" ? { text: e } : e;
+        return !entry.only || (status && entry.only.indexOf(status) >= 0);
+    });
+    if (!usable.length) return null;
+    const pick = usable[_npcRandInt(0, usable.length - 1)];
+    const entry = typeof pick === "string" ? { text: pick } : pick;
+    return { id: kind, kind: entry.kind || "", text: _socialFill(entry.text, fill), known: false };
+}
+
+function generateNPCSocial(npc, room, zoneTemplate) {
+    if (!npc || npc.isHumanoid !== true || npc.isGuide) return null;
+    if (typeof SOCIETY_BY_SPECIES === "undefined" || typeof SOCIETY_SHEETS === "undefined") return null;
+    const society = SOCIETY_BY_SPECIES[npc.species];
+    const sheet = society ? SOCIETY_SHEETS[society] : null;
+    if (!sheet) return null;
+
+    const zone = (room && room.zone) || (zoneTemplate && zoneTemplate.name) || "";
+    const fill = { zone: zone, place: (room && room.buildingName) || zone || "this place", group: "", rank: "", house: "", landlord: "" };
+    const social = { society: society, group: "", rank: "", tier: 0, standing: "" };
+    let standingList = sheet.standings || [];
+    let factSource = sheet;
+    let status = null;
+
+    const kin = npc._kinSocial && npc._kinSocial.society === society ? npc._kinSocial : null;
+    if (society === "orc-clan" || society === "goblin-tribe" || society === "lizardfolk-tribe" || society === "dragonborn-house") {
+        const name = sheet.groupNames[_npcRandInt(0, sheet.groupNames.length - 1)];
+        social.group = kin ? kin.group : (sheet.groupPrefix || "") + name + (society === "lizardfolk-tribe" ? " tribe" : "");
+        if (kin && society === "dragonborn-house") fill.house = kin.group;
+        const rank = _socialWeightedPick(sheet.ranks);
+        social.rank = rank.label; social.tier = rank.tier; social.rankKey = rank.key;
+        if (society === "dragonborn-house" && !kin) fill.house = name;
+    } else if (society === "kobold") {
+        const hasDragonborn = zone === "Underground City" || !!(zoneTemplate && Array.isArray(zoneTemplate.allowedSpecies) && zoneTemplate.allowedSpecies.indexOf("Dragonborn") >= 0);
+        const roll = Math.random();
+        if (kin && kin.status) status = kin.status;
+        else if (hasDragonborn) status = roll < 0.55 ? "bonded" : (roll < 0.8 ? "feral" : (roll < 0.9 ? "tribute" : "runaway"));
+        else status = roll < 0.25 ? "feral" : (roll < 0.6 ? "tribute" : (roll < 0.8 ? "runaway" : "worshipper"));
+        const st = sheet.statuses[status];
+        fill.house = kin && kin.master ? kin.master : DRAGONBORN_HOUSES[_npcRandInt(0, DRAGONBORN_HOUSES.length - 1)];
+        social.status = status;
+        social.group = _socialFill(st.group, fill);
+        social.rank = st.label; social.tier = st.tier;
+        if (status === "bonded") social.master = fill.house;
+        standingList = [st.standing];
+    } else if (society === "realm") {
+        const staff = (typeof REALM_MASTER_ROLES !== "undefined" && REALM_MASTER_ROLES.indexOf(npc.role) >= 0);
+        const noble = kin ? kin.caste === "noble" : (!staff && zone === "Town" && (npc.species === "Human" || npc.species === "Elf") && Math.random() < 0.06);
+        if (noble) {
+            const kinHouse = kin ? NOBLE_HOUSES.filter(function (h) { return h.name === kin.group; })[0] : null;
+            const house = kinHouse || NOBLE_HOUSES[_npcRandInt(0, NOBLE_HOUSES.length - 1)];
+            const rank = _socialWeightedPick(sheet.castes.noble);
+            social.caste = "noble"; social.group = house.name; social.rank = rank.label; social.tier = rank.tier;
+            fill.house = house.name; fill.landlord = "";
+            standingList = sheet.standingsByCaste.noble;
+            factSource = { needs: SOCIAL_NOBLE_FACTS.needs, likings: SOCIAL_NOBLE_FACTS.likings, worries: SOCIAL_NOBLE_FACTS.worries, secrets: SOCIAL_NOBLE_FACTS.secrets };
+        } else {
+            social.caste = "commoner";
+            const holder = (room && room.buildingId && typeof getBuildingLandholder === "function")
+                ? getBuildingLandholder(room.buildingId, room.buildingType)
+                : (typeof getBuildingLandholder === "function" ? getBuildingLandholder(npc.id || npc.name, "House") : null);
+            fill.landlord = kin && kin.landlord ? kin.landlord : (holder ? holder.name : "the landlord");
+            social.landlord = fill.landlord;
+            let r = sheet.castes.wage;
+            if (REALM_MASTER_ROLES.indexOf(npc.role) >= 0) r = sheet.castes.master;
+            else if (REALM_TRADE_ROLES.indexOf(npc.role) >= 0) r = sheet.castes.tradesperson;
+            else if (["Wanderer", "Pilgrim", "Tomb Robber", "Cultist", "Adventurer"].indexOf(npc.role) >= 0) r = sheet.castes.drifter;
+            social.rank = r.label; social.tier = r.tier;
+            social.group = (room && room.buildingName) ? (npc.role ? npc.role + " at " + room.buildingName : room.buildingName) : (npc.role || "the town");
+            standingList = sheet.standingsByCaste.commoner;
+        }
+    }
+
+    fill.group = social.group; fill.rank = social.rank;
+    social.standing = standingList.length ? _socialFill(standingList[_npcRandInt(0, standingList.length - 1)], fill) : "";
+    social.need = _socialPickFact(factSource.needs, status, fill, "need");
+    social.liking = _socialPickFact(factSource.likings, status, fill, "liking");
+    social.worry = _socialPickFact(factSource.worries, status, fill, "worry");
+    social.secret = _socialPickFact(factSource.secrets, status, fill, "secret");
+    social.standingKnown = false;
+    return social;
+}
+
+// Lazily builds the sheet for an NPC that has none (older saves, late spawns).
+function ensureNPCSocial(npc) {
+    if (!npc || npc.isHumanoid !== true || npc.isGuide) return null;
+    if (npc.social === undefined) {
+        const room = (typeof G === "object" && G && G.roomMap && npc.coords) ? G.roomMap[npc.coords] : (typeof G === "object" && G ? G.activeRoom : null);
+        npc.social = generateNPCSocial(npc, room, null);
+    }
+    return npc.social || null;
+}
+
+// Is this fact available to ask about right now? (has the fact, not told yet,
+// the NPC trusts the player enough, and is not hostile.)
+function socialFactAvailable(npc, key) {
+    const social = ensureNPCSocial(npc);
+    if (!social || !SOCIAL_FACT_QUESTIONS[key]) return false;
+    if (key === "standing") { if (social.standingKnown || !social.group) return false; }
+    else if (key === "ties") { if (npc.tiesKnown || !npc.ties || !npc.ties.length || !getNPCTiesAnswer(npc)) return false; }
+    else if (!social[key] || social[key].known) return false;
+    const memory = npc.memory || {};
+    const favor = typeof memory.favorability === "number" ? memory.favorability : 0;
+    if (favor < SOCIAL_FACT_MIN_FAVOR[key]) return false;
+    if ((npc.hostility || 0) >= (key === "secret" ? 40 : 60)) return false;
+    return true;
+}
+
+// The standing question reads differently by society.
+function _socialStandingPhrase(social) {
+    if (!social) return { label: "Ask about their place", ask: "Tell me about your place here." };
+    if (social.society === "kobold") return { label: "Ask who they serve", ask: "Who do you serve?" };
+    if (social.caste === "commoner") return { label: "Ask about their trade and station", ask: "How do you make your living here?" };
+    if (social.caste === "noble") return { label: "Ask about their House", ask: "Tell me about your House." };
+    return { label: "Ask about their place in " + social.group, ask: "Tell me about your place in " + social.group + "." };
+}
+
+function getSocialFactLabel(npc, key) {
+    const social = ensureNPCSocial(npc);
+    const q = SOCIAL_FACT_QUESTIONS[key];
+    if (key === "standing") return _socialStandingPhrase(social).label;
+    return q ? q.label : "";
+}
+
+// What the NPC says. A standing answer joins group, rank and how they got it.
+function getSocialFactAnswer(npc, key) {
+    const social = ensureNPCSocial(npc);
+    if (!social) return "";
+    if (key === "ties") return getNPCTiesAnswer(npc);
+    if (key === "standing") {
+        return "I am " + (/^[aeiou]/i.test(social.rank) ? "an " : "a ") + social.rank + (social.group ? " of " + social.group : "") + "." + (social.standing ? " " + social.standing : "");
+    }
+    return social[key] ? social[key].text : "";
+}
+
+function getSocialFactQuestion(npc, key) {
+    const social = ensureNPCSocial(npc);
+    const q = SOCIAL_FACT_QUESTIONS[key];
+    if (key === "standing") return _socialStandingPhrase(social).ask;
+    return q ? q.ask : "";
+}
+
+// Two short prompt lines for the AI: the NPC's place, and facts the player has
+// already been told (so replies stay consistent). Hidden facts are not sent.
+function getNPCSocialPromptLines(npc) {
+    const social = npc && npc.isHumanoid === true && !npc.isGuide ? ensureNPCSocial(npc) : null;
+    if (!social) return "";
+    const lines = [];
+    if (social.rank) lines.push("- Your place: " + social.rank + (social.group ? " of " + social.group : "") + (social.master ? " (bonded to " + social.master + ")" : "") + (social.standing ? ". In your own words: \"" + social.standing + "\"" : ""));
+    const told = ["need", "worry", "liking", "secret"].filter(function (k) { return social[k] && social[k].known; }).slice(0, 2)
+        .map(function (k) { return k + ": " + social[k].text; });
+    if (told.length) lines.push("- You have already told the player (stay consistent): " + told.join(" | "));
+    return lines.join("\n");
+}
+
+// ============================================================================
+// NPC TIES - base-level relationships (family, friends, workmates)
+// npc.ties = [{ type, id }] where type is one of spouse, parent, child, sibling,
+// friend, coworker, employer, employee (the tie as seen FROM this NPC).
+// Ties are same-species only (cross-species ties are taboo here), match age and
+// job, and are made when an NPC is created by linking it to NPCs that already
+// exist in the world (see pickNPCTies / finalizeNPCTies, called from createNPC).
+// Kin share a group: a kobold's family shares a master, a dragonborn's a House,
+// a clan member's a clan (see generateNPCSocial, which reads npc._kinSocial).
+// Family members also share a surname. Ties are revealed by the "ask about the
+// people in their life" option (social fact "ties").
+// ============================================================================
+const NPC_TIE_MAX = 3;
+const NPC_TIE_FAMILY_CHANCE = 0.16;
+const NPC_TIE_WORK_CHANCE = 0.55;
+const NPC_TIE_FRIEND_CHANCE = 0.18;
+const NPC_TIE_RECIPROCAL = { spouse: "spouse", parent: "child", child: "parent", sibling: "sibling", friend: "friend", coworker: "coworker", employer: "employee", employee: "employer" };
+const NPC_TIE_FAMILY = ["spouse", "parent", "child", "sibling"];
+// Roles that are staff of the building they stand in (a place of work).
+const NPC_TIE_WORK_ROLES = ["Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
+// Employers in a building and who they plausibly employ there.
+const NPC_TIE_EMPLOYER_ROLES = ["Innkeeper", "Blacksmith", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
+const NPC_TIE_EMPLOYEE_ROLES = ["Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk"];
+// Roles that work in teams across a zone rather than in one building.
+const NPC_TIE_TEAM_ROLES = ["Town Guard", "Stone Guard", "Miner", "Scout", "Raider", "Scavenger", "Cultist"];
+
+function _tieCount(npc, type) {
+    return (npc.ties || []).filter(function (t) { return !type || t.type === type; }).length;
+}
+
+function _tieHas(npc, otherId) {
+    return (npc.ties || []).some(function (t) { return t.id === otherId; });
+}
+
+function _tieRoomOf(npc) {
+    return (typeof G === "object" && G && G.roomMap && npc.coords) ? G.roomMap[npc.coords] : null;
+}
+
+// Existing, living, same-species NPCs a new NPC could be tied to.
+function listNPCTieCandidates(npc, room) {
+    const out = [];
+    if (typeof G !== "object" || !G || !G.roomMap) return out;
+    const zone = room ? room.zone : null;
+    Object.keys(G.roomMap).forEach(function (key) {
+        const r = G.roomMap[key];
+        if (!r || !Array.isArray(r.creatures)) return;
+        if (zone && r.zone !== zone) return;
+        r.creatures.forEach(function (c) {
+            if (!c || c === npc || c.isHumanoid !== true || c.isGuide || c.dead || c.objectType === "body") return;
+            if (c.species !== npc.species || typeof c.age !== "number") return;
+            if (!c.social || _tieCount(c) >= NPC_TIE_MAX || _tieHas(c, npc.id)) return;
+            out.push({ npc: c, room: r });
+        });
+    });
+    return out;
+}
+
+// Which family tie (from npc's side) fits this pair, by age and gender.
+// Returns an array of possible types.
+function _familyTypesFor(npc, c) {
+    const types = [];
+    const diff = npc.age - c.age;
+    const g1 = npc.gender, g2 = c.gender;
+    if (Math.abs(diff) <= 12 && npc.age >= 22 && c.age >= 22 && g1 && g2 && g1 !== g2 && g1 !== "none" && g2 !== "none" &&
+        _tieCount(c, "spouse") === 0 && _tieCount(npc, "spouse") === 0) types.push("spouse");
+    if (Math.abs(diff) <= 14) types.push("sibling");
+    // npc is the parent of c
+    if (diff >= 18 && diff <= 45 && _tieCount(c, "parent") < 2 && _tieCount(npc, "child") < 3) types.push("parent");
+    // npc is the child of c
+    if (-diff >= 18 && -diff <= 45 && _tieCount(npc, "parent") < 2 && _tieCount(c, "child") < 3) types.push("child");
+    return types;
+}
+
+function _workTypeFor(npc, c, npcRoom, cRoom) {
+    if (npcRoom && cRoom && npcRoom.buildingId && npcRoom.buildingId === cRoom.buildingId) {
+        const a = npc.role, b = c.role;
+        if (NPC_TIE_EMPLOYER_ROLES.indexOf(a) >= 0 && NPC_TIE_EMPLOYEE_ROLES.indexOf(b) >= 0) return "employer";
+        if (NPC_TIE_EMPLOYER_ROLES.indexOf(b) >= 0 && NPC_TIE_EMPLOYEE_ROLES.indexOf(a) >= 0) return "employee";
+        if (NPC_TIE_WORK_ROLES.indexOf(a) >= 0 && NPC_TIE_WORK_ROLES.indexOf(b) >= 0) return "coworker";
+    }
+    if (NPC_TIE_TEAM_ROLES.indexOf(npc.role) >= 0 && npc.role === c.role) return "coworker";
+    return null;
+}
+
+// Chooses ties for a NEW npc (not yet placed) from existing NPCs. Sets
+// npc._pendingTies and, for a family tie, npc._kinSocial so the social sheet
+// inherits the kin's group. Call before generateNPCEnrichment.
+function pickNPCTies(npc, room) {
+    if (!npc || npc.isHumanoid !== true || npc.isGuide) return;
+    if (typeof SOCIETY_BY_SPECIES === "undefined" || !SOCIETY_BY_SPECIES[npc.species]) return;
+    if (typeof npc.age !== "number") return;
+    const cands = listNPCTieCandidates(npc, room);
+    if (!cands.length) return;
+    const pending = [];
+    const used = {};
+    const shuffled = cands.slice().sort(function () { return Math.random() - 0.5; });
+
+    // Family: one family tie at most for a new NPC.
+    if (Math.random() < NPC_TIE_FAMILY_CHANCE) {
+        for (let i = 0; i < shuffled.length; i++) {
+            const types = _familyTypesFor(npc, shuffled[i].npc);
+            if (!types.length) continue;
+            const type = types[_npcRandInt(0, types.length - 1)];
+            pending.push({ type: type, other: shuffled[i].npc });
+            used[shuffled[i].npc.id] = true;
+            npc._kinSocial = shuffled[i].npc.social;
+            break;
+        }
+    }
+    // Work: someone in the same building or team.
+    if (Math.random() < NPC_TIE_WORK_CHANCE) {
+        for (let i = 0; i < shuffled.length; i++) {
+            const c = shuffled[i];
+            if (used[c.npc.id]) continue;
+            const type = _workTypeFor(npc, c.npc, room, c.room);
+            if (type) { pending.push({ type: type, other: c.npc }); used[c.npc.id] = true; break; }
+        }
+    }
+    // Friend: a peer in age, same zone, anyone.
+    if (pending.length < 2 && Math.random() < NPC_TIE_FRIEND_CHANCE) {
+        for (let i = 0; i < shuffled.length; i++) {
+            const c = shuffled[i];
+            if (used[c.npc.id] || Math.abs(c.npc.age - npc.age) > 20) continue;
+            pending.push({ type: "friend", other: c.npc });
+            used[c.npc.id] = true;
+            break;
+        }
+    }
+    npc._pendingTies = pending;
+}
+
+// A family shares a surname. Changes only the NEW npc's name unless the other
+// has none yet and has not been named to the player.
+function _shareSurname(a, b) {
+    if (typeof ensureNPCGivenName !== "function" || typeof NPC_GIVEN_NAME_POOLS === "undefined") return;
+    ensureNPCGivenName(a); ensureNPCGivenName(b);
+    const pool = NPC_GIVEN_NAME_POOLS[a.species];
+    if (!pool || !pool.surnames || !a.givenName || !b.givenName) return;
+    const partsA = a.givenName.split(" ");
+    const partsB = b.givenName.split(" ");
+    let surname = partsA.length > 1 ? partsA[partsA.length - 1] : "";
+    if (!surname) {
+        if (a.memory && a.memory.nameKnown) return;
+        surname = pool.surnames[_npcRandInt(0, pool.surnames.length - 1)];
+        a.givenName = partsA[0] + " " + surname;
+    }
+    b.givenName = partsB[0] + " " + surname;
+}
+
+// Writes the picked ties onto both NPCs (reciprocally). Call after creation.
+function finalizeNPCTies(npc) {
+    const pending = npc && npc._pendingTies;
+    delete npc._pendingTies;
+    delete npc._kinSocial;
+    if (!pending || !pending.length) return;
+    npc.ties = npc.ties || [];
+    pending.forEach(function (p) {
+        const other = p.other;
+        if (!other || _tieHas(npc, other.id)) return;
+        npc.ties.push({ type: p.type, id: other.id });
+        other.ties = other.ties || [];
+        other.ties.push({ type: NPC_TIE_RECIPROCAL[p.type], id: npc.id });
+        if (NPC_TIE_FAMILY.indexOf(p.type) >= 0) _shareSurname(other, npc);
+    });
+}
+
+function _tieRelationWord(type, otherGender) {
+    const male = otherGender === "male", female = otherGender === "female";
+    if (type === "spouse") return male ? "husband" : (female ? "wife" : "partner");
+    if (type === "parent") return male ? "father" : (female ? "mother" : "parent");
+    if (type === "child") return male ? "son" : (female ? "daughter" : "child");
+    if (type === "sibling") return male ? "brother" : (female ? "sister" : "sibling");
+    return "";
+}
+
+function _tieAnOrA(word) { return /^[aeiou]/i.test(word) ? "an " : "a "; }
+
+// One tie as the NPC would say it, in first person ("" if the other is gone).
+function describeNPCTie(npc, tie) {
+    const other = typeof findNPCById === "function" ? findNPCById(tie.id) : null;
+    if (!other || other.dead) return "";
+    const r = _tieRoomOf(other);
+    const where = r && (r.buildingName || (r.isNPCHome ? "their home" : "")) ? (r.buildingName ? " at " + r.buildingName : "") : "";
+    const role = other.role ? String(other.role).toLowerCase() : "";
+    const roleBit = role ? _tieAnOrA(role) + role : "someone";
+    const t = tie.type;
+    if (NPC_TIE_FAMILY.indexOf(t) >= 0) {
+        const word = _tieRelationWord(t, other.gender);
+        return "My " + word + " is " + roleBit + (where || "") + ".";
+    }
+    if (t === "coworker") return "I work alongside " + roleBit + (where || "") + ".";
+    if (t === "employer") return "I work for " + roleBit + (where || "") + ".";
+    if (t === "employee") return roleBit.charAt(0).toUpperCase() + roleBit.slice(1) + (where || "") + " works for me.";
+    if (t === "friend") return "I count " + roleBit + (where || "") + " as a friend.";
+    return "";
+}
+
+// The reveal line: up to two ties, family first.
+function getNPCTiesAnswer(npc) {
+    const ties = (npc.ties || []).slice().sort(function (a, b) {
+        return (NPC_TIE_FAMILY.indexOf(b.type) >= 0 ? 1 : 0) - (NPC_TIE_FAMILY.indexOf(a.type) >= 0 ? 1 : 0);
+    });
+    const lines = [];
+    for (let i = 0; i < ties.length && lines.length < 2; i++) {
+        const l = describeNPCTie(npc, ties[i]);
+        if (l) lines.push(l);
+    }
+    return lines.join(" ");
+}
+
+// A partnered NPC (living spouse) is not moved by flirting or teasing unless
+// their inhibitions are down (drink, or heavy earlier charm). Returns the
+// spouse NPC, or null if the NPC is free or the spouse is gone.
+const NPC_PARTNER_DISINHIBITION_MIN = 40;
+function getNPCPartner(npc) {
+    if (!npc || !npc.ties) return null;
+    for (let i = 0; i < npc.ties.length; i++) {
+        if (npc.ties[i].type !== "spouse") continue;
+        const other = typeof findNPCById === "function" ? findNPCById(npc.ties[i].id) : null;
+        if (other && !other.dead) return other;
+    }
+    return null;
+}
+
+function npcShrugsOffRomance(npc) {
+    if (!getNPCPartner(npc)) return false;
+    const d = npc.memory && typeof npc.memory.disinhibition === "number" ? npc.memory.disinhibition : 0;
+    return d < NPC_PARTNER_DISINHIBITION_MIN;
 }
 
 function buildNPCAppearanceHighlights(npc) {
