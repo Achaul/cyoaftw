@@ -4992,6 +4992,10 @@ const NPC_SPECIES_REACTION_HOSTILITY_CUTOFF = 60;
 // calm townsperson, so species colours encounters without starting fights alone.
 const NPC_SPECIES_HOSTILITY_PER_FAVOR = 4;
 const NPC_SPECIES_HOSTILITY_MAX_SHIFT = 30;
+// Same-species NPCs get a flat hostility drop on first meeting, so kin start
+// calm in most cases. Aggressive-temperament NPCs are exempt. Favour is not
+// touched by this.
+const NPC_SPECIES_KIN_HOSTILITY_DROP = 50;
 
 function applyNPCSpeciesReaction(npc) {
     if (!npc || npc.isHumanoid === false) return npc;
@@ -5006,7 +5010,12 @@ function applyNPCSpeciesReaction(npc) {
     var npcKey = String(npc.species || "").toLowerCase();
     var tpl = typeof getSpeciesTemplate === "function" ? getSpeciesTemplate(npc.species) : null;
     var delta = 0;
-    if (npcKey && npcKey === playerKey) delta += def.social.kin || 0;
+    var isKin = !!(npcKey && npcKey === playerKey);
+    if (isKin && String(npc.temperament || "").toLowerCase() !== "aggressive") {
+        hostility = Math.max(0, hostility - NPC_SPECIES_KIN_HOSTILITY_DROP);
+        npc.hostility = hostility;
+    }
+    if (isKin) delta += def.social.kin || 0;
     else if (tpl && tpl.isCivilized) delta += def.social.civilized || 0;
     if (def.social.bySpecies && def.social.bySpecies[npcKey]) delta += def.social.bySpecies[npcKey];
     if (!delta) return npc;
