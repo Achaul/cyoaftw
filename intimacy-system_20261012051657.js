@@ -67,6 +67,18 @@ function npcHasCloacaFlag(npc) {
 }
 
 
+// Cloaca narration wording: reptilian-kin have a single vent instead of a
+// separate anus, so canned anal narrative swaps its mammalian nouns for vent
+// wording. "Ring" and "muscle" stay - the vent has those too. Only used for
+// acts that target the hole itself (anus/ass/butthole), never cheeks.
+function _cloacaAnalWording(text) {
+    if (!text) return text;
+    return String(text)
+        .replace(/\bwrinkled skin\b/g, "smooth scales")
+        .replace(/\bwrinkled flesh\b/g, "scaled seam")
+        .replace(/\b(asshole|ass|anus|butthole|hole|rim|pucker|sphincter|entrance|crack|bowels)\b/g, "vent");
+}
+
 // IMPORTS / DEPENDENCIES
 // ============================================================================
 
@@ -1740,6 +1752,11 @@ function _npcPleasureLoopMouthActive(npc) {
         .indexOf(String(loop.actId || "")) !== -1;
 }
 
+function _playerPussyOralActive(npc) {
+    var la = npc && npc.intimacy && npc.intimacy.lastAction;
+    return !!(la && ["lick_player_pussy", "suck_player_clit"].indexOf(String(la.actId || "")) !== -1);
+}
+
 function checkActionValidity(actId, npc, player, positionId, clothingState) {
     const act = getAct(actId);
     if (!act) return { valid: false, reason: "unknown action" };
@@ -1876,7 +1893,9 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     }
 
     // Check penetration conflict: cannot start penetration in different orifice without pulling out first
-    if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
+    // Climax acts (triggersClimax) are exempt: they are release beats,
+    // not tool insertions — their tool/target are narrative labels.
+    if ((act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) && !act.triggersClimax) {
         const intimacy = npc && npc.intimacy;
         if (intimacy && intimacy.penetration && intimacy.penetration.active) {
             const currentTarget = intimacy.penetration.target;
@@ -1925,7 +1944,8 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         var _penTarget = _intimacy.penetration.target;
 
         // 1. CONTINUE actions: must match the current penetration target+tool
-        if (act.type === ACT_TYPES.CONTINUE) {
+        //    Climax acts are exempt (release beats, see above).
+        if (act.type === ACT_TYPES.CONTINUE && !act.triggersClimax) {
             if (act.target !== _penTarget && act.tool !== _penTool) {
                 return { valid: false, reason: "not penetrating this" };
             }
@@ -1966,7 +1986,12 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
             // Loop-routed climax acts are the release beat of the NPC-led
             // pleasure loop: valid without the penetration state that the
             // receive acts never set (external_semen is already exempt).
-            !(act.triggersClimax && _npcPleasureLoopActive(npc))) {
+            // The female player's climax acts are release beats too:
+            // Succumb works in any context, and Squirt is valid while
+            // the NPC's mouth is on her pussy even without penetration.
+            !(act.triggersClimax && (_npcPleasureLoopActive(npc) ||
+                actId === "player_orgasm" ||
+                (actId === "female_ejaculate" && _playerPussyOralActive(npc))))) {
             return { valid: false, reason: "not penetrated" };
         }
     }
@@ -2119,12 +2144,13 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
             // Player can squirt if:
             // - Player's vagina is being penetrated (playerIsBottom, target=vagina)
             // - Player is penetrating with vagina (tool=vagina)
-            if (!currentPenetration.active) {
-                return { valid: false, reason: "no access" };
-            }
-            const validVaginalContext = 
-                (currentPenetration.target === "vagina" && currentPenetration.playerIsBottom) ||
-                (currentPenetration.tool === "vagina");
+            // - The NPC's mouth is on the player's pussy (receiving oral —
+            //   receive acts never set penetration state)
+            const validVaginalContext =
+                (currentPenetration.active &&
+                    ((currentPenetration.target === "vagina" && currentPenetration.playerIsBottom) ||
+                     (currentPenetration.tool === "vagina"))) ||
+                _playerPussyOralActive(npc);
             if (!validVaginalContext) {
                 return { valid: false, reason: "no access" };
             }
@@ -2159,7 +2185,11 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     
     // Check tool/target accessibility for non-clothing, non-END, non-ANY, non-WATERSPORT actions
     const isPlayerActor = !act.playerIsBottom;
-    if (act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.END && act.type !== ACT_TYPES.WATERSPORT && act.reqCloth !== CLOTHING_REQUIREMENTS.ANY) {
+    // Climax acts whose tool/target are narrative labels (the player's own
+    // orgasm, or a shared body climax) skip contact-accessibility: their
+    // climax-section gates define validity. Male ejaculation acts keep it.
+    var _isNarrativeClimaxAct = ["player_orgasm", "female_ejaculate", "mutual_climax"].indexOf(actId) !== -1;
+    if (act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.END && act.type !== ACT_TYPES.WATERSPORT && act.reqCloth !== CLOTHING_REQUIREMENTS.ANY && !_isNarrativeClimaxAct) {
         if (!checkToolTargetAccessibility(act.tool, act.target, positionId, clothingState, isPlayerActor)) {
             return { valid: false, reason: "no access" };
         }
@@ -2929,6 +2959,125 @@ function buildSlaveSubmissionLine(npc) {
 // something an NPC just accepts. She needs coaxing - prep beats this
 // encounter (fingers, mouth, lube), very high arousal with a bold
 // temperament, long-term lust, or an already-experienced anatomy.
+// SPECIES ANAL ADAPTATION: the discomfort-to-pleasure transition during
+// anal penetration is voiced in character per species - how each race
+// endures the initial stretch (enter) and how they signal once the
+// muscles relax (ease). Species without an entry fall back to the generic
+// pain/discomfort pools in the penetration templates. Dragonborn have a
+// separate anus (not a cloaca - see SPECIES_TEMPLATES); Lizardfolk and
+// Kobolds keep the cloacal vent.
+var NPC_ANAL_ADAPTATION_SAMPLES = {
+    human: {
+        // The "wait it out" approach; aware of the awkwardness mid-pain.
+        enter: [
+            "winces, then forces a slow breath. <Ow—okay, just... breathe. I'm trying to let you in.>",
+            "holds up a hand, cheeks going red. <It's stretching... hold still for a second so I can adjust.>",
+            "lets out a strained laugh that's more embarrassment than pain. <Sorry—sorry. Just... let me get used to it.>"
+        ],
+        ease: [
+            "exhales, the tension draining out of {npcP} shoulders. <Okay... it's fading into warmth now. Keep going, just slow.>",
+            "shifts {npcP} hips, testing. <Oh. Okay. That's... actually nice now. Don't stop.>"
+        ]
+    },
+    elf: {
+        // Breath and mental control; they endure the barrier gracefully.
+        enter: [
+            "hisses a breath through {npcP} teeth, spine going rigid. <A sharp intrusion... but my body is learning your shape.>",
+            "closes {npcP} eyes, breath measured and slow. <Pain is temporary. Trust me to guide you through the tightness.>",
+            "bears down with deliberate control. <I am yielding. Do not force it; wait for me to open.>"
+        ],
+        ease: [
+            "breathes out, the last of the resistance melting away. <There. You see? The body obeys, given time.>",
+            "rocks back to meet you, unhurried. <The tightness has passed. Now we can enjoy this.>"
+        ],
+        // Shy/reserved elves: surprise and doubt — the taboo register
+        // lives here now, flustered and elegant rather than pained.
+        shy: [
+            "stiffens with a scandalised gasp, the flush creeping up to the tips of {npcP} ears. <We should not— this is not proper. And yet... wait. Do not move.>",
+            "bites {npcP} lip, torn between pulling away and pressing back. <I was raised better than this... but it aches in a way I cannot name.>",
+            "glances back with wide, doubting eyes. <You are certain it fits? It is... improper. And still I want you to continue.>",
+            "hides {npcP} burning face behind {npcP} hair, voice a mortified whisper. <If the elders ever learned of this... do not tell them. And do not stop.>"
+        ]
+    },
+    dwarf: {
+        // Gritted teeth; the pain is a challenge or a minor injury to endure.
+        enter: [
+            "grits {npcP} teeth with a muffled curse. <Gah! Tight as a vault door. Just... give me a sec to loosen up.>",
+            "plants {npcP} stance wider and endures it, jaw set. <It bites. But I'm used to pressure. Keep going.>",
+            "slaps a hand back against your hip - holding you in place, not pushing you off. <Don't pull out now! You're halfway in. Ride it out.>"
+        ],
+        ease: [
+            "huffs through {npcP} nose, finally loosening. <There. The door's open. Now get on with it.>",
+            "rolls {npcP} shoulders and settles in. <Pressure's just weight now. Give me all of it.>"
+        ]
+    },
+    orc: {
+        // Raw aggression against the pain; the burn is strength.
+        enter: [
+            "tenses hard, then deliberately relaxes with a low growl. <Fuck! It's clamping down hard. Break through it!>",
+            "snarls, pushing back against the burn. <It burns! Good. Now that it's stretched, it feels huge.>",
+            "bares {npcP} teeth over {npcP} shoulder. <Stop waiting! I'm open now! Hit me!>"
+        ],
+        ease: [
+            "roars as the resistance finally gives way. <That's it! All the way in. Don't you dare hold back now.>",
+            "grins through the last of the sting. <The burn's fuel now. Faster.>"
+        ]
+    },
+    halfling: {
+        // Vocal and expressive; yelps and nervous giggles, smaller and sensitive.
+        enter: [
+            "yelps, whole body jolting. <Eep! Okay, okay—give me a second, it's wide!>",
+            "giggles nervously, cheeks bright pink. <That was a pinch! Just hold still while I get used to it, okay?>",
+            "buries {npcP} face against the nearest thing. <Oh gods, oh gods... okay. Okay. I think it's fitting.>"
+        ],
+        ease: [
+            "wriggles back with a delighted squeak. <Oh! That's actually really nice now. Don't stop!>",
+            "sighs, patting {npcP} belly. <My tummy hurts a bit... but it feels so full. Keep going.>"
+        ]
+    },
+    dragonborn: {
+        // Controlled tension; the strain shows (nostrils, tail) before it eases.
+        enter: [
+            "goes utterly still, nostrils flaring with a thin curl of smoke. <The heat rises... but the muscle yields. I am ready.>",
+            "flares {npcP} nostrils, tail snapping stiff behind {npcP}. <It is a tight seal. You must earn the opening.>",
+            "holds {npcP} breath, scales prickling as the stretch settles. <Hold... the sting is passing. Do not stop midway.>"
+        ],
+        ease: [
+            "releases a long plume of smoke, the last of the tension gone. <The sting is gone. Now we begin.>",
+            "rolls {npcP} hips once, testing, and rumbles low in approval. <The seal is broken. Take what is yours.>"
+        ]
+    },
+    kobold: {
+        // Quick to panic, quick to adapt; trembly, then eager.
+        enter: [
+            "trembles, tail tucking tight, then freezes as the head slips in. <Yip! It's big... wait, it fits! It fits!>",
+            "hides {npcP} face behind both hands, peeking between the fingers. <I was scared it would hurt forever... k-keep going, just slow?>",
+            "chirps and squirms, half panic, half curiosity. <Hnn—okay! Okay. It's warm. It's really warm.>"
+        ],
+        ease: [
+            "peeks back over {npcP} shoulder, eyes shining. <Shiny! It's warm inside now. Don't stop!>",
+            "whines happily, pushing back to meet you. <It stopped hurting! It just feels... really, really good?>"
+        ]
+    },
+    goblin: {
+        // Immediate reaction, no patience for waiting; loud until it turns good.
+        enter: [
+            "squirms and swats at you, all noisy protest. <Ouchie! Hey! ...Wait. Wait, do that bit again.>",
+            "wriggles impatiently, huffing. <It's weirdly tight! Just shove it in already!>",
+            "complains loudly right up until the stretch eases - then goes very quiet. <Okay, okay, no more hurting! Let's go!>"
+        ],
+        ease: [
+            "kicks {npcP} little heels, suddenly all enthusiasm. <There! Right there! See, told you it'd get good!>",
+            "grins wide and shameless. <Knew it! Hurts first, then it's great. Go faster!>"
+        ]
+    }
+};
+
+function getSpeciesAnalAdaptationPool(npc) {
+    var key = String((npc && npc.species) || "").toLowerCase();
+    return NPC_ANAL_ADAPTATION_SAMPLES[key] || null;
+}
+
 var NPC_ANAL_REBUFF_SAMPLES = {
     bold: [
         "{npcS} tenses as you press against {npcp} asshole, then reaches back and pushes your hip away. <Nope. Not yet. Work me open first - fingers, mouth, patience. Then we talk.>",
@@ -3543,8 +3692,18 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
                     response.responseText = (response.responseText || '') + " You climax intensely.";
                 }
             } else {
+                // Female player: her organic climax (arousal crossing
+                // the cap without a climax button) draws a full release
+                // beat from the plain orgasm pools — building and
+                // release, in her stimulation context. Squirting never
+                // happens here; it is her explicit choice ("Squirt") only.
                 if (!response.responseText.includes("You climax") && !response.responseText.includes("you climax")) {
-                    response.responseText = (response.responseText || '') + " You reach a powerful orgasm.";
+                    var _organicBeat = buildPlayerOrgasmNarration(npc, player, { id: "player_orgasm" }, intimacy);
+                    if (_organicBeat) {
+                        response.responseText = (response.responseText || '') + ' ' + _organicBeat;
+                    } else {
+                        response.responseText = (response.responseText || '') + " You reach a powerful orgasm.";
+                    }
                 }
             }
         }
@@ -3851,7 +4010,7 @@ function handleLubeFromAction(npc, act) {
     // Actions that add lube to vagina
     const vaginaLubeActions = [
         "lick_pussy", "tongue_pussy", "suck_clit",
-        "lick_player_pussy", "spit_on_vagina"
+        "lick_player_pussy", "suck_player_clit", "spit_on_vagina"
     ];
     
     // Actions that add lube to anus
@@ -4617,9 +4776,24 @@ function buildIntimacyPrompt(context) {
     var _extendedOralLines = (_isExtendedOral && !_sampleMode)
         ? "- Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them, so the engine can tell speech from narration."
         : "";
+    // Extended-beat step list, by act family: cunnilingus builds
+    // differently from fellatio (approach and anticipation first, then
+    // contact, then rhythm, then the receiver climbing).
+    var _oralSteps = ["vagina", "pussy", "clitoris", "clit"].indexOf(String(action.target || "").toLowerCase()) !== -1
+        ? "approach and anticipation, first contact, taste her, find the rhythm, build her pleasure, ease off and look up"
+        : "tease, taste, take, work, pull back, look up";
+
     var _lengthRule = _isExtendedOral
-        ? "- Four to eight complete, grammatical sentences. This act is an EXTENDED beat: progress through distinct steps (tease, taste, take, work, pull back, look up) in order, and end on a beat that invites the player's next move."
+        ? "- Four to eight complete, grammatical sentences. This act is an EXTENDED beat: progress through distinct steps (" + _oralSteps + ") in order, and end on a beat that invites the player's next move."
         : "- One to three complete, grammatical sentences — never fragments. Under 45 words. This is a reaction beat, not a paragraph.";
+
+    // Cunnilingus acts (either direction): physical technique guidance
+    // for the AI - anticipation before contact, varied mouth work,
+    // hands doing their share, and the receiver visibly building.
+    var _cunnilingusNote = _isExtendedOral && ["vagina", "pussy", "clitoris", "clit"].indexOf(String(action.target || "").toLowerCase()) !== -1
+        ? "CUNNILINGUS TECHNIQUE: build the beat physically. Anticipation first - kisses up the inner thigh, warm breath on bare skin before contact. First contact is a slow lick through her folds, then the mouth settles over her clit. Vary the mouth: broad flat strokes of the tongue, pointed circles, and soft suction - but the clit is a small nub, so sucking means lips sealed around it in gentle, steady pressure, never hollowed cheeks (that suction belongs to a cock). Use hands too - parting her folds, fingers curling inside, a palm pinning her hips. Show her building: hips lifting, thighs trembling or clamping shut, breath going ragged, the pressure winding tight low in her belly. Stay on the bodies; concrete verbs, no metaphors."
+        : "";
+
 
     // Build template response context — feed the system-generated response
     // to the AI so it can enhance it rather than generating from scratch.
@@ -4635,8 +4809,15 @@ function buildIntimacyPrompt(context) {
                  action.type === "clothing" ? "clothing removal" :
                  action.type === "watersport" ? "watersports" :
                  "intimate action";
+    // Climax acts read as release beats in the prompt, not thrusting.
+    if (action.triggersClimax) actTypeName = "climax (orgasm release)";
 
     var actDescription = `The player is using their ${action.tool} to ${action.verb} the NPC's ${action.target}. This is a ${actTypeName} act. The NPC's reaction should be about the sensation of ${action.tool} on ${action.target}, NOT about vaginal sex or penetration unless the act IS penetration.`;
+
+    // Female player climax beats: describe HER orgasm, not a tool-on-target act.
+    if (action.id === "player_orgasm" || action.id === "female_ejaculate") {
+        actDescription = `The player is climaxing${action.id === "female_ejaculate" ? " — and squirting" : ""}. The reaction should be the crest and release of HER orgasm: her body, her sounds, the NPC riding it out with her. This is not a penetration beat.`;
+    }
 
     // Construct the full prompt
     var _pos = (typeof getPossessivePronoun === "function" && npc) ? getPossessivePronoun(npc) : "their";
@@ -4728,7 +4909,7 @@ ${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Ma
 - NEVER refer to the NPC by name. Use pronouns only (she/her or he/his, matching the NPC's gender).
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
 ${_dialogueRule}
-${_sampleModeLines}${_extendedOralLines ? "\n" + _extendedOralLines : ""}
+${_sampleModeLines}${_extendedOralLines ? "\n" + _extendedOralLines : ""}${_cunnilingusNote ? "\n" + _cunnilingusNote : ""}
 - Your output is ONLY the NPC's immediate REACTION to the act: ${_pos} body, ${_pos} sounds, ${_pos} face, ${_pos} words. The player's action is described separately — do NOT re-narrate it. Cut any "as you push/slide/fill" clause that describes what the PLAYER does.
 ${_lengthRule}
 - If the base response includes a sound (grunt, gasp, squeal), keep that reaction.
@@ -4749,6 +4930,7 @@ STYLE — write clear, direct, grammatically correct English:
 - Anatomy does not act on its own: the rectum, bowels and sphincter react to what you do - they grip, clench, squeeze, relax, yield - but never act with intent. No "milking", no "sucking you in", no "pulling you deeper".
 - No pulsing, rippling or quivering innards either: keep internal sensation simple - tight, hot, slick. The NPC's body can shudder and tremble; the insides stay hot and tight. Shuddering, trembling and clenching belong to the NPC's body, not to the organs.
 - No atmospheric filler about musk, the air, the room, or "their joined bodies".
+- BANNED phrase: "steady and unhurried" (and close variants like "slow and unhurried"). Never write it - it is canned template filler; pick concrete rhythm words instead.
 - Never imply the scene is ending: no "one last time", no "one final thrust", no "final stroke", no "last orgasm". The encounter continues until the player ends it - stamina allows multiple rounds. Describe THIS beat only. Stay on the two bodies and the act; only mention scent when the STATE gives a smell note.
 ${clothingGuard ? clothingGuard + "\n" : ""}
 
@@ -4905,6 +5087,8 @@ INSTRUCTIONS:
 - NEVER refer to the NPC by name. Use pronouns only (she/her or he/his, matching the NPC's gender).
 - Stay consistent with the sample: same act, same body parts, same sensations and outcome. You may add vivid physical detail drawn from the ANATOMY and STATE, but never contradict it and do not invent new acts.
 - Do NOT copy the sample's phrasing. Every sentence must be freshly written - if a phrase from the sample survives unchanged, rewrite it. The sample is a factual outline, not prose to preserve.
+- BANNED phrase: "steady and unhurried" (and close variants like "slow and unhurried"). Never write it - it is canned template filler. Pick concrete rhythm words instead ("in a slow, even rhythm").
+- The sample can stack overlapping canned fragments (an ongoing-motion line plus a body descriptor that repeats the same motion). MERGE overlapping content into one flowing passage - describe each motion and body part ONCE per beat, never twice.
 - Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them.
 ${_lengthRule}${_detailBlock}
 - Literal, physical language: concrete anatomy ("sphincter", "pucker", "cheeks", "the root"), never abstractions like "clenching heat" or "her warmth".
@@ -5441,7 +5625,7 @@ function getSensoryFragment(npc, target, intimacy, options) {
     }
 
     // Pubic hair (15% chance, only for genital targets)
-    if (Math.random() < 0.15 && (targetKey === "vagina" || targetKey === "anus")) {
+    if (Math.random() < 0.15 && (targetKey === "vagina" || (targetKey === "anus" && !npcHasCloacaFlag(npc)))) {
         var pubicDesc = getPubicDescription(npc) || "";
         var pubicPool = SENSORY_FRAGMENTS.pubic[targetKey] || [];
         if (pubicPool.length && pubicDesc) {
@@ -5675,6 +5859,82 @@ var BODY_PART_REACTIONS = {
  * - Dialogue tags from action definition
  * - Personality context
  */
+var PLAYER_ORGASM_SAMPLES = {
+    // NPC's mouth on the player's pussy
+    oral: {
+        plain: [
+            "The pressure {npcs} has been winding tighter finally crests, and you stop holding it back. Your hips press up into {npcp} mouth as the first wave rolls through you, thighs clamping around {npcp} head. {npcS} moans against you and keeps {npcp} lips exactly where they are, riding out every shudder until you go still. You climax so hard your vision spots, and {npcs} gentles you through the last of it with slow, soft licks.",
+            "You succumb to the pressure all at once — no warning you could have given — your back bowing as the orgasm breaks over you. {npcS} seals {npcp} lips around your clit and sucks you through it, hands holding your shaking thighs apart. You climax in long, rolling waves, each one softer than the last, and {npcs} only pulls back when your body finally goes limp beneath {npcO}.",
+            "{npcS} feels you start to tremble under {npcp} mouth and doubles down, tongue working faster, and that is what pushes you over. You climax with a broken gasp, fingers tangling in {npcp} hair to hold {npcO} there while your hips grind against {npcp} face. {npcS} groans into you like {npcs} is the one being rewarded, and {npcs} does not stop until the last aftershock stills you.",
+            "The pleasure climbs with every pass of {npcp} tongue, a wave cresting higher and higher until you cannot hold it back anymore. You climax with a cry, your body spasming with the force of it, and {npcs} holds your hips steady and keeps {npcp} mouth on you, drawing out every last pulse until you are left gasping.",
+            "You feel yourself getting closer and closer to the edge, legs trembling with the effort of staying still — and then {npcs} flicks {npcp} tongue just right and the edge takes you. You climax with a sob, the tension that coiled so tight in your belly letting go all at once, and {npcs} works you through every wave of it."
+        ],
+        squirt: [
+            "The pressure crests and you let go, and this time it does not stay inside you — you squirt against {npcp} mouth, a hot rush that stripes {npcp} chin and soaks the sheets. {npcS} gasps, then presses {npcp} lips back over you to catch the next wave. You climax in messy pulses, hips jerking with every one, and {npcs} rides out each spasm with {npcp} mouth sealed to you.",
+            "You break with a cry, your release spurting over {npcp} lips and cheeks as your pussy pulses with it. {npcS} does not flinch — {npcs} groans at the taste of you and keeps {npcp} tongue moving through each aftershock. You climax so long and so hard that your legs will not hold you afterward."
+        ]
+    },
+    // Something inside the player (vaginal penetration, either direction)
+    penetration: {
+        plain: [
+            "The pressure that has been gathering with every stroke finally crests, and you stop fighting it. Your inner walls clamp down on what is filling you, hips stuttering, and the orgasm rolls through you in long, clenching waves. You climax with a low, helpless sound, and {npcs} holds you steady through it, growling praise into your ear as you shudder around {npcO}.",
+            "One more movement is all it takes. The pressure breaks, and your whole body draws tight — thighs locking, breath stopping, back arching — before the wave lets go of you and you melt. You climax in rough pulses, your hips working on instinct, and {npcs} keeps moving to draw every last ripple out of you.",
+            "You can feel it building — the pressure coiling tighter and tighter low in your belly with every stroke — and when it finally crests there is no holding back. Your orgasm crashes over you like a wave, and you climax gasping, your body clenching hard around {npcO}, while {npcs} groans at the grip of you and does not dare stop."
+        ],
+        squirt: [
+            "You feel it building past the point of no return — a pressure that needs out — and when it breaks, it breaks wet. You squirt around {npcO} in a hot gush that floods where your bodies meet, your body gripping {npcO} through every pulse. {npcS} groans at the sudden flood and keeps moving, dragging your climax out until you are too sensitive to take more.",
+            "The crest hits and you let go completely, a rush of wetness spurting out around {npcO} as your hips jerk helplessly. {npcS} stills to feel you clench and gush around {npcp}, murmuring filth against your neck, and you climax until your thighs are shaking and everything beneath you is soaked."
+        ]
+    },
+    // Manual, grinding, or plain surrender — no penetration, no mouth
+    general: {
+        plain: [
+            "You succumb to the pressure at last — no act, no warning, just the pleasure finally overtaking you. Your hips lift, every muscle drawing tight, and then release: long, rolling waves that leave you gasping. You climax with {npcp} name on your lips, and {npcs} watches you come apart with dark, satisfied eyes, {npcp} hands never stopping their steady work.",
+            "It has been building for too long to stop. You let the pressure crest and break, your body taking over — thighs snapping shut, back arching, a breath caught halfway between a gasp and a moan. You climax in wave after wave that leave you flushed and trembling, and {npcs} holds you through it, pressing kisses to whatever skin {npcs} can reach.",
+            "It builds the way a wave builds — higher and higher with every breath, until the effort of holding still makes your legs tremble — and then it breaks. You climax hard, crying out, your body convulsing through it in long waves, and {npcs} watches every second of it with {npcp} hands braced on your shaking thighs."
+        ],
+        squirt: [
+            "When you finally let go, your body gives back more than you expected: you squirt, a hot rush soaking your thighs and everything under you as the orgasm tears through. You climax in hard, messy pulses, hips jerking with each one, and {npcs} makes a low, awed sound and presses {npcp} palm flat against you through the rest of it.",
+            "The pressure crests and you break wet — a gush that splashes over {npcp} hand and wrist as your pussy pulses with it. You climax so hard your ears ring, hips bucking into the feeling, and {npcs} works you through every last spasm until you beg {npcO} to stop."
+        ]
+    }
+};
+
+/**
+ * True while the NPC's mouth is working the player's pussy — the climax
+ * context for the female receive-oral acts. They never set penetration
+ * state, so the climax gates read the last action instead.
+ */
+function _playerPussyOralActive(npc) {
+    var la = npc && npc.intimacy && npc.intimacy.lastAction;
+    return !!(la && ["lick_player_pussy", "suck_player_clit"].indexOf(String(la.actId || "")) !== -1);
+}
+
+/**
+ * Player climax beats (player_orgasm "Succumb to the pressure",
+ * female_ejaculate "Squirt"): the female player's release narrated in
+ * second person, with the NPC's reaction woven in. Keyed by stimulation
+ * context (oral on her pussy / penetration / general) and plain vs
+ * squirt, drawn anti-repeated and pronoun-resolved like the servicing
+ * pools. Every beat contains "You climax" verbatim so the generic
+ * climax-notification line in executeIntimacyAction is suppressed.
+ */
+function buildPlayerOrgasmNarration(npc, player, act, intimacy) {
+    var pen = intimacy && intimacy.penetration;
+    var ctx = "general";
+    if (_playerPussyOralActive(npc)) {
+        ctx = "oral";
+    } else if (pen && pen.active &&
+        ((pen.target === "vagina" && pen.playerIsBottom) || pen.tool === "vagina")) {
+        ctx = "penetration";
+    }
+    var squirt = act && act.id === "female_ejaculate";
+    var pool = PLAYER_ORGASM_SAMPLES[ctx] || PLAYER_ORGASM_SAMPLES.general;
+    var beats = squirt ? pool.squirt : pool.plain;
+    if (!beats || !beats.length) beats = PLAYER_ORGASM_SAMPLES.general.plain;
+    return applyNPCPronouns(npc, pickUnique(beats, intimacy, "player-orgasm-" + ctx + (squirt ? "-squirt" : "-plain")));
+}
+
 function buildIntimacyResponse(npc, player, act, intimacy) {
     if (!npc || !act) {
         return pickRandom(BODY_PART_REACTIONS.general.moderate);
@@ -5686,6 +5946,12 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
     // enthusiasm based on temperament, not a body-part reaction.
     if (act.playerIsBottom) {
         return buildReceiveResponse(npc, player, act, intimacy);
+    }
+    // ── PLAYER CLIMAX ACTS ─────────────────────────────────────────
+    // Succumb to the pressure / Squirt: the female player's climax
+    // beats get dedicated narration, not the penetration-continue path.
+    if (act.id === "player_orgasm" || act.id === "female_ejaculate") {
+        return buildPlayerOrgasmNarration(npc, player, act, intimacy);
     }
     
     const npcName = npc.name || "They";
@@ -6245,7 +6511,12 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             ? `clings hot and easy around your ${tool}`
             : `grips your ${tool} like a vice`);
 
-    // Build pain/discomfort descriptors based on size and experience
+    // Build pain/discomfort descriptors based on size and experience.
+    // Species adaptation pools (see NPC_ANAL_ADAPTATION_SAMPLES) win over
+    // the generic registers below — the size-mismatch branch still
+    // overrides them, since a much larger player is a mechanical problem
+    // no species voice talks its way around.
+    var _speciesAdaptation = getSpeciesAnalAdaptationPool(npc);
     var _painEnter = "";
     var _painContinue = "";
     if (_isSmallNpc || _analSize === "player-larger" || _analSize === "player-much-larger") {
@@ -6261,12 +6532,24 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
             `grunts, face tight with discomfort even as ${subjectPronoun.toLowerCase()} adjusts. <Keep it slow. It's a lot.>`,
             `winces slightly but doesn't pull away. <Okay... okay. It's intense. But keep going, just slow.>`
         ]);
+    } else if (_speciesAdaptation) {
+        // Species-voiced stretch-then-ease: discomfort shifts into
+        // pleasure once the muscles relax (see NPC_ANAL_ADAPTATION_SAMPLES).
+        // Shy/reserved NPCs of a species with a `shy` sub-pool sometimes
+        // react with surprise and doubt instead — the taboo register,
+        // voiced in character rather than hardcoded for everyone.
+        var _isShyTemperament = ["shy", "timid", "reserved"].indexOf(_npcTemperament) !== -1;
+        var _shyAnalPool = (_isShyTemperament && _speciesAdaptation.shy) ? _speciesAdaptation.shy : null;
+        _painEnter = applyNPCPronouns(npc, pickRandom(
+            (_shyAnalPool && Math.random() < 0.6) ? _shyAnalPool : _speciesAdaptation.enter
+        ));
+        _painContinue = applyNPCPronouns(npc, pickRandom(_speciesAdaptation.ease));
     } else if (_isExperienced && _isBold) {
         // Experienced + bold — can handle it, even excited by it
         _painEnter = pickRandom([
             `groans, pushing back with a grunt. <Fuck yes. That's intense. Keep going.>`,
             `lets out a sharp exhale, then a wicked grin. <Mmm. That's the burn I like. Go.>`,
-            `shudders but not from pain — from the taboo of it. <Yes. That. More.>`
+            `rocks back onto you, greedy for more. <Every inch. I can take it.>`
         ]);
         _painContinue = pickRandom([
             `grunts with something between pain and pleasure. <Fuck... that's deep. Don't stop.>`,
@@ -6315,6 +6598,7 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
         continue: [
             // Pain/discomfort continues — even warmed up, anal is intense
             (_isSmallNpc || (_analSize === "player-larger" || _analSize === "player-much-larger")) ? _painContinue : null,
+            (_speciesAdaptation && Math.random() < 0.4) ? _painContinue : null,
             (!(_isExperienced && _isBold) && Math.random() < 0.3) ? _painContinue : null,
             isNearClimax ? `clenches desperately, ${subjectPronoun.toLowerCase()} so close to climax ${subjectPronoun.toLowerCase()} can't hold back, ${possessivePronoun} ass gripping your ${tool} tightly.` : 
             (shouldSemenDrip ? `clenches, ${possessivePronoun} cum-filled ass squelching around your ${tool}, your semen bubbling out with each thrust.` : 
@@ -8605,6 +8889,15 @@ function endPenetrationWithNarration(npc, player, intimacy, reason = "transition
                     ]);
                 }
             }
+            // ── CLOACA WORDING ──
+            // Cloaca-bearing NPCs have a single vent instead of a separate
+            // anus: swap the mammalian anal nouns for vent wording on the
+            // finished narrative. "Ring" stays - the vent has a muscular
+            // ring too.
+            if (npcHasCloacaFlag(npc)) {
+                pullOutNarrative = String(pullOutNarrative)
+                    .replace(/\b(ass|anus|hole|rim|entrance|sphincter|crack|bowels)\b/g, "vent");
+            }
         } else if (target === "mouth" || target === "lips") {
             // ── ORAL PULL-OUT: the giver is the active party. She
             // controls the release - working the last inches, deciding
@@ -8970,11 +9263,13 @@ function buildPositionChangeNPCResponse(npc, positionChangeInfo) {
     if (hasSemenToDrip && isStandingPosition) {
         const target = lastEjaculationTarget;
         if (target === "anus") {
+            // Cloaca-bearing NPCs: the load was left in the vent.
+            var dripWord = npcHasCloacaFlag(npc) ? "vent" : target;
             semenDripNarrative = pickRandom([
-                `, your semen immediately beginning to drip from ${possessivePronoun} well-used ${target}, running down ${possessivePronoun} thighs in thick streaks`,
-                `, the change in position causing your cum to sluice out of ${possessivePronoun} stretched ${target}, making a messy trail down ${possessivePronoun} legs`,
-                `, your release gushing out of ${possessivePronoun} gaping ${target} as gravity takes hold, the warm fluid pooling at ${possessivePronoun} feet`,
-                `, a thick glob of semen sliding out from ${possessivePronoun} relaxed ${target}, splattering against ${possessivePronoun} inner thighs`
+                `, your semen immediately beginning to drip from ${possessivePronoun} well-used ${dripWord}, running down ${possessivePronoun} thighs in thick streaks`,
+                `, the change in position causing your cum to sluice out of ${possessivePronoun} stretched ${dripWord}, making a messy trail down ${possessivePronoun} legs`,
+                `, your release gushing out of ${possessivePronoun} gaping ${dripWord} as gravity takes hold, the warm fluid pooling at ${possessivePronoun} feet`,
+                `, a thick glob of semen sliding out from ${possessivePronoun} relaxed ${dripWord}, splattering against ${possessivePronoun} inner thighs`
             ]);
         } else if (target === "vagina") {
             semenDripNarrative = pickRandom([
@@ -9484,17 +9779,20 @@ function describeCloaca(npc, anatomy, posPronoun, arousalDescriptors) {
     var skinDesc = (typeof getSkinDescription === "function") ? getSkinDescription(npc) : "";
     var sizeAdj = pickRandom(["tight", "smooth-scaled", "muscular", "slick"]);
     var cloacaTerm = pickRandom(["cloaca", "vent", "slit", "opening"]);
+    // Adjectival skin form so the descriptor reads "her deep orange scaled
+    // slit" rather than the broken "her deep orange scales slit".
+    var skinAdj = String(skinDesc || "").replace(/\s+scales$/i, " scaled").replace(/\s+skin$/i, "").replace(/\s+fur$/i, " furred").trim();
 
     var candidates = [
-        posPronoun + " " + sizeAdj + " " + skinDesc + " " + cloacaTerm,
-        posPronoun + " " + skinDesc + " " + cloacaTerm + ", the smooth scales parting slightly",
-        posPronoun + " scaled " + cloacaTerm + ", a single sleek opening"
+        posPronoun + " " + sizeAdj + " " + skinAdj + " " + cloacaTerm,
+        posPronoun + " " + skinAdj + " " + cloacaTerm + ", the smooth scales glistening faintly",
+        posPronoun + " scaled " + cloacaTerm + ", a single vertical seam"
     ];
 
     // Arousal affects the cloaca — it gapes/widens when aroused
-    var stateDesc = arousalDescriptors.engorgement ? pickRandom(["parting", "widening", "gaping slightly", "dilated"]) : "";
+    var stateDesc = arousalDescriptors.engorgement ? pickRandom(["widening", "gaping slightly", "dilated", "relaxing open"]) : "";
     if (stateDesc) {
-        candidates.push(posPronoun + " " + stateDesc + " " + skinDesc + " " + cloacaTerm + ", the scales pulling apart with arousal");
+        candidates.push(posPronoun + " " + stateDesc + " " + skinAdj + " " + cloacaTerm + ", the scales pulling apart with arousal");
     }
 
     return pickRandom(candidates).replace(/\s+/g, ' ').trim();
@@ -10400,7 +10698,7 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     var _isEntryAct = act.type === "penetrate" || (typeof ACT_TYPES !== "undefined" && act.type === ACT_TYPES.PENETRATE);
     // Climax acts are exempt too: their full staged narrative (mouth
     // gulping, internal release) must not be flattened into a
-    // one-line transition ("You make contact, your penis ejaculate...").
+    // one-line transition ("You ejaculate onto their stomach...").
     var _isClimaxAct = !!act.triggersClimax;
     // Spit acts too: their dedicated pool (buildSpitOnNarratives) reads
     // far better than the initial-contact line, and "your mouth spit on
@@ -10520,6 +10818,15 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
         }
     }
 
+    // Cloaca-bearing NPCs: acts that target the hole narrate the vent, never
+    // a mammalian anus (scaled, no wrinkled rim, no coarse hair). Cheek acts
+    // (buttocks targets) keep their wording.
+    var _cloacaTgtLc = String(act.target || "").toLowerCase();
+    if (finalNarrative && !act.playerIsBottom && npcHasCloacaFlag(npc) &&
+        (_cloacaTgtLc === "anus" || _cloacaTgtLc === "ass" || _cloacaTgtLc === "butthole")) {
+        finalNarrative = _cloacaAnalWording(finalNarrative);
+    }
+
     return finalNarrative;
 }
 
@@ -10540,11 +10847,19 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
  * verb phrase, so we don't get "You move to her Suck her nipples".
  * Shared between buildInitialContactNarration and buildTransitionNarration.
  */
-function getTargetNoun(actObj, posPronoun) {
+
+function getTargetNoun(actObj, posPronoun, npc) {
     var t = actObj && actObj.target ? actObj.target : "body";
     // For receive actions (playerIsBottom), the target is the player's body part
     if (actObj && actObj.playerIsBottom) {
         return "your " + t;
+    }
+    // Cloaca-bearing NPCs have a single vent instead of a separate anus:
+    // anal narration reads "her cloaca", never "her anus" (mirrors the menu
+    // relabelling in getGenderedLabel).
+    if (npc && typeof npcHasCloacaFlag === "function" && npcHasCloacaFlag(npc) &&
+        String(t).toLowerCase() === "anus") {
+        return (posPronoun || "their") + " cloaca";
     }
     return (posPronoun || "their") + " " + t;
 }
@@ -10737,42 +11052,48 @@ function buildInitialContactNarration(npc, act, pronouns = {}, player = null) {
     // Kissing
     if (isKissing) {
         if (targetNorm === 'lips' || targetNorm === 'mouth') {
-            return `You lean in, parting your lips as you press them to ${getTargetNoun(act, posPronoun)}`;
+            return `You lean in, parting your lips as you press them to ${getTargetNoun(act, posPronoun, npc)}`;
         }
-        return `You lean in and bring your lips to ${getTargetNoun(act, posPronoun)}`;
+        return `You lean in and bring your lips to ${getTargetNoun(act, posPronoun, npc)}`;
     }
 
     // Touching face/lips
     if (isTouching && (isOral(targetNorm) || targetNorm === 'face' || targetNorm === 'cheek')) {
-        return `You reach out, your ${toolNorm} gently ${verbNorm} ${getTargetNoun(act, posPronoun)}`;
+        return `You reach out and gently ${verbNorm} ${getTargetNoun(act, posPronoun, npc)}`;
     }
 
     // Touching genitals
     if (isTouching && (isGenital(targetNorm) || isAnal(targetNorm))) {
         if (targetNorm === 'vagina' || targetNorm === 'pussy') {
-            return `You reach down, your ${toolNorm} finding ${getTargetNoun(act, posPronoun)}`;
+            return `You reach down, your ${toolNorm} finding ${getTargetNoun(act, posPronoun, npc)}`;
         }
         if (isAnal(targetNorm)) {
-            return `You reach around, your ${toolNorm} tracing ${getTargetNoun(act, posPronoun)}`;
+            return `You reach around, your ${toolNorm} tracing ${getTargetNoun(act, posPronoun, npc)}`;
         }
-        return `You reach out, your ${toolNorm} making contact with ${getTargetNoun(act, posPronoun)}`;
+        return `You reach out, your ${toolNorm} finding ${getTargetNoun(act, posPronoun, npc)}`;
     }
 
     // Penetration
     if (isPenetrating) {
         if (targetNorm === 'vagina' || targetNorm === 'pussy') {
-            return `You position yourself, guiding your ${toolNorm} to ${getTargetNoun(act, posPronoun)}`;
+            return `You position yourself, guiding your ${toolNorm} to ${getTargetNoun(act, posPronoun, npc)}`;
         }
         if (isAnal(targetNorm)) {
-            return `You guide your ${toolNorm} into position at ${getTargetNoun(act, posPronoun)}`;
+            return `You guide your ${toolNorm} into position at ${getTargetNoun(act, posPronoun, npc)}`;
         }
         if (isOral(targetNorm)) {
-            return `You bring your ${toolNorm} to ${getTargetNoun(act, posPronoun)}`;
+            return `You bring your ${toolNorm} to ${getTargetNoun(act, posPronoun, npc)}`;
         }
     }
 
-    // Default initial contact
-    return `You make contact, your ${toolNorm} ${verbNorm} ${getTargetNoun(act, posPronoun)}`;
+    // Default initial contact: a direct act line ("You grope her breasts") —
+    // hand-based acts get the reach-out opening move ("You reach out to grope
+    // her breasts") instead of the old odd "You make contact, your hand grope
+    // her breasts".
+    if (toolNorm === 'hand' || toolNorm === 'hands' || toolNorm === 'fingers') {
+        return `You reach out to ${verbNorm} ${getTargetNoun(act, posPronoun, npc)}`;
+    }
+    return `You ${verbNorm} ${getTargetNoun(act, posPronoun, npc)}`;
 }
 
 /**
@@ -10800,8 +11121,36 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
     const lastToolNorm = normalize(lastTool);
     const currentToolNorm = normalize(tool);
 
-    // If tool and target are the same, no significant transition needed
-    if (lastToolNorm === currentToolNorm && lastTargetNorm === currentTargetNorm) {
+
+    // CONTINUE acts never "move" anywhere - they keep the ongoing motion,
+    // so they never produce a transition line.
+    if (currentAct.type === "continue" || (typeof ACT_TYPES !== "undefined" && currentAct.type === ACT_TYPES.CONTINUE)) {
+        return "";
+    }
+
+    // Body-area normalization: different words name the same area
+    // (butt/buttocks/ass, vagina/pussy/clit, breasts/chest/nipples), so two
+    // acts on the same area with the same kind of tool mean the contact is
+    // already there - no "you move your hand to..." transition needed. This
+    // also covers a bare act following its own _clothed variant.
+    const normBodyArea = (t) => {
+        const n = normalize(t);
+        if (['anus', 'butt', 'butthole', 'ass', 'buttocks', 'cheeks'].includes(n)) return 'ass';
+        if (['vagina', 'pussy', 'clit', 'clitoris', 'fold', 'folds'].includes(n)) return 'vagina';
+        if (['breast', 'breasts', 'chest', 'nipple', 'nipples'].includes(n)) return 'breasts';
+        if (['cock', 'penis', 'dick'].includes(n)) return 'penis';
+        if (['mouth', 'lips', 'tongue'].includes(n)) return 'mouth';
+        return n;
+    };
+    const normToolKind = (t) => {
+        const n = normalize(t);
+        if (n === 'hand' || n === 'hands' || n === 'fingers' || n === 'finger') return 'hand';
+        if (n === 'cock' || n === 'penis' || n === 'dick') return 'penis';
+        if (n === 'pussy' || n === 'vagina') return 'vagina';
+        return n;
+    };
+    if (normToolKind(lastToolNorm) === normToolKind(currentToolNorm) &&
+        normBodyArea(lastTargetNorm) === normBodyArea(currentTargetNorm)) {
         return "";
     }
 
@@ -10816,7 +11165,10 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
     const isBreast = (t) => ['breast', 'breasts', 'chest', 'nipple', 'nipples'].includes(normalize(t));
 
     const lastVerbNorm = normalize(lastVerb);
+
     const currentVerbNorm = normalize(verb);
+    // Spreading takes both hands - pluralize the tool word for spread acts.
+    const currentToolWord = (currentVerbNorm === 'spread' && (currentToolNorm === 'hand' || currentToolNorm === 'hands')) ? 'hands' : currentToolNorm;
 
     // ── WITHDRAWAL FROM PENETRATION ──────────────────────────────
     // If the previous action was a penetration and the current action targets
@@ -10831,7 +11183,7 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
         var withdrawDetail = "";
 
         if (isAnal(lastTargetNorm)) {
-            withdrawPart = posPronoun + " anus";
+            withdrawPart = posPronoun + (npcHasCloacaFlag(npc) ? " cloaca" : " anus");
             withdrawDetail = pickRandom([
                 ", the stretched rim slowly clenching shut",
                 ", the ring of muscle clamping down, still hot from the friction",
@@ -10866,20 +11218,20 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
         var transitionSentence = "";
         if (isPenetrating(currentVerbNorm) || isFingering(currentVerbNorm)) {
             if (isAnal(currentTargetNorm)) {
-                transitionSentence = " You shift and press your " + currentToolNorm + " against " + getTargetNoun(currentAct, posPronoun);
+                transitionSentence = " You shift and press your " + currentToolNorm + " against " + getTargetNoun(currentAct, posPronoun, npc);
             } else if (isGenital(currentTargetNorm)) {
-                transitionSentence = " You reposition and guide your " + currentToolNorm + " to " + getTargetNoun(currentAct, posPronoun);
+                transitionSentence = " You reposition and guide your " + currentToolNorm + " to " + getTargetNoun(currentAct, posPronoun, npc);
             } else if (isOral(currentTargetNorm)) {
-                transitionSentence = " You move your " + currentToolNorm + " to " + getTargetNoun(currentAct, posPronoun);
+                transitionSentence = " You move your " + currentToolNorm + " to " + getTargetNoun(currentAct, posPronoun, npc);
             } else {
-                transitionSentence = " You move to " + getTargetNoun(currentAct, posPronoun);
+                transitionSentence = " You move to " + getTargetNoun(currentAct, posPronoun, npc);
             }
         } else if (isTouching(currentVerbNorm)) {
-            transitionSentence = " You reach out and " + currentVerbNorm + " " + getTargetNoun(currentAct, posPronoun);
+            transitionSentence = " You reach out and " + currentVerbNorm + " " + getTargetNoun(currentAct, posPronoun, npc);
         } else if (isKissing(currentVerbNorm)) {
-            transitionSentence = " You lean in and " + currentVerbNorm + " " + getTargetNoun(currentAct, posPronoun);
+            transitionSentence = " You lean in and " + currentVerbNorm + " " + getTargetNoun(currentAct, posPronoun, npc);
         } else {
-            transitionSentence = " You move to " + getTargetNoun(currentAct, posPronoun);
+            transitionSentence = " You move to " + getTargetNoun(currentAct, posPronoun, npc);
         }
 
         return withdrawSentence + transitionSentence;
@@ -10899,34 +11251,34 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
     // Case 1: Transition to kissing from non-kissing
     if (isKissing(currentVerbNorm) && !isKissing(lastVerbNorm) && !isOral(lastTargetNorm)) {
         if (currentTargetNorm === 'lips' || currentTargetNorm === 'mouth') {
-            return `You lean in and press your lips to ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You lean in and press your lips to ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
-        return `You lean in and kiss ${getTargetNoun(currentAct, posPronoun)}`;
+        return `You lean in and kiss ${getTargetNoun(currentAct, posPronoun, npc)}`;
     }
     
     // Case 2: Moving from kissing to something else
     if (isKissing(lastVerbNorm) && !isKissing(currentVerbNorm)) {
         if (isTouching(currentVerbNorm)) {
-            return `You pull back from the kiss and reach out, ${currentVerbNorm} ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You pull back from the kiss and reach out, ${currentVerbNorm} ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         if (isPenetrating(currentVerbNorm) && currentTargetNorm === 'vagina') {
-            return `You break from the kiss and position yourself, pressing your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You break from the kiss and position yourself, pressing your ${currentToolWord} against ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         if (currentTargetNorm === 'anus' || currentTargetNorm === 'butt') {
-            return `You pull away from the kiss and guide ${objPronoun} into position, pressing against ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You pull away from the kiss and guide ${objPronoun} into position, pressing against ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
     }
     
     // Case 3: Moving from touching to penetration
     if (isTouching(lastVerbNorm) && isPenetrating(currentVerbNorm)) {
         if (currentTargetNorm === 'vagina' || currentTargetNorm === 'pussy') {
-            return `You move from teasing to penetration, pressing your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You move from teasing to penetration, pressing your ${currentToolWord} against ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         if (currentTargetNorm === 'anus' || currentTargetNorm === 'butt') {
-            return `You shift your approach, positioning your ${currentToolNorm} at ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You shift your approach, positioning your ${currentToolWord} at ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         if (isOral(currentTargetNorm)) {
-            return `You move your ${currentToolNorm} to ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You move your ${currentToolWord} to ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
     }
     
@@ -10934,60 +11286,60 @@ function buildTransitionNarration(npc, lastAct, currentAct, pronouns = {}, playe
     if (lastTargetNorm !== currentTargetNorm && !isPenetrating(currentVerbNorm)) {
         // From face/breast to genital
         if ((isOral(lastTargetNorm) || isBreast(lastTargetNorm)) && (isGenital(currentTargetNorm) || isAnal(currentTargetNorm))) {
-            return `You move your attention downward, bringing your ${currentToolNorm} to ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You move your attention downward, bringing your ${currentToolWord} to ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         // From genital to face/breast
         if ((isGenital(lastTargetNorm) || isAnal(lastTargetNorm)) && (isOral(currentTargetNorm) || isBreast(currentTargetNorm))) {
-            return `You pull back and move upward, ${currentVerbNorm} ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You pull back and move upward, ${currentVerbNorm} ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         // From breast to genital
         if (isBreast(lastTargetNorm) && (isGenital(currentTargetNorm) || isAnal(currentTargetNorm))) {
-            return `Your hands slide lower, your ${currentToolNorm} finding ${getTargetNoun(currentAct, posPronoun)}`;
+            return `Your hands slide lower, your ${currentToolWord} finding ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         // From genital to breast
         if ((isGenital(lastTargetNorm) || isAnal(lastTargetNorm)) && isBreast(currentTargetNorm)) {
-            return `You move upward, your ${currentToolNorm} exploring ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You move upward, your ${currentToolWord} exploring ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
     }
     
     // Case 5: Tool change (e.g., fingers to penis)
     if (lastToolNorm !== currentToolNorm && lastToolNorm && currentToolNorm) {
         if ((lastToolNorm === 'finger' || lastToolNorm === 'fingers') && (currentToolNorm === 'penis' || currentToolNorm === 'cock')) {
-            return `You withdraw your fingers and position your ${currentToolNorm}, pressing against ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You withdraw your fingers and position your ${currentToolWord}, pressing against ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         if ((currentToolNorm === 'finger' || currentToolNorm === 'fingers') && (lastToolNorm === 'penis' || lastToolNorm === 'cock')) {
-            return `You pull back and use your fingers instead, ${currentVerbNorm} ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You pull back and use your fingers instead, ${currentVerbNorm} ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         if (isOral(currentTargetNorm) && (currentToolNorm === 'penis' || currentToolNorm === 'cock')) {
-            return `You guide your ${currentToolNorm} to ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You guide your ${currentToolWord} to ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
     }
     
     // Case 6: Starting penetration
     if (isPenetrating(currentVerbNorm) && !isPenetrating(lastVerbNorm)) {
         if (currentTargetNorm === 'vagina' || currentTargetNorm === 'pussy') {
-            return `You position yourself and press your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You position yourself and press your ${currentToolWord} against ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         if (currentTargetNorm === 'anus' || currentTargetNorm === 'butt') {
-            return `You guide ${objPronoun} into position and press your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You guide ${objPronoun} into position and press your ${currentToolWord} against ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
         if (isOral(currentTargetNorm)) {
-            return `You move your ${currentToolNorm} to ${getTargetNoun(currentAct, posPronoun)}`;
+            return `You move your ${currentToolWord} to ${getTargetNoun(currentAct, posPronoun, npc)}`;
         }
     }
     
     // Case 7: Moving to face/head with cock
     if ((currentTargetNorm === 'face' || currentTargetNorm === 'cheek' || currentTargetNorm === 'lips') && (currentToolNorm === 'penis' || currentToolNorm === 'cock')) {
-        return `You pull back and rub your ${currentToolNorm} against ${getTargetNoun(currentAct, posPronoun)}`;
+        return `You pull back and rub your ${currentToolWord} against ${getTargetNoun(currentAct, posPronoun, npc)}`;
     }
     
     // Default transition
     if (lastTargetNorm !== currentTargetNorm) {
-        return `You move to ${getTargetNoun(currentAct, posPronoun)}`;
+        return `You move to ${getTargetNoun(currentAct, posPronoun, npc)}`;
     }
     
     if (lastToolNorm !== currentToolNorm) {
-        return `You switch to using your ${currentToolNorm} on ${getTargetNoun(currentAct, posPronoun)}`;
+        return `You switch to using your ${currentToolWord} on ${getTargetNoun(currentAct, posPronoun, npc)}`;
     }
     
     return "";
@@ -11116,6 +11468,40 @@ var NPC_BALLS_SERVICING_SAMPLES = {
 };
 
 /**
+ * Pussy-servicing beats (lick_player_pussy, suck_player_clit): the NPC's
+ * mouth works the player's pussy. Same placeholder/anti-repetition
+ * conventions as NPC_ORAL_SERVICING_SAMPLES. Placeholders: {npcS} subject
+ * ("She"), {npcs} lowercase ("she"), {npcP}/{npcp} possessive ("her"),
+ * {npcO}/{npo} object ("her"/"them"). The player is always "you/your" —
+ * second person.
+ */
+var NPC_PUSSY_SERVICING_ACT_IDS = ["lick_player_pussy", "suck_player_clit"];
+
+var NPC_PUSSY_SERVICING_SAMPLES = {
+    base: [
+        "{npcS} parts your folds with both thumbs and licks one long, flat stripe from your opening up to your clit, slow enough that you feel every inch of {npcp} tongue. {npcS} does it again and again, each pass a little firmer, until your hips are tilting up to meet {npcp} mouth on their own.",
+        "{npcS} presses soft, open-mouthed kisses along your inner lips, taking {npcp} time with each one the way {npcs} would kiss your mouth. Then {npcp} tongue slides between your folds and finds your clit, tracing unhurried circles around it — close, warm, never quite on it — until you arch up seeking more and {npcs} lets you have it.",
+        "{npcS} seals {npcp} lips around your clit and suckles, gentle and rhythmic, {npcp} tongue flicking the underside on every pull. {npcS} keeps the pace maddeningly even, and when your thighs start to tremble {npcs} slides both hands under them and holds you open for {npcp} mouth.",
+        "{npcS} dips {npcp} tongue into you and fucks you with it in shallow, curling strokes, {npcp} nose pressed to your mound and {npcp} chin slick with your wetness. {npcS} groans at the taste, and the vibration of it runs straight through your core.",
+        "{npcS} licks you in slow, broad laps like {npcs} has all the time in the world, {npcp} tongue soft and flat against your whole sex before narrowing to a point that circles your clit and dips back down. {npcS} hums lazily between your legs, and you feel the sound more than hear it.",
+        "{npcS} wraps {npcp} arms around your thighs and buries {npcp} mouth against you, alternating long strokes of {npcp} tongue with slow, suctioning kisses to your clit. When {npcp} fingers curl up inside you and stroke that aching spot, {npcp} mouth never loses its rhythm.",
+        "{npcS} starts with soft, open-mouthed kisses along your inner thigh, each one placed a little higher than the last, and makes you wait for it. Your hips lift off the bed in invitation; {npcs} pins them down with one flat palm and keeps {npcp} unhurried pace, lips grazing skin that has no business being this sensitive, until you are holding your breath.",
+        "{npcS} parts your folds with {npcp} thumbs and simply breathes on you first — warm, slow, deliberate — and the anticipation alone makes you clench around nothing. Then {npcp} tongue slides through your folds in one long, unhurried stroke, gathering your wetness, and {npcs} groans low at the taste before pressing {npcp} mouth closer.",
+        "Your fingers find {npcp} hair without deciding to, tangling in it to hold {npcs} where you need {npcO}. {npcS} lets you steer the pace, moaning against you when you pull tighter, and the sound runs straight through you. Your whole world narrows to {npcp} mouth — the wet sounds, the heat, the flat of {npcp} tongue dragging over your clit in strokes that keep time with your pulse.",
+        "{npcS} is relentless once {npcs} finds the rhythm that makes your back arch: lips sucking, tongue working, {npcp} mouth never leaving you even to breathe. You can feel the pressure building, the tension winding tighter and tighter low in your belly, and {npcs} reads it in every tremble of your thighs and gives you exactly the stroke you need, over and over, without ever letting up."
+    ],
+    // Appended to the pool when the NPC's own arousal is high — hungrier,
+    // sloppier, more urgent beats.
+    high: [
+        "{npcS} eats you like {npcs} is starving for it — face pressed deep, mouth wide open, tongue working you in fast, messy strokes while {npcp} chin drips with you. {npcS} moans into your pussy between laps, gripping your hips to hold you against {npcp} mouth.",
+        "{npcS} flicks {npcp} tongue over your clit in a quick, relentless rhythm, two fingers pumping into you and curling against the front of you with every stroke. {npcS} looks up your body to watch you come apart, and does not slow down.",
+        "{npcS} locks {npcp} mouth over your clit and sucks hard, hard enough to make your back bow off the bed, riding out every buck of your hips without letting go until the pull of {npcp} mouth has you seeing white.",
+        "{npcS} eats you like {npcs} cannot wait another second — mouth wide, tongue pushing into you between strokes over your clit, {npcp} fingers digging into your thighs to hold you open. When your thighs start to shake, {npcs} doubles down, working you faster, rougher, until the only words you have left are the ones you are begging with.",
+        "{npcS} feels how close you are and locks {npcp} lips around your clit, sucking in a hard, steady rhythm that drags you right to the edge and holds you there. Your thighs clamp around {npcp} head, your hips strain against {npcp} mouth, and {npcs} rides out every buck without letting go, moaning into you until you come apart completely."
+    ]
+};
+
+/**
  * Breast-servicing beats (titjob_player), keyed by the NPC's breast size
  * category: what her chest can do with a cock changes completely between
  * a flat/small bust and a heavy one. `high` is shared across sizes.
@@ -11192,6 +11578,11 @@ function buildReceiveResponse(npc, player, act, intimacy) {
         _servicingBeat = _pickServicingBeat(npc, intimacy,
             NPC_ORAL_SERVICING_SAMPLES.base, NPC_ORAL_SERVICING_SAMPLES.high,
             highArousal, "receive-oral-servicing");
+    } else if (NPC_PUSSY_SERVICING_ACT_IDS.indexOf(act.id) !== -1) {
+        _servicingBeat = _pickServicingBeat(npc, intimacy,
+            NPC_PUSSY_SERVICING_SAMPLES.base, NPC_PUSSY_SERVICING_SAMPLES.high,
+            highArousal, "receive-pussy-servicing");
+
     } else if (act.id === "stroke_player_penis") {
         _servicingBeat = _pickServicingBeat(npc, intimacy,
             NPC_HAND_SERVICING_SAMPLES.base, NPC_HAND_SERVICING_SAMPLES.high,
@@ -11229,11 +11620,21 @@ function buildReceiveResponse(npc, player, act, intimacy) {
             `${verbIng} ${playerTarget}, ${posPronoun} mouth warm and soft`
         ]);
     } else if (verb === "suck") {
-        actionDesc = pickRandom([
-            `taking ${playerTarget} into ${posPronoun} mouth, ${verbIng} you with slow, deliberate pulls`,
-            `wrapping ${posPronoun} lips around ${playerTarget}, ${posPronoun} cheeks hollowing`,
-            `drawing ${playerTarget} in, ${posPronoun} mouth warm and wet around you`
-        ]);
+        // "Your clit" is a small nub — gentle, steady pressure, not the
+        // hollowed-cheek suction a cock gets.
+        if (target === "clitoris" || target === "clit") {
+            actionDesc = pickRandom([
+                `taking ${playerTarget} into ${posPronoun} mouth, ${verbIng} you with slow, deliberate pulls`,
+                `sealing ${posPronoun} lips around ${playerTarget}, keeping gentle, steady pressure`,
+                `drawing ${playerTarget} in, ${posPronoun} mouth warm and wet around you`
+            ]);
+        } else {
+            actionDesc = pickRandom([
+                `taking ${playerTarget} into ${posPronoun} mouth, ${verbIng} you with slow, deliberate pulls`,
+                `wrapping ${posPronoun} lips around ${playerTarget}, ${posPronoun} cheeks hollowing`,
+                `drawing ${playerTarget} in, ${posPronoun} mouth warm and wet around you`
+            ]);
+        }
     } else if (verb === "lick") {
         actionDesc = pickRandom([
             `running ${posPronoun} tongue over ${playerTarget}, ${verbIng} you slowly`,
@@ -11496,13 +11897,19 @@ function buildEngagedActContinueSentence(npc, actId, intimacy, arousalLevel) {
         : null;
     var plain = posPronoun + " " + (target || "body");
     var skinDesc = (typeof getSkinDescription === "function") ? (getSkinDescription(npc) || "") : "";
+    // describeVagina sometimes returns a "through her..." pubic-hair
+    // construction built for spread-style phrasing. Only the spread
+    // branch below absorbs it; plain verbs (lick, kiss, suck, thrust)
+    // read broken after it, so they use safeDesc and fall back to the
+    // possessive target instead.
+    var safeDesc = (anatomyDesc && /^(through|to|between|across|over|past)\b/i.test(anatomyDesc)) ? null : anatomyDesc;
 
     // Fingering - the ongoing in-and-out motion.
     if (verb === "finger" || (tool === "fingers" && (verb === "enter" || verb === "slide"))) {
         if (target === "vagina" || target === "pussy" || target === "clitoris" || target === "clit") {
             return pickRandom([
                 `Your finger slides in and out of ${posPronoun} slick folds.`,
-                `You keep fingering ${anatomyDesc || plain}, your fingers curling inside ${posPronoun} with each pass.`
+                `You keep fingering ${safeDesc || plain}, your fingers curling inside ${posPronoun} with each pass.`
             ]);
         }
         if (target === "anus" || target === "ass" || target === "butthole") {
@@ -11515,7 +11922,7 @@ function buildEngagedActContinueSentence(npc, actId, intimacy, arousalLevel) {
 
     // Kissing - continuous contact.
     if (verb === "kiss") {
-        var kissTarget = anatomyDesc || plain;
+        var kissTarget = safeDesc || plain;
         return pickRandom([
             skinDesc
                 ? `You continue kissing ${posPronoun} ${skinDesc}, your lips pressed against ${kissTarget}.`
@@ -11527,38 +11934,59 @@ function buildEngagedActContinueSentence(npc, actId, intimacy, arousalLevel) {
     // Oral - licking and sucking keep going.
     if (verb === "lick") {
         return pickRandom([
-            `You keep licking ${anatomyDesc || plain}, your tongue moving in slow strokes.`,
-            `Your tongue keeps working over ${anatomyDesc || plain}, unhurried and steady.`
+            `You keep licking ${safeDesc || plain}, your tongue moving in slow strokes.`,
+            `Your tongue keeps working over ${safeDesc || plain}, unhurried and steady.`
         ]);
     }
     if (verb === "suck") {
+        // The clit is a small nub: lips sealed around it in gentle,
+        // steady pressure — hollowed cheeks (cock suction) never fit it.
+        if (target === "clitoris" || target === "clit") {
+            // Clit descriptions carry a possessive ("her clitoris") even
+            // when describeAnatomy returns the bare target word.
+            var clitDesc = (safeDesc && !/^(her|his|their|its)\b/i.test(safeDesc))
+                ? posPronoun + " " + safeDesc
+                : (safeDesc || plain);
+            return pickRandom([
+                `Your mouth stays sealed around ${clitDesc}, keeping gentle, steady pressure.`,
+                `You keep suckling ${clitDesc}, your lips sealed soft around the little nub.`
+            ]);
+        }
         return pickRandom([
-            `Your mouth stays sealed around ${anatomyDesc || plain}, sucking steady.`,
-            `You keep sucking ${anatomyDesc || plain}, cheeks hollowed around it.`
+            `Your mouth stays sealed around ${safeDesc || plain}, sucking steady.`,
+            `You keep sucking ${safeDesc || plain}, cheeks hollowed around it.`
         ]);
     }
 
     // Hand teasing - groping, stroking, rubbing.
+
     if (tool === "hand" || tool === "hands") {
         var ing = (typeof verbConjugation === "function") ? verbConjugation(verb, "ing") : (verb + "ing");
+        // Spreading takes both hands.
+        if (verb === "spread") {
+            return pickRandom([
+                `Your hands keep ${ing} ${anatomyDesc || plain} apart.`,
+                `You keep ${ing} ${anatomyDesc || plain} apart with both hands.`
+            ]);
+        }
         return pickRandom([
-            `Your hand keeps ${ing} ${anatomyDesc || plain}.`,
-            `You keep ${ing} ${anatomyDesc || plain}, steady and unhurried.`
+            `Your hand keeps ${ing} ${safeDesc || plain}.`,
+            `You keep ${ing} ${safeDesc || plain}, steady and unhurried.`
         ]);
     }
 
     // Penetration - the ongoing thrust, not a staged re-entry.
     if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
         return pickRandom([
-            `You keep thrusting into ${anatomyDesc || plain}.`,
-            `Your cock keeps moving inside ${anatomyDesc || plain} in deep, steady strokes.`,
-            `You keep fucking ${anatomyDesc || plain}, your rhythm never breaking.`
+            `You keep thrusting into ${safeDesc || plain}.`,
+            `Your cock keeps moving inside ${safeDesc || plain} in deep, steady strokes.`,
+            `You keep fucking ${safeDesc || plain}, your rhythm never breaking.`
         ]);
     }
 
     // Grinding and other bodily contact.
     if (verb === "grind" || verb === "press" || verb === "rub") {
-        return `You keep ${verb === "press" ? "pressing against" : verb + "ing against"} ${anatomyDesc || plain}.`;
+        return `You keep ${verb === "press" ? "pressing against" : verb + "ing against"} ${safeDesc || plain}.`;
     }
 
     return null;
@@ -12091,12 +12519,22 @@ function buildSpitOnNarratives(npc, target, posPronoun, subjectPronoun, context)
             `You lean over ${posPronoun} bare pussy and let a long thread of spit drop onto it, the slickness spreading slowly.`
         ];
     } else if (targetLower === "anus" || targetLower === "ass") {
+        // Cloaca-bearing NPCs: the spit lands on the vent, not a mammalian anus.
+        if (npcHasCloacaFlag(npc)) {
+            options = [
+                `You spit on ${posPronoun} vent, the wetness trailing down over the scaled seam.`,
+                `You gather a mouthful and let it drip onto ${posPronoun} vent, watching the spit pool at its tight ring.`,
+                `You lean in close and spit directly onto ${posPronoun} vent, the slick warmth coating the muscular opening.`,
+                `A thick wad lands square on ${posPronoun} vent, slowly sliding along the scaled seam.`
+            ];
+        } else {
         options = [
             `You spit on ${posPronoun} ass, the wetness trailing down over ${posPronoun} tight pucker.`,
             `You gather a mouthful and let it drip onto ${posPronoun} ass, watching the spit pool around ${posPronoun} rim.`,
             `You lean in close and spit directly onto ${posPronoun} asshole, the slick warmth coating the tight ring.`,
             `A thick wad lands square on ${posPronoun} back entrance, slowly sliding into ${posPronoun} crack.`
         ];
+        }
     } else if (targetLower === "penis" || targetLower === "cock" || targetLower === "dick") {
         options = [
             `You spit onto ${posPronoun} cock, the warm wetness running down ${posPronoun} shaft.`,
@@ -13433,10 +13871,11 @@ OLD_D_MARKER
 }
 
 /**
- * True for oral-service acts on the player's genitals (NPC's mouth on
- * the player's penis, or the player's penis/vagina in the NPC's mouth).
- * These get an EXTENDED multi-beat narration style: the act progresses
- * through distinct steps (tease, taste, take, work, pull back, look up)
+ * True for oral-service acts on genitals, either direction (NPC's mouth
+ * on the player's penis or pussy, or the player's mouth on the NPC's
+ * penis or pussy). These get an EXTENDED multi-beat narration style: the
+ * act progresses through distinct steps (see _oralSteps in
+ * buildIntimacyPrompt; cunnilingus builds differently from fellatio)
  * with invented in-character dialogue allowed - see buildIntimacyPrompt.
  */
 function isExtendedOralAction(action) {
@@ -13446,6 +13885,9 @@ function isExtendedOralAction(action) {
     if ((target === "penis" || target === "cock") &&
         (tool === "mouth" || tool === "lips" || tool === "tongue")) return true;
     if (target === "mouth" && (tool === "penis" || tool === "cock" || tool === "vagina" || tool === "pussy")) return true;
+    if ((target === "vagina" || target === "pussy" || target === "clitoris") &&
+        (tool === "mouth" || tool === "lips" || tool === "tongue") &&
+        ["kiss", "lick", "suck", "penetrate"].indexOf(String(action.verb || "").toLowerCase()) !== -1) return true;
     return false;
 }
 
@@ -13742,6 +14184,18 @@ function getScentDescriptor(npc, target, isAnalAct = false) {
     
     // For anal acts, 30% chance for pungent smell descriptors (60% for uncivilized)
     if (isAnalAct && Math.random() < (isUncivilized ? 0.6 : 0.3)) {
+        // Cloaca-bearing NPCs: the vent is scaled — no coarse hair; the
+        // musk reads reptilian.
+        if (npcHasCloacaFlag(npc)) {
+            return pickRandom([
+                "and the sharp, unwashed stench of the vent hits you hard",
+                "and a thick, acrid musk rises from the scaled seam",
+                "and the pungent, animalistic smell of the vent fills the air",
+                "and a heavy, rank odor clings to the smooth scales of the cleft",
+                "and the strong, raw scent of the vent makes your nose wrinkle",
+                "and a sour, earthy stench wafts up from between the scales"
+            ]);
+        }
         if (isUncivilized) {
             return pickRandom([
                 "and the sharp, unwashed stench of the area hits you hard",

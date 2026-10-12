@@ -319,6 +319,7 @@ var NATURAL_LABELS = {
     suck_player_nipples: "Ask them to suck your {nipples}",
     accept_penis_mouth: "Offer your mouth for their {penis}",
     lick_player_pussy: "Ask them to lick your {pussy}",
+    suck_player_clit: "Ask them to suck on your clit",
     suck_player_penis: "Ask them to suck your {penis}",
     stroke_player_penis: "Ask them to stroke your {penis}",
     titjob_player: "Ask them to titfuck your {penis}",
@@ -341,7 +342,8 @@ var NATURAL_LABELS = {
     ejaculate_on_back: "Finish on their back",
     ejaculate_on_legs: "Finish on their {legs}",
     ejaculate_on_feet: "Finish on their {feet}",
-    female_ejaculate: "Let yourself go",
+    female_ejaculate: "Let yourself go and squirt",
+    player_orgasm: "Succumb to the pressure and come",
     mutual_climax: "Climax together",
     
     // End actions

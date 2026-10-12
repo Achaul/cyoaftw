@@ -319,7 +319,6 @@ const SPECIES_TEMPLATES = [
         speechStyle: "direct",
         anatomyType: "mixed",
         hasTail: true,
-        cloaca: true,
         lore: "Dragonborn carry the blood of ancient dragons in their scales and breath. They value honor above all — a promise given is a debt that outlasts death. Their clans trace lineage to specific dragon ancestors, and they judge others by the weight of their word.",
         articulation: "A rigid snout with no lips - consonants form further back in the throat, with no lip-rounding for sounds like a soft b or w. Comes through as clipped and slightly breathy rather than mumbled or slurred.",
         anatomyProfile: {
