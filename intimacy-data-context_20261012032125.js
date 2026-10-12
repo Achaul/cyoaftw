@@ -64,7 +64,7 @@ var SOCIAL_ROOM_TYPES = [
 // ============================================================================
 
 var INTIMACY_PHASES = {
-    SOCIAL: 1,        // Flirt, seduce, proposition only
+    SOCIAL: 1,        // Flirt, seduce only
     PRIVATE: 2,       // Undressing, foreplay (private location, only 2 people)
     INTIMATE: 3       // Full intimacy menu (after consent/penetration)
 };
@@ -264,7 +264,6 @@ var NATURAL_LABELS = {
     finger_pussy_fast: "Finger their {pussy} fast",
     kiss_pussy: "Kiss their {pussy}",
     lick_pussy: "Taste their {pussy}",
-    eat_pussy: "Eat their {pussy}",
     tongue_pussy: "Tongue their {pussy}",
     grind_pussy: "Grind your groin on {pussy}",
     
@@ -319,8 +318,7 @@ var NATURAL_LABELS = {
     // On player
     suck_player_nipples: "Ask them to suck your {nipples}",
     accept_penis_mouth: "Offer your mouth for their {penis}",
-    lick_player_pussy: "Ask them to eat your {pussy}",
-    eat_player_pussy: "Ask them to taste your {pussy}",
+    lick_player_pussy: "Ask them to lick your {pussy}",
     suck_player_penis: "Ask them to suck your {penis}",
     stroke_player_penis: "Ask them to stroke your {penis}",
     titjob_player: "Ask them to titfuck your {penis}",

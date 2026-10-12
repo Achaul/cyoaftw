@@ -107,6 +107,26 @@ function _npcHasCloaca(npc) {
 }
 
 /**
+ * Whether an NPC belongs to a tailed species (Dragonborn, Lizardfolk,
+ * Kobold). Reads an explicit npc.hasTail flag first (if a hydration pass
+ * ever sets one), then the species template's hasTail.
+ */
+function _actNpcHasTail(npc) {
+    if (!npc) return false;
+    if (npc.hasTail === true) return true;
+    if (npc.hasTail === false) return false;
+    if (npc.species && typeof getSpeciesTemplate === "function") {
+        const tpl = getSpeciesTemplate(npc.species);
+        return !!(tpl && tpl.hasTail === true);
+    }
+    if (npc.species && typeof window !== "undefined" && typeof window.getSpeciesTemplate === "function") {
+        const tpl = window.getSpeciesTemplate(npc.species);
+        return !!(tpl && tpl.hasTail === true);
+    }
+    return false;
+}
+
+/**
  * Replace an un-prefixed genital token possessive-aware:
  *   "your {token}"  -> "your <playerWord>"   (player-owned)
  *   "their {token}" -> "their <npcWord>"      (NPC-owned)
@@ -128,22 +148,34 @@ const BODY_PARTS_REQUIRING_POSSESSIVE = [
     "mouth", "chest", "breasts", "nipples", "stomach", "hips", "waist",
     "buttocks", "butt", "anus", "ass", "thighs", "thigh", "leg", "legs",
     "vagina", "pussy", "clitoris", "clit", "penis", "cock",
-    "testicles", "balls", "groin", "body", "skin", "back", "shoulders"
+    "testicles", "balls", "groin", "body", "skin", "back", "shoulders",
+    "tail"
 ];
 
 /**
- * Get a gender-appropriate label for an intimacy action
+ * Gender an arbitrary piece of act text (label or description tooltip).
  * Replaces placeholders like {npcPossessive}, {npcObject}, {playerPossessive}, etc.
- * Now also auto-adds possessive pronouns to body part targets (e.g., "Kiss lips" -> "Kiss her lips")
+ * Also auto-adds possessive pronouns to body part targets (e.g., "Kiss lips" -> "Kiss her lips"),
+ * relabels cloaca anatomy, and neutralizes player genital words for non-binary players.
  */
-function getGenderedLabel(act, npc, player) {
-    if (!act || !act.label) return act.label;
+function getGenderedText(text, act, npc, player) {
+    if (!act || !text) return text;
     
     const npcGender = (npc && npc.gender) ? String(npc.gender).toLowerCase() : "female";
-    const playerGender = (player && player.stats && player.stats.gender) ? String(player.stats.gender).toLowerCase() : "male";
+    // Player gender lives at the player object root (G.player.gender); the
+    // stats copy is a legacy location kept for old saves. Resolve both.
+    const playerGender = String((player && (player.gender || (player.stats && player.stats.gender))) || "male").toLowerCase();
     
     const npcPronouns = getPronouns(npcGender);
     const playerPronouns = getPronouns(playerGender);
+
+    // Non-binary players use neutral genital wording ("genitals") instead of
+    // gendered terms, matching their both-genitals anatomy (see
+    // ensurePlayerIntimacyAnatomy / genitalGateForGender in the engine).
+    const playerIsNonBinary = playerGender === "non-binary" || playerGender === "nonbinary";
+    const playerGenitalWords = playerIsNonBinary
+        ? { vaginal: "genitals", penis: "genitals", testicles: "genitals" }
+        : { vaginal: playerPronouns.vaginal, penis: playerPronouns.penis, testicles: playerPronouns.testicles };
 
     // Cloaca-bearing NPCs (reptilian-kin) have a single cloacal vent instead
     // of separate genitals. Females resolve to "cloaca"; males keep a distinct
@@ -154,7 +186,7 @@ function getGenderedLabel(act, npc, player) {
         ? { vaginal: "cloaca", penis: "hemipenis", testicles: "" }
         : { vaginal: npcPronouns.vaginal, penis: npcPronouns.penis, testicles: npcPronouns.testicles };
 
-    let label = act.label;
+    let label = text;
 
     // Replace NPC pronouns. Genital tokens use the cloaca-aware words above;
     // possessive/object/subject/chest are unaffected by cloaca.
@@ -171,9 +203,9 @@ function getGenderedLabel(act, npc, player) {
     label = label.replace(/\{playerPossessive\}/gi, playerPronouns.possessive);
     label = label.replace(/\{playerObject\}/gi, playerPronouns.object);
     label = label.replace(/\{playerSubject\}/gi, playerPronouns.subject);
-    label = label.replace(/\{playerPussy\}/gi, playerPronouns.vaginal);
-    label = label.replace(/\{playerCock\}/gi, playerPronouns.penis);
-    label = label.replace(/\{playerBalls\}/gi, playerPronouns.testicles);
+    label = label.replace(/\{playerPussy\}/gi, playerGenitalWords.vaginal);
+    label = label.replace(/\{playerCock\}/gi, playerGenitalWords.penis);
+    label = label.replace(/\{playerBalls\}/gi, playerGenitalWords.testicles);
     label = label.replace(/\{playerChest\}/gi, playerPronouns.chest);
 
     // Replace body part placeholders (without npc/player prefix).
@@ -181,13 +213,13 @@ function getGenderedLabel(act, npc, player) {
     // Genital tokens are possessive-aware: "your {pussy}" belongs to the player,
     // "their {pussy}" (or anything else) belongs to the NPC. Without this split,
     // a cloaca NPC would turn player-side labels like "your {pussy}" into "your cloaca".
-    label = _replaceGenitalToken(label, "pussy", npcGenitals.vaginal, playerPronouns.vaginal);
-    label = _replaceGenitalToken(label, "vagina", npcGenitals.vaginal, playerPronouns.vaginal);
-    label = _replaceGenitalToken(label, "cock", npcGenitals.penis, playerPronouns.penis);
-    label = _replaceGenitalToken(label, "penis", npcGenitals.penis, playerPronouns.penis);
-    label = _replaceGenitalToken(label, "dick", npcGenitals.penis, playerPronouns.penis);
-    label = _replaceGenitalToken(label, "balls", npcGenitals.testicles, playerPronouns.testicles);
-    label = _replaceGenitalToken(label, "testicles", npcGenitals.testicles, playerPronouns.testicles);
+    label = _replaceGenitalToken(label, "pussy", npcGenitals.vaginal, playerGenitalWords.vaginal);
+    label = _replaceGenitalToken(label, "vagina", npcGenitals.vaginal, playerGenitalWords.vaginal);
+    label = _replaceGenitalToken(label, "cock", npcGenitals.penis, playerGenitalWords.penis);
+    label = _replaceGenitalToken(label, "penis", npcGenitals.penis, playerGenitalWords.penis);
+    label = _replaceGenitalToken(label, "dick", npcGenitals.penis, playerGenitalWords.penis);
+    label = _replaceGenitalToken(label, "balls", npcGenitals.testicles, playerGenitalWords.testicles);
+    label = _replaceGenitalToken(label, "testicles", npcGenitals.testicles, playerGenitalWords.testicles);
     label = label.replace(/\{clit\}/gi, "clitoris");
     label = label.replace(/\{clitoris\}/gi, "clitoris");
     label = label.replace(/\{nipples\}/gi, "nipples");
@@ -249,7 +281,36 @@ function getGenderedLabel(act, npc, player) {
         label = label.replace(/\b(her|his|their)\s+anus\b/gi, "$1 cloaca");
     }
 
+    // Final non-binary pass: raw act labels like "Ask them to suck your cock"
+    // are hardcoded (not tokenized), so the player genital word survives the
+    // token replacement above. Swap player-owned gendered genital words for
+    // the neutral "genitals". NPC-owned words are untouched (NPCs are only
+    // male/female/none).
+    if (playerIsNonBinary) {
+        label = label.replace(/\byour\s+(cock|penis|dick|balls|testicles|pussy|vagina|clit(?:oris)?)\b/gi, "your genitals");
+    }
+
     return label;
+}
+
+/**
+ * Get a gender-appropriate label for an intimacy action.
+ * Replaces placeholders like {npcPossessive}, {npcObject}, {playerPossessive}, etc.
+ * Also auto-adds possessive pronouns to body part targets (e.g., "Kiss lips" -> "Kiss her lips")
+ */
+function getGenderedLabel(act, npc, player) {
+    if (!act || !act.label) return act.label;
+    return getGenderedText(act.label, act, npc, player);
+}
+
+/**
+ * Get a gender-appropriate description (tooltip) for an intimacy action.
+ * Runs act.desc through the same token replacement, cloaca relabelling and
+ * non-binary neutral-wording as labels, so tooltips match menu wording.
+ */
+function getGenderedDesc(act, npc, player) {
+    if (!act) return undefined;
+    return getGenderedText(act.desc, act, npc, player);
 }
 
 // ============================================================================
@@ -340,6 +401,8 @@ var SEX_ACTS = {
     caress_stomach: { id: "caress_stomach", tool: "hand", target: "stomach", verb: "caress", type: ACT_TYPES.TEASE, label: "Caress stomach", desc: "Run your hand over their stomach", arousal: { p: 6, n: 10 }, pos: ["Standing", "Perched", "Missionary"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF },
     stroke_back: { id: "stroke_back", tool: "hand", target: "back", verb: "stroke", type: ACT_TYPES.TEASE, label: "Stroke back", desc: "Stroke their back", arousal: { p: 5, n: 10 }, pos: ["Standing From Behind", "Spooning", "Doggy", "Bent Over"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
     massage_shoulders: { id: "massage_shoulders", tool: "hand", target: "shoulders", verb: "massage", type: ACT_TYPES.TEASE, label: "Massage shoulders", desc: "Massage their shoulders", arousal: { p: 4, n: 8 }, pos: ["Standing", "Standing From Behind", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
+    caress_tail: { id: "caress_tail", tool: "hand", target: "tail", verb: "caress", type: ACT_TYPES.TEASE, label: "Caress tail", desc: "Caress their tail with your hand", arousal: { p: 4, n: 8 }, pos: [], reqCloth: CLOTHING_REQUIREMENTS.ANY, requiresNpcTail: true, objectDialogueTags: ["tail caressed"] },
+    pull_tail: { id: "pull_tail", tool: "hand", target: "tail", verb: "pull", type: ACT_TYPES.TEASE, label: "Pull tail", desc: "Pull on their tail", arousal: { p: 6, n: 10 }, pos: [], reqCloth: CLOTHING_REQUIREMENTS.ANY, requiresNpcTail: true, objectDialogueTags: ["tail pulled"] },
     
     // Groin/Thigh
     tease_groin: { id: "tease_groin", tool: "hand", target: "groin", verb: "tease", type: ACT_TYPES.TEASE, label: "Tease groin", desc: "Tease their groin with your hand", arousal: { p: 15, n: 25 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Doggy", "Bent Over", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
@@ -368,7 +431,6 @@ var SEX_ACTS = {
     
     kiss_pussy: { id: "kiss_pussy", tool: "mouth", target: "vagina", verb: "kiss", type: ACT_TYPES.TEASE, label: "Kiss pussy", desc: "Kiss their pussy", arousal: { p: 10, n: 40 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Oral Service", "Kneeling", "Kneeling By Face", "Squatting Before", "Riding Face", "Prone Oral Service", "Mounted On X-Cross Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true, objectDialogueTags: ["pussy kissed"] },
     lick_pussy: { id: "lick_pussy", tool: "mouth", target: "vagina", verb: "lick", type: ACT_TYPES.TEASE, label: "Lick pussy", desc: "Lick their pussy", arousal: { p: 12, n: 50 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Oral Service", "Kneeling", "Kneeling By Face", "Squatting Before", "Riding Face", "Prone Oral Service", "Mounted On X-Cross Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true, objectDialogueTags: ["pussy licked"] },
-    eat_pussy: { id: "eat_pussy", tool: "mouth", target: "vagina", verb: "eat", type: ACT_TYPES.TEASE, label: "Eat pussy", desc: "Eat their pussy", arousal: { p: 15, n: 60 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Oral Service", "Kneeling", "Kneeling By Face", "Squatting Before", "Riding Face", "Prone Oral Service", "Mounted On X-Cross Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true },
     tongue_pussy: { id: "tongue_pussy", tool: "tongue", target: "vagina", verb: "penetrate", type: ACT_TYPES.TEASE, label: "Tongue fuck", desc: "Penetrate their pussy with your tongue", arousal: { p: 15, n: 65 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Oral Service", "Kneeling", "Kneeling By Face", "Squatting Before", "Riding Face", "Prone Oral Service", "Mounted On X-Cross Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true },
     suck_clit: { id: "suck_clit", tool: "mouth", target: "clitoris", verb: "suck", type: ACT_TYPES.TEASE, label: "Suck clit", desc: "Suck on their clitoris", arousal: { p: 10, n: 60 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Kneeling", "Kneeling Over", "Oral Service", "Prone Oral Service", "Squatting Before"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true },
     
@@ -483,7 +545,6 @@ var SEX_ACTS = {
     kiss_player_mouth: { id: "kiss_player_mouth", tool: "mouth", target: "mouth", verb: "kiss", type: ACT_TYPES.TEASE, label: "Ask them to kiss your lips", desc: "Ask them to kiss your lips", arousal: { p: 5, n: 5 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: true },
     suck_player_nipples: { id: "suck_player_nipples", tool: "mouth", target: "nipples", verb: "suck", type: ACT_TYPES.TEASE, label: "Ask them to suck your nipples", desc: "Ask them to suck on your nipples", arousal: { p: 40, n: 12 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.TOP_OFF, playerIsBottom: true },
     lick_player_pussy: { id: "lick_player_pussy", tool: "mouth", target: "vagina", verb: "lick", type: ACT_TYPES.TEASE, label: "Ask them to lick your pussy", desc: "Ask them to lick your pussy", arousal: { p: 50, n: 12 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerFemale: true },
-    eat_player_pussy: { id: "eat_player_pussy", tool: "mouth", target: "vagina", verb: "eat", type: ACT_TYPES.TEASE, label: "Ask them to eat your pussy", desc: "Ask them to eat your pussy", arousal: { p: 60, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerFemale: true },
     suck_player_penis: { id: "suck_player_penis", tool: "mouth", target: "penis", verb: "suck", type: ACT_TYPES.TEASE, label: "Ask them to suck your cock", desc: "Ask them to suck your penis", arousal: { p: 40, n: 15 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
     stroke_player_penis: { id: "stroke_player_penis", tool: "hand", target: "penis", verb: "stroke", type: ACT_TYPES.TEASE, label: "Ask them to stroke your cock", desc: "Ask them to stroke your penis with their hand", arousal: { p: 25, n: 10 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Sixty-Nine", "Kneeling", "Kneeling By Face"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true },
     titjob_player: { id: "titjob_player", tool: "breasts", target: "penis", verb: "stroke", type: ACT_TYPES.TEASE, label: "Ask them to wrap their breasts around your cock", desc: "Ask them to press their breasts around your penis", arousal: { p: 45, n: 25 }, pos: ["Missionary", "Astride Lap", "Kneeling Over", "Kneeling By Face", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true, requiresPlayerMale: true, requiresNpcFemale: true },
@@ -788,34 +849,44 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
         }
     }
     
+    // Tail-targeted acts (caress/pull tail) require a tailed species
+    if (act.requiresNpcTail && !_actNpcHasTail(npc)) return false;
+
     // Check gender requirements
-    if (act.maleOnly || act.femaleOnly || act.requiresNpcMale || act.requiresNpcFemale || act.requiresActorMale || act.requiresActorFemale) {
-        const playerGender = (player && player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+    // Non-binary players have both genitals (ensurePlayerIntimacyAnatomy in
+    // the engine), so they pass either player-side gate; NPC-side gates stay
+    // binary (NPCs are only male/female/none).
+    if (act.maleOnly || act.femaleOnly || act.requiresNpcMale || act.requiresNpcFemale || act.requiresActorMale || act.requiresActorFemale || act.requiresPlayerMale || act.requiresPlayerFemale) {
+        const playerGender = String((player && (player.gender || (player.stats && player.stats.gender))) || "male").toLowerCase();
+        const playerGateMale = playerGender === "male" || playerGender === "non-binary" || playerGender === "nonbinary";
+        const playerGateFemale = playerGender === "female" || playerGender === "non-binary" || playerGender === "nonbinary";
         const npcGender = (npc.gender || "female").toLowerCase();
         
         const actorIsPlayer = !act.playerIsBottom;
         
         // Legacy support for maleOnly/femaleOnly (checks actor)
         if (act.maleOnly) {
-            if (actorIsPlayer && playerGender !== "male") return false;
+            if (actorIsPlayer && !playerGateMale) return false;
             if (!actorIsPlayer && npcGender !== "male") return false;
         }
         if (act.femaleOnly) {
-            if (actorIsPlayer && playerGender !== "female") return false;
+            if (actorIsPlayer && !playerGateFemale) return false;
             if (!actorIsPlayer && npcGender !== "female") return false;
         }
         
         // New explicit properties
         if (act.requiresActorMale) {
-            if (actorIsPlayer && playerGender !== "male") return false;
+            if (actorIsPlayer && !playerGateMale) return false;
             if (!actorIsPlayer && npcGender !== "male") return false;
         }
         if (act.requiresActorFemale) {
-            if (actorIsPlayer && playerGender !== "female") return false;
+            if (actorIsPlayer && !playerGateFemale) return false;
             if (!actorIsPlayer && npcGender !== "female") return false;
         }
         if (act.requiresNpcMale && npcGender !== "male") return false;
         if (act.requiresNpcFemale && npcGender !== "female") return false;
+        if (act.requiresPlayerMale && !playerGateMale) return false;
+        if (act.requiresPlayerFemale && !playerGateFemale) return false;
     }
     
     // Check if prior actions are required
@@ -993,6 +1064,12 @@ function getActionCategory(actId, npc) {
         return "Lower Body";
     }
     
+    // Tail (tailed species only — the acts are hidden without one)
+    if (target === "tail" ||
+        actIdLower.includes("tail") || labelLower.includes("tail")) {
+        return "Tail";
+    }
+
     // Body (general)
     if (target === "chest" || target === "shoulders" || target === "back" || target === "stomach" || target === "arms" ||
         target === "hands" || target === "legs" || target === "feet") {
@@ -1042,7 +1119,9 @@ if (typeof module !== 'undefined' && module.exports) {
         checkClothingRequirement,
         getActionCategory,
         getPronouns,
-        getGenderedLabel
+        getGenderedLabel,
+        getGenderedText,
+        getGenderedDesc
     };
 }
 
@@ -1066,4 +1145,6 @@ if (typeof window !== 'undefined') {
     window.getActionCategory = getActionCategory;
     window.getPronouns = getPronouns;
     window.getGenderedLabel = getGenderedLabel;
+    window.getGenderedText = getGenderedText;
+    window.getGenderedDesc = getGenderedDesc;
 }

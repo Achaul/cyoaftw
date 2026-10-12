@@ -1,4 +1,4 @@
-// ── cyoaftw-npc-data.js v2026-10-11-007 ── Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
+// ── cyoaftw-npc-data.js v2026-10-11-008 ── Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.NPC_DATA_VERSION = "2026-10-11-007";
@@ -178,6 +178,66 @@ const NPC_SPEECH_PROFILES = {
         avoid: ["stagey suspense", "breathy seduction", "atmospheric rambling"]
     }
 };
+
+// ── NATIVE SPEECH BY SPECIES ─────────────────────────────────────
+// Everyone speaks the common tongue; there are no invented languages. What
+// differs by species is idiom, cadence and what they talk about, and that is
+// applied on top of the role/temperament style above for every NPC (see
+// getNPCSpeechProfile). `line` is the species' general manner; `kin` is added
+// when the NPC is talking to a player of the same species. Mobs that do not
+// talk (rat, skeleton, ghost) have no entry.
+const NPC_SPECIES_NATIVE_SPEECH = {
+    human: {
+        line: "plain common-tongue speech with trade and guild turns of phrase (fair coin, a good name); varies more by region and trade than by blood",
+        kin: ""
+    },
+    elf: {
+        line: "measured, unhurried and precise; thinks in seasons and years, remembers old oaths and grudges, prefers understatement to exclamation, rarely raises their voice",
+        kin: "with another elf they relax their formality a notch and speak of shared years and old houses"
+    },
+    dwarf: {
+        line: "blunt and economical; uses stone, forge and ledger images (solid, load-bearing, paid in full), counts costs, honours contracts and clan debts, praises sparingly",
+        kin: "with another dwarf they speak of clan, hall and craft as if to family"
+    },
+    halfling: {
+        line: "warm, chatty and domestic; hearth, table and favour images, friendly diminutives, offers food, keeps a cheerful tally of favours owed",
+        kin: "with another halfling they gossip freely and trade family names and favours"
+    },
+    orc: {
+        line: "direct and concrete, short declarative sentences, articulate and not broken; strength, blood-kin and honour fairly won; bluntness and a challenge count as courtesy",
+        kin: "with another orc they speak of clan and rank and test each other's mettle"
+    },
+    dragonborn: {
+        line: "formal and proud; speaks of house, line, oath and honour in declarative sentences, a touch condescending toward lesser blood, never casual and never grovelling",
+        kin: "with another dragonborn they speak of house and bloodline, status first"
+    },
+    goblin: {
+        line: "quick, sly and sing-song; always working out what is useful, flatters and plays modest, fond of scraps and tricks, jumpy around magic; clipped but not broken",
+        kin: "with another goblin they trade gossip about the tribe and who is useful to whom"
+    },
+    lizardfolk: {
+        line: "terse, literal and in the present tense; hunting, land, water and shared food; no flattery and little small talk; says 'we' for the tribe",
+        kin: "with another lizardfolk they speak as one family, of land and the hunt"
+    },
+    kobold: {
+        line: "anxious, eager and quick to defer; speaks of masters, dragons and the clan, calls itself 'we', trap-wise and wary; grovels to dragonborn and spits at everyone else",
+        kin: "with another kobold they whisper about masters and who is in favour"
+    }
+};
+const NPC_NATIVE_SPEECH_RULES = "plain common tongue only: no invented words, no apostrophe names, no phonetic accent spelling";
+
+// A compact line for the prompt: the species' manner, plus the kin note when
+// the player is the same species. Empty for species with no entry.
+function getNPCNativeSpeech(npc) {
+    if (!npc) return "";
+    const key = String(npc.species || "").toLowerCase();
+    const entry = NPC_SPECIES_NATIVE_SPEECH[key];
+    if (!entry) return "";
+    let text = entry.line;
+    const playerKey = typeof getPlayerSpeciesKey === "function" ? getPlayerSpeciesKey() : "";
+    if (entry.kin && playerKey && playerKey === key && !npc.isPlayer) text += "; " + entry.kin;
+    return text + " (" + NPC_NATIVE_SPEECH_RULES + ")";
+}
 
 const SPEECH_STYLE_ALIASES = {
     archaic: "formal",
@@ -1067,6 +1127,11 @@ function getNPCKnownLoreFacts(npc, ctx) {
     if (typeof getBackstoryLoreFacts === "function") {
         allFacts = allFacts.concat(getBackstoryLoreFacts());
     }
+    // Strangers asking after the player (see getPressureLoreFacts in
+    // cyoaftw-world-data.js): gossip from the first warning on.
+    if (typeof getPressureLoreFacts === "function") {
+        allFacts = allFacts.concat(getPressureLoreFacts());
+    }
     // Wanted thieves (see getCrimeLoreFacts in the engine) are live gossip.
     // A fact carrying aboutId is never told by the person it is about.
     if (typeof getCrimeLoreFacts === "function") {
@@ -1406,6 +1471,16 @@ function _npcIntroNote(npc, ctx) {
 // read the player's backstory, so what they say follows the player's own
 // answers. All wording comes from AI replies steered by these notes; the
 // facts in them are the only ones the guide is told to use.
+// The past's emissary (npc.isPressureEmissary): the one who comes to settle
+// the player's backstory in "Settle it" mode. State lives in the engine.
+function _npcIsPressureEmissary(npc) {
+    return !!(npc && npc.isPressureEmissary);
+}
+
+function _npcPressureMenu() {
+    return typeof getPressureMenuState === "function" ? getPressureMenuState() : {};
+}
+
 function _npcIsGuide(npc) {
     return !!(npc && npc.guide && npc.guide.active);
 }
@@ -1684,7 +1759,8 @@ const NPC_CONVERSATION_CATALOGUE = [
     // ---- Finding a teacher (engine: "FINDING TEACHERS") ----
     // Scripted, no AI turn. The NPC names a real trainer in town and where to
     // find them, and the player's sheet remembers it. Hidden once that class
-    // is at Adept or better (your own class always is).
+    // is at Adept or better (your own class always is), and when no teacher of
+    // that class is known in this zone (canNPCPointToTeacher in the engine).
     {
         id: "ask-teacher-arcane",
         priority: 29,
@@ -1699,7 +1775,9 @@ const NPC_CONVERSATION_CATALOGUE = [
                 ctx.isHumanoid &&
                 typeof askNPCAboutTeacher === "function" &&
                 typeof G !== "undefined" && !!G.player &&
-                getClassSkillRank(G.player, "wizard") < 3
+                getClassSkillRank(G.player, "wizard") < 3 &&
+                typeof canNPCPointToTeacher === "function" &&
+                canNPCPointToTeacher(npc, "wizard")
         },
         action: (npc) => {
             if (typeof askNPCAboutTeacher === "function") askNPCAboutTeacher(npc, "wizard");
@@ -1719,7 +1797,9 @@ const NPC_CONVERSATION_CATALOGUE = [
                 ctx.isHumanoid &&
                 typeof askNPCAboutTeacher === "function" &&
                 typeof G !== "undefined" && !!G.player &&
-                getClassSkillRank(G.player, "cleric") < 3
+                getClassSkillRank(G.player, "cleric") < 3 &&
+                typeof canNPCPointToTeacher === "function" &&
+                canNPCPointToTeacher(npc, "cleric")
         },
         action: (npc) => {
             if (typeof askNPCAboutTeacher === "function") askNPCAboutTeacher(npc, "cleric");
@@ -1739,7 +1819,9 @@ const NPC_CONVERSATION_CATALOGUE = [
                 ctx.isHumanoid &&
                 typeof askNPCAboutTeacher === "function" &&
                 typeof G !== "undefined" && !!G.player &&
-                getClassSkillRank(G.player, "rogue") < 3
+                getClassSkillRank(G.player, "rogue") < 3 &&
+                typeof canNPCPointToTeacher === "function" &&
+                canNPCPointToTeacher(npc, "rogue")
         },
         action: (npc) => {
             if (typeof askNPCAboutTeacher === "function") askNPCAboutTeacher(npc, "rogue");
@@ -2429,6 +2511,74 @@ const NPC_CONVERSATION_CATALOGUE = [
             excludedActionTags: ["win-them-over"]
         }
     },
+    // ===== BACKSTORY PRESSURE EMISSARY =====
+    // Only the NPC who comes to settle the player's past (npc.isPressureEmissary).
+    {
+        id: "pressure-what",
+        priority: 1,
+        rankBoost: 95,
+        repeat: "always",
+        label: "What do you want from me?",
+        action: "pressure",
+        pressureAction: "what",
+        intent: "curious",
+        conditions: { custom: (npc) => _npcIsPressureEmissary(npc) && !!_npcPressureMenu().what }
+    },
+    {
+        id: "pressure-pay",
+        priority: 1,
+        rankBoost: 92,
+        repeat: "always",
+        label: () => { const m = _npcPressureMenu(); return "Pay what you can (" + (m.pay || 0) + " coins)"; },
+        action: "pressure",
+        pressureAction: "pay",
+        intent: "friendly",
+        conditions: { custom: (npc) => _npcIsPressureEmissary(npc) && _npcPressureMenu().pay > 0 }
+    },
+    {
+        id: "pressure-report",
+        priority: 2,
+        rankBoost: 88,
+        repeat: "always",
+        label: "Tell them what you have done",
+        action: "pressure",
+        pressureAction: "report",
+        intent: "friendly",
+        conditions: { custom: (npc) => _npcIsPressureEmissary(npc) && !!_npcPressureMenu().report }
+    },
+    {
+        id: "pressure-time",
+        priority: 2,
+        rankBoost: 85,
+        repeat: "always",
+        label: "Ask for more time",
+        action: "pressure",
+        pressureAction: "time",
+        intent: "friendly",
+        conditions: { custom: (npc) => _npcIsPressureEmissary(npc) && !!_npcPressureMenu().time }
+    },
+    {
+        id: "pressure-ready",
+        priority: 3,
+        rankBoost: 82,
+        repeat: "always",
+        label: "Say you are ready",
+        action: "pressure",
+        pressureAction: "ready",
+        intent: "aggressive",
+        conditions: { custom: (npc) => _npcIsPressureEmissary(npc) && !!_npcPressureMenu().ready }
+    },
+    {
+        id: "pressure-refuse",
+        priority: 4,
+        rankBoost: 80,
+        repeat: "always",
+        label: "Refuse to deal with them",
+        action: "pressure",
+        pressureAction: "refuse",
+        intent: "aggressive",
+        conditions: { custom: (npc) => _npcIsPressureEmissary(npc) && !!_npcPressureMenu().refuse }
+    },
     // ===== GUIDE =====
     // Only the opening-guide NPC (npc.guide) gets these. They float to the top
     // of the menu (rankBoost) until the player has what they need.
@@ -2554,7 +2704,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         relationshipImpact: { mood: 0, favor: 1, intent: "goodbye", markMet: true, actionTag: "goodbye" }
     },
     // ===== NSFW OPTIONS =====
-    // NSFW catalogue entries (flirt / seduce / proposition / touch_intimately /
+    // NSFW catalogue entries (flirt / seduce / touch_intimately /
     // start_intimacy) live in cyoaftw-npc-data-nsfw.js and are merged into the
     // active catalogue at query time via window.NPC_NSFW_CONVERSATION_CATALOGUE.
     // Do NOT re-inline them here; keeping them out keeps this file readable by
@@ -2977,7 +3127,7 @@ function buildConversationOption(entry, npc, ctx) {
     const optionId = String(entry.id || "").trim();
     const label = _npcPickConversationVariant(npc, `${optionId}:label`, entry.labelVariants, entry.label, ctx);
     // Do NOT resolve the action property via _npcResolveConversationValue —
-    // if it's a function (like ask-to-follow/stop-following/make-a-move), we
+    // if it's a function (like ask-to-follow/stop-following), we
     // need to pass it through as a function reference so it fires on click,
     // not during menu rendering. String actions ("trade", "intimacy", etc.)
     // pass through unchanged.
@@ -3032,6 +3182,16 @@ function buildConversationOption(entry, npc, ctx) {
         // Intimacy system additions
         intimacyAction: entry.intimacyAction,
         startEncounter: entry.startEncounter,
+        // How an encounter-starting option opens the scene (see
+        // handleIntimacyConversationChoice in the engine): tone flavors the
+        // opening narration, arousalBoost starts both meters above zero.
+        encounterStart: entry.encounterStart,
+        // Bold escalation after a rebuffed advance: the reply prompt leans
+        // toward responsive desire and only a clear refusal holds the scene
+        // off (see the _pendingIntimacyStart handoff in npcRespond).
+        responsiveDesire: entry.responsiveDesire,
+        // Backstory pressure emissary menu (see handlePressureChoice in the engine).
+        pressureAction: entry.pressureAction,
         phase: entry.phase,
         // Opening-guide story beat (see onGuideBeat in the engine).
         guideBeat: entry.guideBeat,
@@ -3220,6 +3380,7 @@ function getNPCSpeechProfile(npc, room, zoneTemplate) {
         tone: profile.tone || "",
         styleDescription: profile.styleDescription || "",
         languageNotes: profile.languageNotes || "",
+        nativeSpeech: getNPCNativeSpeech(npc),
         cues: Array.isArray(profile.cues) ? profile.cues.slice() : [],
         avoid: Array.isArray(profile.avoid) ? profile.avoid.slice() : []
     };
@@ -3238,6 +3399,7 @@ function syncNPCSpeechProfile(npc, room, zoneTemplate) {
         tone: speechProfile.tone,
         styleDescription: speechProfile.styleDescription,
         languageNotes: speechProfile.languageNotes,
+        nativeSpeech: speechProfile.nativeSpeech || "",
         cues: speechProfile.cues.slice(0, 3),
         avoid: speechProfile.avoid.slice(0, 3)
     };

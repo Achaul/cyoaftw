@@ -665,6 +665,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         speechStyle ? `- Speech style: ${speechStyle}` : "",
         speechProfile ? `- Speech guide: ${speechProfile.sentenceLength} sentences, ${speechProfile.vocabulary}, ${speechProfile.cadence}` : "",
         speechProfile ? `- Speech sample (style only, never copy its words): "${speechProfile.sample}"` : "",
+        speechProfile && speechProfile.nativeSpeech ? `- Native manner of speaking (their own people, in the common tongue; shape word choice and rhythm, never invented words): ${speechProfile.nativeSpeech}` : "",
         speechTics.length ? `- Speech cues (use rarely, not in most lines): ${speechTics.join("; ")}` : "",
         speechAvoid.length ? `- Avoid in speech: ${speechAvoid.join("; ")}` : "",
         voice ? `- Voice: ${voice}` : "",

@@ -21,6 +21,52 @@ if (typeof window !== "undefined") {
 }
 
 // ============================================================================
+// PLAYER GENDER RESOLUTION
+// ============================================================================
+// The engine stores the player's gender at the player object root
+// (G.player.gender, set in beginAdventure); player.stats has no gender key.
+// The gates below historically read player.stats.gender only, which is
+// undefined for engine-created players and silently defaulted EVERY player
+// to "male" - a female player was offered penis acts ("Ask them to suck your
+// cock") and denied vagina acts. Resolve both locations.
+
+function getPlayerGenderForGates(player) {
+    const raw = (player && (player.gender || (player.stats && player.stats.gender))) || "male";
+    return String(raw).toLowerCase();
+}
+
+// Non-binary players have both genitals (see ensurePlayerIntimacyAnatomy and
+// genitalGateForGender in the engine: non-binary -> "both"), so they pass
+// either player-side gate. NPC-side gates stay binary - NPCs are only
+// male/female/none.
+function playerGateMale(playerGender) {
+    return playerGender === "male" || playerGender === "non-binary";
+}
+
+function playerGateFemale(playerGender) {
+    return playerGender === "female" || playerGender === "non-binary";
+}
+
+// Cloaca check for gating: prefer the hydrated npc.cloaca flag (set by the
+// engine at NPC creation / hydrateNPCSpeciesFlags), falling back to the
+// species template so NPCs from old saves without the flag still gate
+// correctly. Mirrors _npcHasCloaca in intimacy-data-acts.js.
+function npcHasCloacaFlag(npc) {
+    if (!npc) return false;
+    if (npc.cloaca === true) return true;
+    if (npc.cloaca === false) return false;
+    if (npc.species && typeof getSpeciesTemplate === "function") {
+        const tpl = getSpeciesTemplate(npc.species);
+        return !!(tpl && tpl.cloaca === true);
+    }
+    if (npc.species && typeof window !== "undefined" && typeof window.getSpeciesTemplate === "function") {
+        const tpl = window.getSpeciesTemplate(npc.species);
+        return !!(tpl && tpl.cloaca === true);
+    }
+    return false;
+}
+
+
 // IMPORTS / DEPENDENCIES
 // ============================================================================
 
@@ -1704,8 +1750,15 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
 
     // Cloaca-bearing NPCs have no external testes, so actions targeting
     // the NPC's testicles are hidden entirely.
-    if (npc && npc.cloaca && act.target === "testicles" && act.requiresNpcMale) {
+    if (npcHasCloacaFlag(npc) && act.target === "testicles" && act.requiresNpcMale) {
         return { valid: false, reason: "no external testes (cloaca)", hidden: true };
+    }
+
+    // Tail-targeted acts (caress/pull tail) require a tailed species
+    // (Dragonborn, Lizardfolk, Kobold). Hidden entirely — not disabled — so
+    // the Tail category heading never surfaces for tailless NPCs.
+    if (act.requiresNpcTail && !hasNPCTail(npc)) {
+        return { valid: false, reason: "no tail", hidden: true };
     }
 
     // Cloaca-bearing NPCs have a single cloacal vent instead of separate
@@ -1713,7 +1766,7 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     // Cloaca (formerly Anus) category with cloaca relabelling handles it.
     // Player-owned vaginal actions (playerIsBottom) and the player self-climax
     // (female_ejaculate) are kept, since the player's anatomy is unaffected.
-    if (npc && npc.cloaca && !act.playerIsBottom && act.id !== "female_ejaculate" &&
+    if (npcHasCloacaFlag(npc) && !act.playerIsBottom && act.id !== "female_ejaculate" &&
         (act.target === "vagina" || act.target === "pussy" || act.target === "clitoris")) {
         return { valid: false, reason: "cloaca replaces vagina", hidden: true };
     }
@@ -1784,30 +1837,30 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     
     // Check gender requirements
     if (act.maleOnly || act.femaleOnly || act.requiresNpcMale || act.requiresNpcFemale || act.requiresActorMale || act.requiresActorFemale || act.requiresPlayerMale || act.requiresPlayerFemale) {
-        const playerGender = (player && player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+        const playerGender = getPlayerGenderForGates(player);
         const npcGender = (npc.gender || "female").toLowerCase();
         const actorIsPlayer = !act.playerIsBottom;
         
         if (act.maleOnly) {
-            if (actorIsPlayer && playerGender !== "male") return { valid: false, reason: "wrong gender" };
+            if (actorIsPlayer && !playerGateMale(playerGender)) return { valid: false, reason: "wrong gender" };
             if (!actorIsPlayer && npcGender !== "male") return { valid: false, reason: "wrong gender" };
         }
         if (act.femaleOnly) {
-            if (actorIsPlayer && playerGender !== "female") return { valid: false, reason: "wrong gender" };
+            if (actorIsPlayer && !playerGateFemale(playerGender)) return { valid: false, reason: "wrong gender" };
             if (!actorIsPlayer && npcGender !== "female") return { valid: false, reason: "wrong gender" };
         }
         if (act.requiresActorMale) {
-            if (actorIsPlayer && playerGender !== "male") return { valid: false, reason: "wrong gender" };
+            if (actorIsPlayer && !playerGateMale(playerGender)) return { valid: false, reason: "wrong gender" };
             if (!actorIsPlayer && npcGender !== "male") return { valid: false, reason: "wrong gender" };
         }
         if (act.requiresActorFemale) {
-            if (actorIsPlayer && playerGender !== "female") return { valid: false, reason: "wrong gender" };
+            if (actorIsPlayer && !playerGateFemale(playerGender)) return { valid: false, reason: "wrong gender" };
             if (!actorIsPlayer && npcGender !== "female") return { valid: false, reason: "wrong gender" };
         }
         if (act.requiresNpcMale && npcGender !== "male") return { valid: false, reason: "wrong gender" };
         if (act.requiresNpcFemale && npcGender !== "female") return { valid: false, reason: "wrong gender" };
-        if (act.requiresPlayerMale && playerGender !== "male") return { valid: false, reason: "wrong gender" };
-        if (act.requiresPlayerFemale && playerGender !== "female") return { valid: false, reason: "wrong gender" };
+        if (act.requiresPlayerMale && !playerGateMale(playerGender)) return { valid: false, reason: "wrong gender" };
+        if (act.requiresPlayerFemale && !playerGateFemale(playerGender)) return { valid: false, reason: "wrong gender" };
     }
 
     // Check prior actions
@@ -2014,14 +2067,14 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         if (!intimacy) return { valid: true }; // Can't validate, allow
         
         const currentPenetration = intimacy.penetration || {};
-        const playerGender = (player && player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+        const playerGender = getPlayerGenderForGates(player);
         const npcGender = (npc.gender || "female").toLowerCase();
         
         // For internal ejaculation (inside vagina/anus/mouth), player must be:
         // 1. Male
         // 2. Currently penetrating that specific body part with their penis
         if (actId === "ejaculate_in_vagina") {
-            if (playerGender !== "male") {
+            if (!playerGateMale(playerGender)) {
                 return { valid: false, reason: "wrong gender" };
             }
             // Must be penetrating vagina with penis (player -> NPC)
@@ -2031,7 +2084,7 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         }
         
         if (actId === "ejaculate_in_anus") {
-            if (playerGender !== "male") {
+            if (!playerGateMale(playerGender)) {
                 return { valid: false, reason: "wrong gender" };
             }
             // Must be penetrating anus with penis (player -> NPC)
@@ -2041,7 +2094,7 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         }
         
         if (actId === "ejaculate_in_mouth") {
-            if (playerGender !== "male") {
+            if (!playerGateMale(playerGender)) {
                 return { valid: false, reason: "wrong gender" };
             }
             // Must be penetrating mouth with penis (player -> NPC mouth)
@@ -2060,7 +2113,7 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         // 1. Female
         // 2. Receiving vaginal penetration or penetrating with vagina
         if (actId === "female_ejaculate") {
-            if (playerGender !== "female") {
+            if (!playerGateFemale(playerGender)) {
                 return { valid: false, reason: "wrong gender" };
             }
             // Player can squirt if:
@@ -2079,7 +2132,7 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         
         // For external ejaculation (on body parts), player must be male
         if (actId.startsWith("ejaculate_on_")) {
-            if (playerGender !== "male") {
+            if (!playerGateMale(playerGender)) {
                 return { valid: false, reason: "wrong gender" };
             }
             // These are always available for males, regardless of penetration state
@@ -2737,7 +2790,7 @@ function maybeNpcIntercourseRequest(npc, player, act, intimacy) {
     // Already being fucked — nothing to ask for.
     if (intimacy.penetration && intimacy.penetration.active) return null;
     // She wants the player inside her: he needs a working cock.
-    var playerGender = (player && player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+    var playerGender = getPlayerGenderForGates(player);
     if (playerGender !== "male" && !(player && player.anatomy && player.anatomy.penis)) return null;
     var climaxState = intimacy.climax || {};
     if (playerGender === "male" && climaxState.playerCooldownUntil && Date.now() < climaxState.playerCooldownUntil) return null;
@@ -3484,7 +3537,7 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         
         // Add player climax notification if applicable
         if (climaxResult.playerClimax) {
-            const playerGender = (player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+            const playerGender = getPlayerGenderForGates(player);
             if (playerGender === "male" || playerGender.includes("male")) {
                 if (!response.responseText.includes("You climax") && !response.responseText.includes("you climax")) {
                     response.responseText = (response.responseText || '') + " You climax intensely.";
@@ -3797,8 +3850,8 @@ function handleLubeFromAction(npc, act) {
     
     // Actions that add lube to vagina
     const vaginaLubeActions = [
-        "lick_pussy", "eat_pussy", "tongue_pussy", "suck_clit",
-        "lick_player_pussy", "eat_player_pussy", "spit_on_vagina"
+        "lick_pussy", "tongue_pussy", "suck_clit",
+        "lick_player_pussy", "spit_on_vagina"
     ];
     
     // Actions that add lube to anus
@@ -3900,7 +3953,7 @@ function handleClimax(npc, player, act, intimacy) {
     };
     
     // Determine gender
-    const playerGender = (player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+    const playerGender = getPlayerGenderForGates(player);
     const npcGender = (npc.gender || "female").toLowerCase();
     
     // Check if player climaxed
@@ -4021,7 +4074,7 @@ function handleFluidConsequence(npc, player, consequenceType, intimacy) {
  * Only applies to male characters
  */
 function checkCooldownForAction(npc, player, act) {
-    const playerGender = (player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+    const playerGender = getPlayerGenderForGates(player);
     const npcGender = (npc.gender || "female").toLowerCase();
     
     // Only males have cooldown
@@ -4383,7 +4436,7 @@ function buildActionContext(npc, player, act, intimacy, positionId) {
     const temperament = npc.temperament || "neutral";
 
     // Get player gender for pronoun handling
-    const playerGender = (player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+    const playerGender = getPlayerGenderForGates(player);
 
     // Build clothing description
     const clothingDesc = buildClothingDescription(clothingState, act.playerIsBottom ? "npc" : "player");
@@ -5650,7 +5703,7 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
     const verb = act.verb || "touch";
     
     // Check cooldown state for player
-    const playerGender = (player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+    const playerGender = getPlayerGenderForGates(player);
     const isPlayerOnCooldown = playerGender === "male" && intimacy && intimacy.climax && intimacy.climax.playerCooldownUntil && Date.now() < intimacy.climax.playerCooldownUntil;
     const isNPConCooldown = npc.gender && (npc.gender.toLowerCase() === "male" || npc.gender.toLowerCase().includes("male")) && intimacy && intimacy.climax && intimacy.climax.npcCooldownUntil && Date.now() < intimacy.climax.npcCooldownUntil;
     
@@ -5882,7 +5935,7 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
     const pleasureIntensity = getPleasureIntensity(arousalLevel);
 
     // Check cooldown state for player
-    const playerGender = (player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+    const playerGender = getPlayerGenderForGates(player);
     const isPlayerOnCooldown = playerGender === "male" && intimacy && intimacy.climax && intimacy.climax.playerCooldownUntil && Date.now() < intimacy.climax.playerCooldownUntil;
     
     // Get penis state descriptor based on cooldown
@@ -7423,7 +7476,7 @@ function generateEndResponse(npc, player, act) {
     const isUncivilized = npc && npc.species && !isCivilizedSpecies(npc.species);
     
     // Get player gender
-    const playerGender = (player && player.stats && player.stats.gender) ? player.stats.gender.toLowerCase() : "male";
+    const playerGender = getPlayerGenderForGates(player);
     const playerHasPenis = playerGender === "male" || playerGender.includes("male");
     
     // Handle pull-out actions
@@ -7790,7 +7843,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         flatActions.push({
             id: a.actId,
             label: getNaturalLabel(a.actId, npc, player),
-            description: a.desc,
+            description: (typeof getGenderedDesc === "function") ? getGenderedDesc(a, npc, player) : a.desc,
             type: a.type,
             disabled: false
         });
@@ -7801,7 +7854,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         flatActions.push({
             id: a.actId,
             label: getNaturalLabel(a.actId, npc, player),
-            description: a.desc,
+            description: (typeof getGenderedDesc === "function") ? getGenderedDesc(a, npc, player) : a.desc,
             type: a.type,
             disabled: true,
             disabledHint: a.disabledHint
@@ -7972,7 +8025,9 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                                 ejaculationOptions.push({
                                     actionId: actId,
                                     label: getNaturalLabel(actId, npc, player),
-                                    desc: actDetails.desc || "Release on body"
+                                    desc: (typeof getGenderedDesc === "function" && actDetails.desc)
+                                        ? getGenderedDesc(actDetails, npc, player)
+                                        : (actDetails.desc || "Release on body")
                                 });
                             }
                         }
@@ -10172,6 +10227,7 @@ function getRoomMessNotes(room) {
     window.resetIntimacyState = resetIntimacyState;
     window.startIntimacyEncounter = startIntimacyEncounter;
     window.endIntimacyEncounter = endIntimacyEncounter;
+    window.updateArousal = updateArousal;
     window.handleClimax = handleClimax;
     window.executeIntimacyAction = executeIntimacyAction;
     window.getMenuActions = getMenuActions;

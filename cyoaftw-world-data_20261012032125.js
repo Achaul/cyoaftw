@@ -3181,9 +3181,7 @@ const PLAYER_ARCHETYPES = {
             species: ["Human", "Dwarf", "Elf", "Halfling"], role: "Townsfolk", age: "middle-aged",
             persona: "A weathered, patient old friend of the player's family who has seen plenty of green youngsters come to this town and wants this one to land on their feet. Dry humor, gentle teasing, genuinely proud of the player.",
             opening: [
-                "\"{player}! There you are. So, what do you make of this town? Ready to start your apprenticeship, or do you want a day to find your feet first?\"",
-                "\"Found you at last. Well? What do you make of the place? Home must feel a long way off by now. Time we found you someone worth learning from.\"",
-                "\"There's the face I promised your family I'd look after. So, {player}, what do you think of the town? Ready to meet some people who can teach you something?\""
+                "\"{player}! There you are. I promised your family I would see you properly started, and I mean to keep that promise.\""
             ],
             replies: [
                 { label: "Say you're ready", say: "I'm ready. Where do we start?", stance: "friendly" },
@@ -3220,9 +3218,7 @@ const PLAYER_ARCHETYPES = {
             species: ["Human", "Dwarf", "Orc", "Halfling"], role: "Adventurer", age: "adult",
             persona: "A hard, quiet old comrade of the player's who shares the grudge and has been tracking the same trail. Speaks low and plainly, trusts few people, loyal without being soft about it.",
             opening: [
-                "\"{player}. Keep your voice down. The trail of {quarry} had gone cold, and then a trace of it turned up at {leadPlace}. We ask around quietly, and we don't say who is asking.\"",
-                "\"Over here. Don't stare. Last traces of {quarry} were seen at {leadPlace}. Let's ask around, nice and easy, and see who flinches.\"",
-                "\"Good, you came. I've something. {quarry}, or someone who deals with them, passed through {leadPlace} not long ago. We start there, and we start quiet.\""
+                "\"{player}. Keep your voice down. A trace of {quarry} turned up at {leadPlace}. We ask around quietly, and we don't say who is asking.\""
             ],
             replies: [
                 { label: "Say you're with them", say: "Then we start there. Lead on.", stance: "friendly" },
@@ -3259,9 +3255,7 @@ const PLAYER_ARCHETYPES = {
             species: ["Human", "Dwarf", "Elf", "Halfling"], role: "Priest", age: "elderly",
             persona: "A calm, plainspoken priest who knew the player before the worst of it and chose to offer help anyway. Gentle but never flattering; believes in small deeds over grand gestures.",
             opening: [
-                "\"{player}. You came. I was not certain you would. So, what do you make of this town? It is as good a place as any to begin setting things right. I would start with {leadPlace}.\"",
-                "\"There you are. Walk with me a moment. What do you make of the town? Folk here remember a kindness a long time, and a harm longer. We should begin at {leadPlace}.\"",
-                "\"I'm glad you stayed. No speeches, {player}. This town has people who need help and a shrine worth sitting in. Start at {leadPlace}, and we will see what you make of it.\""
+                "\"{player}. You came. I was not certain you would. No speeches: this town has people who need help and a shrine worth sitting in. I would start at {leadPlace}.\""
             ],
             replies: [
                 { label: "Thank them", say: "Thank you for not giving up on me. Where do I begin?", stance: "friendly" },
@@ -3298,9 +3292,7 @@ const PLAYER_ARCHETYPES = {
             species: ["Human", "Elf", "Halfling", "Dwarf"], role: "Townsfolk", age: "adult",
             persona: "A loyal, observant friend of the missing person who has been helping the player search. Practical, quick to notice small details, careful about raising hope too high.",
             opening: [
-                "\"{player}, over here. So, what do you make of the place? Big enough that someone could vanish into it. The clerk at {leadPlace} keeps a ledger of who comes and goes. If {who} passed through, a name is in it.\"",
-                "\"There you are. First impressions of the town? Mine is that it keeps records, and records are where we start. {leadPlace} should have something on arrivals.\"",
-                "\"I've been walking the street all morning. It's smaller than I feared, and that's good news for us. Let's start at {leadPlace}. Someone there will have seen something.\""
+                "\"{player}, over here. The clerk at {leadPlace} keeps a ledger of who comes and goes. If {who} passed through, a name is in it.\""
             ],
             replies: [
                 { label: "Say let's go", say: "Then let's go. I'm not stopping until I know.", stance: "friendly" },
@@ -3337,9 +3329,7 @@ const PLAYER_ARCHETYPES = {
             species: ["Human", "Halfling", "Dwarf", "Elf"], role: "Adventurer", age: "adult",
             persona: "A charming, chancy partner in the player's schemes who talks fast, jokes through danger and has never once been honest about a price. Loyal in their own way.",
             opening: [
-                "\"{player}! Well, here we are. So, what do you make of the place? More coin in this town than either of us has seen in a year, and I intend we meet some of it. Start at {leadPlace}. Somebody always pays for a quiet pair of hands.\"",
-                "\"There you are. Don't look so grim. Look at the place, there's money in the walls. First stop, {leadPlace}. I hear someone's always hiring.\"",
-                "\"Right. Town. Lots of people. Lots of purses. Not that I'd suggest anything. Let's ask around at {leadPlace} for honest work first, and see what turns up after.\""
+                "\"{player}! Well, here we are. There is more coin in this town than either of us has seen in a year, and somebody always pays for a quiet pair of hands. Start at {leadPlace}.\""
             ],
             replies: [
                 { label: "Grin and agree", say: "Honest work first. Then we see.", stance: "friendly" },
@@ -3376,9 +3366,7 @@ const PLAYER_ARCHETYPES = {
             species: ["Human", "Elf", "Dwarf", "Halfling"], role: "Adventurer", age: "adult",
             persona: "A steady, protective friend who vouched for the player and has been quietly watching their back. Soft-spoken, always checking the room, never raises their voice.",
             opening: [
-                "\"Easy, {player}. Nobody's followed us. So, what do you make of the place? Small enough to hide in, big enough that nobody looks twice. Use no real name where you can help it. {leadPlace} is a good place to start being nobody.\"",
-                "\"Steady. Look at the room, not at me. This town asks few questions. We keep it that way. Start at {leadPlace} and keep your head down.\"",
-                "\"There you are. Good. First impression of the town? Mine is that it's the sort of place that minds its business. Let's stay in {leadPlace} and watch who comes and goes.\""
+                "\"Easy, {player}. Nobody followed us. This town asks few questions, so use no real name where you can help it. {leadPlace} is a good place to start being nobody.\""
             ],
             replies: [
                 { label: "Thank them for the warning", say: "Thank you. I'll keep my head down.", stance: "friendly" },
@@ -3415,9 +3403,7 @@ const PLAYER_ARCHETYPES = {
             species: ["Human", "Elf", "Dwarf", "Halfling"], role: "Priest", age: "elderly",
             persona: "A quiet, unflappable old pilgrim who recognises the sign that drew the player and speaks of it without drama. Patient, amused by questions, never gives a straight answer when a story will do.",
             opening: [
-                "\"{player}. You followed it all the way. So, what do you make of this town? Folk say an old shrine tied to {leadPlace} still answers. Come, we'll see whether it answers you.\"",
-                "\"There. You can feel it too, can't you? Never mind the town, it's only the road you walked to get here. {leadPlace} is where I'd start.\"",
-                "\"I wondered whether you would come. What did you see on the way? Walk with me to {leadPlace}. Some things are easier to understand where they began.\""
+                "\"{player}. You followed it all the way. Folk say an old shrine tied to {leadPlace} still answers. Come, we will see whether it answers you.\""
             ],
             replies: [
                 { label: "Ask them to explain", say: "Then tell me what it means. Please.", stance: "friendly" },
@@ -3548,10 +3534,228 @@ function buildPlayerBackstory(choices) {
 }
 
 // The guide's opening line for this backstory (one of the variants, stable per player).
+// ── GUIDE SPEECH BY SPECIES ────────────────────────────────────────────────
+// The guide is always the player's own species (see spawnGuideNPC), and talks
+// the way that people talk. Everyone speaks the common tongue; there are no
+// invented languages. What changes is idiom, cadence and what they care about
+// (see NPC_SPECIES_SPEECH in cyoaftw-npc-data.js for the same layer applied
+// to every NPC). Humans use the base lines in PLAYER_ARCHETYPES; the other
+// playable species override the relation and the opening line per archetype,
+// and the shared mission and newcomer-blessing lines below.
+// Fill tokens are the same as the base lines ({player}, {leadPlace}, {quarry},
+// {who}, {guildPlace}, {chapelPlace}).
+const GUIDE_SPECIES_LINES = {
+    "coming-of-age": {
+        elf: {
+            relation: "an old friend of your family, long in years, who promised to see you started",
+            opening: "\"{player}. At last. I gave your family my word that I would see you properly started, and I do not give my word lightly. We have time, but not as much as you think.\""
+        },
+        dwarf: {
+            relation: "a clan friend of your family who swore to see you started",
+            opening: "\"{player}! About time. I gave your family my word I would see you started, and a word is a contract. Let us get on with it.\""
+        },
+        halfling: {
+            relation: "an old friend from the next hearth over who promised to see you started",
+            opening: "\"{player}, there you are! Look at you, thin as a rake. I promised your family I would see you properly started, and I will not have it said I broke a promise on an empty stomach.\""
+        },
+        orc: {
+            relation: "an elder of your clan, old kin to your family, who swore to see you started",
+            opening: "\"{player}. You came. Good. I swore to your kin that I would see you started, and I keep what I swear. Stand straight and listen.\""
+        },
+        dragonborn: {
+            relation: "a retainer of your family's house, sworn to see you started",
+            opening: "\"{player}. You are late, but you are here. I gave my oath to your house that you would be properly started, and I do not leave an oath half kept.\""
+        }
+    },
+    "revenge": {
+        elf: {
+            relation: "an old companion of the road who has long shared your grudge",
+            opening: "\"{player}. Speak softly. I have waited a long while for a trace of {quarry}, and one has turned up at {leadPlace}. We ask quietly, and we give no name.\""
+        },
+        dwarf: {
+            relation: "an old comrade from the same hall who shares your grudge",
+            opening: "\"{player}. Keep it down. A trace of {quarry} turned up at {leadPlace}. We ask around, we do not say who is asking, and we settle the account in full.\""
+        },
+        halfling: {
+            relation: "an old friend who shares your grudge and has not forgiven it either",
+            opening: "\"{player}, shh, come close. Somebody at {leadPlace} saw a trace of {quarry}. We ask nicely, we do not say who is asking, and we do not let on that we care.\""
+        },
+        orc: {
+            relation: "a blood-sworn clan-mate who shares your grudge",
+            opening: "\"{player}. Low voice. {quarry} left a trail and it runs to {leadPlace}. We ask, we listen, we say no names. When the time comes we strike once, and properly.\""
+        },
+        dragonborn: {
+            relation: "a sworn companion of your line who shares your grudge",
+            opening: "\"{player}. Lower your voice. A trace of {quarry} has surfaced at {leadPlace}. We inquire discreetly, and we do not speak of who asks. Patience will be repaid.\""
+        }
+    },
+    "redemption": {
+        elf: {
+            relation: "a patient elder who offered you a way to begin making amends",
+            opening: "\"{player}. You came. I was not certain you would, and I am glad. There is no hurry in amends, only the doing. This town has people who need help, and I would begin at {leadPlace}.\""
+        },
+        dwarf: {
+            relation: "a stern old priest who offered you a way to begin making amends, and a ledger to keep it in",
+            opening: "\"{player}. You came. Good. A debt is not paid by talking about it. This town has folk who need help and a shrine worth sitting in. Start at {leadPlace}.\""
+        },
+        halfling: {
+            relation: "a kindly old priest who offered you a way to begin making amends, and a bowl of soup besides",
+            opening: "\"{player}, dear, you came. I was not sure you would. No fuss, no speeches. There are folk here who need help and a shrine that is good to sit in. Start at {leadPlace}, and eat something first.\""
+        },
+        orc: {
+            relation: "an old priest of the clan who offered you a way to begin making amends",
+            opening: "\"{player}. You came. I did not know that you would. Words are cheap, so I will not spend many. People here need a strong hand, and the shrine is worth your time. Go to {leadPlace}.\""
+        },
+        dragonborn: {
+            relation: "an elderly priest of your house who offered you a way to begin making amends",
+            opening: "\"{player}. You came. I confess I was uncertain. Honour is repaired by deeds, not declarations. This town holds people in need and a shrine worth your devotion. Begin at {leadPlace}.\""
+        }
+    },
+    "missing-kin": {
+        elf: {
+            relation: "a friend of long standing who wants answers as badly as you do",
+            opening: "\"{player}, over here. I have been patient, but patience has its limits. The clerk at {leadPlace} keeps a ledger of who comes and goes. If {who} passed through, a name is in it.\""
+        },
+        dwarf: {
+            relation: "a clan friend who wants answers as badly as you do",
+            opening: "\"{player}, here. The clerk at {leadPlace} keeps the books on who comes and goes. If {who} passed through, it is written down. Books do not lie. Clerks might.\""
+        },
+        halfling: {
+            relation: "a close friend who wants answers as badly as you do",
+            opening: "\"{player}, over here, quick! The clerk at {leadPlace} keeps a ledger of who comes and goes, and clerks love to be asked nicely. If {who} passed through, a name is in it.\""
+        },
+        orc: {
+            relation: "a clan-mate who wants answers as badly as you do",
+            opening: "\"{player}. Here. The clerk at {leadPlace} keeps a ledger of who comes and goes. If {who} passed through, a name is in it. We go together, and we do not leave without the answer.\""
+        },
+        dragonborn: {
+            relation: "a loyal friend of your house who wants answers as badly as you do",
+            opening: "\"{player}. Here. The clerk at {leadPlace} keeps a record of arrivals and departures. If {who} passed through, a name is written there. We will have it.\""
+        }
+    },
+    "fortune": {
+        elf: {
+            relation: "a fellow chancer, older and cleverer than you, who got you into this",
+            opening: "\"{player}. Well. Here we are. There is more coin in this town than either of us has seen in a very long time, and someone always pays for a quiet pair of hands. Begin at {leadPlace}.\""
+        },
+        dwarf: {
+            relation: "a fellow chancer who talked you into this on a handshake",
+            opening: "\"{player}! Here we are. More coin in this town than we have seen in a year, and somebody always pays for quiet hands. Fair work for fair coin. Start at {leadPlace}.\""
+        },
+        halfling: {
+            relation: "a fellow chancer, quick with a smile, who got you into this",
+            opening: "\"{player}! Well, here we are, and what a town! More coin than either of us has seen in a year, and somebody always pays for a quiet pair of hands. Start at {leadPlace}, and mind your pockets.\""
+        },
+        orc: {
+            relation: "a fellow raider turned chancer who got you into this",
+            opening: "\"{player}. We are here. There is more coin in this town than either of us has seen in a year, and somebody pays well for hands that can be quiet or loud. Start at {leadPlace}.\""
+        },
+        dragonborn: {
+            relation: "a fellow chancer of good birth and poor luck who got you into this",
+            opening: "\"{player}. We have arrived. There is more coin in this town than either of us has seen in a year, and someone always pays for discreet service. Begin at {leadPlace}.\""
+        }
+    },
+    "exile": {
+        elf: {
+            relation: "a friend of long standing who vouched for you when nobody else would",
+            opening: "\"Softly, {player}. Nobody followed us. This town asks few questions, so give no true name where you can avoid it. {leadPlace} is a good place to begin being nobody.\""
+        },
+        dwarf: {
+            relation: "a clan friend who vouched for you when nobody else would",
+            opening: "\"Easy, {player}. Nobody followed. This town does not ask many questions, so give no real name if you can help it. {leadPlace} is a good place to start being nobody.\""
+        },
+        halfling: {
+            relation: "a friend who vouched for you when nobody else would, and fed you besides",
+            opening: "\"Easy, {player}, easy. Nobody followed us, and I looked twice. This town asks few questions, so use no real name if you can help it. {leadPlace} is a good place to start being nobody.\""
+        },
+        orc: {
+            relation: "a clan-mate who vouched for you when nobody else would",
+            opening: "\"Easy, {player}. Nobody followed us. This town asks few questions, so give no true name if you can avoid it. {leadPlace} is a good place to start being no one.\""
+        },
+        dragonborn: {
+            relation: "a friend who spoke for you when nobody else would, at cost to their own name",
+            opening: "\"Calm yourself, {player}. Nobody followed us. This town asks few questions, so give no true name where it can be helped. {leadPlace} is a fitting place to be nobody for a while.\""
+        }
+    },
+    "calling": {
+        elf: {
+            relation: "someone who understands the sign that drew you here, and has seen its like before",
+            opening: "\"{player}. You followed it all the way. I have seen a sign like yours once before, long ago. They say an old shrine tied to {leadPlace} still answers. Come, we will see whether it answers you.\""
+        },
+        dwarf: {
+            relation: "someone who understands the sign that drew you here",
+            opening: "\"{player}. You followed it all the way. Folk say an old shrine tied to {leadPlace} still answers. Come on, we will see whether it answers you.\""
+        },
+        halfling: {
+            relation: "someone who understands the sign that drew you here",
+            opening: "\"{player}! You followed it all the way here, bless you. Folk say an old shrine tied to {leadPlace} still answers. Come along, we will see whether it answers you.\""
+        },
+        orc: {
+            relation: "a seer of your clan who understands the sign that drew you here",
+            opening: "\"{player}. You followed the sign to the end. Good. They say an old shrine tied to {leadPlace} still answers. We will go and see whether it answers you.\""
+        },
+        dragonborn: {
+            relation: "someone who understands the sign that drew you here",
+            opening: "\"{player}. You followed it to the end. Fitting. It is said an old shrine tied to {leadPlace} still answers. Let us see whether it answers you.\""
+        }
+    }
+};
+
+// Shared guide lines by species (mission, mission when the lead is the
+// Guildhall, and the newcomer's-blessing advice). Facts are identical to the
+// base lines; only the voice changes. Humans use the base lines.
+const GUIDE_SPECIES_TEXT = {
+    elf: {
+        mission: "\"Three things matter, {player}. Grow stronger: {guildPlace} has trainers and a yard to practise in. Earn coin: take work and bounties. And follow your lead, patiently.\"",
+        missionGuild: "\"Three things matter, {player}. Grow stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. And follow your lead, patiently.\"",
+        advice: "\"Death is final in this country, and I have seen too many young ones learn it late. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can bring you back, and only if they are strong enough.\""
+    },
+    dwarf: {
+        mission: "\"Three things, {player}. Get stronger: {guildPlace} has trainers and a yard. Earn coin: take work and bounties. Follow your lead. No shortcuts.\"",
+        missionGuild: "\"Three things, {player}. Get stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. Follow your lead. No shortcuts.\"",
+        advice: "\"Death is final here. No refunds. First thing, ask for a newcomer's blessing at the shrine in {chapelPlace}. It costs nothing, it binds you to no god, and it saves you once. After that, only a patron god you have served can pull you back, and only if they have the strength.\""
+    },
+    halfling: {
+        mission: "\"Three things, {player}, and then supper. Get stronger: {guildPlace} has trainers and a yard to practise in. Earn coin: take work and bounties. And follow your lead.\"",
+        missionGuild: "\"Three things, {player}, and then supper. Get stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. And follow your lead.\"",
+        advice: "\"Now, one hard thing, and I will say it kindly: death is final in this country. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can bring you back, and only if they are strong enough.\""
+    },
+    orc: {
+        mission: "\"Three things, {player}. Get strong: {guildPlace} has trainers and a yard to test yourself in. Earn coin: take work and bounties. Follow your lead.\"",
+        missionGuild: "\"Three things, {player}. Get strong: the trainers and the yard there are for that. Earn coin: take work and bounties. Follow your lead.\"",
+        advice: "\"Know this: death is final here. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can pull you back, and only if they are strong enough. Do not skip it out of pride.\""
+    },
+    dragonborn: {
+        mission: "\"Three matters, {player}. Grow stronger: {guildPlace} has trainers and a yard for practice. Earn coin: take work and bounties. And follow your lead.\"",
+        missionGuild: "\"Three matters, {player}. Grow stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. And follow your lead.\"",
+        advice: "\"Understand this: death is final in this country, and pride will not undo it. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can restore you, and only if they are strong enough.\""
+    }
+};
+
+// The guide's spec for this player's species: the archetype's base guide with
+// the species relation and opening swapped in when one exists.
+function getGuideSpec(archetypeId, speciesKey) {
+    const arch = PLAYER_ARCHETYPES[archetypeId];
+    if (!arch || !arch.guide) return null;
+    const key = String(speciesKey || "").toLowerCase();
+    const byArch = GUIDE_SPECIES_LINES[archetypeId];
+    const o = byArch && byArch[key] ? byArch[key] : null;
+    if (!o) return arch.guide;
+    const spec = Object.assign({}, arch.guide);
+    if (o.relation) spec.relation = o.relation;
+    if (o.opening) spec.opening = [o.opening];
+    return spec;
+}
+
+function _guideOwnSpeciesKey() {
+    return typeof getPlayerSpeciesKey === "function" ? getPlayerSpeciesKey() : "";
+}
+
 function getGuideOpeningLine(backstory) {
     const arch = backstory ? PLAYER_ARCHETYPES[backstory.archetype] : null;
     if (!arch) return "";
-    const variants = arch.guide.opening;
+    const gspec = getGuideSpec(backstory.archetype, _guideOwnSpeciesKey()) || arch.guide;
+    const variants = gspec.opening;
     let h = 0;
     const seed = String(backstory.playerName || "") + backstory.archetype;
     for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 9973;
@@ -3564,13 +3768,16 @@ function getGuideOpeningLine(backstory) {
 // requestNewcomerBlessing in the engine). Folded into one bubble by
 // startGuideArrival.
 const GUIDE_MISSION_LINES = [
-    "\"Three things matter here, {player}. Get stronger: {guildPlace} has trainers, and a yard to practise in. Earn coin: take work and bounties. And follow your lead, which starts at {leadPlace}.\"",
-    "\"Here is how it works, {player}. Get stronger, because there are trainers at {guildPlace}. Earn coin from work and bounties. And chase your lead, which begins at {leadPlace}.\""
+    "\"Three things matter here, {player}. Get stronger: {guildPlace} has trainers and a yard to practise in. Earn coin: take work and bounties. And follow your lead.\""
+];
+
+// Used when the first lead is the Guildhall itself, so the place is not named twice.
+const GUIDE_MISSION_LINES_GUILD_LEAD = [
+    "\"Three things matter here, {player}. Get stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. And follow your lead.\""
 ];
 
 const GUIDE_NEWCOMER_ADVICE = [
-    "\"Death is final in this country. So before anything else, find a shrine ({chapelPlace} has one) and ask for a newcomer's blessing. It is free, it binds you to no god, and it saves you once. After that, only a god you have served can pull you back, and only if they are strong enough.\"",
-    "\"One hard truth, {player}: dying here is for good. Ask for a newcomer's blessing at the shrine in {chapelPlace} first. It is free, no oaths, and it saves you one time. Past that, you need a patron god strong enough to answer.\""
+    "\"Death is final in this country. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can pull you back, and only if they are strong enough.\""
 ];
 
 function _guideSeedIndex(backstory, n) {
@@ -3582,12 +3789,401 @@ function _guideSeedIndex(backstory, n) {
 
 function getGuideMissionLine(backstory) {
     if (!backstory) return "";
-    return _spFill(GUIDE_MISSION_LINES[_guideSeedIndex(backstory, GUIDE_MISSION_LINES.length)], getBackstoryFillMap(backstory));
+    const fill = getBackstoryFillMap(backstory);
+    const guildLead = fill.leadPlace === fill.guildPlace;
+    const sp = GUIDE_SPECIES_TEXT[_guideOwnSpeciesKey()];
+    let pool = guildLead ? GUIDE_MISSION_LINES_GUILD_LEAD : GUIDE_MISSION_LINES;
+    if (sp) pool = [guildLead ? sp.missionGuild : sp.mission];
+    return _spFill(pool[_guideSeedIndex(backstory, pool.length)], fill);
 }
 
 function getGuideNewcomerAdvice(backstory) {
     if (!backstory) return "";
-    return _spFill(GUIDE_NEWCOMER_ADVICE[_guideSeedIndex(backstory, GUIDE_NEWCOMER_ADVICE.length)], getBackstoryFillMap(backstory));
+    const sp = GUIDE_SPECIES_TEXT[_guideOwnSpeciesKey()];
+    const pool = sp ? [sp.advice] : GUIDE_NEWCOMER_ADVICE;
+    return _spFill(pool[_guideSeedIndex(backstory, pool.length)], getBackstoryFillMap(backstory));
+}
+
+// ── OPENING SCENE (the intro card shown once, at the start of a new game) ──
+// Staged from the wizard's answers: species and look, personality, past
+// (backstory text), and where the player starts. buildOpeningSceneTemplate
+// is pure (it takes a plain context object) and always returns a complete
+// scripted version; the engine may then ask the AI to polish it (see
+// polishOpeningScene) and falls back to this text if that fails.
+const OPENING_ZONE_SCENES = {
+    "Town": "Chimney smoke drifts over the roofs, and the town hums with people trying to live ordinary lives in a country the Long War has left scarred. Beyond its edge, the broken skyline of old Aldermere stands black against the sky.",
+    "Underground City": "Far below the open sky, {hub} is a lamplit district of stone and iron that carries on as if the war overhead were only weather.",
+    "Dungeon": "{hub} smells of smoke, old bone and wet stone, and the noise of a warband at rest echoes down every passage.",
+    "Ruins": "{hub} huddles among the fallen masonry of old Aldermere, a ring of cookfires and bedrolls beneath a black, broken skyline.",
+    "Swamp": "{hub} stands on rotting stilts above black water, and the mist keeps its secrets as well as any wall."
+};
+const OPENING_FALLBACK_SCENE = "You have arrived somewhere few would choose to begin.";
+
+const OPENING_TIER_LINES = {
+    "Easy": "The people here look you over and, for the most part, their faces soften.",
+    "Normal": "Heads turn as you arrive, curious more than kind or cruel.",
+    "Hard": "Heads turn as you arrive, and few of the looks are friendly.",
+    "Brutal": "Every eye weighs you the moment you arrive, and the weighing is not kind."
+};
+
+const OPENING_TRAIT_LINES = {
+    curiosity: "You have never been able to leave a closed door alone, or a question unasked.",
+    empathy: "You have never been able to walk past someone in trouble.",
+    boldness: "You have never waited for an invitation into trouble."
+};
+
+const OPENING_HAIR_STYLE_PHRASES = {
+    "cropped": "cropped close",
+    "short": "cut short",
+    "loose": "worn loose",
+    "long": "worn long",
+    "braided": "braided",
+    "tied back": "tied back",
+    "curly": "curling freely",
+    "messy": "in a messy tangle"
+};
+
+function _opLowerFirst(s) {
+    s = String(s || "");
+    return s ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+}
+
+function _opArticle(word) {
+    return /^[aeiou]/i.test(String(word || "")) ? "an" : "a";
+}
+
+function _opJoin(parts) {
+    if (!parts.length) return "";
+    if (parts.length === 1) return parts[0];
+    if (parts.length === 2) return parts[0] + " and " + parts[1];
+    return parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
+}
+
+// ctx: { speciesLabel, appearance, scaled, trait, backstoryText, zone,
+//        hubName, roomName, tier, kin, guideRelation, goal }
+function buildOpeningSceneTemplate(ctx) {
+    ctx = ctx || {};
+    const a = ctx.appearance || {};
+    const species = String(ctx.speciesLabel || "human").toLowerCase();
+    const paragraphs = [];
+
+    // 1. Who you are.
+    const build = a.build ? String(a.build) : "";
+    let who = "You are " + _opArticle(build || species) + " " + (build ? build + " " : "") + species + ".";
+    const looks = [];
+    if (a.hairColor || a.hairStyle) {
+        const style = a.hairStyle ? (OPENING_HAIR_STYLE_PHRASES[a.hairStyle] || a.hairStyle) : "";
+        looks.push((a.hairColor ? a.hairColor + " hair" : "hair") + (style ? " " + style : ""));
+    }
+    if (a.eyeColor) looks.push(a.eyeColor + " eyes");
+    if (a.skinTone) looks.push(a.skinTone + (ctx.scaled ? " scales" : " skin"));
+    if (looks.length) who += " You have " + _opJoin(looks) + ".";
+    if (a.feature) who += " People notice " + a.feature + ".";
+    const traitLine = OPENING_TRAIT_LINES[ctx.trait] || "";
+    if (traitLine) who += " " + traitLine;
+    paragraphs.push(who);
+
+    // 2. Where you come from (the backstory text, template or polished).
+    if (ctx.backstoryText) paragraphs.push(String(ctx.backstoryText).trim());
+
+    // 3. Where you are now.
+    const hub = ctx.hubName || "";
+    let scene = OPENING_ZONE_SCENES[ctx.zone] || OPENING_FALLBACK_SCENE;
+    scene = scene.replace(/\{hub\}/g, hub || "the quarter");
+    let now = scene;
+    if (ctx.roomName) now += " You stand in " + ctx.roomName + ".";
+    now += " " + (OPENING_TIER_LINES[ctx.tier] || OPENING_TIER_LINES.Normal);
+    if (ctx.modeLine) now += " " + ctx.modeLine;
+    now += ctx.kin ? " Here and there you pick out a few of your own kind." : " You see no one of your own kind.";
+    if (ctx.guideRelation) now += " Before long, " + ctx.guideRelation + " will find you.";
+    if (ctx.goal) now += " You came with one aim: " + _opLowerFirst(ctx.goal);
+    paragraphs.push(now);
+
+    return paragraphs.join("\n\n");
+}
+
+// ── START MODES AND BACKSTORY PRESSURE ─────────────────────────────────────
+// The last wizard page asks how the player's story begins. The answer is also
+// the difficulty:
+//   survive  hunters are already on the trail and there is no talking; beat
+//            three waves to be left alone. Hard start (Brutal where the
+//            species and zone already say Brutal).
+//   settle   the past catches up, but its envoy talks first. Meet the
+//            backstory's terms (pay, deeds, a faith, a fight) and it ends.
+//            Normal start.
+//   fresh    nobody is chasing you; the backstory is only a story. Easy start.
+// Each backstory (archetype) has its own pursuers, terms and wording
+// (getPressureSpec). The engine runs the clock (see BACKSTORY PRESSURE in
+// cyoaftw-engine-CORE.js): a warning, then an emissary or scout, then
+// waves. Terms are a list of requirements the engine can check:
+//   pay {amount}   coin handed to the emissary, in parts if need be
+//   deeds {n}      jobs plus bounties finished
+//   trained        has trained at a guildhall or the yard
+//   lead           the first-lead arc is finished
+//   faith          has pledged to a patron god
+//   defeat         the leader of a wave is beaten
+const START_MODES = {
+    survive: { id: "survive", label: "Survive", tag: "Hard start", tier: "Hard", pressure: true, talks: false },
+    settle:  { id: "settle",  label: "Settle it", tag: "Normal start", tier: "Normal", pressure: true, talks: true },
+    fresh:   { id: "fresh",   label: "Fresh start", tag: "Easy start", tier: "Easy", pressure: false, talks: false }
+};
+const START_MODE_ORDER = ["settle", "survive", "fresh"];
+const DEFAULT_START_MODE = "settle";
+const START_TIER_ORDER = ["Easy", "Normal", "Hard", "Brutal"];
+
+// The mode sets the tier; where the species and zone already say Brutal, the
+// mode's tier is lifted one step (survive stays at Brutal) so a Human who
+// starts in the Warrens is never handed an "easy" start.
+function getStartTierForMode(modeId, computedTier) {
+    const mode = START_MODES[modeId] || START_MODES[DEFAULT_START_MODE];
+    let i = START_TIER_ORDER.indexOf(mode.tier);
+    if (computedTier === "Brutal") i += 1;
+    return START_TIER_ORDER[Math.max(0, Math.min(START_TIER_ORDER.length - 1, i))];
+}
+
+// Story-turn clock. warn: first warning; next: gap from the warning to the
+// emissary (settle) or scout (survive); then: gap to the first party; repeat:
+// gap between later waves.
+const PRESSURE_TIMING = {
+    settle:  { warn: 50, next: 70, then: 90, repeat: 130 },
+    survive: { warn: 30, next: 40, then: 60, repeat: 90 }
+};
+const PRESSURE_PAY_EXTEND = 80;      // a payment buys this many turns
+const PRESSURE_TIME_EXTEND = 60;     // "ask for more time", once per visit
+const PRESSURE_READY_DELAY = 30;     // "I'm ready" (defeat terms) brings the party this soon
+const PRESSURE_SURVIVE_BEATEN = 3;   // waves beaten to outlast the hunters
+const PRESSURE_MAX_ALIVE = 6;        // never more than this many pursuers alive at once
+
+function _prSlot(s, key, fallback) { return s && s[key] ? s[key] : fallback; }
+function _prHas(text, word) { return String(text || "").toLowerCase().indexOf(word) >= 0; }
+
+// The resolved spec for one backstory. All text may use {player} and {owed}
+// (the engine fills them). Returns null for an unknown archetype.
+function getPressureSpec(archetypeId, slots) {
+    const s = slots || {};
+    let spec = null;
+    if (archetypeId === "coming-of-age") {
+        spec = {
+            settleLabel: "Prove yourself",
+            pursuers: "a rival from home and their friends", who: "a rival from home",
+            cards: {
+                survive: "Someone from home swore you would never make it, and has followed to see you fail. They are not alone, and they are not friendly. Outlast them.",
+                settle: "A rival from home has followed you to see whether you earned your place. Train, take honest work, and show them. Then it ends.",
+                fresh: "No rival, no deadline. The place is yours to make, in your own time."
+            },
+            warning: "A carter at the gate mentions, to no one in particular, that someone from your old home is on the road and has been asking after you by name.",
+            rumor: "Someone from the country has been asking around for a newcomer, and does not sound friendly.",
+            emissary: { species: ["Human", "Elf", "Dwarf", "Halfling"], role: "Adventurer", age: "adult",
+                persona: "A proud, prickly rival from the player's home who was passed over for the place the player got and has come to see whether it was earned. Not cruel, but quick to sneer. Respects results, not words.",
+                arrival: "\"So this is where you ended up. They said at home you had made something of yourself, so I came to see. Prove you earned your place, and I will ride home and say so. Fail, and I stay. I brought friends.\"" },
+            partyIntro: "Your rival from home shoulders in with two friends at their back. \"Time is up,\" they say. \"Let us see what you have learned.\"",
+            reqs: [{ type: "trained" }, { type: "deeds", n: 2 }],
+            settledLine: "Your rival looks you over, nods stiffly, and says they will tell them at home that you earned your place. Then they are gone.",
+            outlastedLine: "The last of them limps off down the road. Nobody from home comes after you again."
+        };
+    } else if (archetypeId === "revenge") {
+        const org = s.quarryFaction === "crown" || s.quarryFaction === "banners";
+        const q = _prSlot(s, "quarry", "your enemy");
+        spec = {
+            settleLabel: "Face them",
+            pursuers: org ? "agents of " + q : "hired blades sent by " + q, who: "a go-between for " + q,
+            cards: {
+                survive: q.charAt(0).toUpperCase() + q.slice(1) + " has learned who is hunting them, and has sent hunters first. No parley. Outlast them.",
+                settle: q.charAt(0).toUpperCase() + q.slice(1) + " will send their best to meet you. Beat them, and the trail comes to you.",
+                fresh: "The trail is cold, and you may let it stay that way. No hunters, no clock."
+            },
+            warning: "A stranger at the gate has been asking after someone with your description, quietly, and paying in old coin.",
+            rumor: "A quiet stranger has been asking after someone with a newcomer's description, and paying well for the answer.",
+            emissary: { species: ["Human", "Elf", "Dwarf", "Halfling"], role: "Adventurer", age: "adult",
+                persona: "A cold, careful go-between sent by the player's enemy to deliver one message and watch how it lands. Polite, unhurried, never raises a voice, says nothing that could be repeated in court.",
+                arrival: "\"" + q.charAt(0).toUpperCase() + q.slice(1) + " knows you are here, and what you want. They would rather settle it face to face than watch you creep around town. Say the word, and the best they have will meet you. Only one of you walks away.\"" },
+            partyIntro: "Figures step out of the crowd from three sides at once. The one in front says, \"" + q.charAt(0).toUpperCase() + q.slice(1) + " sends regards,\" and draws.",
+            reqs: [{ type: "defeat" }],
+            settledLine: "Their best lies beaten at your feet. Whatever " + q + " wanted to settle is settled, and the others melt away into the crowd.",
+            outlastedLine: "The last of the hired hands is down, and the street goes quiet. For now, " + q + " has run out of people to send."
+        };
+    } else if (archetypeId === "redemption") {
+        spec = {
+            settleLabel: "Make it right",
+            pursuers: "those you wronged, and the hired hands who speak for them", who: "an envoy of those you wronged",
+            cards: {
+                survive: "What you did cannot be paid for, and those you wronged know it. They want blood. Outlast them.",
+                settle: "Those you wronged will hear you if you can make good the loss and show you have changed. Pay what you can, and do honest work.",
+                fresh: "Nobody is waiting to hear your apology. Make amends if you want to. The road is open."
+            },
+            warning: "A weathered traveller leaves word at the inn that someone you once wronged knows where you are, and wants what is owed.",
+            rumor: "A traveller says someone is coming to town to settle an old wrong with a newcomer.",
+            emissary: { species: ["Human", "Dwarf", "Halfling", "Elf"], role: "Adventurer", age: "adult",
+                persona: "A stern, plainspoken envoy for the people the player wronged. Not cruel and not forgiving. Wants restitution and proof of change, in that order.",
+                arrival: "\"I speak for those you wronged. They know you are here. They want two things: coin to make good the loss, and proof you are not the same person who did it. Honest work will serve for the second.\"" },
+            partyIntro: "Hard-faced men push in, and the one in front says, \"We were told you had your chance to make it right.\"",
+            reqs: [{ type: "pay", amount: 300 }, { type: "deeds", n: 3 }],
+            settledLine: "The envoy weighs what you have done, and for the first time looks at you without anger. \"It is enough,\" they say. \"They will not come again.\"",
+            outlastedLine: "The last of them is down. Nobody speaks for those you wronged any more, and the quiet is not forgiveness, but it is something."
+        };
+    } else if (archetypeId === "missing-kin") {
+        const who = _prSlot(s, "who", "the one you are searching for");
+        spec = {
+            settleLabel: "Find the truth",
+            pursuers: "people who do not want the trail followed", who: "a polite stranger",
+            cards: {
+                survive: "Someone does not want " + who + " found, and has noticed you looking. They are sending people. Outlast them.",
+                settle: "Whoever is behind it knows you are close. Follow the trail to its end, and they have no reason left to hunt you.",
+                fresh: "The trail is yours to follow at your own pace. Nobody is watching."
+            },
+            warning: "Someone has been asking the innkeepers who is searching for whom, and tipping well for the answer.",
+            rumor: "A smiling stranger has been asking who the newcomer is, and who they are looking for.",
+            emissary: { species: ["Human", "Elf", "Halfling", "Dwarf"], role: "Adventurer", age: "adult",
+                persona: "A smooth, polite stranger sent to find out how much the player knows and to talk them out of searching. Friendly on the surface, always smiling, never answers a direct question.",
+                arrival: "\"You have been asking questions, friend. Nobody minds questions. But some people would rather the trail ended here, and I would hate to see you hurt. Find what you came for, or give it up, and be quick about either.\"" },
+            partyIntro: "The polite stranger is not smiling now. \"A pity,\" they say, and the men behind them move in.",
+            reqs: [{ type: "lead" }],
+            settledLine: "You have found what you came here to find, and there is nothing left for them to hide. The watchers stop coming.",
+            outlastedLine: "The last of them is down, and whoever sent them seems to have run out of hands. The trail is yours again."
+        };
+    } else if (archetypeId === "fortune") {
+        const need = s.need || "";
+        let kind = "poor";
+        if (_prHas(need, "moneylender")) kind = "lender";
+        else if (_prHas(need, "venture")) kind = "venture";
+        else if (_prHas(need, "gambled")) kind = "gambled";
+        const K = {
+            lender:  { pursuers: "the moneylender's collectors", who: "a collector", amount: 500, label: "Pay what you owe",
+                       persona: "A bored, businesslike collector who has chased many debtors and no longer takes it personally. Polite until the money is mentioned.",
+                       arrival: "\"There you are. {owed} coins, and we call it even. No more interest, since I like you. Pay what you can now and the rest as it comes, and my colleagues stay home.\"",
+                       warning: "Someone has been asking after you in the taverns, and the men who ask are not drinking.",
+                       rumor: "Men in the moneylender's grey have been asking about a newcomer with debts." },
+            venture: { pursuers: "your creditors' collectors", who: "a collector", amount: 450, label: "Pay what you owe",
+                       persona: "A dry, patient collector for the people the player's failed venture left owed. Takes notes, keeps accounts, never loses their temper.",
+                       arrival: "\"Your venture failed, and the people who backed it want their money. {owed} coins, as you can manage it. I am authorised to take it in pieces, but not to take no.\"",
+                       warning: "A clerk has been asking at the inn whether a certain newcomer has been seen, and what they do for coin.",
+                       rumor: "A clerk with a ledger has been asking around about a newcomer who owes a good deal." },
+            gambled: { pursuers: "the gambling house's collectors", who: "a collector from the gambling house", amount: 600, label: "Pay what you owe",
+                       persona: "A smiling, heavy-set collector for a gambling house who treats every debt as a friendly game that the debtor is losing.",
+                       arrival: "\"You left owing the house, friend, and the house has a long memory. {owed} coins settles it. Pay in parts if you must. The house is patient, but its friends are not.\"",
+                       warning: "Two big men in good coats have been asking at the tavern whether anyone has seen a newcomer who plays cards badly.",
+                       rumor: "Big men in good coats have been asking after a newcomer who left a gaming debt." },
+            poor:    { pursuers: "the crew that runs these streets", who: "one of the street crew", amount: 300, label: "Buy your peace",
+                       persona: "A lazy, confident street enforcer who treats this town's corners as theirs. Not cruel, just certain nobody will say no.",
+                       arrival: "\"You are new. New people pay for the privilege of keeping their teeth. {owed} coins, a little at a time if you are broke, and we leave you alone.\"",
+                       warning: "Someone mentions that a certain crew has noticed the newcomer, and that the crew likes to be introduced.",
+                       rumor: "A street crew has taken an interest in a newcomer's purse." }
+        }[kind];
+        spec = {
+            settleLabel: K.label,
+            pursuers: K.pursuers, who: K.who,
+            cards: {
+                survive: "The collectors have stopped sending letters and started sending people. There is no paying this off now. Outlast them.",
+                settle: "The collectors will come, but they will talk first. Pay what you owe, in whatever pieces you can, and they leave.",
+                fresh: "Whatever you owed, you left behind it. Nobody here knows your name."
+            },
+            warning: K.warning, rumor: K.rumor,
+            emissary: { species: ["Human", "Halfling", "Dwarf", "Elf"], role: "Adventurer", age: "adult", persona: K.persona, arrival: K.arrival },
+            partyIntro: "The collectors shoulder in, three of them, and the leader does not bother with a greeting. \"Time is up,\" they say.",
+            reqs: [{ type: "pay", amount: K.amount }],
+            settledLine: "The last coin is counted, and the collector tears the note in two. \"A pleasure doing business,\" they say. \"You will not see us again.\"",
+            outlastedLine: "The last of them is down, and nobody comes to collect. Whoever held the debt has decided you are not worth the cost."
+        };
+    } else if (archetypeId === "exile") {
+        const h = s.hunters || "";
+        let kind = "nobody";
+        if (_prHas(h, "magistrate")) kind = "crown";
+        else if (_prHas(h, "company")) kind = "company";
+        else if (_prHas(h, "family")) kind = "family";
+        const K = {
+            crown:   { pursuers: "the magistrates' bailiffs", who: "a magistrate's clerk", amount: 400, species: ["Human", "Elf", "Dwarf"],
+                       persona: "A tired magistrate's clerk who serves writs and takes fines. Careful with words, bored by everything except a signed receipt.",
+                       arrival: "\"I am told you are the person the magistrates are looking for. I am also told a fine, paid in coin and promptly, makes a clerk forget a face. {owed} coins, and I never saw you.\"",
+                       warning: "A clerk in a magistrate's grey passes through town and asks the innkeepers, very politely, for the names of recent arrivals." },
+            company: { pursuers: "your former company's men", who: "an old comrade from the company", amount: 400, species: ["Human", "Dwarf", "Orc"],
+                       persona: "A gruff old comrade from the player's former company, sent to collect what the company says is owed. Does not enjoy this, does it anyway.",
+                       arrival: "\"The company wants its due, or an apology it can use. Coin does for either: {owed}. Pay what you can, the rest when you can. Do not make me bring the others.\"",
+                       warning: "A man with a company's faded colours under his cloak has been asking about a newcomer who walks like a soldier." },
+            family:  { pursuers: "the family's retainers", who: "a family retainer", amount: 500, species: ["Human", "Elf", "Halfling"],
+                       persona: "A smooth retainer of a powerful family, sent to name a price for the family's forgetting. Never raises their voice; has never needed to.",
+                       arrival: "\"The family would be willing to forget you, for a price. {owed} coins, by instalment if you must. The family is patient. Its retainers are less so.\"",
+                       warning: "A well-dressed stranger has been taking rooms at the inn and asking, with great courtesy, about a newcomer's habits." },
+            nobody:  { pursuers: "a bounty hunter who recognised your face", who: "a bounty hunter", amount: 250, species: ["Human", "Orc", "Dwarf"],
+                       persona: "A tired bounty hunter who recognised the player from a notice and would rather be paid to look away than do the work.",
+                       arrival: "\"I know your face from a notice, friend. A hunter has to eat. {owed} coins and I am suddenly lost, and I forget where I saw you.\"",
+                       warning: "A hard-eyed stranger has been studying the notices in the square, and then studying the crowd." }
+        }[kind];
+        spec = {
+            settleLabel: "Clear your name",
+            pursuers: K.pursuers, who: K.who,
+            cards: {
+                survive: "They found you. There is no appeal and no price. Outlast them.",
+                settle: "They will come and name terms: a fine, a fee, a favour. Meet them and your name is clear.",
+                fresh: "Nobody is looking. Keep your head down or do not. The name is yours to make."
+            },
+            warning: K.warning,
+            rumor: "A stranger has been asking about newcomers who keep their heads down.",
+            emissary: { species: K.species, role: "Adventurer", age: "adult", persona: K.persona, arrival: K.arrival },
+            partyIntro: "Armed figures step in from the street, and the one in front says, \"We gave you the chance to settle. That chance is gone.\"",
+            reqs: [{ type: "pay", amount: K.amount }],
+            settledLine: "The coin vanishes into a pocket. \"A pleasure,\" they say. \"I never saw you.\" And they are gone.",
+            outlastedLine: "The last of them is down. Whoever sent them seems to have decided you are more trouble than you are worth."
+        };
+    } else if (archetypeId === "calling") {
+        spec = {
+            settleLabel: "Answer the call",
+            pursuers: "pilgrims who believe the sign is theirs", who: "a rival seeker",
+            cards: {
+                survive: "Others heard the same call and believe it is theirs. They will kill to stop you answering. Outlast them.",
+                settle: "A rival seeker wants what the sign promises. Answer the call by pledging yourself to a god, and they have nothing left to contest.",
+                fresh: "The call is quiet now. You are free to follow it, or not."
+            },
+            warning: "Hooded pilgrims have been seen on the road, and they ask which shrine the newcomer visits.",
+            rumor: "Hooded pilgrims have been asking about a newcomer, and about which shrine they pray at.",
+            emissary: { species: ["Human", "Elf", "Dwarf", "Halfling"], role: "Adventurer", age: "adult",
+                persona: "A fervent rival seeker who heard the same call and is convinced it was meant for them. Devout, intense, not quite calm about it.",
+                arrival: "\"You heard it too. I see it on you. It was meant for one of us, and it was meant for me. Unless you can show the god you answer to, and that it answers you, I will take what is mine.\"" },
+            partyIntro: "The hooded pilgrims close in, murmuring, and their leader says, \"It was never yours.\"",
+            reqs: [{ type: "faith" }],
+            settledLine: "You speak a name before the shrine, and for a heartbeat the room is warmer. The rival seeker lowers their eyes. \"It is yours,\" they whisper, and go.",
+            outlastedLine: "The last of them is down. The sign is yours, and nobody left alive disputes it."
+        };
+    }
+    return spec;
+}
+
+// The three wizard cards for a backstory: [{ id, label, tag, text }].
+function getStartModeCards(archetypeId, slots) {
+    const spec = getPressureSpec(archetypeId, slots);
+    return START_MODE_ORDER.map(function (id) {
+        const mode = START_MODES[id];
+        const label = id === "settle" && spec ? spec.settleLabel : mode.label;
+        const text = spec && spec.cards ? spec.cards[id] : "";
+        return { id: id, label: label, tag: mode.tag, text: text };
+    });
+}
+
+// One line for the prologue: how the past is expected to catch up.
+function getPressurePrologueLine(modeId, archetypeId, slots) {
+    const spec = getPressureSpec(archetypeId, slots);
+    if (!spec) return "";
+    const cap = spec.pursuers.charAt(0).toUpperCase() + spec.pursuers.slice(1);
+    if (modeId === "survive") return cap + " are already on your trail, and they will not stop to talk.";
+    if (modeId === "settle") return "Sooner or later " + spec.pursuers + " will find you. When they do, you mean to settle it.";
+    return "Nobody here knows what you left behind, and nobody is looking.";
+}
+
+// Gossip about the player's pursuers, from the first warning until the
+// pressure ends (see BACKSTORY PRESSURE in the engine). Joins the lore pool.
+function getPressureLoreFacts() {
+    const p = typeof G !== "undefined" && G && G.player ? G.player : null;
+    const pr = p ? p.pressure : null;
+    if (!pr || pr.resolved || pr.mode === "fresh" || (pr.stage || 0) < 1) return [];
+    const bs = p.backstory;
+    const spec = bs ? getPressureSpec(bs.archetype, bs.slots) : null;
+    if (!spec) return [];
+    return [{
+        id: "pressure-rumor", tiers: ["common", "local", "trade"],
+        zones: ["Town", "Underground City", "Dungeon", "Ruins", "Swamp"],
+        know: 60, rumor: true, topic: "strangers asking questions",
+        text: spec.rumor,
+        distorted: "Strangers have been asking questions around town about a newcomer."
+    }];
 }
 
 // First-lead facts the world can answer. These join the lore pool (see
@@ -4272,6 +4868,23 @@ const GUIDE_KNOWLEDGE = [
         answer: function (map, bs) { const st = getGuideNextStep(bs); return st ? st.text : ""; }
     },
     {
+        id: "how",
+        question: "How does this work?",
+        keywords: ["how does this work", "how do i play", "how to play", "how do i move", "how do i talk", "how do i speak", "how do i walk", "controls", "buttons", "tutorial", "choices", "interact", "typing", "how it works", "how this works"],
+        answer: function () {
+            return "\"Everything here is a choice, and the road is yours. The buttons around the map walk you down streets and through doors. The middle one, Interact, lets you look around, search, take and use what is in the room. Anyone or anything you see is a name you can tap: tap a person to speak to them, and you will be offered things to say or do. Choose Respond, or Say something, to put it in your own words instead. The people remember what you do, so choose with care.\"";
+        }
+    },
+    {
+        id: "pursuit",
+        question: "Is anyone still after me?",
+        keywords: ["after me", "chasing me", "chase", "chased", "hunt", "hunted", "hunters", "following me", "followed", "pursue", "pursuers", "pursuit", "collector", "collectors", "debt", "debts", "owe", "owed", "enemy", "enemies", "looking for me", "who is looking"],
+        answer: function () {
+            const t = typeof window !== "undefined" && typeof window.getPressureGuideText === "function" ? window.getPressureGuideText() : "";
+            return "\"" + (t || "Not that I know of. Nobody has come asking, and I have been listening.") + "\"";
+        }
+    },
+    {
         id: "stronger",
         question: "How do I get stronger?",
         keywords: ["stronger", "strong", "train", "trainer", "training", "learn", "level", "xp", "skill", "skills", "teacher", "practice", "practise", "improve", "better", "lesson", "lessons"],
@@ -4355,7 +4968,7 @@ const GUIDE_KNOWLEDGE = [
 ];
 
 // The guide's turn when asked something outside what they know.
-const GUIDE_UNKNOWN_NOTE = "You are a local with only common knowledge: the places in town, how people make coin, that gods and shrines exist, that a portal leads to harder towns, and that death is final. If the player asks about fighting technique, spells, weapons, stats or other fine rules, say plainly that you do not know the details and suggest asking the trainers at the guildhall. Never invent numbers, prices, odds or rules.";
+const GUIDE_UNKNOWN_NOTE = "You are a local with only common knowledge: the places in town, how people make coin, that gods and shrines exist, that a portal leads to harder towns, that death is final, and what you have told them of who is after you. If the player asks about fighting technique, spells, weapons, stats or other fine rules, say plainly that you do not know the details and suggest asking the trainers at the guildhall. Never invent numbers, prices, odds or rules.";
 
 function getGuideTopic(id) {
     for (let i = 0; i < GUIDE_KNOWLEDGE.length; i++) if (GUIDE_KNOWLEDGE[i].id === id) return GUIDE_KNOWLEDGE[i];
@@ -4422,6 +5035,9 @@ function getGuideNextStep(backstory) {
     if (p && !p.newcomerProtection) {
         key = "blessing";
         text = "\"First, " + map.player + ", get the newcomer's blessing. Go to the shrine in " + map.chapelPlace + " and ask for it. It costs nothing, and it is the only thing between you and the end until you have a god behind you.\"";
+    } else if (typeof window !== "undefined" && typeof window.getPressureGuideNext === "function" && window.getPressureGuideNext()) {
+        key = "pressure";
+        text = "\"" + window.getPressureGuideNext() + "\"";
     } else if (!flag("trained-once")) {
         key = "train";
         text = "\"Next, get stronger. Go to " + map.guildPlace + " and find a trainer, or work the dummies in the yard. Even a little training beats walking into a fight raw.\"";
@@ -4462,6 +5078,10 @@ if (typeof window !== "undefined") {
     window.resolveGuideLeadPlace = resolveGuideLeadPlace;
     window.getGuidePlanText = getGuidePlanText;
     window.getGuideMissionLine = getGuideMissionLine;
+    window.getGuideSpec = getGuideSpec;
+    window.GUIDE_SPECIES_LINES = GUIDE_SPECIES_LINES;
+    window.GUIDE_SPECIES_TEXT = GUIDE_SPECIES_TEXT;
+    window.buildOpeningSceneTemplate = buildOpeningSceneTemplate;
     window.GUIDE_KNOWLEDGE = GUIDE_KNOWLEDGE;
     window.GUIDE_UNKNOWN_NOTE = GUIDE_UNKNOWN_NOTE;
     window.getGuideTopic = getGuideTopic;
@@ -4469,6 +5089,15 @@ if (typeof window !== "undefined") {
     window.matchGuideTopic = matchGuideTopic;
     window.getGuideTopicAnswer = getGuideTopicAnswer;
     window.getGuideNextStep = getGuideNextStep;
+    window.START_MODES = START_MODES;
+    window.START_MODE_ORDER = START_MODE_ORDER;
+    window.DEFAULT_START_MODE = DEFAULT_START_MODE;
+    window.getStartTierForMode = getStartTierForMode;
+    window.getStartModeCards = getStartModeCards;
+    window.getPressureSpec = getPressureSpec;
+    window.getPressureLoreFacts = getPressureLoreFacts;
+    window.getPressurePrologueLine = getPressurePrologueLine;
+    window.PRESSURE_TIMING = PRESSURE_TIMING;
     window.SOCIETY_BY_SPECIES = SOCIETY_BY_SPECIES;
     window.SOCIETY_SHEETS = SOCIETY_SHEETS;
     window.DRAGONBORN_HOUSES = DRAGONBORN_HOUSES;

@@ -1,5 +1,5 @@
 // === cyoaftw-nsfw-system.js === - v2026-09-11-002
-// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, make-a-move, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply
+// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply
 window.__NSFW_SYSTEM_VERSION = "2026-10-08-002";
 console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
 try {
@@ -415,38 +415,6 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     return null;
   }
 
-  // Helper: Find nearest private room (no creatures or specific types)
-  function findNearestPrivateRoom(startCoords) {
-    const privateTypes = ["alleyway", "cellar", "storage", "closet"];
-    const privateTypeSet = new Set(privateTypes);
-    const visited = new Set();
-    const queue = [{ coords: startCoords, distance: 0 }];
-
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (visited.has(current.coords)) continue;
-      visited.add(current.coords);
-
-      const room = window.G.roomMap[current.coords];
-      if (room) {
-        const isPrivateType = privateTypeSet.has((room.type || "").toLowerCase());
-        const isEmpty = !room.creatures || room.creatures.length === 0;
-        if (isPrivateType || isEmpty) {
-          return room;
-        }
-      }
-
-      if (room?.exits) {
-        Object.values(room.exits).forEach(exit => {
-          if (exit?.key && !visited.has(exit.key)) {
-            queue.push({ coords: exit.key, distance: current.distance + 1 });
-          }
-        });
-      }
-    }
-    return null;
-  }
-
   function applyInquiryResponse(npc, option, responseText, affirmativeFromCache) {
     if (!npc || !option || !option.isInquiry) return responseText;
 
@@ -502,11 +470,11 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         }
     }
 
-    // If affirmative is still unknown and this is seduce/proposition, check
+    // If affirmative is still unknown and this is seduce, check
     // the runtime cache directly as a last resort (the reply may have arrived
     // between the engine's fallback and this function call).
     if (affirmativeFromCache === undefined && !isAccepted && !isRejected &&
-        (option.id === "seduce" || option.id === "proposition")) {
+        option.id === "seduce") {
         if (typeof runtimeConversationState !== "undefined" && runtimeConversationState.replyCache) {
             for (var key in runtimeConversationState.replyCache) {
                 var cached = runtimeConversationState.replyCache[key];
@@ -523,21 +491,20 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     // ── STAT-BASED FALLBACK ACCEPTANCE ───────────────────────────
     // If the AI hasn't returned an affirmative (not cached, timed out,
     // or unavailable), fall back to NPC stats to decide acceptance.
-    // This ensures seduce/proposition can succeed without AI.
+    // This ensures seduce can succeed without AI.
     if (!isAccepted && !isRejected && affirmativeFromCache === undefined &&
-        (option.id === "seduce" || option.id === "proposition")) {
+        option.id === "seduce") {
         var _favor = (npc.memory && typeof npc.memory.favorability === "number") ? npc.memory.favorability : 0;
         var _attraction = (npc.memory && typeof npc.memory.attraction === "number") ? npc.memory.attraction : 0;
         var _lust = (npc.memory && typeof npc.memory.lust === "number") ? npc.memory.lust : 0;
         var _temperament = String(npc.temperament || "").toLowerCase();
         var _isBold = _temperament === "forward" || _temperament === "bold" || _temperament === "lustful";
 
-        // Seduce is easier — accepts if favor >= 20 or attraction >= 15 or lust >= 20
-        // Proposition is harder — accepts if favor >= 40 or attraction >= 25 or lust >= 30
+        // Seduce accepts if favor >= 20 or attraction >= 15 or lust >= 20
         // Bold NPCs get a -10 threshold reduction
-        var _threshold = (option.id === "proposition") ? 40 : 20;
-        var _attrThreshold = (option.id === "proposition") ? 25 : 15;
-        var _lustThreshold = (option.id === "proposition") ? 30 : 20;
+        var _threshold = 20;
+        var _attrThreshold = 15;
+        var _lustThreshold = 20;
         if (_isBold) { _threshold -= 10; _attrThreshold -= 10; _lustThreshold -= 10; }
 
         if (_favor >= _threshold || _attraction >= _attrThreshold || _lust >= _lustThreshold) {
@@ -561,8 +528,8 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       }
 
       // Clear any existing meetup state before setting up new one
-      if (option.id === "seduce" || option.id === "proposition") {
-        // Mark that this NPC has responded positively to a seduce/proposition,
+      if (option.id === "seduce") {
+        // Mark that this NPC has responded positively to a seduce,
         // which unlocks the "Ask them to follow you" session-follower option.
         npc._seductionAccepted = true;
         delete npc._meetupArrived;
@@ -575,36 +542,22 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         delete npc._pendingSeductionOption;
       }
 
-      // Handle routing for seduce/proposition
-      if (option.id === "seduce" || option.id === "proposition") {
-        // Check if we're already in a suitable location for intimacy
+      // Handle routing for seduce
+      if (option.id === "seduce") {
+        // Check if we're already in a suitable meetup location (tavern/inn)
         const currentRoom = window.G && window.G.activeRoom;
-        const isAlreadySuitable = currentRoom && (
-          option.id === "proposition"
-            ? (typeof isPrivateLocation === "function" ? isPrivateLocation(currentRoom) : false)
-            : ["Tavern", "Inn", "Inn Common"].some(t => currentRoom.type && currentRoom.type.includes(t))
-        );
-
-        // Check if we're alone with the NPC (for proposition)
-        const isAloneWithNPC = currentRoom && Array.isArray(currentRoom.creatures) &&
-          currentRoom.creatures.some(c => c === npc) &&
-          currentRoom.creatures.filter(c => c !== npc && (c.isHumanoid || c.humanoid)).length === 0;
+        const isAlreadySuitable = currentRoom &&
+          ["Tavern", "Inn", "Inn Common"].some(t => currentRoom.type && currentRoom.type.includes(t));
 
         console.log("[NSFW Routing] option=" + option.id, {
           roomType: currentRoom ? currentRoom.type : "none",
           isAlreadySuitable: isAlreadySuitable,
-          isAloneWithNPC: isAloneWithNPC,
           startEncounter: option.startEncounter,
-          creaturesCount: currentRoom && currentRoom.creatures ? currentRoom.creatures.length : 0,
-          otherHumanoids: currentRoom && currentRoom.creatures
-            ? currentRoom.creatures.filter(c => c !== npc && (c.isHumanoid || c.humanoid)).length : -1
+          creaturesCount: currentRoom && currentRoom.creatures ? currentRoom.creatures.length : 0
         });
 
         // If already in suitable location, start intimacy encounter directly
-        if (option.startEncounter && isAlreadySuitable && (
-            option.id === "proposition" && isAloneWithNPC ||
-            option.id === "seduce"
-          )) {
+        if (option.startEncounter && isAlreadySuitable) {
           console.log("[NSFW Routing] → DIRECT INTIMACY (already in suitable location)");
           // Clear pending state
           delete npc._pendingSeductionDestination;
@@ -627,9 +580,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
 
         const isForward = npc.temperament === "forward" || npc.temperament === "bold";
         const startCoords = window.G.player.coords;
-        const targetRoom = option.id === "seduce"
-            ? findNearestRoomOfTypes(startCoords, ["Tavern", "Inn", "Inn Common"])
-            : findNearestPrivateRoom(startCoords);
+        const targetRoom = findNearestRoomOfTypes(startCoords, ["Tavern", "Inn", "Inn Common"]);
 
         console.log("[NSFW Routing] targetRoom search:", {
           isForward: isForward,
@@ -641,7 +592,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
             setTimeout(() => {
               window.teleportPlayerToCoords(targetRoom.coords);
             }, 100);
-            // Mark that NPC is at meetup location for immediate proposition
+            // Mark that NPC is at meetup location for immediate follow-up
             npc._meetupArrived = true;
             npc._meetupLocation = targetRoom.coords;
             npc._meetupRoomName = targetRoom.displayName || targetRoom.type;
@@ -685,65 +636,31 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
           delete npc._pendingSeductionDestination;
           delete npc._pendingSeductionOption;
 
-          if (option.id === "proposition") {
-            // For proposition: player can ask NPC to follow to a spot
-            const followOption = {
-              id: "ask-npc-to-follow",
-              label: `Ask ${npc.name} to follow you`,
-              text: `You ask ${npc.name} to follow you to a more private location.`,
-              promptText: `You ask ${npc.name} to follow you to a more private location.`,
-              priority: 5,
-              intent: "seduction-followup",
-              action: function(selectedNPC) {
-                // Set flag so player can lead the NPC
-                selectedNPC._pendingSeductionOption = "follow-player";
-                // For now, set a flag to indicate they're ready to follow
-                selectedNPC._waitingToFollow = true;
-                // Actually add to session followers so they follow the player
-                if (typeof window.addSessionFollower === "function") {
-                    window.addSessionFollower(selectedNPC);
-                }
-                // Show confirmation
-                if (typeof window.addChatMessage === "function") {
-                    var _name = selectedNPC && selectedNPC.name ? selectedNPC.name : "They";
-                    window.addChatMessage("left", _name, "Alright, lead the way.", { mode: "auto" });
-                }
-              },
-              relationshipImpact: { lust: +2, attraction: +2 }
-            };
+          // For seduce: NPC agrees to meet later at a specific location
+          const meetupRoom = findNearestRoomOfTypes(startCoords, ["Tavern", "Inn", "Inn Common"]);
 
-            if (!window.NPC_CONVERSATION_CATALOGUE.some(o => o.id === followOption.id)) {
-              window.NPC_CONVERSATION_CATALOGUE.push(followOption);
-            }
+          if (meetupRoom) {
+            // Store original location so NPC can return if player doesn't meet
+            // Use _homeCoords if available, otherwise use startCoords
+            npc._originalLocation = npc._homeCoords || startCoords;
 
-            return responseText + ` ${npc.name} glances around without spotting anywhere suitable nearby - perhaps you should lead the way.`;
+            // Store meetup info on NPC
+            npc._meetupLocation = meetupRoom.coords;
+            npc._meetupRoomType = meetupRoom.type || "Inn";
+            npc._meetupRoomName = meetupRoom.displayName || meetupRoom.type;
+
+            // Set trigger: meet after 2 turns
+            npc._meetupTriggerTurn = (window.G.story && typeof window.G.story.turnCounter === "number" 
+                ? window.G.story.turnCounter + 2 
+                : 2);
+
+            // Set return trigger: if not met after 12 more turns, return to home
+            npc._meetupReturnTurn = npc._meetupTriggerTurn + 12;
+
+            return responseText + ` ${npc.name} agrees - you will meet at the ${meetupRoom.displayName || meetupRoom.type} in a little while.`;
           } else {
-            // For seduce: NPC agrees to meet later at a specific location
-            const meetupRoom = findNearestRoomOfTypes(startCoords, ["Tavern", "Inn", "Inn Common"]);
-            
-            if (meetupRoom) {
-              // Store original location so NPC can return if player doesn't meet
-              // Use _homeCoords if available, otherwise use startCoords
-              npc._originalLocation = npc._homeCoords || startCoords;
-              
-              // Store meetup info on NPC
-              npc._meetupLocation = meetupRoom.coords;
-              npc._meetupRoomType = meetupRoom.type || "Inn";
-              npc._meetupRoomName = meetupRoom.displayName || meetupRoom.type;
-              
-              // Set trigger: meet after 2 turns
-              npc._meetupTriggerTurn = (window.G.story && typeof window.G.story.turnCounter === "number" 
-                  ? window.G.story.turnCounter + 2 
-                  : 2);
-              
-              // Set return trigger: if not met after 12 more turns, return to home
-              npc._meetupReturnTurn = npc._meetupTriggerTurn + 12;
-              
-              return responseText + ` ${npc.name} agrees - you will meet at the ${meetupRoom.displayName || meetupRoom.type} in a little while.`;
-            } else {
-              // No meetup location found at all
-              return responseText + ` ${npc.name} agrees, and the two of you settle on finding a good spot later.`;
-            }
+            // No meetup location found at all
+            return responseText + ` ${npc.name} agrees, and the two of you settle on finding a good spot later.`;
           }
         }
       }
@@ -839,7 +756,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   // Expose critical functions to window immediately (not waiting for
   // initNSFWSystem, which defers until window.G exists). The engine's
   // npcRespond calls window.applyInquiryResponse for inquiry options
-  // (seduce/proposition), and it may run before initNSFWSystem completes.
+  // (seduce), and it may run before initNSFWSystem completes.
   window.applyInquiryResponse = applyInquiryResponse;
   window.isPrivateLocation = (typeof isPrivateLocation === "function") ? isPrivateLocation : function(room) {
     // Inline fallback so this works even if intimacy-data-context.js hasn't
@@ -927,14 +844,14 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     });
 
     // ── Session-follower options ──────────────────────────────────
-    // Become available after a successful seduce/proposition (gated by the
+    // Become available after a successful seduce (gated by the
     // npc._seductionAccepted flag set in applyInquiryResponse). "Ask them to
     // follow you" makes the NPC trail the player for the current session only
     // (G.sessionFollowers is in-memory; not persisted by saveGameState). The
     // follow/unfollow pair is mutually exclusive via the sessionFollowers
     // membership check. nsfw:true + phase:1 lets these pass the NSFW query
-    // wrapper's date-context and phase-2 filters (same as flirt/seduce/
-    // proposition); the custom condition still gates them on
+    // wrapper's date-context and phase-2 filters (same as flirt/seduce);
+    // the custom condition still gates them on
     // _seductionAccepted and sessionFollowers membership. relationshipImpact
     // must be a truthy object so the chooseChatOption wrapper reaches the
     // option.action() call (see extendChooseChatOption); an empty object
@@ -1015,49 +932,6 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       }
     });
 
-    // ── "Make a move" shortcut ────────────────────────────────────
-    // A simple option that appears after a successful seduce/proposition
-    // (gated by npc._seductionAccepted). Clicking it starts the intimacy
-    // encounter directly via window.startIntimacyEncounter, bypassing the
-    // phase-2 location/alone/attraction gates that gate the existing
-    // "start_intimacy"/"touch_intimately" options. This is a pragmatic
-    // fallback while the async affirmative pipeline is being fixed.
-    var makeMoveOption = {
-      id: "make-a-move",
-      label: function(npc) { return "Make a move on " + (npc && npc.name ? npc.name : "them"); },
-      text: function(npc) { return "You make your move on " + (npc && npc.name ? npc.name : "them") + "."; },
-      promptText: function(npc) { return "You make your move on " + (npc && npc.name ? npc.name : "them") + "."; },
-      priority: 28,
-      phase: 1,
-      nsfw: true,
-      conditions: {
-        custom: function(npc, ctx) {
-          if (!npc || !npc._seductionAccepted) return false;
-          // Don't show if intimacy is already active
-          if (npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active) return false;
-          return true;
-        }
-      },
-      relationshipImpact: {},
-      action: function(npc) {
-        console.log("[NSFW] make-a-move action triggered for", npc && npc.name);
-        if (typeof window.startIntimacyEncounter === "function") {
-          window.startIntimacyEncounter(npc, window.G.player);
-          if (typeof window.renderIntimacyActionMenu === "function") {
-            window.renderIntimacyActionMenu(npc);
-          }
-        } else {
-          console.error("[NSFW] startIntimacyEncounter not available for make-a-move");
-        }
-      }
-    };
-
-    var makeMoveIndex = window.NPC_CONVERSATION_CATALOGUE.findIndex(function(o) { return o.id === makeMoveOption.id; });
-    if (makeMoveIndex >= 0) {
-      window.NPC_CONVERSATION_CATALOGUE[makeMoveIndex] = makeMoveOption;
-    } else {
-      window.NPC_CONVERSATION_CATALOGUE.push(makeMoveOption);
-    }
   }
 
   function extendChooseChatOption() {
@@ -1076,7 +950,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       if (!npc || !option.relationshipImpact) return result;
       
       // Log NSFW actions for debugging - only for specific NSFW option IDs
-      if (option.id === "proposition" || option.id === "seduce" || option.id === "split-bill" || option.id === "pay-for-meal" || option.id === "small-talk") {
+      if (option.id === "seduce" || option.id === "split-bill" || option.id === "pay-for-meal" || option.id === "small-talk") {
         console.log("[NSFW] Action:", option.id, "with", npc.name);
       }
       
@@ -1096,7 +970,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       
       // Clear meetup flags only if this is a non-date action (player is leaving the date context)
       // Date actions (split-bill, pay-for-meal, small-talk, flirt) should NOT clear the flags
-      const dateActions = ["split-bill", "pay-for-meal", "small-talk", "flirt", "seduce", "proposition"];
+      const dateActions = ["split-bill", "pay-for-meal", "small-talk", "flirt", "seduce"];
       if (npc._meetupArrived && !dateActions.includes(option.id)) {
         delete npc._meetupArrived;
         delete npc._meetupReturnTurn;
@@ -1264,7 +1138,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         const isAtMeetup = npc && npc._meetupArrived && context && context.room && 
                           context.room.coords === npc._meetupLocation;
         
-        // Check if there's a pending seduction/proposition that needs follow-up (show follow option only)
+        // Check if there's a pending seduction that needs follow-up (show follow option only)
         // "follow-player" (set by ask-npc-to-follow) means the NPC already
         // agreed and is actively following — it is not a pending decision.
         // Counting it here would lock every later conversation with the NPC
@@ -1360,7 +1234,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         // Check this BEFORE Phase 2 so date context takes precedence
         if (isDateContext) {
           const dateOptionIds = ["split-bill", "pay-for-meal", "small-talk", "flirt", 
-                                 "follow-seduction-suggestion", "ask-npc-to-follow", "goodbye",
+                                 "follow-seduction-suggestion", "goodbye",
                                  "touch_intimately", "start_intimacy"];
           const filtered = filteredOptions.filter(option => 
             dateOptionIds.includes(option.id) || 
@@ -1380,7 +1254,7 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
         // If in Phase 2 context (private location, alone with target), include NSFW options
         if (isPhase2Context) {
           const nsfwOptionIds = ["goodbye", "disengage", "step-away"];
-          const phase1NsfwIds = ["flirt", "seduce", "proposition"];
+          const phase1NsfwIds = ["flirt", "seduce"];
           const filtered = filteredOptions.filter(option => {
             // Include exit options
             if (nsfwOptionIds.includes(option.id)) return true;
@@ -2364,11 +2238,14 @@ anatomyNote,
 
   // ── Anatomy / exposure helpers for body actions ──────────────
 
-  // Player gender — mirrors the intimacy system convention
-  // (player.stats.gender, lowercased; "male" => has penis).
+  // Player gender — the engine stores it at the player object root
+  // (G.player.gender, set in beginAdventure); player.stats has no gender
+  // key. Resolve both so the default-to-"male" bug (female players offered
+  // penis acts) stays fixed. Non-binary players have both genitals.
   function nsfwPlayerGender() {
     var p = window.G && window.G.player;
-    return (p && p.stats && p.stats.gender) ? String(p.stats.gender).toLowerCase() : "male";
+    var raw = (p && (p.gender || (p.stats && p.stats.gender))) || "male";
+    return String(raw).toLowerCase();
   }
 
   function nsfwPlayerHasPenis() {
@@ -2376,7 +2253,8 @@ anatomyNote,
     // "female" contains the substring "male" — exclude it explicitly before
     // the prefix match, or every female player counts as penis-bearing.
     if (g === "female" || g === "f" || g === "woman") return false;
-    return g === "male" || g.indexOf("male") !== -1;
+    // Non-binary players have both genitals (genitalGateForGender -> "both").
+    return g === "male" || g === "non-binary" || g === "nonbinary" || g.indexOf("male") !== -1;
   }
 
   // Determine NPC genital type from nsfwTraits.anatomy.
