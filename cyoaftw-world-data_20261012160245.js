@@ -559,6 +559,7 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "cooking-fire", name: "cooking fire",     tags: ["heat", "work"] },
+            { id: "cauldron",     name: "soup cauldron",    tags: ["work", "cauldron"] },
             { id: "prep-table",   name: "preparation table",tags: ["surface", "work"] },
             { id: "pot-rack",     name: "pot rack",         tags: ["storage"] }
         ],
@@ -1830,7 +1831,7 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "hanging-charms", name: "hanging charms",     tags: ["danger", "landmark"] },
-            { id: "cauldron",       name: "bubbling cauldron",  tags: ["danger", "work"] }
+            { id: "cauldron",       name: "bubbling cauldron",  tags: ["danger", "work", "cauldron"] }
         ],
         imageKey: "Witch's Lair"
     }
