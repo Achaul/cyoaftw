@@ -1,7 +1,7 @@
-// ── cyoaftw-npc-data.js v2026-10-11-008 ── Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
+// ── cyoaftw-npc-data.js v2026-10-12-001 ── Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-11-007";
+    window.NPC_DATA_VERSION = "2026-10-12-001";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -4886,8 +4886,40 @@ function getNPCAgeDescriptor(npc) {
     return bracket ? NPC_AGE_DESCRIPTORS[bracket] : null;
 }
 
+// Looks (feminine / masculine / androgynous): an explicit npc.looks wins,
+// otherwise it follows the NPC's gender.
+var NPC_LOOKS_BY_GENDER = { female: "feminine", male: "masculine", "non-binary": "androgynous" };
+
+// Size words for the chest / butt tastes, read from whatever size or
+// description text the NPC's anatomy part carries (anatomy.breasts,
+// anatomy.buttocks). Longest phrases first so "very large" beats "large".
+// NPCs without that anatomy simply return "" and never match.
+var NPC_BODY_SIZE_WORDS = [
+    ["very large", ["very large", "huge", "massive", "enormous", "immense"]],
+    ["large", ["large", "big", "ample", "generous", "heavy", "full", "plump"]],
+    ["small", ["small", "petite", "modest", "slight", "little"]],
+    ["flat", ["flat", "tiny", "washboard"]],
+    ["medium", ["medium", "average", "moderate", "shapely"]]
+];
+function _npcBodySize(npc, partKey) {
+    var part = npc && npc.anatomy ? npc.anatomy[partKey] : null;
+    if (!part) return "";
+    var text = typeof part === "string" ? part : String(part.size || "") + " " + String(part.description || "");
+    text = text.toLowerCase();
+    for (var i = 0; i < NPC_BODY_SIZE_WORDS.length; i++) {
+        var words = NPC_BODY_SIZE_WORDS[i][1];
+        for (var j = 0; j < words.length; j++) {
+            if (text.indexOf(words[j]) !== -1) return NPC_BODY_SIZE_WORDS[i][0];
+        }
+    }
+    return "";
+}
+
 function _npcTasteValue(npc, axis) {
     if (axis === "gender") return String(npc.gender || "").toLowerCase();
+    if (axis === "looks") return String(npc.looks || NPC_LOOKS_BY_GENDER[String(npc.gender || "").toLowerCase()] || "").toLowerCase();
+    if (axis === "chest") return _npcBodySize(npc, "breasts");
+    if (axis === "butt") return _npcBodySize(npc, "buttocks");
     if (axis === "age") return getNPCAgeBracket(npc);
     if (axis === "species") return String(npc.species || "").toLowerCase();
     if (axis === "build") return String(npc.bodyType || npc.build || "").toLowerCase();
