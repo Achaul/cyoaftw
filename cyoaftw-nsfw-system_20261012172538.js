@@ -3696,6 +3696,128 @@ stateInstr,
         ]);
   }
 
+  // ── Witnessed free-use narration polish ─────────────────────────
+  // The witnessed beat is AI-polished like body-action narrations: a
+  // background ai() call refines the templated line into a fuller erotic
+  // scene beat, with a dimmed "..." placeholder in the log while in flight
+  // and a fallback to the template if the polish fails (ai() missing,
+  // error, empty, or meta-commentary reply). Unlike polishBodyNarration
+  // there is no activeObject binding — the player is standing in the room
+  // without necessarily examining anything, so the polish is bound to the
+  // room instead (discarded if the player has left or combat has begun by
+  // the time it lands).
+  function buildFreeUsePrompt(actor, victim, room, part, baseText, varietyOpts) {
+    var aName = nsfwGetEntityName(actor);
+    var vName = nsfwGetEntityName(victim);
+    var aSpecies = String(actor.species || "human").toLowerCase();
+    var vSpecies = String(victim.species || "human").toLowerCase();
+    var victimIsUnconscious = victim.bodyState === "unconscious";
+    var partLabel = part === "cloaca" ? "cloacal vent" : part;
+
+    var sceneLine = victimIsUnconscious
+      ? "The victim is " + vName + ", a " + vSpecies + " lying UNCONSCIOUS in the room — completely limp, unresponsive, no awareness, no conscious reaction (reflexive twitches only)."
+      : "The victim is " + vName + ", a " + vSpecies + " bound hand and foot (hog-tied) — awake, aware, helpless, and unable to do more than struggle and make muffled noises.";
+
+    // Anatomy of the used part, pulled from the victim's profile (only for
+    // bare-flesh parts; a clothed victim is used in the mouth only).
+    var anatomyNote = "";
+    if (part !== "mouth" && !freeUseIsClothed(victim)) {
+      var anatomyKeys = part === "vagina" ? ["genitals", "vagina"]
+        : part === "cloaca" ? ["genitals"]
+        : ["anus"];
+      anatomyNote = buildBodyAnatomyNote(victim, anatomyKeys);
+    }
+
+    var variety = varietyOpts || {};
+    var toneNote = variety.tone
+      ? "TONE for this beat (let it color word choice, pacing and verbs — not the facts of the act): " + variety.tone
+      : "";
+    var avoidNote = Array.isArray(variety.recentLines) && variety.recentLines.length
+      ? "DO NOT REUSE PHRASING — these are recent narration lines in this room. Use fresh wording and fresh imagery; do not repeat or lightly rephrase them:\n" +
+        variety.recentLines.map(function (l) { return '"' + l + '"'; }).join("\n")
+      : "";
+
+    var prompt = [
+"You are polishing a witnessed scene description from a text adventure game.",
+"The player is standing in the room, watching this happen in front of them.",
+"The actor is " + aName + ", a " + aSpecies + " NPC in the mood, seizing the opportunity.",
+sceneLine,
+"The act: the actor uses the victim's " + partLabel + ".",
+"The room: " + (room.name || "a room") + ".",
+anatomyNote,
+"",
+"INSTRUCTIONS:",
+"- Polish the BASE TEXT below. Fix grammar, refine the sentence, make it more vivid and sensory.",
+"- Keep the same meaning and the same act. Do NOT invent new actions or participants.",
+"- Write in second person from the player's observing perspective (\u201CYou watch ...\u201D style where natural).",
+"- The player is only a witness: they do not participate, and the scene does not address or involve them.",
+"- This is an erotic scene: use direct, explicit physical language. Name the body parts and the act plainly. No metaphors, no purple prose.",
+"- The victim gives nothing back: " + (victimIsUnconscious
+  ? "purely reflexive reactions at most — no awareness, no conscious response."
+  : "only muffled struggling against the ropes — no ability to resist, no cooperation."),
+"- Keep it to 2-3 sentences. Match the length of the base text.",
+toneNote,
+avoidNote,
+"",
+"BASE TEXT (polish this — refine, make more vivid, keep same meaning and details):",
+"\"" + baseText + "\"",
+"",
+"IMPORTANT: Output ONLY the polished text. No explanations, no meta-discussion. Just the polished scene."
+    ].filter(function (l) { return l !== ""; }).join("\n");
+
+    return prompt;
+  }
+
+  function polishFreeUseNarration(actor, victim, room, part, baseText) {
+    var _ai = typeof window.ai === "function" ? window.ai : null;
+    if (!_ai) { nsfwPrintBodyNarration(baseText); return; }
+
+    var pendingEntry = nsfwShowBodyPendingNarration("...");
+    (async function () {
+      var polished = null;
+      var recent = Array.isArray(room._recentFreeUseNarration)
+        ? room._recentFreeUseNarration.slice()
+        : [];
+      var tone = pickBodyNarrationTone();
+      try {
+        var prompt = buildFreeUsePrompt(actor, victim, room, part, baseText, {
+          tone: tone,
+          recentLines: recent
+        });
+        var result = await _ai({
+          instruction: prompt,
+          startWith: "",
+          endButtons: "none",
+          generatorName: "cyoaftw-engine-core"
+        });
+        polished = result && (result.text || result);
+        if (polished && polished.trim()) {
+          var isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(polished.trim());
+          if (isMeta) {
+            console.log("[Free Use] Narration rejected (meta-commentary)");
+            polished = null;
+          }
+        } else {
+          polished = null;
+        }
+      } catch (e) {
+        console.warn("[Free Use] Narration polish failed:", e);
+      }
+
+      // Bound to the room: if the player left or a fight broke out before
+      // the polish landed, print the plain template so the beat still reads.
+      if (window.G && (window.G.activeRoom !== room || freeUseBlockedByCombat())) polished = null;
+      nsfwRemoveBodyPendingNarration(pendingEntry);
+      var printedText = polished ? polished.trim() : baseText;
+      nsfwPrintBodyNarration(printedText);
+      if (typeof printedText === "string" && printedText.trim()) {
+        room._recentFreeUseNarration = recent
+          .concat([printedText.trim()])
+          .slice(-2);
+      }
+    })();
+  }
+
   // One witnessed use attempt: chance roll, effects, live narration.
   // Returns true when the use happened.
   function nsfwFreeUseWitnessedBeat(actor, victim, room) {
@@ -3705,7 +3827,8 @@ stateInstr,
     var aName = nsfwGetEntityName(actor);
     var vName = nsfwGetEntityName(victim);
     var victimIsUnconscious = victim.bodyState === "unconscious";
-    nsfwPrintBodyNarration(freeUseWitnessedLine(aName, vName, part, victimIsUnconscious));
+    polishFreeUseNarration(actor, victim, room, part,
+      freeUseWitnessedLine(aName, vName, part, victimIsUnconscious));
     window.rememberStoryEvent("combat",
       aName + " used " + vName + (part === "mouth" ? "'s mouth" : "") +
       " in front of " + (window.G.player && window.G.player.name || "the player") +
