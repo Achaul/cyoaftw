@@ -1454,6 +1454,42 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       window.appendCombatGroup(el, "Touch", touchButtons);
     }
 
+    // Grind group — the player's own genitals against the body's bare
+    // genitals. Female players get the explicit f/f tribadism option;
+    // non-binary players get the generic grind (no cock assumption).
+    var grindButtons = [];
+    var playerAnatomy = nsfwPlayerAnatomy();
+    if (nsfwRegionExposed(item, "genitals")) {
+      if (playerAnatomy === "vagina" && touchGenitalType === "vagina") {
+        grindButtons.push(window.createCombatButton("Grind pussies", () => grindBody(item, "pussy")));
+      }
+      if (playerAnatomy === "both") {
+        grindButtons.push(window.createCombatButton("Grind against them", () => grindBody(item, "generic")));
+      }
+    }
+    if (grindButtons.length) {
+      window.appendCombatGroup(el, "Grind", grindButtons);
+    }
+
+    // Ride face group — sit on the unconscious face, open to every
+    // anatomy: penis players get their ass rimmed, vagina players choose
+    // pussy or ass, non-binary players get their genitals serviced
+    // (generic wording). Requires the body on its back, mouth accessible.
+    var faceButtons = [];
+    if ((item.bodyPosition || "back") === "back" && nsfwRegionExposed(item, "mouth")) {
+      if (playerAnatomy === "penis") {
+        faceButtons.push(window.createCombatButton("Sit on their face (get rimmed)", () => rideFaceBody(item, "rim")));
+      } else if (playerAnatomy === "vagina") {
+        faceButtons.push(window.createCombatButton("Ride their face (your pussy)", () => rideFaceBody(item, "pussy")));
+        faceButtons.push(window.createCombatButton("Sit on their face (get rimmed)", () => rideFaceBody(item, "rim")));
+      } else if (playerAnatomy === "both") {
+        faceButtons.push(window.createCombatButton("Ride their face", () => rideFaceBody(item, "generic")));
+      }
+    }
+    if (faceButtons.length) {
+      window.appendCombatGroup(el, "Ride face", faceButtons);
+    }
+
     // Oral group — player must have a penis; mouth accessible (not face-down).
     // Once entered, the button becomes a continuation thrust so the entry
     // narration is not repeated.
@@ -1505,20 +1541,40 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       }
     }
 
+    // Generic penetration (non-binary, "both" anatomy): the player's sex
+    // enters without the narration ever assuming a cock. Shares the
+    // penetratedTarget state so continuation and climax read the same.
+    if (playerAnatomy === "both") {
+      if (genitalType === "vagina" && nsfwRegionExposed(item, "genitals")) {
+        penButtons.push(item.penetratedTarget === "vagina"
+          ? window.createCombatButton("Continue (their vagina)", () => thrustBodyGeneric(item, "vagina"))
+          : window.createCombatButton("Penetrate vagina", () => penetrateBodyGeneric(item, "vagina")));
+      } else if (isCloaca && nsfwRegionExposed(item, "genitals")) {
+        penButtons.push(item.penetratedTarget === "cloaca"
+          ? window.createCombatButton("Continue (their cloaca)", () => thrustBodyGeneric(item, "cloaca"))
+          : window.createCombatButton("Penetrate cloaca", () => penetrateBodyGeneric(item, "cloaca")));
+      }
+      if (hasAnus && nsfwRegionExposed(item, "anus")) {
+        penButtons.push(item.penetratedTarget === "anus"
+          ? window.createCombatButton("Continue (their anus)", () => thrustBodyGeneric(item, "anus"))
+          : window.createCombatButton("Penetrate anus", () => penetrateBodyGeneric(item, "anus")));
+      }
+    }
+
     if (penButtons.length) {
       window.appendCombatGroup(el, "Penetrate", penButtons);
     }
 
     // Their cock group — the body's own reflex-hardened cock. Stroking is
-    // available to any player; mounting/riding to players without a
-    // penis (penis players use the Penetrate/Climax groups above).
+    // available to any player; mounting/riding to vagina and non-binary
+    // ("both") players (penis players use the Penetrate/Climax groups).
     if (genitalType === "penis" && nsfwRegionExposed(item, "genitals")) {
       var cockButtons = [];
       cockButtons.push(window.createCombatButton(
         item.bodyCockStiff ? "Stroke their stiff cock" : "Stroke their cock",
         () => strokeBodyCock(item)
       ));
-      if (!nsfwPlayerHasPenis()) {
+      if (playerAnatomy !== "penis") {
         if (item.bodyRidden) {
           cockButtons.push(window.createCombatButton("Ride their cock", () => rideBodyCock(item)));
           cockButtons.push(window.createCombatButton("Climax (riding)", () => riderClimaxBody(item)));
@@ -1571,6 +1627,23 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
       }
       if (climaxButtons.length) {
         window.appendCombatGroup(el, "Climax", climaxButtons);
+      }
+    }
+
+    // Generic climax — non-binary ("both") players finish inside without
+    // cock or ejaculation wording (no load or smell marks are recorded).
+    if (playerAnatomy === "both") {
+      var genericClimaxButtons = [];
+      if (item.penetratedTarget === "vagina" && nsfwRegionExposed(item, "genitals")) {
+        genericClimaxButtons.push(window.createCombatButton("Finish inside (vagina)", () => climaxBodyGeneric(item, "vagina")));
+      } else if (item.penetratedTarget === "cloaca" && nsfwRegionExposed(item, "genitals")) {
+        genericClimaxButtons.push(window.createCombatButton("Finish inside (" + (nsfwGenitalLabel(item) || "cloaca") + ")", () => climaxBodyGeneric(item, "cloaca")));
+      }
+      if (item.penetratedTarget === "anus" && nsfwRegionExposed(item, "anus")) {
+        genericClimaxButtons.push(window.createCombatButton("Finish inside (anus)", () => climaxBodyGeneric(item, "anus")));
+      }
+      if (genericClimaxButtons.length) {
+        window.appendCombatGroup(el, "Climax", genericClimaxButtons);
       }
     }
 
@@ -2360,13 +2433,21 @@ avoidNote,
     return String(raw).toLowerCase();
   }
 
-  function nsfwPlayerHasPenis() {
+  // Player anatomy for act gating: "penis" (male), "vagina" (female),
+  // "both" (non-binary). Non-binary players are never assumed to have (or
+  // lack) a cock: they only ever get the generic ride / grind / penetrate
+  // acts, never cock-worded ones.
+  function nsfwPlayerAnatomy() {
     var g = nsfwPlayerGender();
-    // "female" contains the substring "male" — exclude it explicitly before
-    // the prefix match, or every female player counts as penis-bearing.
-    if (g === "female" || g === "f" || g === "woman") return false;
-    // Non-binary players have both genitals (genitalGateForGender -> "both").
-    return g === "male" || g === "non-binary" || g === "nonbinary" || g.indexOf("male") !== -1;
+    if (g === "female" || g === "f" || g === "woman") return "vagina";
+    if (g === "non-binary" || g === "nonbinary") return "both";
+    return "penis";
+  }
+
+  function nsfwPlayerHasPenis() {
+    // Cock-worded acts are male-only. Non-binary ("both") anatomy uses the
+    // generic ride / grind / penetrate acts instead.
+    return nsfwPlayerAnatomy() === "penis";
   }
 
   // Determine NPC genital type from nsfwTraits.anatomy.
@@ -3107,6 +3188,170 @@ avoidNote,
     nsfwRenderBodyMenu(item);
   }
 
+  // F/f tribadism or the non-binary generic grind: the player's own
+  // genitals rub against the body's bare genitals. mode: "pussy" (female
+  // player, vagina body) | "generic" (non-binary, any genital type).
+  function grindBody(item, mode) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (!nsfwRegionExposed(item, "genitals")) return;
+    var anatomy = nsfwPlayerAnatomy();
+    var genType = nsfwBodyGenitalType(item);
+    if (mode === "pussy" && !(anatomy === "vagina" && genType === "vagina")) return;
+    if (mode === "generic" && anatomy !== "both") return;
+    const name = nsfwGetEntityName(item);
+    var genLabel = nsfwGenitalLabel(item) || "sex";
+    var baseText;
+    if (mode === "pussy") {
+      baseText = pickFrom([
+        `You straddle ${name}'s limp form and press your bare pussy flush against theirs, grinding in slow circles. Their folds lie slack and cool against your heat; the only answer is a faint, sleeping twitch each time your hips roll.`,
+        `You settle between ${name}'s unresisting thighs and slot your pussy against their bare one, rocking in a slow rhythm. Nothing stirs but the reflex buck of a sleeping body beneath you.`
+      ]);
+    } else {
+      baseText = pickFrom([
+        `You straddle ${name}'s unconscious body and grind your sex against their bare ${genLabel}, slow and deliberate. The body only rocks with your rhythm, offering limp, unresisting flesh.`,
+        `You press your sex to ${name}'s exposed ${genLabel} and roll your hips, taking your friction from flesh that cannot know it is being used.`
+      ]);
+    }
+    item.bodyGrindCount = ((item && item.bodyGrindCount) || 0) + 1;
+    nsfwBodyAddStimulus(item);
+    polishBodyNarration(item, mode === "pussy" ? "grind pussies" : "grind", baseText);
+    window.rememberStoryEvent("combat", mode === "pussy"
+      ? `${window.G.player.name} ground their pussy against ${name}'s while they were unconscious.`
+      : `${window.G.player.name} ground against ${name}'s exposed sex while they were unconscious.`, 6);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Face riding: the player sits on the unconscious face and takes what
+  // they want from the slack mouth. mode: "rim" (penis/vagina players,
+  // their hole gets serviced), "pussy" (vagina players), "generic"
+  // (non-binary — their sex gets serviced, no anatomy assumption).
+  function rideFaceBody(item, mode) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if ((item.bodyPosition || "back") !== "back") return;
+    if (!nsfwRegionExposed(item, "mouth")) return;
+    var anatomy = nsfwPlayerAnatomy();
+    if (mode === "pussy" && anatomy !== "vagina") return;
+    if (mode === "generic" && anatomy !== "both") return;
+    const name = nsfwGetEntityName(item);
+    var wasRiding = !!item.faceRidden;
+    item.faceRidden = true;
+    item.faceRideMode = mode;
+    item.faceRideCount = ((item && item.faceRideCount) || 0) + 1;
+    var baseText;
+    if (mode === "rim") {
+      baseText = wasRiding
+        ? pickFrom([
+          `You keep your cheeks spread over ${name}'s lax face, rocking your hole against their slack lips and idle tongue. Their breath stutters warm against your skin — reflex, nothing more.`,
+          `You ride ${name}'s face unhurried, your hole seated against their open mouth. The sleeping tongue stirs in soft, brainless flickers while you take your pleasure.`
+        ])
+        : pickFrom([
+          `You kneel either side of ${name}'s slack head and sink down, spreading your cheeks so your hole seats right against their parted lips. The sleeping mouth offers warm, passive wetness; you set the pace and use it.`,
+          `You lower your bare rear onto ${name}'s upturned face, your hole settling flush against their slack lips. Their tongue lies soft and unresisting as you roll your hips, riding the unconscious mouth for your rimming.`
+        ]);
+    } else if (mode === "pussy") {
+      baseText = wasRiding
+        ? pickFrom([
+          `You ride ${name}'s lax face at your leisure, your slick folds dragging over their slack lips and idle tongue. The only sounds are your own breath and the slow pulse of theirs against you.`,
+          `You rock your pussy over ${name}'s sleeping face, their nose and mouth flush against you. Nothing answers but a reflexive flicker of tongue as you grind.`
+        ])
+        : pickFrom([
+          `You straddle ${name}'s head and lower your bare pussy over their upturned face, rocking until your folds part around the bridge of their nose and their slack lips. Their mouth is warm, wet and utterly passive — you set the pace and use it.`,
+          `You settle your pussy down over ${name}'s sleeping face, pressing your folds to their lax lips. Nothing answers you but reflex — a sleepy flick of tongue against your clit as you roll your hips.`
+        ]);
+    } else {
+      baseText = wasRiding
+        ? `You ride ${name}'s lax face steadily, your sex pressed to their unresisting mouth, taking your pleasure from a face that cannot refuse it.`
+        : pickFrom([
+          `You straddle ${name}'s head and lower your bare sex to their upturned mouth, rocking your hips. The sleeping face serves you — lips, tongue and warmth, all passive beneath you.`,
+          `You sit your bare sex on ${name}'s slack face and roll slowly, letting the unconscious mouth serve you in its mindless warmth.`
+        ]);
+    }
+    polishBodyNarration(item, mode === "rim" ? "ride face (rimming)" : (mode === "pussy" ? "ride face (pussy)" : "ride face"), baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} rode ${name}'s face while they were unconscious.`, 6);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Generic penetration for non-binary ("both") players: the player's sex
+  // enters the body without the narration ever naming a cock. Shares the
+  // penetratedTarget/bodyDepth state with the penis path so the menu's
+  // continuation and climax buttons read the same. target: "vagina" |
+  // "cloaca" | "anus"
+  function penetrateBodyGeneric(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (nsfwPlayerAnatomy() !== "both") return;
+    const name = nsfwGetEntityName(item);
+    var label = target === "anus" ? "anus" : (target === "cloaca" ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina");
+    if (!nsfwRegionExposed(item, target === "anus" ? "anus" : "genitals")) return;
+    var baseText;
+    if (target === "vagina" || target === "cloaca") {
+      baseText = pickFrom([
+        `You spread ${name}'s limp legs apart and guide your sex against their exposed ${label}, pressing in bit by bit while the unconscious body takes you in silence. ` + nsfwBodyUseClause(item, target),
+        `You position ${name}'s slack hips with both hands and ease your sex into their unresisting ${label}, working deeper with slow rolls of your hips. ` + nsfwBodyUseClause(item, target)
+      ]);
+    } else {
+      baseText = pickFrom([
+        `You press your sex to ${name}'s tight, unresisting anus and push in slowly, forcing the slack ring to open around you. ` + nsfwBodyUseClause(item, target),
+        `You spread ${name}'s limp cheeks and ease yourself into their unresisting hole, the sleeping body flinching faintly as it is made to take you. ` + nsfwBodyUseClause(item, target)
+      ]);
+    }
+    item.penetrated = true;
+    item.penetratedTarget = target;
+    item.bodyDepth = 1;
+    item.bodyDepthTarget = target;
+    polishBodyNarration(item, "penetrate " + label, baseText);
+    // Record AFTER the polish prompt is built - see deepthroatBody.
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
+    window.rememberStoryEvent("combat", `${window.G.player.name} penetrated ${name}'s ${label} while they were unconscious.`, 8);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Continuation thrusting for the generic (non-binary) penetration.
+  // target: "vagina" | "cloaca" | "anus"
+  function thrustBodyGeneric(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (nsfwPlayerAnatomy() !== "both") return;
+    if (item.penetratedTarget !== target) return;
+    if (!nsfwRegionExposed(item, target === "anus" ? "anus" : "genitals")) return;
+    const name = nsfwGetEntityName(item);
+    var label = target === "anus" ? "anus" : (target === "cloaca" ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina");
+    var baseText = pickFrom([
+      `You move inside ${name}'s limp ${label} in slow strokes, their unresisting body rocking with your rhythm. ` + nsfwBodyUseClause(item, target),
+      `You grind into ${name}'s unconscious body, seated deep in their ${label} while they sleep through every motion. ` + nsfwBodyUseClause(item, target)
+    ]);
+    item.bodyThrustCount = ((item && item.bodyThrustCount) || 0) + 1;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
+    polishBodyNarration(item, "thrust " + label, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} kept moving inside ${name}'s ${label} while they were unconscious.`, 6);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
+  // Generic finish inside for non-binary ("both") players - no cock or
+  // ejaculation wording, so no load or smell marks are recorded.
+  // target: "vagina" | "cloaca" | "anus"
+  function climaxBodyGeneric(item, target) {
+    if (!item || item.bodyState !== "unconscious") return;
+    if (nsfwPlayerAnatomy() !== "both") return;
+    if (item.penetratedTarget !== target) return;
+    if (!nsfwRegionExposed(item, target === "anus" ? "anus" : "genitals")) return;
+    const name = nsfwGetEntityName(item);
+    var label = target === "anus" ? "anus" : (target === "cloaca" ? (nsfwGenitalLabel(item) || "cloaca") : "vagina");
+    var baseText = pickFrom([
+      `You sheathe yourself to the root in ${name}'s ${label} and come, your climax rolling through the unconscious body beneath you. ${name} never stirs.`,
+      `You press deep into ${name}'s limp ${label} and let go, shuddering through your finish while they sleep, utterly oblivious.`
+    ]);
+    item.bodyClimaxCount = (item.bodyClimaxCount || 0) + 1;
+    item.bodyClimaxTarget = target;
+    polishBodyNarration(item, "climax inside " + label, baseText);
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { useKind: "penetrate" });
+    window.rememberStoryEvent("combat", `${window.G.player.name} finished inside ${name}'s ${label} while they were unconscious.`, 7);
+    window.saveGameState();
+    nsfwRenderBodyMenu(item);
+  }
+
   // External finish: masturbate over the body (or pull out first while
   // inside) and spend on it. target: "face" | "chest" | "stomach" | "genitals".
   function finishOnBody(item, target) {
@@ -3568,6 +3813,12 @@ stateInstr,
   function freeUseActorQualifies(n) {
     if (!n || n.dead || n.unconscious || n.bound || n.surrendered) return false;
     if (n.isHumanoid === false) return false;
+    // Explicit undead guard: the engine's isUndeadNPC list (skeleton, ghost,
+    // zombie, wraith, ghoul, specter, revenant). Fresh spawns are already
+    // excluded via isHumanoid === false and gender "none", but legacy saves
+    // (or any future humanoid-flagged undead template) must not slip through.
+    if (typeof window.isUndeadNPC === "function" && window.isUndeadNPC(n)) return false;
+    if (typeof window.isEntityIncorporeal === "function" && window.isEntityIncorporeal(n)) return false;
     if (n.objectType === "body") return false;
     if ((window.G.partyMembers || []).indexOf(n) >= 0) return false;
     if ((window.G.sessionFollowers || []).indexOf(n) >= 0) return false;
@@ -4022,6 +4273,42 @@ avoidNote,
       window.appendCombatGroup(el, "Touch", touchButtons);
     }
 
+    // Grind group — f/f tribadism for female players, the generic grind
+    // for non-binary ("both") players. Both need the captive's bare
+    // genitals reachable (lower garment gone).
+    var grindButtons = [];
+    var playerAnatomy = nsfwPlayerAnatomy();
+    if (nsfwCaptiveRegionExposed(npc, "genitals")) {
+      if (playerAnatomy === "vagina" && genitalType === "vagina") {
+        grindButtons.push(window.createCombatButton("Grind pussies", () => grindCaptive(npc, "pussy")));
+      }
+      if (playerAnatomy === "both") {
+        grindButtons.push(window.createCombatButton("Grind against them", () => grindCaptive(npc, "generic")));
+      }
+    }
+    if (grindButtons.length) {
+      window.appendCombatGroup(el, "Grind", grindButtons);
+    }
+
+    // Ride face group — shove the bound captive down and sit on their
+    // face. Every anatomy gets it: rimming (penis players), a choice of
+    // pussy or ass (vagina players), generic service (non-binary). Not
+    // offered for hog-tied (prone) captives — they lie face-down.
+    var faceButtons = [];
+    if (!npc.captiveProne) {
+      if (playerAnatomy === "penis") {
+        faceButtons.push(window.createCombatButton("Sit on their face (get rimmed)", () => rideFaceCaptive(npc, "rim")));
+      } else if (playerAnatomy === "vagina") {
+        faceButtons.push(window.createCombatButton("Ride their face (your pussy)", () => rideFaceCaptive(npc, "pussy")));
+        faceButtons.push(window.createCombatButton("Sit on their face (get rimmed)", () => rideFaceCaptive(npc, "rim")));
+      } else if (playerAnatomy === "both") {
+        faceButtons.push(window.createCombatButton("Ride their face", () => rideFaceCaptive(npc, "generic")));
+      }
+    }
+    if (faceButtons.length) {
+      window.appendCombatGroup(el, "Ride face", faceButtons);
+    }
+
     // Oral group — player must have a penis. Once forced, the button becomes
     // a continuation thrust so the entry narration is not repeated.
     if (nsfwPlayerHasPenis()) {
@@ -4061,6 +4348,25 @@ avoidNote,
           : window.createCombatButton("Penetrate anus", () => penetrateCaptive(npc, "anus")));
       }
     }
+
+    // Generic penetration (non-binary, "both" anatomy): the player's sex
+    // enters without the narration ever assuming a cock.
+    if (playerAnatomy === "both") {
+      if (genitalType === "vagina" && nsfwCaptiveRegionExposed(npc, "genitals")) {
+        penButtons.push(npc.captivePenetratedTarget === "vagina"
+          ? window.createCombatButton("Thrust into vagina", () => thrustCaptiveGeneric(npc, "vagina"))
+          : window.createCombatButton("Penetrate vagina", () => penetrateCaptiveGeneric(npc, "vagina")));
+      } else if (isCloaca && nsfwCaptiveRegionExposed(npc, "genitals")) {
+        penButtons.push(npc.captivePenetratedTarget === "cloaca"
+          ? window.createCombatButton("Thrust into cloaca", () => thrustCaptiveGeneric(npc, "cloaca"))
+          : window.createCombatButton("Penetrate cloaca", () => penetrateCaptiveGeneric(npc, "cloaca")));
+      }
+      if (hasAnus && nsfwCaptiveRegionExposed(npc, "anus")) {
+        penButtons.push(npc.captivePenetratedTarget === "anus"
+          ? window.createCombatButton("Thrust into anus", () => thrustCaptiveGeneric(npc, "anus"))
+          : window.createCombatButton("Penetrate anus", () => penetrateCaptiveGeneric(npc, "anus")));
+      }
+    }
     if (penButtons.length) {
       window.appendCombatGroup(el, "Penetrate", penButtons);
     }
@@ -4082,6 +4388,46 @@ avoidNote,
       if (climaxButtons.length) {
         window.appendCombatGroup(el, "Climax", climaxButtons);
       }
+    }
+
+    // Generic climax — non-binary ("both") players finish inside without
+    // cock or ejaculation wording (no load or smell marks recorded).
+    if (playerAnatomy === "both") {
+      var genericClimaxButtons = [];
+      if (npc.captivePenetratedTarget === "vagina" && nsfwCaptiveRegionExposed(npc, "genitals")) {
+        genericClimaxButtons.push(window.createCombatButton("Finish inside (vagina)", () => climaxCaptiveGeneric(npc, "vagina")));
+      } else if (npc.captivePenetratedTarget === "cloaca" && nsfwCaptiveRegionExposed(npc, "genitals")) {
+        genericClimaxButtons.push(window.createCombatButton("Finish inside (" + (nsfwGenitalLabel(npc) || "cloaca") + ")", () => climaxCaptiveGeneric(npc, "cloaca")));
+      }
+      if (npc.captivePenetratedTarget === "anus" && nsfwCaptiveRegionExposed(npc, "anus")) {
+        genericClimaxButtons.push(window.createCombatButton("Finish inside (anus)", () => climaxCaptiveGeneric(npc, "anus")));
+      }
+      if (genericClimaxButtons.length) {
+        window.appendCombatGroup(el, "Climax", genericClimaxButtons);
+      }
+    }
+
+    // Their cock group — the bound captive's own cock. Stroking is
+    // available to any player; mounting/riding to vagina and non-binary
+    // ("both") players — the generic "ride" (penis players use the
+    // Penetrate groups).
+    if (genitalType === "penis" && nsfwCaptiveRegionExposed(npc, "genitals")) {
+      var cockButtons = [];
+      cockButtons.push(window.createCombatButton(
+        npc.captiveCockStiff ? "Stroke their stiff cock" : "Stroke their cock",
+        () => strokeCaptiveCock(npc)
+      ));
+      if (playerAnatomy !== "penis") {
+        if (npc.captiveRiding) {
+          cockButtons.push(window.createCombatButton("Ride their cock", () => rideCaptiveCock(npc)));
+          cockButtons.push(window.createCombatButton("Climax (riding)", () => riderClimaxCaptive(npc)));
+        } else {
+          cockButtons.push(window.createCombatButton("Mount their cock", () => rideCaptiveCock(npc), {
+            disabled: !npc.captiveCockStiff
+          }));
+        }
+      }
+      window.appendCombatGroup(el, "Their cock", cockButtons);
     }
 
     // Care group — wipes dried loads / smell notes off the captive (the only
@@ -4294,6 +4640,195 @@ avoidNote,
     const actionDesc = "climax inside " + label;
     polishCaptiveNarration(npc, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} ejaculated into ${name}'s ${label} while they were bound.`, 8);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // F/f tribadism ("pussy") or the non-binary generic grind ("generic")
+  // on the bound captive. mode: "pussy" | "generic"
+  function grindCaptive(npc, mode) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (!nsfwCaptiveRegionExposed(npc, "genitals")) return;
+    var anatomy = nsfwPlayerAnatomy();
+    var genType = nsfwBodyGenitalType(npc);
+    if (mode === "pussy" && !(anatomy === "vagina" && genType === "vagina")) return;
+    if (mode === "generic" && anatomy !== "both") return;
+    const name = nsfwGetEntityName(npc);
+    var genLabel = nsfwGenitalLabel(npc) || "sex";
+    var baseText = mode === "pussy"
+      ? `You wrestle ${name} flat onto their back despite the ropes and straddle their bound body, pressing your bare pussy flush against theirs. They twist and curse into the rope; you pin their hips with your knees and grind, ignoring every muffled protest.`
+      : `You haul ${name} down and straddle them, grinding your sex against their exposed ${genLabel} while they strain against the rope. Their body gives small, helpless jerks beneath yours — nothing they do matters.`;
+    npc.captiveGrindCount = (npc.captiveGrindCount || 0) + 1;
+    polishCaptiveNarration(npc, mode === "pussy" ? "grind pussies" : "grind", baseText);
+    window.rememberStoryEvent("combat", mode === "pussy"
+      ? `${window.G.player.name} ground their pussy against their bound captive ${name}'s.`
+      : `${window.G.player.name} ground against their bound captive ${name}'s exposed sex.`, 6);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // Face riding on a bound (awake) captive — coercion-framed. Standing
+  // captives are shoved onto their back first; not offered for prone
+  // (hog-tied) captives. mode: "rim" | "pussy" | "generic" — same anatomy
+  // rules as the unconscious-body version.
+  function rideFaceCaptive(npc, mode) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (npc.captiveProne) return;
+    var anatomy = nsfwPlayerAnatomy();
+    if (mode === "pussy" && anatomy !== "vagina") return;
+    if (mode === "generic" && anatomy !== "both") return;
+    const name = nsfwGetEntityName(npc);
+    var baseText;
+    if (mode === "rim") {
+      baseText = pickFrom([
+        `You shove ${name} down onto their back, kneel over their face and settle your bare hole against their mouth. "Lick," you say — and they do, wary and humiliated, their bound hands useless beneath them.`,
+        `You topple ${name} flat and sit your bare rear on their upturned face, your hole pressed to their lips. They lick you in stiff, unwilling strokes, cheeks burning red.`
+      ]);
+    } else if (mode === "pussy") {
+      baseText = pickFrom([
+        `You shove ${name} onto their back and lower your bare pussy over their face, pinning their head between your thighs. They service you with clumsy, unwilling licks, nowhere to turn.`,
+        `You force ${name} down and press your pussy to their mouth, holding their head still by the hair. They lick because they have no choice, eyes squeezed shut.`
+      ]);
+    } else {
+      baseText = pickFrom([
+        `You shove ${name} onto their back and sit your bare sex on their upturned face, holding their head still. They lick as instructed — a captive made to serve with their mouth.`,
+        `You push ${name} flat and settle your sex over their mouth, watching them serve you under your shadow, bound hands flexing uselessly.`
+      ]);
+    }
+    npc.captiveFaceRideCount = (npc.captiveFaceRideCount || 0) + 1;
+    npc.captiveFaceRideMode = mode;
+    polishCaptiveNarration(npc, "ride face", baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} sat on their bound captive ${name}'s face and made them serve.`, 7);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // Stroke the bound captive's cock — any player anatomy.
+  function strokeCaptiveCock(npc) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (nsfwBodyGenitalType(npc) !== "penis") return;
+    if (!nsfwCaptiveRegionExposed(npc, "genitals")) return;
+    const name = nsfwGetEntityName(npc);
+    var wasStiff = !!npc.captiveCockStiff;
+    var baseText = wasStiff
+      ? `You work ${name}'s stiffened cock in slow strokes while they glare, the flesh twitching in your grip no matter how they hate it.`
+      : `You take ${name}'s soft cock in hand and work it with slow, steady strokes. It hardens in your grip — a betrayal of the flesh they cannot hide behind bound hands.`;
+    npc.captiveCockStiff = true;
+    npc.captiveCockStroked = (npc.captiveCockStroked || 0) + 1;
+    if (!wasStiff && typeof window.recordBodyUse === "function") window.recordBodyUse(npc, "penis", { useKind: "hand" });
+    polishCaptiveNarration(npc, "stroke cock", baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} stroked their bound captive ${name}'s cock.`, 5);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // Mount / continue riding the bound captive's stiff cock. For vagina
+  // and non-binary ("both") players — the generic "ride" (penis players
+  // use the Penetrate groups).
+  function rideCaptiveCock(npc) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (nsfwPlayerHasPenis()) return;
+    if (nsfwBodyGenitalType(npc) !== "penis") return;
+    if (!npc.captiveCockStiff) return;
+    if (!nsfwCaptiveRegionExposed(npc, "genitals")) return;
+    const name = nsfwGetEntityName(npc);
+    var wasRiding = !!npc.captiveRiding;
+    var baseText = wasRiding
+      ? pickFrom([
+        `You ride ${name}'s stiff cock at your own pace, pinning their bound body with your weight. They squeeze their eyes shut and endure every roll of your hips.`,
+        `You grind down on the captive cock, doing all the work yourself while ${name} lies helpless beneath you, wrists raw against the rope.`
+      ])
+      : `You straddle your bound captive, line up their stiff cock and sink down onto it. ${name} bites off a helpless sound — they can do nothing but take being used.`;
+    npc.captiveRiding = true;
+    npc.captiveRideCount = (npc.captiveRideCount || 0) + 1;
+    if (!wasRiding && typeof window.recordBodyUse === "function") window.recordBodyUse(npc, "penis", { useKind: "penetrate" });
+    polishCaptiveNarration(npc, wasRiding ? "ride cock" : "mount cock", baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} ${wasRiding ? "continued riding" : "mounted and rode"} their bound captive ${name}'s cock.`, 7);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // The riding player's own climax on their bound captive.
+  function riderClimaxCaptive(npc) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (!npc.captiveRiding) return;
+    const name = nsfwGetEntityName(npc);
+    var baseText = pickFrom([
+      `You grind down hard and come on ${name}'s stiff cock, your climax shuddering through you while your captive lies bound and helpless beneath. They turn their face aside and endure it.`,
+      `You bring yourself off riding your bound captive, clenching around them as the waves take you. ${name} can only wait for it to be over.`
+    ]);
+    npc.captiveRiderClimaxCount = (npc.captiveRiderClimaxCount || 0) + 1;
+    polishCaptiveNarration(npc, "rider climax", baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} climaxed while riding their bound captive ${name}.`, 7);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // Generic penetration for non-binary ("both") players — no cock wording.
+  // target: "vagina" | "cloaca" | "anus"
+  function penetrateCaptiveGeneric(npc, target) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (nsfwPlayerAnatomy() !== "both") return;
+    const name = nsfwGetEntityName(npc);
+    var label;
+    var baseText;
+    if (target === "vagina" || target === "cloaca") {
+      if (!nsfwCaptiveRegionExposed(npc, "genitals")) return;
+      label = (target === "cloaca") ? (nsfwGenitalLabel(npc) || "cloacal vent") : "vagina";
+      baseText = `You guide your sex into ${name}'s exposed ${label}. Their breath comes fast and panicked; they take it stiff and unready, bound hands flexing uselessly.` + nsfwBodyUseClause(npc, target);
+    } else if (target === "anus") {
+      if (!nsfwCaptiveRegionExposed(npc, "anus")) return;
+      label = "anus";
+      baseText = `You press your sex against ${name}'s tight anus and push in. They stifle a strained noise, muscles locked, forcing themselves to endure it.` + nsfwBodyUseClause(npc, target);
+    } else return;
+    npc.captivePenetrated = true;
+    npc.captivePenetratedTarget = target;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, target, { useKind: "penetrate" });
+    polishCaptiveNarration(npc, "penetrate " + label, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} penetrated ${name}'s ${label} while they were bound.`, 8);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // Continuation thrusting for the generic (non-binary) penetration.
+  // target: "vagina" | "cloaca" | "anus"
+  function thrustCaptiveGeneric(npc, target) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (nsfwPlayerAnatomy() !== "both") return;
+    if (npc.captivePenetratedTarget !== target) return;
+    const name = nsfwGetEntityName(npc);
+    var label = target === "anus" ? "anus" : (target === "cloaca" ? (nsfwGenitalLabel(npc) || "cloacal vent") : "vagina");
+    if (!nsfwCaptiveRegionExposed(npc, target === "anus" ? "anus" : "genitals")) return;
+    var baseText = pickFrom([
+      `You move inside ${name}'s ${label} in slow, deliberate strokes, their bound hands flexing with every push. They endure it with their jaw clenched tight.`,
+      `You keep a steady pace in ${name}'s ${label}, watching them struggle to hold still. Every motion is yours to take.`
+    ]);
+    npc.captiveThrustCount = (npc.captiveThrustCount || 0) + 1;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, target, { useKind: "penetrate" });
+    polishCaptiveNarration(npc, "thrust " + label, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} continued moving inside ${name}'s ${label} while they were bound.`, 6);
+    window.saveGameState();
+    nsfwRenderCaptiveMenu(npc);
+  }
+
+  // Generic finish inside for non-binary ("both") players — no cock or
+  // ejaculation wording, so no load or smell marks are recorded.
+  // target: "vagina" | "cloaca" | "anus"
+  function climaxCaptiveGeneric(npc, target) {
+    if (!nsfwIsBoundCaptive(npc)) return;
+    if (nsfwPlayerAnatomy() !== "both") return;
+    if (npc.captivePenetratedTarget !== target) return;
+    const name = nsfwGetEntityName(npc);
+    var label = target === "anus" ? "anus" : (target === "cloaca" ? (nsfwGenitalLabel(npc) || "cloaca") : "vagina");
+    if (!nsfwCaptiveRegionExposed(npc, target === "anus" ? "anus" : "genitals")) return;
+    var baseText = pickFrom([
+      `You press deep into ${name}'s ${label} and come, shuddering through your finish while your captive endures it, bound and shivering beneath you.`,
+      `You seat yourself to the root in ${name}'s ${label} and let your climax take you. They hold rigidly still and wait for it to end.`
+    ]);
+    npc.captiveClimaxCount = (npc.captiveClimaxCount || 0) + 1;
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, target, { useKind: "penetrate" });
+    polishCaptiveNarration(npc, "climax inside " + label, baseText);
+    window.rememberStoryEvent("combat", `${window.G.player.name} finished inside ${name}'s ${label} while they were bound.`, 8);
     window.saveGameState();
     nsfwRenderCaptiveMenu(npc);
   }
