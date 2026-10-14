@@ -5154,19 +5154,39 @@ avoidNote,
     return parts.join(", ");
   };
 
-  // Body-state and act prompt terms for the opt-in second portrait during
-  // an active intimacy encounter. Called (typeof-guarded) by the SFW
-  // engine's lazy intimacy portrait generator only while the encounter is
-  // active. Returns null when there is no active encounter, which keeps the
-  // eye button hidden.
-  //
-  // Act-aware (ported from the legacy generateNPCPartActionPortrait): the
-  // image frames the body part the current act targets, with the acting
-  // partner drawn only as a shadow silhouette. With no current act (scene
-  // start, or a clothing/continue act) it falls back to a body-state
-  // portrait that escalates with the clothing mirrors.
-  window.getNsfwIntimacyPortraitTerms = function(npc) {
+
+  // Opt-in part-scene portraits (engine part buttons: mouth, boobs/chest,
+  // vulva/penis, butt). getNsfwIntimacyParts lists the parts this NPC can
+  // show - gender and clothing-state aware, so buttons appear as the
+  // encounter makes them available. getNsfwIntimacyPartTerms builds the
+  // anatomy-only prompt terms for one part: macro framing with the current
+  // position's perspective (so "butt" in doggy style reads as presented
+  // from behind), the part's own anatomy detail, and the state the current
+  // act leaves on it when the act targets the same region. No act
+  // narration, no partner figure - just the anatomy in question.
+  window.getNsfwIntimacyParts = function(npc) {
     if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
+    const anatomy = npc.anatomy || {};
+    const breasts = anatomy.breasts || {};
+    const gender = String(npc.gender || "").toLowerCase();
+    const feminine = /female|woman|futa|herm/.test(gender) ||
+      (breasts.sizeCategory && breasts.sizeCategory !== "flat");
+    const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
+      || { top: true, bottom: true, undergarments: true };
+    const parts = ["mouth"];
+    if (!clothing.top) parts.push(feminine ? "boobs" : "chest");
+    if (!clothing.bottom && !clothing.undergarments) {
+      parts.push(feminine ? "vulva" : "penis");
+      parts.push("butt");
+    } else if (!clothing.bottom) {
+      parts.push("butt");
+    }
+    return parts;
+  };
+
+  window.getNsfwIntimacyPartTerms = function(npc, partKey) {
+    if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
+    const part = String(partKey || "").toLowerCase();
     const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
       || { top: true, bottom: true, undergarments: true };
     const anatomy = npc.anatomy || {};
@@ -5176,123 +5196,98 @@ avoidNote,
       (breasts.sizeCategory && breasts.sizeCategory !== "flat");
     const stateKey = (clothing.top ? "t1" : "t0") + (clothing.bottom ? "b1" : "b0") +
       (clothing.undergarments ? "u1" : "u0");
-
-    // Region-scoped exposure terms: only what the framing can actually
-    // show goes into the prompt. The engine sends just species, gender and
-    // the body surface (skin/hide type + color) alongside this — no face,
-    // build, gear or clothing identity terms — so the model draws only the
-    // anatomy in question.
     const arousalTerms = "flushed skin, aroused";
-    const chestTerms = () => {
-      const parts = [];
-      if (!clothing.top) {
-        parts.push("topless, bare chest, exposed upper body");
-        if (feminine) {
-          if (breasts.description) parts.push(breasts.description);
-          parts.push("bare breasts, exposed nipples");
-        } else {
-          parts.push("visible nipples");
-        }
+
+    // Part definitions: macro framing, anatomy detail and region. The
+    // face is always excluded - the bust portrait owns the face, and a
+    // part-scene redraw would never match it.
+    const PART_DEFS = {
+      mouth: {
+        framing: "Extreme macro focus on the lips and mouth only, they fill the entire frame, nothing else in frame. ",
+        detail: "glistening lips, slightly parted, warm breath",
+        region: "head",
+        negatives: "wide shot, full face, both eyes, looking at camera"
+      },
+      boobs: {
+        framing: "Extreme close-up of the breasts only, they fill the entire frame, face out of frame. ",
+        detail: (breasts.description || "soft bare breasts") + ", bare breasts, exposed nipples",
+        region: "torso",
+        negatives: "wide shot, visible face, eyes, full torso"
+      },
+      chest: {
+        framing: "Extreme close-up of the bare chest only, it fills the entire frame, face out of frame. ",
+        detail: "bare chest, visible nipples",
+        region: "torso",
+        negatives: "wide shot, visible face, eyes, full torso"
+      },
+      vulva: {
+        framing: "Extreme close-up of the vulva only, it fills the entire frame with its immediate surface, nothing else in frame, face out of frame. ",
+        detail: "exposed pussy, detailed vulva and labia, slick and aroused",
+        region: "lower",
+        negatives: "wide shot, visible face, eyes, looking at camera, full body"
+      },
+      penis: {
+        framing: "Extreme close-up of the erect penis only, it fills the entire frame, face out of frame. ",
+        detail: "erect hard penis, engorged and flushed",
+        region: "lower",
+        negatives: "wide shot, visible face, eyes, full body"
+      },
+      butt: {
+        framing: "Extreme close-up of the buttocks only, they fill the entire frame, nothing else in frame, face not visible. ",
+        detail: "bare soft buttocks",
+        region: "rear",
+        negatives: "wide shot, visible face, eyes, full body"
       }
-      return parts;
     };
-    const lowerTerms = () => {
-      const parts = [];
-      if (!clothing.undergarments && !clothing.bottom) {
-        parts.push("fully nude below the waist, exposed genitals");
-      } else if (!clothing.bottom) {
-        parts.push("lower clothing removed, underwear only");
-      }
-      return parts;
+    const def = PART_DEFS[part];
+    if (!def) return null;
+    if ((part === "boobs" || part === "vulva") && !feminine) return null;
+    if ((part === "chest" || part === "penis") && feminine) return null;
+    if ((part === "boobs" || part === "chest") && clothing.top) return null;
+    if ((part === "vulva" || part === "penis") && (clothing.bottom || clothing.undergarments)) return null;
+    if (part === "butt" && clothing.bottom) return null;
+
+    // Position perspective: the framing must match the scene's geometry
+    // ("butt" in doggy style is presented from behind, hips raised).
+    const POSITION_VIEW = {
+      "Doggy": "on all fours, hips raised, presented from behind",
+      "Bent Over": "bent forward over a surface, presented from behind",
+      "Standing From Behind": "standing, viewed from behind",
+      "Against Wall From Behind": "pressed against the wall, viewed from behind",
+      "Spooning": "lying on their side, viewed from behind",
+      "Missionary": "lying on their back, hips tilted up, viewed from the front",
+      "Cowgirl": "upright and straddling, viewed from the front",
+      "Reverse Cowgirl": "upright and straddling, viewed from behind",
+      "Astride Lap": "seated astride, viewed from the front",
+      "Perched": "perched on the lap, viewed from the front",
+      "Standing": "standing, viewed from the front",
+      "Against Wall": "pressed against the wall, viewed from the front",
+      "Kneeling": "kneeling upright, viewed from the front",
+      "Kneeling Before": "kneeling upright, viewed from the front",
+      "Kneeling By Face": "kneeling, viewed from the front",
+      "Squatting Before": "squatting, viewed from the front",
+      "Kneeling Over": "leaning over the partner, viewed from above",
+      "Sixty-Nine": "viewed from above",
+      "Oral Service": "kneeling between legs, viewed from the front",
+      "Prone Oral Service": "lying flat, viewed from above",
+      "Riding Face": "straddling above the partner, viewed from below"
     };
-    const stateTerms = () => [arousalTerms].concat(chestTerms(), lowerTerms()).join(", ");
-
-    // Current act: the portrait frames the targeted body part.
-    const last = npc.intimacy.lastAction || {};
-    const act = (window.SEX_ACTS && last.actId && window.SEX_ACTS[last.actId]) || null;
-    if (!act || !act.target || !act.verb) {
-      // Scene start / clothing acts: a body-state portrait, framed from the
-      // shoulders down so the face never gets redrawn.
-      return {
-        text: stateTerms(),
-        negatives: "visible face, eyes, looking at camera",
-        framing: "Upper body portrait framed from the shoulders to the waist, face out of frame and not visible. ",
-        cacheKey: "state::" + stateKey
-      };
-    }
-    const target = String(act.target).toLowerCase();
-    const verb = String(act.verb).toLowerCase();
-
-    // Acts where the player is the bottom target the player's body, not this
-    // NPC's — the portrait can't depict that, so fall back to body state.
-    if (act.playerIsBottom) {
-      return { text: stateTerms(), negatives: "", framing: "", cacheKey: "state::" + stateKey };
-    }
-
-    // Region framing + matching negatives. The goal is a pure macro crop:
-    // the targeted part fills the frame (with its species surface - scales,
-    // fur, skin), and nothing else appears. The face is always excluded -
-    // the bust portrait owns the face, and a part-scene redraw would never
-    // match it (the legacy generateNPCPartActionPortrait trick).
-    const HEAD_TARGETS = ["face", "head", "eyes", "mouth", "hair", "lips", "cheek", "ear", "tongue"];
-    const TORSO_TARGETS = ["neck", "chest", "torso", "abdomen", "stomach", "back", "breasts", "nipples",
-      "shoulders", "waist", "body", "tail", "collar"];
-    const FRONT_LOWER = ["groin", "hips", "thighs", "vagina", "clitoris", "clit", "pussy", "penis", "crotch", "labia", "hand"];
-    const REAR_LOWER = ["butt", "buttocks", "ass", "anus"];
-    let framing;
-    let framingNegatives;
-    if (HEAD_TARGETS.indexOf(target) >= 0) {
-      framing = "Extreme macro focus on the " + target + " only, the " + target +
-        " fills the entire frame with its immediate surroundings, nothing else in frame. ";
-      framingNegatives = "wide shot, full face, both eyes, looking at camera";
-    } else if (TORSO_TARGETS.indexOf(target) >= 0) {
-      framing = "Extreme close-up of the " + target + " only, the " + target +
-        " fills the entire frame, only the " + target + " and its immediate surface visible, face out of frame. ";
-      framingNegatives = "wide shot, visible face, eyes, looking at camera, full torso";
-    } else if (REAR_LOWER.indexOf(target) >= 0) {
-      framing = "Extreme close-up of the " + target + " only, the " + target +
-        " fills the entire frame, nothing else in frame, face not visible. ";
-      framingNegatives = "wide shot, visible face, eyes, full body";
-    } else if (FRONT_LOWER.indexOf(target) >= 0) {
-      framing = "Extreme close-up of the " + target + " only, the " + target +
-        " fills the entire frame with its immediate surface, nothing else in frame, face out of frame. ";
-      framingNegatives = "wide shot, visible face, eyes, looking at camera, full body";
-    } else {
-      framing = "Extreme close-up of the " + target + " only, the " + target +
-        " fills the entire frame, nothing else in frame. ";
-      framingNegatives = "wide shot, visible face, eyes";
+    const posId = npc.intimacy.position && npc.intimacy.position.player;
+    let perspective = "";
+    if (posId) {
+      const view = POSITION_VIEW[posId];
+      perspective = "In the current position (" + posId + (view ? "): " + view : "") + ". ";
     }
 
-    // Explicit target-part detail terms.
-    const TARGET_TERMS = {
-      lips: "glistening lips, slightly parted",
-      mouth: "parted lips, warm breath",
-      tongue: "wet tongue, delicate motion",
-      neck: "bare tender neck",
-      breasts: feminine ? "soft bare breast flesh, stiff nipples, breasts compressing under touch" : "bare chest",
-      nipples: "erect stiff nipples, detailed areolas",
-      chest: "bare chest, exposed skin",
-      stomach: "soft bare stomach, tensing abdominal muscles",
-      abdomen: "soft bare stomach, tensing abdominal muscles",
-      back: "bare back, shoulder blades",
-      shoulders: "bare shoulders",
-      thighs: "bare inner thighs, warm soft skin",
-      hips: "bare hips, pelvis framed",
-      butt: "bare soft buttocks",
-      buttocks: "bare soft buttocks",
-      groin: "exposed groin",
-      vagina: feminine ? "exposed pussy, detailed vulva and labia, slick and aroused" : "",
-      clitoris: feminine ? "exposed clitoris, slick aroused vulva" : "",
-      clit: feminine ? "exposed clitoris, slick aroused vulva" : "",
-      labia: feminine ? "spread labia, slick aroused vulva" : "",
-      penis: !feminine ? "erect hard penis, engorged and flushed" : "",
-      anus: "exposed anus, intimate rear view",
-      tail: "bare tail, base of the tail"
+    // State the current act leaves on the part, when the act targets the
+    // same region (squeeze on the buttocks -> flesh compressing).
+    const REGION_TARGETS = {
+      head: ["face", "head", "eyes", "mouth", "hair", "lips", "cheek", "ear", "tongue"],
+      torso: ["neck", "chest", "torso", "abdomen", "stomach", "back", "breasts", "nipples",
+        "shoulders", "waist", "body", "tail", "collar"],
+      lower: ["groin", "hips", "thighs", "vagina", "clitoris", "clit", "pussy", "penis", "crotch", "labia"],
+      rear: ["butt", "buttocks", "ass", "anus"]
     };
-
-    // State the act leaves on the anatomy (fluids, flush, compression,
-    // spread) — NOT the act itself and NOT the acting partner. The image
-    // shows only the body part and how it looks mid-act.
     const VERB_STATE_TERMS = {
       kiss: "wet and glistening",
       lick: "wet, glistening with saliva",
@@ -5318,29 +5313,27 @@ avoidNote,
       grind: "warm and slick",
       thrust: "stretched open, slick"
     };
-
-    const partBits = [target, TARGET_TERMS[target]].filter(Boolean);
-    if (act.target === "body" || act.target === "torso") {
-      // Whole-body acts: let the body-state terms carry the detail.
-      partBits.length = 0;
+    const last = npc.intimacy.lastAction || {};
+    const act = (window.SEX_ACTS && last.actId && window.SEX_ACTS[last.actId]) || null;
+    let actState = "";
+    let actId = "none";
+    if (act && act.target && act.verb && !act.playerIsBottom) {
+      const actTarget = String(act.target).toLowerCase();
+      const actRegion = Object.keys(REGION_TARGETS).filter(function (r) {
+        return REGION_TARGETS[r].indexOf(actTarget) >= 0;
+      })[0];
+      if (actRegion === def.region) {
+        actState = VERB_STATE_TERMS[String(act.verb).toLowerCase()] || "";
+        actId = act.id;
+      }
     }
-    const actState = VERB_STATE_TERMS[verb] || "";
 
-    // Anatomy state only: arousal, the region's exposure terms, the part's
-    // own detail, and the state the act leaves on it. No act narration and
-    // no acting partner — the model draws the part, nothing else.
-    const _isTorsoRegion = TORSO_TARGETS.indexOf(target) >= 0;
-    const _isLowerRegion = (FRONT_LOWER.indexOf(target) >= 0 || REAR_LOWER.indexOf(target) >= 0);
-    const text = [arousalTerms]
-      .concat(_isTorsoRegion ? chestTerms() : [])
-      .concat(_isLowerRegion ? lowerTerms() : [])
-      .concat(partBits, [actState])
-      .filter(Boolean).join(", ");
+    const text = [arousalTerms, def.detail, actState].filter(Boolean).join(", ");
     return {
       text: text,
-      negatives: "exaggerated tongue length, deformed anatomy, distorted proportions, unnatural stretching, " + framingNegatives,
-      framing: framing,
-      cacheKey: "act::" + act.id + "::" + stateKey
+      negatives: def.negatives,
+      framing: def.framing + perspective,
+      cacheKey: "part::" + part + "::" + stateKey + "::" + actId
     };
   };
 

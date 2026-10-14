@@ -5522,7 +5522,7 @@ var SENSORY_FRAGMENTS = {
         ],
         anus: [
             ", the {pubicDesc} around {npcP} hole tickling your {yourTool}",
-            ", the coarse hair dusting {npcP} cleft brushing against you"
+            ", {npcP} {pubicDesc} brushing against you"
         ],
         general: []
     },
@@ -9512,8 +9512,27 @@ function describeVagina(npc, anatomy, posPronoun, arousalDescriptors) {
     
     const descriptions = [];
     
-    // Pubic hair description
-    if (hairStyle !== "smooth" && hairStyle !== "none") {
+    // Pubic hair: only skin-covered mammalian anatomy has a pubicHair
+    // profile (the nsfw anatomy generator omits the key for scaled, furred,
+    // feathered and chitinous species). Never invent hair from the defaults
+    // below - describe the mound by its actual surface instead, so the
+    // text always matches the anatomy.
+    const body = anatomy.body || {};
+    const surfaceType = body.surfaceType || "skin";
+    const anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    if (anatomyType === "reptilian" || anatomyType === "mixed" || surfaceType !== "skin") {
+        const surfaceColor = body.color || "";
+        const surface = surfaceColor ? surfaceColor + " " + surfaceType : surfaceType;
+        if (surfaceType === "scales" || anatomyType === "reptilian" || anatomyType === "mixed") {
+            descriptions.push(pickRandom([
+                "smooth " + surface + " mound, the plates finer and lighter here",
+                "bare scaled mound, no hair",
+                "hairless " + surface + " mound"
+            ]));
+        } else {
+            descriptions.push(surface + " mound");
+        }
+    } else if (hairStyle !== "smooth" && hairStyle !== "none") {
         const hairAdjectives = {
             dark: ["dark", "ebony", "raven", "jet black", "deep brown"],
             brown: ["chestnut", "auburn", "caramel", "cinnamon"],
@@ -13170,7 +13189,15 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
                 "The rank, sour stench of an unwashed ass makes you recoil. You pull away"
             ]);
         } else if (Math.random() < 0.35) {
-            deterrenceDesc = pickRandom([
+            // Scaled species have no coarse hair back there — deterrence
+            // reads on the unwashed state, not hair.
+            var _scaledBack = (typeof getNPCAnatomyType === "function" &&
+                    (getNPCAnatomyType(npc) === "reptilian" || getNPCAnatomyType(npc) === "mixed")) ||
+                (npc.anatomy && npc.anatomy.body && String(npc.anatomy.body.surfaceType || "") === "scales");
+            deterrenceDesc = _scaledBack ? pickRandom([
+                "The rough, unwashed scales back there give you a moment of doubt",
+                "The unwashed state of the area makes you think twice"
+            ]) : pickRandom([
                 "The wiry hair around the hole makes you pause for a second",
                 "The rough, unwashed skin back there gives you a moment of doubt",
                 "The wild, unkempt hair framing the entrance catches you off guard",
