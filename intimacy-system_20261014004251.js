@@ -747,7 +747,7 @@ function buildPlayerNarrativePrompt(context) {
 "- WRONG: \"Forcing her glutes wide, you lay bare the dusky ring of her anus, the velvet skin stretching taut.\"",
 "",
 "ACT: " + action.tool + " " + action.verb + " " + action.target + " (" + actTypeName + ")",
-"Position: " + (position.label || "Unknown") + ".",
+"Position: " + (position.label || "Unknown") + "." + (position.promptNote ? " Geometry: " + position.promptNote : ""),
 _speciesNote ? _speciesNote : "",
 _skinDesc ? "NPC skin: " + _skinDesc : "",
 _sizeContext ? _sizeContext : "",
@@ -2246,6 +2246,20 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
  * Get user-friendly hint for disabled action reason
  */
 function getDisabledHintForReason(reason, npc, player, act) {
+    // Position mismatch: name positions where the act IS possible, so the
+    // player knows a position change is what unlocks it (and to where).
+    if (reason === "no position" && act) {
+        const ids = resolvePositionFor(act.id);
+        if (ids.length) {
+            const labels = ids.slice(0, 3).map(id => {
+                const p = getPosition(id);
+                return p && p.label ? p.label : id;
+            });
+            return ids.length <= 3
+                ? "Change position - works in " + labels.join(", ")
+                : "Change position - e.g. " + labels.join(", ");
+        }
+    }
     const hintMap = {
         "pull out first": "Pull out first",
         "no position": "Wrong position",
@@ -2429,6 +2443,22 @@ function applyStageFiltering(categorizedActions, stage) {
 /**
  * Check if a tool can access a target in current position and clothing state
  */
+/**
+ * Where can this act be performed? The act's pos allowlist is the single
+ * source of truth for position choreography (an empty list means valid in
+ * every position - see isActionValid). Returns the position ids where the
+ * act works; used by the disabled-action hint so a blocked act names the
+ * positions that unlock it instead of a bare "Wrong position".
+ */
+function resolvePositionFor(actId) {
+    const act = getAct(actId);
+    if (!act) return [];
+    if (!Array.isArray(act.pos) || act.pos.length === 0) {
+        return typeof getAllPositionIds === "function" ? getAllPositionIds() : [];
+    }
+    return act.pos.filter(id => typeof hasPosition === "function" ? hasPosition(id) : !!getPosition(id));
+}
+
 function checkToolTargetAccessibility(tool, target, positionId, clothingState, isPlayerAction) {
     const position = getPosition(positionId);
     if (!position) return false;
@@ -4717,7 +4747,7 @@ function buildIntimacyPrompt(context) {
     const continuity = buildContinuityContext(history, action);
 
     // Build position context
-    const positionContext = `Position: ${position.label}.`;
+    const positionContext = `Position: ${position.label}.${position.promptNote ? " Geometry: " + position.promptNote : ""}`;
 
     // Build clothing context
     const clothingContext = `Clothing: ${clothingDesc}`;
@@ -5010,7 +5040,9 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
     var _arousalNpc = (ctxIntimacy && ctxIntimacy.arousal && ctxIntimacy.arousal.npc) || 0;
     var _arousalPlayer = (ctxIntimacy && ctxIntimacy.arousal && ctxIntimacy.arousal.player) || 0;
     var _arousalContext = "Arousal: " + describeArousalLevel(_arousalNpc) + " (NPC), " + describeArousalLevel(_arousalPlayer) + " (Player).";
-    var _positionContext = position && position.label ? "Position: " + position.label + "." : "";
+    var _positionContext = position && position.label
+        ? "Position: " + position.label + "." + (position.promptNote ? " Geometry: " + position.promptNote : "")
+        : "";
     var _pen = (ctxIntimacy && ctxIntimacy.penetration) || null;
     var _penetrationContext = (_pen && _pen.active)
         ? "Currently penetrating: " + (_pen.tool || "") + " in " + (_pen.target || "") + ". Depth: " + (_pen.depth || 1) + "/5."

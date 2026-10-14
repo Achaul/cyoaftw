@@ -481,7 +481,7 @@ const ROOM_TEMPLATES = [
             { id: "grindstone",    name: "grindstone",    tags: ["work", "forge"] },
             { id: "quench-trough", name: "quench trough", tags: ["work", "forge"] },
             { id: "ore-bin",       name: "ore bin",       tags: ["storage", "loot"] },
-            { id: "commission-board", name: "commission board", tags: ["information", "commerce"] }
+            { id: "commission-board", name: "commission board", tags: ["information", "commerce"], alwaysShow: true }
         ],
         imageKey: "Smithy"
     },
@@ -512,7 +512,7 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "fountain",     name: "fountain",         tags: ["landmark", "water"] },
             { id: "benches",      name: "benches",          tags: ["rest", "social"] },
-            { id: "notice-post",  name: "notice post",      tags: ["information"] }
+            { id: "notice-post",  name: "notice post",      tags: ["information"], alwaysShow: true }
         ],
         imageKey: "Square"
     },
@@ -528,7 +528,7 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "bar-counter",  name: "bar counter",      tags: ["surface", "social"] },
             { id: "fireplace",    name: "fireplace",        tags: ["heat", "light"] },
-            { id: "notice-board", name: "notice board",     tags: ["information"] }
+            { id: "notice-board", name: "notice board",     tags: ["information"], alwaysShow: true }
         ],
         imageKey: "Tavern"
     },
@@ -559,7 +559,7 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "cooking-fire", name: "cooking fire",     tags: ["heat", "work"] },
-            { id: "cauldron",     name: "soup cauldron",    tags: ["work", "cauldron"] },
+            { id: "cauldron",     name: "soup cauldron",    tags: ["work", "cauldron"], alwaysShow: true },
             { id: "prep-table",   name: "preparation table",tags: ["surface", "work"] },
             { id: "pot-rack",     name: "pot rack",         tags: ["storage"] }
         ],
@@ -707,7 +707,7 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "long-tables",  name: "long tables",  tags: ["social", "surface"] },
-            { id: "notice-board", name: "notice board", tags: ["information"] },
+            { id: "notice-board", name: "notice board", tags: ["information"], alwaysShow: true },
             { id: "hearth",       name: "hearth",       tags: ["heat", "light"] }
         ],
         imageKey: "Inn Common"
@@ -918,7 +918,7 @@ const ROOM_TEMPLATES = [
             { id: "grindstone",    name: "grindstone",     tags: ["work", "forge"] },
             { id: "quench-trough", name: "quench trough",  tags: ["work", "forge"] },
             { id: "ore-bin",       name: "ore bin",        tags: ["storage", "loot"] },
-            { id: "commission-board", name: "commission board", tags: ["information", "commerce"] }
+            { id: "commission-board", name: "commission board", tags: ["information", "commerce"], alwaysShow: true }
         ],
         imageKey: "Deep Forge"
     },
@@ -1094,7 +1094,7 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "market-stalls", name: "stone market stalls", tags: ["commerce", "social"] },
             { id: "lamp-well",     name: "well of hanging lamps", tags: ["light", "landmark"] },
-            { id: "notice-board",  name: "notice board", tags: ["information", "commerce"] }
+            { id: "notice-board",  name: "notice board", tags: ["information", "commerce"], alwaysShow: true }
         ],
         imageKey: "Cavern"
     },
@@ -1650,7 +1650,7 @@ const ROOM_TEMPLATES = [
         parentCluster: ["square"],
         isConnector: false,
         structural: [
-            { id: "town-portal", name: "shimmering waygate", tags: ["landmark", "portal"],
+            { id: "town-portal", name: "shimmering waygate", tags: ["landmark", "portal"], alwaysShow: true,
               examineText: "A tall arch of black stone holds a pane of shimmering air. Through it you glimpse a street you do not know, under a different sky. Brass rings in the floor hum faintly whenever someone stands near, and a plaque beside the arch states the council's fee for passage." },
             { id: "brass-rings", name: "inlaid brass rings", tags: ["landmark"] }
         ],
@@ -1673,7 +1673,7 @@ const ROOM_TEMPLATES = [
         parentCluster: ["square"],
         isConnector: false,
         structural: [
-            { id: "job-board",    name: "job board",         tags: ["information", "commerce"] },
+            { id: "job-board",    name: "job board",         tags: ["information", "commerce"], alwaysShow: true },
             { id: "guild-shields", name: "painted guild shields", tags: ["landmark"] },
             { id: "muster-bench", name: "muster bench",      tags: ["social", "rest"] }
         ],
@@ -1831,7 +1831,7 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "hanging-charms", name: "hanging charms",     tags: ["danger", "landmark"] },
-            { id: "cauldron",       name: "bubbling cauldron",  tags: ["danger", "work", "cauldron"] }
+            { id: "cauldron",       name: "bubbling cauldron",  tags: ["danger", "work", "cauldron"], alwaysShow: true }
         ],
         imageKey: "Witch's Lair"
     }

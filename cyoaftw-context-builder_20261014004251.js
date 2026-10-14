@@ -408,6 +408,12 @@ function buildNPCDeliveryNote(npc, room, mood, favorability) {
 
     const G = window.G;
     const action = String((npc.currentState && npc.currentState.gesture) || npc.action || "").trim();
+    // Bound captive: the ropes color how the words come out.
+    if (npc.bound) {
+        parts.push(npc.captiveProne
+            ? "you are hog-tied and prone, so every word comes out twisted toward your captor"
+            : "your wrists are lashed together, so you can neither gesture nor fend anything off");
+    }
     const sharing = typeof window.getNPCSharing === "function" && window.getNPCSharing(npc);
     if (action && !sharing && /^(is|was) /.test(action) && !/(waiting|idle|standing|here)\b/.test(action)) {
         parts.push("you were just " + action.replace(/^(is|was) /, "") + ", so attention may stray back to it");
@@ -664,8 +670,13 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         background ? `- Background: ${background}${dialectFlavor ? ` - ${dialectFlavor}` : ""}` : "",
         speechStyle ? `- Speech style: ${speechStyle}` : "",
         speechProfile ? `- Speech guide: ${speechProfile.sentenceLength} sentences, ${speechProfile.vocabulary}, ${speechProfile.cadence}` : "",
-        speechProfile ? `- Speech sample (style only, never copy its words): "${speechProfile.sample}"` : "",
-        speechProfile && speechProfile.nativeSpeech ? `- Native manner of speaking (their own people, in the common tongue; shape word choice and rhythm, never invented words): ${speechProfile.nativeSpeech}` : "",
+        // The concrete sample the AI mimics: the species voice when the NPC
+        // is non-human (humans keep the generic style sample). This is the
+        // strongest "sounds like their people" signal in the prompt.
+        speechProfile
+            ? `- Speech sample (${speechProfile.speciesSample ? "this character's own species voice" : "style"} only, never copy its words): "${speechProfile.speciesSample || speechProfile.sample}"`
+            : "",
+        speechProfile && speechProfile.nativeSpeech ? `- Native manner of speaking (their own people, in the common tongue; shape word choice and rhythm, never invented words; this species manner takes precedence over the generic style guide where they differ): ${speechProfile.nativeSpeech}` : "",
         speechTics.length ? `- Speech cues (use rarely, not in most lines): ${speechTics.join("; ")}` : "",
         speechAvoid.length ? `- Avoid in speech: ${speechAvoid.join("; ")}` : "",
         voice ? `- Voice: ${voice}` : "",
@@ -715,6 +726,22 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         typeof window.getGuideContextLine === "function" ? window.getGuideContextLine(npc) : "",
         (currentState && currentState.gesture) || npc.action
             ? `- Currently: ${(currentState && currentState.gesture) || npc.action}`
+            : "",
+        // A rope-bound captive is never unaware of the ropes: the AI must
+        // play the restraint (no standing up, gesturing, fighting or leaving)
+        // instead of answering like a free bystander.
+        npc.bound
+            ? `- Restrained: you are the player's captive, ${npc.captiveProne
+                ? "hog-tied and prone on the ground, wrists lashed to your ankles"
+                : npc._boundCaptiveFollower
+                    ? "wrists lashed to a rope lead around your neck"
+                    : "wrists bound with rope"}. You cannot leave, fight back or use your hands; speak from within the ropes - fear, anger, bargaining or sullen defiance as suits your temperament. Never narrate yourself standing up, moving freely or attacking.`
+            : "",
+        // Aftermath of being used while unconscious (wording authored on the
+        // NSFW side; typeof-guarded no-op when NSFW is absent, same pattern
+        // as the smell notes). Colors their replies until it is washed away.
+        typeof window.nsfwGetUseContextNote === "function"
+            ? window.nsfwGetUseContextNote(npc)
             : ""
     ].filter(Boolean);
 

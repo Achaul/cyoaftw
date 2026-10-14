@@ -239,6 +239,76 @@ function getNPCNativeSpeech(npc) {
     return text + " (" + NPC_NATIVE_SPEECH_RULES + ")";
 }
 
+// The species' characteristic fallback style: applied ONLY when role, room,
+// temperament and traits have all left the neutral human "common" style in
+// place. A common-speaking dwarf still sounds like a dwarf; an elf
+// shopkeeper does not sound like a halfling one. Roles with a strong style
+// of their own (a guard's "direct") are untouched.
+const NPC_SPECIES_SPEECH_STYLE_BIAS = {
+    elf: "formal",
+    dwarf: "gruff",
+    halfling: "folksy",
+    goblin: "clipped",
+    orc: "direct",
+    dragonborn: "formal",
+    lizardfolk: "clipped",
+    kobold: "nervous"
+};
+
+// One in-character sample per conversable species (humans keep the style
+// samples). Fed to the AI instead of the generic style sample so the one
+// concrete voice it mimics belongs to the species, not to a human
+// template. Same information shape as the style samples (answering "did
+// you see two travelers pass?") so the difference is voice, not content.
+const NPC_SPECIES_SPEECH_SAMPLES = {
+    elf: [
+        "Two came through before dusk, and neither lingered. An old road remembers such passings; ask me in a year and I will still recall their faces.",
+        "I saw them. There was a patience to the way they walked that I did not care for. We will know their purpose soon enough."
+    ],
+    dwarf: [
+        "Aye, two of them, before the light went. Paid for nothing, took nothing. That kind of accounting always comes due eventually.",
+        "Seen them. Two travelers, heads down, boots worn thin. A day's honest work would fix those boots faster than gossip fixes anything."
+    ],
+    halfling: [
+        "Oh aye, two came through just past supper - didn't stop for a bite, which tells you plenty. Folk who refuse a warm meal are usually in a hurry about the wrong thing.",
+        "Two travelers, before dusk. I offered bread; they waved me off. No one has ever regretted taking my bread, mind you."
+    ],
+    goblin: [
+        "Two? Two-two, quick-quick past the door, yes. Nothing on them worth the grabbing... probably. Maybe. Ask again nicer and I remember more.",
+        "Saw them, saw them! Slim pickings, those two - but useful, useful to know which way they went, eh? That knowledge might be worth something."
+    ],
+    orc: [
+        "Two strangers passed before dusk. They kept their eyes down and their hands easy. That is wise, in a town like this.",
+        "I saw them. They walked like they had a debt to settle somewhere. Good posture. Bad reason."
+    ],
+    dragonborn: [
+        "Two travelers crossed before nightfall. I noted them, as one notes weather that may yet turn. Their errand is none of my house's concern - yet.",
+        "They passed. My grandfather's oath does not extend to accounting for every drifter, but this town holds a debt of mine, and I watch what comes for it."
+    ],
+    lizardfolk: [
+        "We saw two. They came with the dusk and left with it. They took no water and left no meat. Strange, for travelers.",
+        "Two walked the road. The road is ours to watch. They did not hunt; they did not stay. This is what we know."
+    ],
+    kobold: [
+        "We- I- yes, two of them, before dark! Big ones, walking soft. Soft-walkers spring traps, you know. Not that- not that there are traps. But we watched them.",
+        "Oh, we saw them, yes! They did not look for us, so we looked for them. That is the proper order of things."
+    ]
+};
+
+// The species voice sample for this NPC, or "" for humans and unknowns.
+// The pick is stable per NPC (hash of id/name) so the prompt does not vary
+// between builds.
+function getNPCSpeciesSpeechSample(npc) {
+    if (!npc) return "";
+    const key = String(npc.species || "").toLowerCase();
+    const samples = NPC_SPECIES_SPEECH_SAMPLES[key];
+    if (!Array.isArray(samples) || !samples.length) return "";
+    let h = 0;
+    const id = String(npc.id || npc.name || "");
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return samples[h % samples.length];
+}
+
 const SPEECH_STYLE_ALIASES = {
     archaic: "formal",
     boisterous: "boisterous",
@@ -3365,6 +3435,15 @@ function determineNPCSpeechStyle(npc, room, zoneTemplate) {
     if (ageCategory === "elderly" && ["common", "direct"].includes(style)) style = "formal";
     if (ageCategory === "young" && style === "formal" && !role.includes("priest") && !role.includes("archivist")) style = "common";
 
+    // Species native cadence: when everything above has left the neutral
+    // human "common" style in place, a non-human speaks like their people
+    // instead. (A strong role or temperament style above is untouched - a
+    // dwarf guard stays "direct"; this only replaces the generic default.)
+    const speciesKey = String((npc.species || "")).toLowerCase();
+    if (style === "common" && NPC_SPECIES_SPEECH_STYLE_BIAS[speciesKey]) {
+        style = NPC_SPECIES_SPEECH_STYLE_BIAS[speciesKey];
+    }
+
     return normalizeSpeechStyle(style);
 }
 
@@ -3381,6 +3460,7 @@ function getNPCSpeechProfile(npc, room, zoneTemplate) {
         styleDescription: profile.styleDescription || "",
         languageNotes: profile.languageNotes || "",
         nativeSpeech: getNPCNativeSpeech(npc),
+        speciesSample: getNPCSpeciesSpeechSample(npc),
         cues: Array.isArray(profile.cues) ? profile.cues.slice() : [],
         avoid: Array.isArray(profile.avoid) ? profile.avoid.slice() : []
     };
@@ -3400,6 +3480,7 @@ function syncNPCSpeechProfile(npc, room, zoneTemplate) {
         styleDescription: speechProfile.styleDescription,
         languageNotes: speechProfile.languageNotes,
         nativeSpeech: speechProfile.nativeSpeech || "",
+        speciesSample: speechProfile.speciesSample || "",
         cues: speechProfile.cues.slice(0, 3),
         avoid: speechProfile.avoid.slice(0, 3)
     };

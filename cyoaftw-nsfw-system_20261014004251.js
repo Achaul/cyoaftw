@@ -3918,6 +3918,160 @@ stateInstr,
     }
   };
 
+  // ── Waking into the aftermath ───────────────────────────────────
+  // A body used while unconscious carries the evidence on it: bodyUse
+  // loads never fade on their own (they dry, they stay), and smell notes
+  // linger. Waking means NOTICING. Three window-exposed hooks serve the
+  // SFW engine's wake paths (and the context builder); all wording lives
+  // here so the explicit text stays NSFW-side. The engine only calls them
+  // behind typeof guards and prints what they return.
+
+  // Detection only, no wording. Which evidence the waking victim carries.
+  function nsfwWakeEvidence(entity, room) {
+    var out = { loads: [], used: [], smells: [], bare: false, topless: false, bottomless: false, floorSeed: false };
+    if (entity) {
+      Object.keys(entity.bodyUse || {}).forEach(function (part) {
+        var st = entity.bodyUse[part];
+        if (!st) return;
+        if (st.loadKey) out.loads.push({ part: part, count: st.loadCount || 1 });
+        else if (String(st.useKind || "") === "penetrate") out.used.push(part);
+      });
+      if (typeof window.getActiveSmellNotes === "function") {
+        window.getActiveSmellNotes(entity).forEach(function (n) {
+          if (n && n.key) out.smells.push(n.key);
+        });
+      }
+      var eq = entity.equipped || {};
+      var hasUpper = !!eq.upper, hasLower = !!eq.lower;
+      if (!hasUpper && !hasLower) out.bare = true;
+      else if (!hasUpper) out.topless = true;
+      else if (!hasLower) out.bottomless = true;
+    }
+    if (room && room.liquids && room.liquids.seed && (room.liquids.seed.volume || 0) > 0) out.floorSeed = true;
+    return out;
+  }
+
+  function nsfwHasUseEvidence(ev) {
+    return !!(ev && (ev.loads.length || ev.used.length || ev.smells.length));
+  }
+
+  var WAKE_LOAD_TEXTS = {
+    mouth: function (name, count) {
+      return count > 1
+        ? "dried seed is crusted at both corners of " + name + "'s mouth"
+        : "dried seed is crusted at the corner of " + name + "'s slack mouth";
+    },
+    vagina: function (name, count) {
+      return count > 1
+        ? "seed has dried thick between " + name + "'s thighs, still leaking slowly from their used cunt"
+        : "a smear of dried seed lies between " + name + "'s thighs, leaking slowly from their used cunt";
+    },
+    anus: function (name, count) {
+      return count > 1
+        ? "seed dries down " + name + "'s crack and thighs, their hole left gaping and freshly used"
+        : "dried seed clings to " + name + "'s hole and runs down their thighs";
+    },
+    penis: function (name, count) {
+      return count > 1
+        ? name + "'s spent cock is crusted with dried seed"
+        : "a crust of dried seed flakes off " + name + "'s soft cock";
+    },
+    breasts: function (name, count) {
+      return "dried seed flakes across " + name + "'s chest";
+    }
+  };
+
+  var WAKE_SMELL_TEXTS = {
+    semen: "the unmistakable reek of seed hangs about them",
+    anal: "a crude musk clings to them",
+    urine: "the sharp stink of piss hangs about them"
+  };
+
+  // Third-person evidence sentence for the wake narration (the player,
+  // standing there, sees it as they stir). "" when there is nothing to
+  // notice. Exposure and floor mess only read as evidence when there is
+  // actual use on the body - a merely undressed body is not "aftermath".
+  function nsfwDescribeWakeUseEvidence(entity, room) {
+    var ev = nsfwWakeEvidence(entity, room);
+    if (!nsfwHasUseEvidence(ev)) return "";
+    var name = nsfwGetEntityName(entity);
+    var bits = [];
+    ev.loads.forEach(function (load) {
+      var fn = WAKE_LOAD_TEXTS[load.part];
+      if (fn) bits.push(fn(name, load.count));
+    });
+    ev.used.forEach(function (part) {
+      if (part === "mouth") bits.push(name + "'s lips are rubbed raw and slick");
+      else if (part === "vagina" || part === "anus") bits.push(name + "'s thighs are sticky, their hole raw and used");
+      else if (part === "penis") bits.push(name + "'s cock is slick and red with use");
+    });
+    ev.smells.forEach(function (key) {
+      var text = WAKE_SMELL_TEXTS[key];
+      if (text && bits.indexOf(text) < 0) bits.push(text);
+    });
+    if (ev.bare) bits.push("they lie stripped stark naked, their clothes long gone");
+    else if (ev.bottomless) bits.push("they are bare from the waist down, their bottoms nowhere in sight");
+    else if (ev.topless) bits.push("their chest is bare, their top nowhere in sight");
+    if (ev.floorSeed) bits.push("a white pool dries on the floor beside them");
+    if (!bits.length) return "";
+    var sentence = bits.join("; ");
+    return sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".";
+  }
+
+  // Second-person instruction note for the wake-reaction AI call: what THEY
+  // notice as they come to, and how it should hit them. "" when none.
+  function nsfwWakeUseInstructionNote(entity, room) {
+    var ev = nsfwWakeEvidence(entity, room);
+    if (!nsfwHasUseEvidence(ev)) return "";
+    var bits = [];
+    ev.loads.forEach(function (load) {
+      if (load.part === "mouth") bits.push("dried seed at the corner of your mouth - someone pushed their cock into it and finished there while you were out cold");
+      else if (load.part === "vagina") bits.push("cold seed drying between your thighs - you were fucked in your sleep and filled");
+      else if (load.part === "anus") bits.push("seed drying down your crack - you were fucked in your sleep, your hole raw with it");
+      else if (load.part === "penis") bits.push("your own cock crusted with dried seed");
+      else if (load.part === "breasts") bits.push("dried seed flaking off your chest");
+    });
+    ev.used.forEach(function (part) {
+      if (part === "mouth") bits.push("your lips are rubbed raw from a cock you never felt");
+      else if (part === "vagina" || part === "anus") bits.push("your thighs are sticky and your hole aches with rough use");
+    });
+    if (ev.smells.indexOf("semen") >= 0) bits.push("you reek of seed - your own body is the evidence");
+    if (ev.bare) bits.push("you are stark naked - whoever did this took your clothes first");
+    else if (ev.bottomless) bits.push("you are bare from the waist down");
+    else if (ev.topless) bits.push("your top is gone");
+    if (ev.floorSeed) bits.push("a drying pool of seed on the floor beside you says it happened more than once");
+    if (!bits.length) return "";
+    return "As you come to, you notice what was done to you while you were unconscious: " + bits.join("; ") + ". " +
+      "You do not know who did it unless you have a clear reason to suspect someone in particular. " +
+      "Let this hit you in your spoken line - horror, fury, shame, cold dread or grim compliance, as fits who you are.";
+  }
+
+  // Second-person persona-block line for any later conversation, while the
+  // evidence lasts (a wash clears loads and smell marks; until then the
+  // aftermath colors their replies). "" when none.
+  function nsfwGetUseContextNote(entity) {
+    var ev = nsfwWakeEvidence(entity, null);
+    if (!nsfwHasUseEvidence(ev)) return "";
+    var bits = [];
+    ev.loads.forEach(function (load) {
+      if (load.part === "mouth") bits.push("dried seed still crusts the corner of your mouth");
+      else if (load.part === "vagina" || load.part === "anus") bits.push("dried seed still clings between your thighs");
+      else bits.push("dried seed still marks your skin");
+    });
+    ev.used.forEach(function (part) {
+      if (part === "vagina" || part === "anus" || part === "mouth") bits.push("your body still aches with use you never felt");
+    });
+    if (ev.smells.indexOf("semen") >= 0) bits.push("the smell of seed still hangs on you");
+    if (!bits.length) return "";
+    return "- Lingering aftermath: someone used you while you lay unconscious, and the evidence is still on you - " +
+      bits.join("; ") + ". It has not been washed away, and it colors everything you say: shame, anger, guardedness or brittle bravado, as fits your temperament. " +
+      "Mention it only when it fits naturally, never every reply.";
+  }
+
+  window.nsfwDescribeWakeUseEvidence = nsfwDescribeWakeUseEvidence;
+  window.nsfwWakeUseInstructionNote = nsfwWakeUseInstructionNote;
+  window.nsfwGetUseContextNote = nsfwGetUseContextNote;
+
   // ── Live-witnessed variant ──────────────────────────────────────
   // The same opportunity, but the player is standing right there: an NPC
   // walking into the player's room, or already present when the player
