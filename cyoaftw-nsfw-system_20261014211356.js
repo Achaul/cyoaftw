@@ -5186,7 +5186,7 @@ avoidNote,
     return parts;
   };
 
-  window.getNsfwIntimacyPartTerms = function(npc, partKey, withSceneContext) {
+  window.getNsfwIntimacyPartTerms = function(npc, partKey, withSceneContext, fluidFocus) {
     if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
     const part = String(partKey || "").toLowerCase();
     const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
@@ -5360,16 +5360,36 @@ avoidNote,
       sceneCtx = ctxBits.join(", ");
     }
 
-    const text = [arousalTerms, def.detail, actState].concat(fluidBits, sceneCtx ? [sceneCtx] : [])
-      .filter(Boolean).join(", ");
+    // Cum focus (the engine's fluid button): the fluid terms move to the
+    // FRONT of the prompt and gain an amplifying lead clause - buried
+    // mid-prompt the model tends to ignore them entirely, which is why
+    // fluids were never visible in the base shots. No fluids recorded for
+    // this part: nothing to draw, so the click is a no-op (null).
+    if (fluidFocus && !fluidBits.length) return null;
+    const text = fluidFocus
+      ? ["freshly used, thick glistening sexual fluids prominently coating the skin, dripping and smearing"]
+          .concat(fluidBits, [arousalTerms, def.detail, actState], sceneCtx ? [sceneCtx] : [])
+          .filter(Boolean).join(", ")
+      : [arousalTerms, def.detail, actState].concat(fluidBits, sceneCtx ? [sceneCtx] : [])
+          .filter(Boolean).join(", ");
     return {
       text: text,
       negatives: def.negatives,
-      framing: def.framing + perspective,
+      framing: def.framing +
+        (fluidFocus ? "The surface is visibly wet and coated in thick glistening fluids. " : "") +
+        perspective,
       cacheKey: "part::" + part + "::" + stateKey + "::" + actId +
         "::" + (fluidBits.length ? fluidBits.join("|") : "clean") +
-        (withSceneContext ? "::ctx::" + (act ? act.id : "-") + "::" + (posId || "-") : "")
+        (withSceneContext ? "::ctx::" + (act ? act.id : "-") + "::" + (posId || "-") : "") +
+        (fluidFocus ? "::cum" : "")
     };
+  };
+
+  // Cum button visibility: any fluid state recorded for this encounter.
+  window.getNsfwIntimacyFluidsActive = function(npc) {
+    const f = npc && npc.intimacy && npc.intimacy.fluids;
+    return !!(f && (f.internalSemen || f.oralSemen || f.externalSemen ||
+      f.femaleEjaculate || f.urine || f.penisSaliva || f.penisSemen));
   };
 
   // Position perspective shared by the part close-ups and the scene shot:
