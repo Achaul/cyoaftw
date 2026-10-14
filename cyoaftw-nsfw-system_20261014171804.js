@@ -5347,12 +5347,15 @@ avoidNote,
 
     // "last scene" checkbox (engine): fold the ongoing act into the part
     // close-up so the image can catch the moment, not just the anatomy.
+    // Phrased as the shown part's state ("mid-act state") - NOT as an
+    // action to draw ("action in progress"), which invites the model to
+    // abandon the close-up framing and draw the whole sex scene instead.
     // Deterministic act words (verb, target, position) - never raw AI
     // narration, which is too long and too loose for an image prompt.
     let sceneCtx = "";
     if (withSceneContext && act) {
-      const ctxBits = ["action in progress: " + act.verb];
-      if (act.target) ctxBits.push("on the " + act.target);
+      const ctxBits = ["mid-act state: being " + act.verb];
+      if (act.target) ctxBits.push("at the " + act.target);
       if (posId) ctxBits.push(posId + " position");
       sceneCtx = ctxBits.join(", ");
     }
@@ -5429,7 +5432,10 @@ avoidNote,
     const species = String((player.anatomy && player.anatomy.species) || "human").trim();
 
     // Penetration (penetrate/continue) vs pressed-together foreplay (tease):
-    // the framing must match what the act is actually doing.
+    // the framing must match what the act is actually doing. The act and the
+    // orifice are named at the FRONT of the prompt - models weight early
+    // tokens most, and a generic "sexual intercourse" clause makes them
+    // default to vaginal regardless of the act.
     const actType = String(act.type || "");
     const inside = actType === "penetrate" || actType === "continue";
     const sizeAdj = size === "small" ? "slender" : (size === "large" ? "large girthy" : "thick");
@@ -5445,14 +5451,23 @@ avoidNote,
       const view = POSITION_VIEW[posId];
       perspective = "In the current position (" + posId + (view ? "): " + view : "") + ". ";
     }
+    const holeWord = partKey === "vulva" ? "vulva" : "anus";
     const framing = (inside
-      ? "Explicit close-up of sexual intercourse, the joined genitals fill the frame, no faces in frame. "
-      : "Explicit close-up of the erect penis against the partner's body, it fills the frame, no faces in frame. ")
+      ? "Explicit close-up of " + (partKey === "vulva" ? "vaginal intercourse" : "anal intercourse") +
+        ": the partner's penis is inside the " + holeWord + ", the joined genitals fill the frame, no faces in frame. "
+      : "Explicit close-up of foreplay: the partner's erect penis presses against the " + holeWord +
+        ", not inside, no penetration, it fills the frame, no faces in frame. ")
       + perspective;
+
+    // Orifice-exclusion negatives: without them the model happily draws a
+    // vagina in an anal scene (its default for "intercourse" prompts).
+    const holeNegatives = partKey === "vulva"
+      ? "anus, anal sex, anal penetration"
+      : "vagina, vulva, pussy, vaginal sex, vaginal penetration";
 
     return {
       text: [partTerms.text].concat(penisBits).join(", "),
-      negatives: partTerms.negatives,
+      negatives: partTerms.negatives + ", " + holeNegatives + (inside ? "" : ", penetration, penis inside"),
       framing: framing,
       cacheKey: "scene::" + partKey + "::" + actType + "::" + posId + "::" + size +
         "::" + (skinTone || "-") + "::" + partTerms.cacheKey,

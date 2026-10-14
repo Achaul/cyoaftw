@@ -4818,7 +4818,7 @@ function buildIntimacyPrompt(context) {
             ? "- You MAY write short in-character dialogue for the NPC (mark it with <angle brackets>). Keep it consistent with their temperament, speech style, and the moment - one line is plenty."
             : "- Do NOT invent new dialogue or speech. Keep existing speech if present, do not add new lines of dialogue.");
     var _sampleModeLines = _sampleMode
-        ? "- Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them, so the engine can tell speech from narration.\n- Base the reaction on this NPC's actual temperament and arousal, not just the sample: a shy one hesitates, a bold one is direct, a lustful one may enjoy it."
+        ? "- Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them, so the engine can tell speech from narration.\n- Base the reaction on this NPC's actual temperament and arousal, not just the sample: a shy one hesitates, a bold one is direct, a lustful one may enjoy it.\n- Core fact: this act is UNNATURAL for their kind. They are surprised or confused by it, though still consenting. Derive every word of the reaction from their temperament, species note and speech style above - the sample is a tone hint only, never wording to keep."
         : "";
     var _extendedOralLines = (_isExtendedOral && !_sampleMode)
         ? "- Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them, so the engine can tell speech from narration."
@@ -6396,60 +6396,47 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
 
         if (_species === "goblin") {
             _uncivEnterResponses = [
-                `twists around, sharp face scrunched up. <Huh? What you doing back there? That not the... that different hole.> Their voice is a high squeak.`,
-                `tilts their head sideways, large ears twitching. <That... that wrong place, yeah? You sure? Weird.>`,
-                `lets out a sharp chitter. <You humans do THIS? With that hole? Okay, okay. Goblin try. Goblin brave.>`,
-                `squints at you over their shoulder. <That goes WHERE? ...Okay. Goblin not asking again.>`
+                `twists around, sharp face scrunched up, large ears twitching. <Wrong hole. You sure?>`,
+                `lets out a sharp chitter, squinting at you over their shoulder. <Okay. Okay. Goblin try.>`
             ];
             _uncivContinueResponses = [
-                `shifts side to side, chittering. <Weird. Weird weird. Not bad though? Goblin confused.>`,
-                `lets out a nasal huff. <Strange feeling. But okay. Goblin go with it. You know things, maybe.>`,
-                `glances back with a toothy grimace. <Keep going, yeah? Goblin getting used to it. Maybe.>`
+                `shifts side to side, chittering softly, slowly getting used to the feeling.`,
+                `glances back with a toothy grimace, half doubt, half willingness.`
             ];
         } else if (_species === "orc") {
             _uncivEnterResponses = [
-                `grunts, looking over their shoulder with a raised brow. <That's not the right hole. You know that, right?>`,
-                `a low, guttural rumble. <You humans. Always with the strange ideas. Fine. Go ahead.>`,
-                `snorts through wide nostrils. <Are you sure about this? ...Hmph. Your funeral.>`,
-                `tenses their jaw, tusks catching the light. <That goes where? ...Alright. I've had worse ideas.>`
+                `grunts, looking over their shoulder with a raised brow. <Wrong hole. You know that, right?>`,
+                `snorts through wide nostrils, tusks catching the light. <Sure about this? ...Hmph.>`
             ];
             _uncivContinueResponses = [
-                `a deep grunt, shifting their weight. <Different. Not bad. Just... different.>`,
                 `rumbles low in their chest. <Keep going. I can take it. Not my first strange thing.>`,
-                `rolls their shoulders with a crack. <Weird. But you know what you're doing. Maybe.>`
             ];
         } else if (_species === "lizardfolk") {
             _uncivEnterResponses = [
-                `their head swivels, tongue flicking rapidly. <Wrong hole. Not for breeding. You... sssure about this?>`,
-                `a guttural hiss, frilled crest twitching. <Sstrange. Not how we mate. But... okay. You do this?>`,
-                `they bare their teeth, not in aggression but confusion. <That goes... there? Odd. Odd odd.> Their tail thumps once.`
+                `their head swivels, tongue flicking rapidly, frilled crest twitching. <Wrong hole. Not for breeding. ...You sure?>`,
+                `they bare their teeth in confusion, tail thumping once. <Odd. Odd odd.>`
             ];
             _uncivContinueResponses = [
-                `a wet hiss, body coiling slightly. <Sstrange feeling. Not bad. Not breeding. But... okay.>`,
-                `their tongue darts out, tasting the air. <Different. Different different. You keep going, yes?>`,
-                `a low reptilian rumble. <Weird. But lizardfolk adapt. We adapt to everything.>`
+                `a wet hiss, body coiling slightly, adjusting to the strange sensation.`,
+                `their tongue darts out, tasting the air, uncertain but willing.`
             ];
         } else if (_species === "kobold") {
             _uncivEnterResponses = [
-                `spins around, tail puffing up. <What?! What what what?! That not breeding hole! That other hole! Kobold know holes!>`,
-                `a high-pitched squeak of confusion. <That goes WHERE? No no no... okay maybe yes? Kobold not sure! Kobold trust you!>`,
-                `their ears flatten, squeaking. <You sure? That's the... the bad hole? Kobold mean the not-fun hole? But okay! Kobold brave kobold!>`
+                `spins around, tail puffing up. <What?! That not breeding hole! That other hole! ...Okay. Kobold try.>`,
+                `a high-pitched squeak of confusion, ears flattening. <Okay maybe yes. Kobold trust you.>`
             ];
             _uncivContinueResponses = [
-                `a rapid chitter, tail curling tight. <Weird weird weird! But not bad! Not bad, no! Kobold can do this!>`,
-                `yips softly, looking back. <Sstrange. Very sstrange. But kobold okay! Kobold tough! Keep going, yes?>`,
-                `their tail whips nervously. <Oooh. That's... that's new. Kobold not expecting that. But okay! Kobold adapt!>`
+                `a rapid chitter, tail curling tight, settling into it.`,
+                `yips softly, looking back, uncertain but going along with it.`
             ];
         } else if (_species === "skeleton") {
             _uncivEnterResponses = [
-                `its jaw clacks, head turning with a dry creak. <...that... is... not... where... the... living... go...>`,
-                `a hollow rattle. <...strange... even... for... one... such... as... I...>`,
-                `it pauses, empty sockets staring. <...you... are... sure...?... very... well...>`
+                `its jaw clacks, head turning with a dry creak. <...not... where... the... living... go...>`,
+                `it pauses, empty sockets staring. <...you... are... sure...?...>`
             ];
             _uncivContinueResponses = [
-                `a dry whisper, bones creaking. <...strange... sensation... or... lack... of... it...>`,
-                `its ribcage rattles softly. <...continue... if... you... must... I... am... patient...>`,
-                `a hollow clack of its jaw. <...not... unpleasant... for... the... dead...>`
+                `a dry whisper, bones creaking. <...strange... sensation...>`,
+                `its ribcage rattles softly, patient and unbothered.`
             ];
         } else {
             // Generic uncivilized fallback
