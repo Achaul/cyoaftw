@@ -5186,7 +5186,7 @@ avoidNote,
     return parts;
   };
 
-  window.getNsfwIntimacyPartTerms = function(npc, partKey) {
+  window.getNsfwIntimacyPartTerms = function(npc, partKey, withSceneContext) {
     if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
     const part = String(partKey || "").toLowerCase();
     const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
@@ -5345,13 +5345,27 @@ avoidNote,
       if (fluids.urine) fluidBits.push("wet and glistening");
     }
 
-    const text = [arousalTerms, def.detail, actState].concat(fluidBits).filter(Boolean).join(", ");
+    // "last scene" checkbox (engine): fold the ongoing act into the part
+    // close-up so the image can catch the moment, not just the anatomy.
+    // Deterministic act words (verb, target, position) - never raw AI
+    // narration, which is too long and too loose for an image prompt.
+    let sceneCtx = "";
+    if (withSceneContext && act) {
+      const ctxBits = ["action in progress: " + act.verb];
+      if (act.target) ctxBits.push("on the " + act.target);
+      if (posId) ctxBits.push(posId + " position");
+      sceneCtx = ctxBits.join(", ");
+    }
+
+    const text = [arousalTerms, def.detail, actState].concat(fluidBits, sceneCtx ? [sceneCtx] : [])
+      .filter(Boolean).join(", ");
     return {
       text: text,
       negatives: def.negatives,
       framing: def.framing + perspective,
       cacheKey: "part::" + part + "::" + stateKey + "::" + actId +
-        "::" + (fluidBits.length ? fluidBits.join("|") : "clean")
+        "::" + (fluidBits.length ? fluidBits.join("|") : "clean") +
+        (withSceneContext ? "::ctx::" + (act ? act.id : "-") + "::" + (posId || "-") : "")
     };
   };
 
