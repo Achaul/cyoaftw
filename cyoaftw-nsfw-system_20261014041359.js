@@ -5177,9 +5177,12 @@ avoidNote,
     const stateKey = (clothing.top ? "t1" : "t0") + (clothing.bottom ? "b1" : "b0") +
       (clothing.undergarments ? "u1" : "u0");
 
-    // Body-state exposure terms (shared by every framing).
+    // Body-state exposure terms (shared by every framing). No face/expression
+    // words: every intimacy framing keeps the face out of the picture (the
+    // legacy trick from generateNPCPartActionPortrait) so the model never
+    // redraws — and mismatches — the face that the bust portrait established.
     const bodyParts = [];
-    bodyParts.push("flushed skin, heavy-lidded eyes, aroused expression, sultry gaze, parted lips, dishevelled hair");
+    bodyParts.push("flushed skin, aroused, parted lips, dishevelled hair");
     if (!clothing.top) {
       bodyParts.push("topless, bare chest, exposed upper body");
       if (feminine) {
@@ -5199,7 +5202,14 @@ avoidNote,
     const last = npc.intimacy.lastAction || {};
     const act = (window.SEX_ACTS && last.actId && window.SEX_ACTS[last.actId]) || null;
     if (!act || !act.target || !act.verb) {
-      return { text: bodyParts.join(", "), negatives: "", framing: "", cacheKey: "state::" + stateKey };
+      // Scene start / clothing acts: a body-state portrait, framed from the
+      // shoulders down so the face never gets redrawn.
+      return {
+        text: bodyParts.join(", "),
+        negatives: "visible face, eyes, looking at camera",
+        framing: "Upper body portrait framed from the shoulders to the waist, face out of frame and not visible. ",
+        cacheKey: "state::" + stateKey
+      };
     }
     const target = String(act.target).toLowerCase();
     const verb = String(act.verb).toLowerCase();
@@ -5211,23 +5221,38 @@ avoidNote,
       return { text: bodyParts.join(", "), negatives: "", framing: "", cacheKey: "state::" + stateKey };
     }
 
-    // Region framing (legacy body-part grouping).
+    // Region framing + matching negatives. The goal is a pure macro crop:
+    // the targeted part fills the frame (with its species surface - scales,
+    // fur, skin), and nothing else appears. The face is always excluded -
+    // the bust portrait owns the face, and a part-scene redraw would never
+    // match it (the legacy generateNPCPartActionPortrait trick).
     const HEAD_TARGETS = ["face", "head", "eyes", "mouth", "hair", "lips", "cheek", "ear", "tongue"];
     const TORSO_TARGETS = ["neck", "chest", "torso", "abdomen", "stomach", "back", "breasts", "nipples",
       "shoulders", "waist", "body", "tail", "collar"];
     const FRONT_LOWER = ["groin", "hips", "thighs", "vagina", "clitoris", "clit", "pussy", "penis", "crotch", "labia", "hand"];
     const REAR_LOWER = ["butt", "buttocks", "ass", "anus"];
     let framing;
+    let framingNegatives;
     if (HEAD_TARGETS.indexOf(target) >= 0) {
-      framing = "Tight close-up framing on the " + target + " and surrounding features, face partially visible. ";
+      framing = "Extreme macro focus on the " + target + " only, the " + target +
+        " fills the entire frame with its immediate surroundings, nothing else in frame. ";
+      framingNegatives = "wide shot, full face, both eyes, looking at camera";
     } else if (TORSO_TARGETS.indexOf(target) >= 0) {
-      framing = "Close-up framing on the " + target + " and upper body, face mostly out of frame. ";
+      framing = "Extreme close-up of the " + target + " only, the " + target +
+        " fills the entire frame, only the " + target + " and its immediate surface visible, face out of frame. ";
+      framingNegatives = "wide shot, visible face, eyes, looking at camera, full torso";
     } else if (REAR_LOWER.indexOf(target) >= 0) {
-      framing = "Rear close-up framing centered on the " + target + ", face not visible. ";
+      framing = "Extreme close-up of the " + target + " only, the " + target +
+        " fills the entire frame, nothing else in frame, face not visible. ";
+      framingNegatives = "wide shot, visible face, eyes, full body";
     } else if (FRONT_LOWER.indexOf(target) >= 0) {
-      framing = "Tight frontal framing centered on the " + target + " and hips, face out of frame. ";
+      framing = "Extreme close-up of the " + target + " only, the " + target +
+        " fills the entire frame with its immediate surface, nothing else in frame, face out of frame. ";
+      framingNegatives = "wide shot, visible face, eyes, looking at camera, full body";
     } else {
-      framing = "Tight macro framing centered on the " + target + ", face out of frame. ";
+      framing = "Extreme close-up of the " + target + " only, the " + target +
+        " fills the entire frame, nothing else in frame. ";
+      framingNegatives = "wide shot, visible face, eyes";
     }
 
     // Explicit target-part detail terms.
@@ -5304,7 +5329,7 @@ avoidNote,
       .filter(Boolean).join(", ");
     return {
       text: text,
-      negatives: "aggressive biting, exaggerated tongue length, deformed anatomy, distorted proportions, unnatural stretching",
+      negatives: "aggressive biting, exaggerated tongue length, deformed anatomy, distorted proportions, unnatural stretching, " + framingNegatives,
       framing: framing,
       cacheKey: "act::" + act.id + "::" + stateKey
     };

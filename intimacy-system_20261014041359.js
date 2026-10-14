@@ -4846,7 +4846,7 @@ function buildIntimacyPrompt(context) {
     // Climax acts read as release beats in the prompt, not thrusting.
     if (action.triggersClimax) actTypeName = "climax (orgasm release)";
 
-    var actDescription = `The player is using their ${action.tool} to ${action.verb} the NPC's ${action.target}. This is a ${actTypeName} act. The NPC's reaction should be about the sensation of ${action.tool} on ${action.target}, NOT about vaginal sex or penetration unless the act IS penetration.`;
+    var actDescription = `The player is using their ${action.tool} to ${action.verb} the NPC's ${action.target}. This is a ${actTypeName} act. The NPC's reaction should be about the sensation of ${action.tool} on ${action.target}, NOT about vaginal sex or penetration unless the act IS penetration. The act is FIXED for this beat: only ${action.tool} on ${action.target} - never describe a different act, tool, or body part.`;
 
     // Female player climax beats: describe HER orgasm, not a tool-on-target act.
     if (action.id === "player_orgasm" || action.id === "female_ejaculate") {
@@ -4911,7 +4911,7 @@ function buildIntimacyPrompt(context) {
         }
     }
     var _repeatBlock = _repeatCount > 1
-        ? "REPETITION: the player has performed this exact act " + _repeatCount + " times this encounter. ESCALATE the tempo - never restate the previous beat: 2nd time slow and savouring, 3rd steady and deeper, 4th and beyond faster, rougher, more vocal. Same act, same body parts."
+        ? "REPETITION: the player has performed this exact act " + _repeatCount + " times this encounter. Vary the beat - never restate the previous one: 2nd time slow and savouring, 3rd steady, 4th and beyond faster and more vocal. THE ACT NEVER CHANGES WITH REPETITION: every repeat is still the same act - the same tool on the same body part (" + (action.tool || "") + " on " + (action.target || "") + "). Escalating means tempo, pressure and voice only. NEVER escalate into a different act: no penetration or intercourse, no different tool, no different body part, unless this act itself is a penetration act."
         : "";
     var _playerName = (player && player.name) ? String(player.name).trim() : "";
     var _nameBlock = _playerName
@@ -5079,7 +5079,7 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
         }
     }
     var _repeatBlock = _repeatCount > 1
-        ? "REPETITION: the player has performed this exact act " + _repeatCount + " times this encounter. ESCALATE the tempo - never restate the previous beat: 2nd time slow and savouring, 3rd steady and deeper, 4th and beyond faster, rougher, more vocal. Same act, same body parts."
+        ? "REPETITION: the player has performed this exact act " + _repeatCount + " times this encounter. Vary the beat - never restate the previous one: 2nd time slow and savouring, 3rd steady, 4th and beyond faster and more vocal. THE ACT NEVER CHANGES WITH REPETITION: every repeat is still the same act - the same tool on the same body part (" + (action.tool || "") + " on " + (action.target || "") + "). Escalating means tempo, pressure and voice only. NEVER escalate into a different act: no penetration or intercourse, no different tool, no different body part, unless this act itself is a penetration act."
         : "";
     var _playerName = (player && player.name) ? String(player.name).trim() : "";
     var _nameBlock = _playerName
@@ -5109,7 +5109,8 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
         : "";
     var _actLine = action && action.tool
         ? "ACT: " + action.tool + " " + (action.verb || "") + " " + (action.target || "") +
-          (playerIsBottom ? " (the NPC acts on the player)" : "")
+          (playerIsBottom ? " (the NPC acts on the player)" : "") +
+          " - THIS EXACT ACT, NOTHING ELSE: do not escalate it into a different act (no penetration unless the act IS penetration, no other tool, no other body part)."
         : "";
 
     const prompt = `
@@ -5174,7 +5175,7 @@ function buildContinuityContext(history, currentAction) {
     
     // Check if same type of action
     if (prevAction.tool === currentAction.tool && prevAction.target === currentAction.target) {
-        return `PREVIOUS ACTION: You ${prevAction.verb}ed their ${prevAction.target} with your ${prevAction.tool}. Continue the motion naturally.`;
+        return `PREVIOUS ACTION: You ${prevAction.verb}ed their ${prevAction.target} with your ${prevAction.tool}. Continue the same motion naturally - the same act, same tool, same body part; the act does not become a different one.`;
     }
     
     return `PREVIOUS ACTION: You ${prevAction.verb}ed their ${prevAction.target} with your ${prevAction.tool}.`;
