@@ -5154,6 +5154,162 @@ avoidNote,
     return parts.join(", ");
   };
 
+  // Body-state and act prompt terms for the opt-in second portrait during
+  // an active intimacy encounter. Called (typeof-guarded) by the SFW
+  // engine's lazy intimacy portrait generator only while the encounter is
+  // active. Returns null when there is no active encounter, which keeps the
+  // eye button hidden.
+  //
+  // Act-aware (ported from the legacy generateNPCPartActionPortrait): the
+  // image frames the body part the current act targets, with the acting
+  // partner drawn only as a shadow silhouette. With no current act (scene
+  // start, or a clothing/continue act) it falls back to a body-state
+  // portrait that escalates with the clothing mirrors.
+  window.getNsfwIntimacyPortraitTerms = function(npc) {
+    if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
+    const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
+      || { top: true, bottom: true, undergarments: true };
+    const anatomy = npc.anatomy || {};
+    const breasts = anatomy.breasts || {};
+    const gender = String(npc.gender || "").toLowerCase();
+    const feminine = /female|woman|futa|herm/.test(gender) ||
+      (breasts.sizeCategory && breasts.sizeCategory !== "flat");
+    const stateKey = (clothing.top ? "t1" : "t0") + (clothing.bottom ? "b1" : "b0") +
+      (clothing.undergarments ? "u1" : "u0");
+
+    // Body-state exposure terms (shared by every framing).
+    const bodyParts = [];
+    bodyParts.push("flushed skin, heavy-lidded eyes, aroused expression, sultry gaze, parted lips, dishevelled hair");
+    if (!clothing.top) {
+      bodyParts.push("topless, bare chest, exposed upper body");
+      if (feminine) {
+        if (breasts.description) bodyParts.push(breasts.description);
+        bodyParts.push("bare breasts, exposed nipples");
+      } else {
+        bodyParts.push("visible nipples");
+      }
+    }
+    if (!clothing.undergarments && !clothing.bottom) {
+      bodyParts.push("fully nude, no clothing below the waist, exposed genitals");
+    } else if (!clothing.bottom) {
+      bodyParts.push("lower clothing removed, underwear only");
+    }
+
+    // Current act: the portrait frames the targeted body part.
+    const last = npc.intimacy.lastAction || {};
+    const act = (window.SEX_ACTS && last.actId && window.SEX_ACTS[last.actId]) || null;
+    if (!act || !act.target || !act.verb) {
+      return { text: bodyParts.join(", "), negatives: "", framing: "", cacheKey: "state::" + stateKey };
+    }
+    const target = String(act.target).toLowerCase();
+    const verb = String(act.verb).toLowerCase();
+    const tool = String(act.tool || "").toLowerCase();
+
+    // Acts where the player is the bottom target the player's body, not this
+    // NPC's — the portrait can't depict that, so fall back to body state.
+    if (act.playerIsBottom) {
+      return { text: bodyParts.join(", "), negatives: "", framing: "", cacheKey: "state::" + stateKey };
+    }
+
+    // Region framing (legacy body-part grouping).
+    const HEAD_TARGETS = ["face", "head", "eyes", "mouth", "hair", "lips", "cheek", "ear", "tongue"];
+    const TORSO_TARGETS = ["neck", "chest", "torso", "abdomen", "stomach", "back", "breasts", "nipples",
+      "shoulders", "waist", "body", "tail", "collar"];
+    const FRONT_LOWER = ["groin", "hips", "thighs", "vagina", "clitoris", "clit", "pussy", "penis", "crotch", "labia", "hand"];
+    const REAR_LOWER = ["butt", "buttocks", "ass", "anus"];
+    let framing;
+    if (HEAD_TARGETS.indexOf(target) >= 0) {
+      framing = "Tight close-up framing on the " + target + " and surrounding features, face partially visible. ";
+    } else if (TORSO_TARGETS.indexOf(target) >= 0) {
+      framing = "Close-up framing on the " + target + " and upper body, face mostly out of frame. ";
+    } else if (REAR_LOWER.indexOf(target) >= 0) {
+      framing = "Rear close-up framing centered on the " + target + ", face not visible. ";
+    } else if (FRONT_LOWER.indexOf(target) >= 0) {
+      framing = "Tight frontal framing centered on the " + target + " and hips, face out of frame. ";
+    } else {
+      framing = "Tight macro framing centered on the " + target + ", face out of frame. ";
+    }
+
+    // Explicit target-part detail terms.
+    const TARGET_TERMS = {
+      lips: "glistening lips, slightly parted",
+      mouth: "parted lips, warm breath",
+      tongue: "wet tongue, delicate motion",
+      neck: "bare tender neck",
+      breasts: feminine ? "soft bare breast flesh, stiff nipples, breasts compressing under touch" : "bare chest",
+      nipples: "erect stiff nipples, detailed areolas",
+      chest: "bare chest, exposed skin",
+      stomach: "soft bare stomach, tensing abdominal muscles",
+      abdomen: "soft bare stomach, tensing abdominal muscles",
+      back: "bare back, shoulder blades",
+      shoulders: "bare shoulders",
+      thighs: "bare inner thighs, warm soft skin",
+      hips: "bare hips, pelvis framed",
+      butt: "bare soft buttocks",
+      buttocks: "bare soft buttocks",
+      groin: "exposed groin",
+      vagina: feminine ? "exposed pussy, detailed vulva and labia, slick and aroused" : "",
+      clitoris: feminine ? "exposed clitoris, slick aroused vulva" : "",
+      clit: feminine ? "exposed clitoris, slick aroused vulva" : "",
+      labia: feminine ? "spread labia, slick aroused vulva" : "",
+      penis: !feminine ? "erect hard penis, engorged and flushed" : "",
+      anus: "exposed anus, intimate rear view",
+      tail: "bare tail, base of the tail"
+    };
+
+    // Verb intensity (legacy VERB_ACTION_OVERRIDES, condensed).
+    const VERB_TERMS = {
+      kiss: "gentle intimate contact",
+      lick: "slow deliberate tongue motion, wet surface detail",
+      suck: "gentle suction, wet intimate contact",
+      bite: "gentle controlled bite, flushed skin",
+      grope: "firm kneading pressure, flesh compressing under fingers",
+      squeeze: "firm controlled pressure, flesh compressing",
+      caress: "slow gentle motion",
+      stroke: "slow deliberate motion",
+      tease: "light delicate contact",
+      pinch: "firm fingertip pressure",
+      flick: "light quick contact",
+      rub: "slow circular motion, warm friction",
+      press: "steady firm pressure",
+      spread: "controlled deliberate separation, anatomy detail",
+      grip: "strong steady grip",
+      massage: "deep slow kneading",
+      pull: "steady firm pull",
+      hold: "steady gentle hold",
+      spank: "stinging impact, reddening skin",
+      slap: "stinging impact, reddening skin",
+      penetrate: "slow physical entry with tension",
+      fuck: "deep rhythmic motion",
+      grind: "slow rhythmic grinding",
+      thrust: "deep rhythmic motion"
+    };
+
+    const partBits = [target, TARGET_TERMS[target]].filter(Boolean);
+    if (act.target === "body" || act.target === "torso") {
+      // Whole-body acts: let the body-state terms carry the detail.
+      partBits.length = 0;
+    }
+    const intensity = VERB_TERMS[verb] || "";
+
+    // Shadow-silhouette partner (legacy trick): the acting figure is only
+    // a vague dark outline so the image stays on the primary subject.
+    const toolPhrase = tool ? "using their " + tool : "using their hands";
+    const shadowLine = "A soft shadow silhouette of a partner is performing " + verb + " on the " +
+      target + " " + toolPhrase + ". Only the shadow of the partner is visible: dark, vague, " +
+      "no visible facial features, no identifiable details. No second character is clearly present. " +
+      "Focus remains on the primary subject.";
+
+    const text = [bodyParts.join(", "), partBits.join(", "), intensity, shadowLine]
+      .filter(Boolean).join(", ");
+    return {
+      text: text,
+      negatives: "aggressive biting, exaggerated tongue length, deformed anatomy, distorted proportions, unnatural stretching",
+      framing: framing,
+      cacheKey: "act::" + act.id + "::" + stateKey
+    };
+  };
+
   initNSFWSystem();
 })();
 } catch (e) {

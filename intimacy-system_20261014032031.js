@@ -1431,6 +1431,10 @@ function endIntimacyEncounter(npc) {
     npc.intimacy.encounter.active = false;
     npc.intimacy.encounter.startedAt = null;
     npc.intimacy.encounter.lastActivityAt = null;
+
+    // Hide the opt-in second portrait with the scene (SFW engine feature,
+    // typeof-guarded no-op when the engine doesn't provide it).
+    if (typeof window.hideIntimacyPortrait === "function") window.hideIntimacyPortrait();
     
     // Stop any NPC-led pleasure loop (engine-side oral/stroke loop)
     if (npc.intimacy.npcPleasureLoop) npc.intimacy.npcPleasureLoop = null;

@@ -1,4 +1,4 @@
-// ── cyoaftw-npc-data.js v2026-10-12-001 ── Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
+// ── cyoaftw-npc-data.js v2026-10-12-002 ── "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
     window.NPC_DATA_VERSION = "2026-10-12-001";
@@ -1791,6 +1791,29 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
     {
+        // A session follower (someone already travelling with you, this
+        // session) can be asked to make it permanent and join the party
+        // proper. Scripted, no AI turn: the answer is a roll from how much
+        // they like you (see askFollowerToJoinParty in the engine), and a no
+        // means a cooldown (FOLLOWER_JOIN_ASK_COOLDOWN) before the question
+        // can be put again. Held captives never get it - they have the rope
+        // collar path instead.
+        id: "follower-join-party",
+        priority: 1,
+        repeat: "always",
+        label: "Ask them to join you for good",
+        text: "You ask if they would travel with you for good.",
+        intent: "talk",
+        conditions: {
+            custom: (npc, ctx) =>
+                typeof canAskFollowerToJoinParty === "function" &&
+                canAskFollowerToJoinParty(npc)
+        },
+        action: (npc) => {
+            if (typeof askFollowerToJoinParty === "function") askFollowerToJoinParty(npc);
+        }
+    },
+    {
         // A party member can be asked to settle the loot rule again (engine:
         // "LOOSE ENDS"). Scripted, no AI turn.
         id: "party-loot-revisit",
@@ -3323,8 +3346,9 @@ function queryConversationCatalogue(npc, extraContext = {}) {
             const isDisengage = entry.action === "disengage" || entry.id === "goodbye";
             // "stop-following" is companion management, not small talk — an
             // NPC who is actively following can always be dismissed, even
-            // before the session greeting.
-            const isCompanionManagement = entry.id === "stop-following" || entry.id === "follower-ask-stay";
+            // before the session greeting. Same for asking a follower to
+            // join the party for good.
+            const isCompanionManagement = entry.id === "stop-following" || entry.id === "follower-ask-stay" || entry.id === "follower-join-party";
             return isGreeting || isDisengage || isCompanionManagement;
         });
     }
