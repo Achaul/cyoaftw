@@ -1248,7 +1248,10 @@ function initializeIntimacyState(npc) {
             internalSemen: false,
             oralSemen: false,
             externalSemen: false,
-            femaleEjaculate: false
+            femaleEjaculate: false,
+            urine: false,
+            penisSaliva: false,
+            penisSemen: false
         },
         // LLM enhancement system
         llmEnhancement: {
@@ -1316,7 +1319,10 @@ function resetIntimacyState(npc) {
             internalSemen: false,
             oralSemen: false,
             externalSemen: false,
-            femaleEjaculate: false
+            femaleEjaculate: false,
+            urine: false,
+            penisSaliva: false,
+            penisSemen: false
         },
         // LLM enhancement system
         llmEnhancement: {
@@ -3693,6 +3699,11 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         handleFluidConsequence(npc, player, act.consequence, intimacy);
     }
     
+    // Player mouth on the NPC penis: saliva for part portraits.
+    // requiresNpcMale separates NPC-penis acts from player-penis acts.
+    if (act.tool === "mouth" && act.target === "penis" && act.requiresNpcMale && intimacy.fluids) {
+        intimacy.fluids.penisSaliva = true;
+    }
     // Generate response
     // Store virginity flag so buildPenetrationResponse can use it
     if (wasVirgin) intimacy._wasVirgin = true;
@@ -4172,6 +4183,8 @@ function handleClimax(npc, player, act, intimacy) {
         intimacy.arousal.npc = Math.max(0, intimacy.arousal.npc - (AROUSAL_CONFIG.ORGASM_THRESHOLD * 0.7));
         intimacy.climax.npcOrgasms++;
         intimacy.climax.lastNPCClimax = Date.now();
+        // NPC with a penis climaxed: semen left on their own penis (part portraits)
+        if ((npcGender === "male" || (npc.anatomy && (npc.anatomy.penis || npc.anatomy.cock))) && intimacy.fluids) intimacy.fluids.penisSemen = true;
         spendIntimacyStamina(npc, INTIMACY_STAMINA_COST_CLIMAX, false);
         
         // Apply cooldown for male NPCs

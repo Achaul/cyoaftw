@@ -5178,8 +5178,10 @@ avoidNote,
     if (!clothing.bottom && !clothing.undergarments) {
       parts.push(feminine ? "vulva" : "penis");
       parts.push("butt");
+      parts.push("anus");
     } else if (!clothing.bottom) {
       parts.push("butt");
+      parts.push("anus");
     }
     return parts;
   };
@@ -5233,10 +5235,16 @@ avoidNote,
         negatives: "wide shot, visible face, eyes, full body"
       },
       butt: {
-        framing: "Extreme close-up of the anus and buttocks only, they fill the entire frame, nothing else in frame, face not visible. ",
+        framing: "Extreme close-up of the bare buttocks only, they fill the entire frame, nothing else in frame, face not visible. ",
         detail: "bare soft buttocks",
         region: "rear",
         negatives: "wide shot, visible face, eyes, full body"
+      },
+      anus: {
+        framing: "Extreme macro close-up of the anus only, it fills the entire frame with its immediate surface, nothing else in frame, face not visible. ",
+        detail: "detailed puckered anus, wrinkled sphincter",
+        region: "rear",
+        negatives: "wide shot, visible face, eyes, full body, breasts, genitals"
       }
     };
     const def = PART_DEFS[part];
@@ -5246,32 +5254,8 @@ avoidNote,
     if ((part === "boobs" || part === "chest") && clothing.top) return null;
     if ((part === "vulva" || part === "penis") && (clothing.bottom || clothing.undergarments)) return null;
     if (part === "butt" && clothing.bottom) return null;
+    if (part === "anus" && clothing.bottom) return null;
 
-    // Position perspective: the framing must match the scene's geometry
-    // ("butt" in doggy style is presented from behind, hips raised).
-    const POSITION_VIEW = {
-      "Doggy": "on all fours, hips raised, presented from behind",
-      "Bent Over": "bent forward over a surface, presented from behind",
-      "Standing From Behind": "standing, viewed from behind",
-      "Against Wall From Behind": "pressed against the wall, viewed from behind",
-      "Spooning": "lying on their side, viewed from behind",
-      "Missionary": "lying on their back, hips tilted up, viewed from the front",
-      "Cowgirl": "upright and straddling, viewed from the front",
-      "Reverse Cowgirl": "upright and straddling, viewed from behind",
-      "Astride Lap": "seated astride, viewed from the front",
-      "Perched": "perched on the lap, viewed from the front",
-      "Standing": "standing, viewed from the front",
-      "Against Wall": "pressed against the wall, viewed from the front",
-      "Kneeling": "kneeling upright, viewed from the front",
-      "Kneeling Before": "kneeling upright, viewed from the front",
-      "Kneeling By Face": "kneeling, viewed from the front",
-      "Squatting Before": "squatting, viewed from the front",
-      "Kneeling Over": "leaning over the partner, viewed from above",
-      "Sixty-Nine": "viewed from above",
-      "Oral Service": "kneeling between legs, viewed from the front",
-      "Prone Oral Service": "lying flat, viewed from above",
-      "Riding Face": "straddling above the partner, viewed from below"
-    };
     const posId = npc.intimacy.position && npc.intimacy.position.player;
     let perspective = "";
     if (posId) {
@@ -5328,12 +5312,137 @@ avoidNote,
       }
     }
 
-    const text = [arousalTerms, def.detail, actState].filter(Boolean).join(", ");
+    // Encounter fluid state (intimacy.fluids, set by handleFluidConsequence,
+    // plus climax.lastInternalEjaculation naming the creampie hole) mapped
+    // onto the part it would be visible on. The cache key carries the fluid
+    // signature so a state change regenerates the image.
+    const fluids = npc.intimacy.fluids || {};
+    const internalHole = (npc.intimacy.climax && npc.intimacy.climax.lastInternalEjaculation) || "";
+    const fluidBits = [];
+    if (part === "mouth") {
+      if (fluids.oralSemen) fluidBits.push("lips glossy with semen, white residue in the mouth");
+      if (fluids.urine) fluidBits.push("lips wet, glistening");
+    } else if (part === "boobs" || part === "chest") {
+      if (fluids.externalSemen) fluidBits.push("glistening streaks of semen on the skin");
+      if (fluids.urine) fluidBits.push("skin wet and glistening");
+    } else if (part === "vulva") {
+      if (fluids.internalSemen && internalHole === "vagina") fluidBits.push("creampie, semen dripping from the opening");
+      if (fluids.externalSemen) fluidBits.push("semen smeared across the vulva");
+      if (fluids.femaleEjaculate) fluidBits.push("glistening with her own release");
+      if (fluids.urine) fluidBits.push("wet, glistening");
+      const ar = (npc.intimacy.arousal && npc.intimacy.arousal.npc) || 0;
+      if (ar >= 450) fluidBits.push("dripping wet");
+      else if (ar >= 250) fluidBits.push("wet and glistening");
+    } else if (part === "penis") {
+      if (fluids.penisSaliva) fluidBits.push("slick with saliva, wet and glistening");
+      if (fluids.penisSemen) fluidBits.push("semen smeared along the shaft");
+      if (fluids.urine) fluidBits.push("wet and glistening");
+      const ar = (npc.intimacy.arousal && npc.intimacy.arousal.npc) || 0;
+      if (ar >= 450) fluidBits.push("beading pre-cum at the tip");
+    } else if (part === "butt" || part === "anus") {
+      if (fluids.externalSemen) fluidBits.push("glistening streaks of semen on the skin");
+      if (fluids.internalSemen && internalHole === "anus" && part === "anus") fluidBits.push("creampie, semen dripping from the hole");
+      if (fluids.urine) fluidBits.push("wet and glistening");
+    }
+
+    const text = [arousalTerms, def.detail, actState].concat(fluidBits).filter(Boolean).join(", ");
     return {
       text: text,
       negatives: def.negatives,
       framing: def.framing + perspective,
-      cacheKey: "part::" + part + "::" + stateKey + "::" + actId
+      cacheKey: "part::" + part + "::" + stateKey + "::" + actId +
+        "::" + (fluidBits.length ? fluidBits.join("|") : "clean")
+    };
+  };
+
+  // Position perspective shared by the part close-ups and the scene shot:
+  // the framing must match the scene's geometry ("butt" in doggy style is
+  // presented from behind, hips raised).
+  const POSITION_VIEW = {
+    "Doggy": "on all fours, hips raised, presented from behind",
+    "Bent Over": "bent forward over a surface, presented from behind",
+    "Standing From Behind": "standing, viewed from behind",
+    "Against Wall From Behind": "pressed against the wall, viewed from behind",
+    "Spooning": "lying on their side, viewed from behind",
+    "Missionary": "lying on their back, hips tilted up, viewed from the front",
+    "Cowgirl": "upright and straddling, viewed from the front",
+    "Reverse Cowgirl": "upright and straddling, viewed from behind",
+    "Astride Lap": "seated astride, viewed from the front",
+    "Perched": "perched on the lap, viewed from the front",
+    "Standing": "standing, viewed from the front",
+    "Against Wall": "pressed against the wall, viewed from the front",
+    "Kneeling": "kneeling upright, viewed from the front",
+    "Kneeling Before": "kneeling upright, viewed from the front",
+    "Kneeling By Face": "kneeling, viewed from the front",
+    "Squatting Before": "squatting, viewed from the front",
+    "Kneeling Over": "leaning over the partner, viewed from above",
+    "Sixty-Nine": "viewed from above",
+    "Oral Service": "kneeling between legs, viewed from the front",
+    "Prone Oral Service": "lying flat, viewed from above",
+    "Riding Face": "straddling above the partner, viewed from below"
+  };
+
+  // Experimental two-body scene shot (the engine's dark cucumber button).
+  // Offered only while the encounter's LAST act is the player's penis in
+  // the NPC (vaginal or anal; oral would put a face in frame, which the
+  // part-portrait system deliberately never draws). The prompt reuses the
+  // involved part's terms - anatomy detail, act state, fluid bits - and
+  // adds the player's penis: size, skin tone, species. Ad-hoc by design:
+  // two bodies in frame is where image models distort the most, so this
+  // is one opt-in click, never automatic.
+  window.getNsfwIntimacySceneTerms = function(npc) {
+    if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
+    const intimacy = npc.intimacy;
+    const last = intimacy.lastAction || {};
+    const act = (window.SEX_ACTS && last.actId && window.SEX_ACTS[last.actId]) || null;
+    if (!act || String(act.tool || "").toLowerCase() !== "penis") return null;
+    const target = String(act.target || "").toLowerCase();
+    const partKey = target === "vagina" ? "vulva" : (target === "anus" ? "anus" : null);
+    if (!partKey) return null;
+    const partTerms = window.getNsfwIntimacyPartTerms(npc, partKey);
+    if (!partTerms) return null;
+
+    // Player penis data (engine globals, all typeof-guarded). Returns null
+    // without a player or player penis - nothing to add to the scene.
+    const player = (typeof G !== "undefined" && G && G.player) || null;
+    if (!player) return null;
+    try { if (typeof ensurePlayerIntimacyAnatomy === "function") ensurePlayerIntimacyAnatomy(player); } catch (e) {}
+    const penis = (player.anatomy && player.anatomy.penis) || null;
+    if (!penis) return null;
+    let size = "medium";
+    try { if (typeof getPlayerCockSize === "function") size = String(getPlayerCockSize(player) || "medium"); } catch (e) {}
+    const skinTone = String((player.anatomy && player.anatomy.skinTone) || "").trim();
+    const species = String((player.anatomy && player.anatomy.species) || "human").trim();
+
+    // Penetration (penetrate/continue) vs pressed-together foreplay (tease):
+    // the framing must match what the act is actually doing.
+    const actType = String(act.type || "");
+    const inside = actType === "penetrate" || actType === "continue";
+    const sizeAdj = size === "small" ? "slender" : (size === "large" ? "large girthy" : "thick");
+    const penisBits = [inside
+      ? "the penetrating partner's " + sizeAdj + " erect penis buried inside, slick"
+      : "the penetrating partner's " + sizeAdj + " erect penis pressed against it"];
+    if (skinTone) penisBits.push("the penetrating partner has " + skinTone + " skin");
+    if (species && species !== "human") penisBits.push("the penetrating partner is a " + species);
+
+    const posId = intimacy.position && intimacy.position.player;
+    let perspective = "";
+    if (posId) {
+      const view = POSITION_VIEW[posId];
+      perspective = "In the current position (" + posId + (view ? "): " + view : "") + ". ";
+    }
+    const framing = (inside
+      ? "Explicit close-up of sexual intercourse, the joined genitals fill the frame, no faces in frame. "
+      : "Explicit close-up of the erect penis against the partner's body, it fills the frame, no faces in frame. ")
+      + perspective;
+
+    return {
+      text: [partTerms.text].concat(penisBits).join(", "),
+      negatives: partTerms.negatives,
+      framing: framing,
+      cacheKey: "scene::" + partKey + "::" + actType + "::" + posId + "::" + size +
+        "::" + (skinTone || "-") + "::" + partTerms.cacheKey,
+      scene: true
     };
   };
 
