@@ -5233,7 +5233,7 @@ avoidNote,
         negatives: "wide shot, visible face, eyes, full body"
       },
       butt: {
-        framing: "Extreme close-up of the buttocks only, they fill the entire frame, nothing else in frame, face not visible. ",
+        framing: "Extreme close-up of the anus and buttocks only, they fill the entire frame, nothing else in frame, face not visible. ",
         detail: "bare soft buttocks",
         region: "rear",
         negatives: "wide shot, visible face, eyes, full body"
