@@ -401,6 +401,7 @@ const NPC_ACTION_RELATION_WEIGHTS = {
     "ask-need": 2,
     "ask-people": 1,
     "ask-rumor": 0,
+    "ask-talk": 0,
     "ask-rumor-source": 0,
     "ask-rumor-proof": 1,
     "ask-family": 1,
@@ -493,6 +494,7 @@ function formatNPCActionTag(tag) {
         "ask-need": "asked what you needed most",
         "ask-people": "asked about your people",
         "ask-rumor": "asked for rumors",
+        "ask-talk": "asked what people were saying",
         question: "asked questions",
         calm: "tried to keep things calm",
         "keep-calm": "tried to keep things calm",
@@ -754,6 +756,9 @@ function recordNPCConversationChoice(npc, choice) {
             npc.memory.loreTold[choice.loreFactId] = true;
             state.lastLoreFactId = choice.loreFactId;
         }
+        // A "what are people saying" option: that deed has now been told, and she will
+        // not bring it up again (see markRenownDeedTold in the engine).
+        if (choice.deedTalkId && typeof markRenownDeedTold === "function") markRenownDeedTold(npc, choice.deedTalkId);
         // A guide option moves the opening story along (e.g. "plan" marks the
         // guide as having oriented the player).
         if (choice.guideBeat && typeof onGuideBeat === "function") onGuideBeat(npc, choice.guideBeat);
@@ -846,6 +851,7 @@ const NPC_OPTION_TAGS = {
     "ask-about-lore": ["rumor", "place"],
     "ask-lore-source": ["rumor"],
     "ask-rumor": ["rumor"],
+    "ask-talk": ["rumor", "law", "danger", "help"],
     "offer-help": ["work", "help", "debt"],
     "keep-calm": ["danger"],
     "ask-standing": ["self", "work"],
@@ -877,6 +883,7 @@ const NPC_OPTION_TAGS = {
     "pressure-refuse": ["law"],
     "guide-first-step": ["place", "work"],
     "guide-ask-question": ["self"],
+    "guide-lead-shrine": ["place"],
     "lead-stage-ask": ["place", "rumor"],
     "ask-directions": ["place"],
     "offer-drink": ["food", "money"],
@@ -1808,6 +1815,15 @@ if (typeof window !== "undefined") window.getNPCAwareStoryEvents = getNPCAwareSt
 // Picks the newest aware event we can turn into a menu topic and describes it:
 // { event, label, phrase, note, sig } or null. Memoized on ctx so the label,
 // text and note of one menu build all agree.
+// The renown deed this NPC could tell about right now (see getRenownTalkFor in the
+// engine), or null. Memoized on ctx like _npcEventTopic.
+function _npcDeedTalk(npc, ctx) {
+    if (ctx && ctx.__deedTalk !== undefined) return ctx.__deedTalk;
+    const talk = ctx && ctx.room && typeof getRenownTalkFor === "function" ? getRenownTalkFor(npc, ctx.room) : null;
+    if (ctx) ctx.__deedTalk = talk;
+    return talk;
+}
+
 function _npcEventTopic(npc, ctx) {
     if (ctx && ctx.__eventTopic !== undefined) return ctx.__eventTopic;
     let topic = null;
@@ -2967,6 +2983,35 @@ const NPC_CONVERSATION_CATALOGUE = [
             minFavor: -20
         }
     },
+    // WHAT PEOPLE ARE SAYING: only a gossiper (women of a nervous or nosy temperament, and
+    // staff working in an inn or tavern) who knows an untold, weighty deed about the player
+    // offers it, once per deed. The label is neutral; whether she knows it is you, and how
+    // she says it, is in the contextNote (see describeRenownTalk in the engine).
+    {
+        id: "ask-talk",
+        priority: 66,
+        rankBoost: 30,
+        repeat: "always",
+        label: "Ask what people are saying",
+        textVariants: [
+            "You ask what folk have been saying lately.",
+            "You ask if there is any talk worth hearing.",
+            "You lean in and ask what the gossip is."
+        ],
+        deedTalk: (npc, ctx) => { const t = _npcDeedTalk(npc, ctx); return t ? t.id : ""; },
+        contextNote: (npc, ctx) => { const t = _npcDeedTalk(npc, ctx); return t ? t.note : ""; },
+        cacheSig: (npc, ctx) => { const t = _npcDeedTalk(npc, ctx); return t ? t.sig : ""; },
+        intent: "rumor",
+        relationshipImpact: { mood: 0, favor: 0, intent: "curious", markMet: true, actionTag: "ask-talk" },
+        memory: { skip: true },
+        replaces: ["ask-rumor"],
+        conditions: {
+            metPlayer: true,
+            maxHostility: 59,
+            minFavor: -20,
+            custom: (npc, ctx) => ctx.isHumanoid && !ctx.offDuty && !!_npcDeedTalk(npc, ctx)
+        }
+    },
     // SOCIAL FACTS: each reveals one stored fact from the NPC's social sheet
     // (see generateNPCSocial). Scripted, no AI call. Each shows once, only when
     // the NPC has that fact and trusts the player enough; the engine handler is
@@ -3436,6 +3481,24 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "guidemenu",
         intent: "curious",
         conditions: { custom: (npc) => _npcIsGuide(npc) }
+    },
+    // Offered until the newcomer's blessing is taken: the guide leads the
+    // player to the nearest shrine with the Follow mechanism (see
+    // findNearestShrineDest / askNPCToLeadYou in the engine).
+    {
+        id: "guide-lead-shrine",
+        priority: 1,
+        rankBoost: 92,
+        repeat: "always",
+        label: "Ask them to take you to the shrine",
+        action: "guideshrine",
+        intent: "curious",
+        conditions: {
+            custom: (npc) => _npcIsGuide(npc)
+                && typeof G !== "undefined" && G && G.player
+                && typeof getNewcomerProtectionState === "function" && getNewcomerProtectionState(G.player) === "none"
+                && typeof findNearestShrineDest === "function" && !!findNearestShrineDest()
+        }
     },
     // Lead payoff: with the guide's plan heard, asking the current lead's
     // question of someone in that lead's building moves the opening arc along
@@ -3997,6 +4060,8 @@ function buildConversationOption(entry, npc, ctx) {
         contextNote: String(_npcResolveConversationValue(entry.contextNote, npc, ctx) || ""),
         // World-lore fact this option tells (recorded once chosen, see recordNPCConversationChoice).
         loreFactId: entry.loreFact ? String(_npcResolveConversationValue(entry.loreFact, npc, ctx) || "") : "",
+        // Renown deed this option tells (marked told once chosen, see recordNPCConversationChoice).
+        deedTalkId: entry.deedTalk ? String(_npcResolveConversationValue(entry.deedTalk, npc, ctx) || "") : "",
         revealsName: entry.revealsName !== undefined ? _npcResolveConversationValue(entry.revealsName, npc, ctx) === true : false,
         action,
         intent: resolvedIntent,

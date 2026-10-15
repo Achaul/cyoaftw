@@ -3706,29 +3706,29 @@ const GUIDE_SPECIES_LINES = {
 // base lines; only the voice changes. Humans use the base lines.
 const GUIDE_SPECIES_TEXT = {
     elf: {
-        mission: "\"Three things matter, {player}. Grow stronger: {guildPlace} has trainers and a yard to practise in. Earn coin: take work and bounties. And follow your lead, patiently.\"",
-        missionGuild: "\"Three things matter, {player}. Grow stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. And follow your lead, patiently.\"",
-        advice: "\"Death is final in this country, and I have seen too many young ones learn it late. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can bring you back, and only if they are strong enough.\""
+        mission: "\"Three things, {player}, and there is no need to hurry any of them. Grow stronger: {guildPlace} keeps trainers and a quiet yard. Earn coin: the notice boards are never empty. And follow your lead, patiently; it will keep.\"",
+        missionGuild: "\"Three things, {player}, and there is no need to hurry any of them. Grow stronger: the trainers and the quiet yard there are for that. Earn coin: the notice boards are never empty. And follow your lead, patiently; it will keep.\"",
+        advice: "\"I have buried too many who learned this late: death here is final. Before anything else, go to the shrine in {chapelPlace} and ask for a newcomer's blessing. It is free, it binds you to no god, and it will catch you once. Beyond that, only a patron you have served can bring you back, and only if they are strong enough. Say the word and I will walk you there.\""
     },
     dwarf: {
-        mission: "\"Three things, {player}. Get stronger: {guildPlace} has trainers and a yard. Earn coin: take work and bounties. Follow your lead. No shortcuts.\"",
-        missionGuild: "\"Three things, {player}. Get stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. Follow your lead. No shortcuts.\"",
-        advice: "\"Death is final here. No refunds. First thing, ask for a newcomer's blessing at the shrine in {chapelPlace}. It costs nothing, it binds you to no god, and it saves you once. After that, only a patron god you have served can pull you back, and only if they have the strength.\""
+        mission: "\"Three things, {player}, no frills. Get stronger: {guildPlace} has trainers and a yard. Earn coin: the boards pay for honest work. Follow your lead. There are no shortcuts, only the work.\"",
+        missionGuild: "\"Three things, {player}, no frills. Get stronger: the trainers and the yard there are for that. Earn coin: the boards pay for honest work. Follow your lead. There are no shortcuts, only the work.\"",
+        advice: "\"Death is final here. No refunds, no second pour. First thing, the shrine in {chapelPlace}: ask for a newcomer's blessing. It costs nothing, ties you to no god, and it saves you once. After that, only a patron you have served, and only if they have the strength. I will show you the way, if you want it.\""
     },
     halfling: {
-        mission: "\"Three things, {player}, and then supper. Get stronger: {guildPlace} has trainers and a yard to practise in. Earn coin: take work and bounties. And follow your lead.\"",
-        missionGuild: "\"Three things, {player}, and then supper. Get stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. And follow your lead.\"",
-        advice: "\"Now, one hard thing, and I will say it kindly: death is final in this country. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can bring you back, and only if they are strong enough.\""
+        mission: "\"Right, {player}, three things, and then supper. Get stronger: {guildPlace} has trainers and a yard to practise in. Earn coin: there is always a job on a board somewhere. And follow your lead.\"",
+        missionGuild: "\"Right, {player}, three things, and then supper. Get stronger: the trainers and the yard there are for that. Earn coin: there is always a job on a board somewhere. And follow your lead.\"",
+        advice: "\"Now, one hard thing, and I will say it kindly: death is final in this country. Pop into the shrine in {chapelPlace} and ask for a newcomer's blessing before anything else. It is free, it binds you to no god, and it saves you once. After that, only a patron you have served can bring you back, and only if they are strong enough. I will walk you over, if you like.\""
     },
     orc: {
-        mission: "\"Three things, {player}. Get strong: {guildPlace} has trainers and a yard to test yourself in. Earn coin: take work and bounties. Follow your lead.\"",
-        missionGuild: "\"Three things, {player}. Get strong: the trainers and the yard there are for that. Earn coin: take work and bounties. Follow your lead.\"",
-        advice: "\"Know this: death is final here. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can pull you back, and only if they are strong enough. Do not skip it out of pride.\""
+        mission: "\"Three things, {player}. Get strong: {guildPlace} has trainers and a yard to bleed in. Earn coin: take work, take bounties. Then follow your lead.\"",
+        missionGuild: "\"Three things, {player}. Get strong: the trainers and the yard there are for that. Earn coin: take work, take bounties. Then follow your lead.\"",
+        advice: "\"Know this: death is final here, and pride will not save you. Before anything else, go to the shrine in {chapelPlace} and ask for a newcomer's blessing. Free, binds you to no god, saves you once. After that, only a patron you have served can pull you back, if they are strong enough. Do not skip it. I will take you there.\""
     },
     dragonborn: {
-        mission: "\"Three matters, {player}. Grow stronger: {guildPlace} has trainers and a yard for practice. Earn coin: take work and bounties. And follow your lead.\"",
-        missionGuild: "\"Three matters, {player}. Grow stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. And follow your lead.\"",
-        advice: "\"Understand this: death is final in this country, and pride will not undo it. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can restore you, and only if they are strong enough.\""
+        mission: "\"Three matters, {player}. Grow stronger: {guildPlace} has trainers and a yard worth your sweat. Earn coin: there is work, and there are bounties. And follow your lead, for it will not wait forever.\"",
+        missionGuild: "\"Three matters, {player}. Grow stronger: the trainers and the yard there are worth your sweat. Earn coin: there is work, and there are bounties. And follow your lead, for it will not wait forever.\"",
+        advice: "\"Understand this: death is final in this country, and pride will not undo it. Before anything else, go to the shrine in {chapelPlace} and ask for a newcomer's blessing. It is free, it binds you to no god, and it saves you once. After that, only a patron you have served can restore you, and only if they are strong enough. Let me lead you there.\""
     }
 };
 
@@ -3768,16 +3768,16 @@ function getGuideOpeningLine(backstory) {
 // requestNewcomerBlessing in the engine). Folded into one bubble by
 // startGuideArrival.
 const GUIDE_MISSION_LINES = [
-    "\"Three things matter here, {player}. Get stronger: {guildPlace} has trainers and a yard to practise in. Earn coin: take work and bounties. And follow your lead.\""
+    "\"I will not bury you in advice, {player}. Three things matter here. Get stronger: {guildPlace} keeps trainers and a yard for it. Earn coin: the notice boards always want something done. And follow your lead, before it goes cold.\""
 ];
 
 // Used when the first lead is the Guildhall itself, so the place is not named twice.
 const GUIDE_MISSION_LINES_GUILD_LEAD = [
-    "\"Three things matter here, {player}. Get stronger: the trainers and the yard there are for that. Earn coin: take work and bounties. And follow your lead.\""
+    "\"I will not bury you in advice, {player}. Three things matter here. Get stronger: the trainers and the yard there are made for it. Earn coin: the notice boards always want something done. And follow your lead, before it goes cold.\""
 ];
 
 const GUIDE_NEWCOMER_ADVICE = [
-    "\"Death is final in this country. Before anything else, ask for a newcomer's blessing at the shrine in {chapelPlace}. It is free, it binds you to no god, and it saves you once. After that, only a patron god you have served can pull you back, and only if they are strong enough.\""
+    "\"One more thing, and listen. Death here does not bargain. Before you do anything rash, go to the shrine in {chapelPlace} and ask for a newcomer's blessing. It costs nothing, it binds you to no god, and it pulls you back from the grave once. After that, you will need a patron who owes you, and one strong enough to pay. Say the word and I will walk you there.\""
 ];
 
 function _guideSeedIndex(backstory, n) {
@@ -3802,6 +3802,146 @@ function getGuideNewcomerAdvice(backstory) {
     const sp = GUIDE_SPECIES_TEXT[_guideOwnSpeciesKey()];
     const pool = sp ? [sp.advice] : GUIDE_NEWCOMER_ADVICE;
     return _spFill(pool[_guideSeedIndex(backstory, pool.length)], getBackstoryFillMap(backstory));
+}
+
+// ── GUIDE TALK: the opening as a back-and-forth ───────────────────────────
+// The guide no longer delivers opening + mission + blessing in one go. They
+// speak a short line, stop on a check-in with reply buttons, and each reply
+// picks the next small beat (see handleGuideTalk in the engine). Every beat
+// has several phrasings, one chosen at random each time. Facts (places, the
+// newcomer's blessing) stay scripted. Works for any guide NPC: the name and
+// species come from the NPC, the places from the fill map.
+const GUIDE_TALK_CHECKIN = [
+    "\"Are you unhurt? I heard the fighting from here.\"",
+    "\"{player}. Easy. Are you hurt?\"",
+    "\"There you are. Breathe. Any wounds I should know about?\"",
+    "\"I came as fast as I could. Are you in one piece?\""
+];
+const GUIDE_TALK_CHECKIN_REPLIES = [
+    { label: "I'm fine", say: "I'm fine. Just a scratch.", stance: "friendly", guideTalk: "checkin-fine" },
+    { label: "A bit rattled", say: "A bit rattled, if I'm honest.", stance: "guarded", guideTalk: "checkin-rattled" },
+    { label: "Who are you?", say: "Who are you?", stance: "guarded", guideTalk: "checkin-who" }
+];
+const GUIDE_TALK_FINE_OK = [
+    "\"Good. Then you are in better shape than most who come through here.\"",
+    "\"Glad to hear it. I would rather not be burying anyone today.\"",
+    "\"Good. Keep your guard up all the same.\""
+];
+const GUIDE_TALK_FINE_HURT = [
+    "\"That is more than a scratch, {player}. Do not be proud about it.\"",
+    "\"You are favouring that wound and calling it fine. I will let it go, this once.\"",
+    "\"Fine, says the one who is hurt. Rest when you can.\""
+];
+const GUIDE_TALK_RATTLED = [
+    "\"No shame in it. Take a breath. Rattled is only what alive feels like.\"",
+    "\"It passes. It passes faster with something to do, in my experience.\"",
+    "\"Then we go slowly. I am in no hurry.\""
+];
+const GUIDE_TALK_WHO = [
+    "\"Fair question. I am {relation}.\"",
+    "\"Someone who has been looking for you. I am {relation}.\"",
+    "\"On your side, if nothing else. I am {relation}.\""
+];
+const GUIDE_TALK_HOOK_REACT = {
+    friendly: ["\"Good. Then listen.\"", "\"Glad you see it that way.\"", "\"That is the spirit.\""],
+    guarded: ["\"Fair enough. Careful keeps people alive here.\"", "\"Ask what you like. I will not take offence.\"", "\"Take your time. I will say it plainly.\""],
+    hostile: ["\"Prickly. Fine. You will thank me when it counts.\"", "\"Say what you like. I am staying anyway.\"", "\"I have been called worse by better. Hear me out.\""]
+};
+const GUIDE_TALK_FIRST = [
+    "\"So. What do you want to deal with first?\"",
+    "\"Where do you want to begin?\"",
+    "\"What weighs on you most right now?\""
+];
+const GUIDE_TALK_FIRST_REPLIES = [
+    { label: "Get stronger", say: "I want to get stronger.", stance: "friendly", guideTalk: "first-strong" },
+    { label: "Earn some coin", say: "I need coin.", stance: "friendly", guideTalk: "first-coin" },
+    { label: "Follow my lead", say: "I want to follow my lead.", stance: "friendly", guideTalk: "first-lead" },
+    { label: "What would you do?", say: "What would you do?", stance: "guarded", guideTalk: "first-suggest" }
+];
+const GUIDE_TALK_STRONG = [
+    "\"Then {guildPlace}. The trainers sell lessons, and the yard costs nothing to swing a blade in.\"",
+    "\"{guildPlace}. Trainers, and a yard to bruise yourself in. Cheaper than learning from a real fight.\""
+];
+const GUIDE_TALK_COIN = [
+    "\"The notice boards always want something done: the tavern, the inn, the town hall. Bounties pay on proof, and innkeepers and cooks hire hands too.\"",
+    "\"Work and bounties. Check the boards, and ask the innkeeper or the cook. Coin buys lessons, and one day a way out.\""
+];
+// The blessing, said as the guide parts. Species voice (GUIDE_SPECIES_TEXT) is
+// used when the player's species has one; the base advice is one more variant.
+const GUIDE_TALK_PARTING = [
+    "\"Before you go, {player}, one thing. Death here does not bargain. Stop at the shrine in {chapelPlace} and ask for a newcomer's blessing. It is free, it binds you to no god, and it pulls you back from the grave once. After that you will need a patron who owes you, and one strong enough to pay.\"",
+    "\"Wait. Shrine in {chapelPlace} first. Ask for a newcomer's blessing: no cost, no god, and it saves you once when the worst happens. After that, only a patron you have served can do the same, and only if they are strong enough. I mean it.\"",
+    "\"Off with you, then. But humour me: the shrine in {chapelPlace}, a newcomer's blessing, before anything else. Free, binds you to no god, and it brings you back from the grave once. Say the word and I will walk you there.\""
+];
+const GUIDE_TALK_PARTING_SHOUT = [
+    "\"{player}! One thing before you go far. Shrine in {chapelPlace}, ask for a newcomer's blessing. It is free, it binds you to no god, and it saves you once. After that you need a patron who owes you.\"",
+    "\"Wait, {player}! Death here does not bargain. Get the newcomer's blessing at the shrine in {chapelPlace} before you do anything rash. Free, no god, one rescue.\""
+];
+const GUIDE_TALK_PARTING_PLAIN = [
+    "\"Go well, {player}. You know where to find me.\"",
+    "\"Mind yourself out there. I will be around.\"",
+    "\"Good. Come back when you want company.\""
+];
+
+function _guideTalkPick(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// beatId -> { lines: [bubbles], replies: [...] | null, plan: bool, offerParty: bool }.
+// ctx: { hpFrac, relation, stance, plan, blessed }. Returns null for an unknown beat.
+function getGuideTalkBeat(beatId, backstory, ctx) {
+    const c = ctx || {};
+    const map = getBackstoryFillMap(backstory);
+    if (c.relation) map.relation = c.relation;
+    const f = function (t) { return _spFill(t, map); };
+    const copy = function (list) { return list.map(function (r) { return Object.assign({}, r); }); };
+    const hookReplies = function () {
+        const spec = backstory ? (getGuideSpec(backstory.archetype, _guideOwnSpeciesKey()) || (PLAYER_ARCHETYPES[backstory.archetype] || {}).guide) : null;
+        const list = spec && Array.isArray(spec.replies) ? spec.replies : [];
+        return list.map(function (r) { return Object.assign({}, r, { guideTalk: "hook-react" }); });
+    };
+    const hook = function () { return getGuideOpeningLine(backstory); };
+    const firstBeat = function (lines) {
+        return { lines: lines.concat([f(_guideTalkPick(GUIDE_TALK_FIRST))]), replies: copy(GUIDE_TALK_FIRST_REPLIES) };
+    };
+    const answer = function (line) { return { lines: [line], replies: null, plan: true, offerParty: true }; };
+
+    if (beatId === "checkin") {
+        return { lines: [f(_guideTalkPick(GUIDE_TALK_CHECKIN))], replies: copy(GUIDE_TALK_CHECKIN_REPLIES) };
+    }
+    if (beatId === "checkin-fine" || beatId === "checkin-rattled" || beatId === "checkin-who") {
+        let pool = GUIDE_TALK_RATTLED;
+        if (beatId === "checkin-who") pool = GUIDE_TALK_WHO;
+        else if (beatId === "checkin-fine") pool = (typeof c.hpFrac === "number" && c.hpFrac < 0.7) ? GUIDE_TALK_FINE_HURT : GUIDE_TALK_FINE_OK;
+        const hookReplyList = hookReplies();
+        const lines = [f(_guideTalkPick(pool)), hook()].filter(function (x) { return !!x; });
+        // An archetype with no replies skips straight to "what first?".
+        if (!hookReplyList.length) return firstBeat(lines);
+        return { lines: lines, replies: hookReplyList };
+    }
+    if (beatId === "hook-react") {
+        const pool = GUIDE_TALK_HOOK_REACT[c.stance] || GUIDE_TALK_HOOK_REACT.guarded;
+        return firstBeat([f(_guideTalkPick(pool))]);
+    }
+    if (beatId === "first-strong") return answer(f(_guideTalkPick(GUIDE_TALK_STRONG)));
+    if (beatId === "first-coin") return answer(f(_guideTalkPick(GUIDE_TALK_COIN)));
+    if (beatId === "first-lead") {
+        const plan = getGuidePlanText(backstory);
+        return answer(plan ? "\"" + f(plan) + "\"" : f(_guideTalkPick(GUIDE_TALK_STRONG)));
+    }
+    if (beatId === "first-suggest") {
+        let t = getGuideTopicAnswer("next", backstory);
+        if (t && t.charAt(0) !== "\"") t = "\"" + t + "\"";
+        return answer(t || f(_guideTalkPick(GUIDE_TALK_STRONG)));
+    }
+    if (beatId === "parting" || beatId === "parting-shout") {
+        if (c.blessed) return { lines: [f(_guideTalkPick(GUIDE_TALK_PARTING_PLAIN))], replies: null, advice: false };
+        if (beatId === "parting-shout") return { lines: [f(_guideTalkPick(GUIDE_TALK_PARTING_SHOUT))], replies: null, advice: true };
+        const sp = GUIDE_SPECIES_TEXT[_guideOwnSpeciesKey()];
+        const pool = sp ? [sp.advice] : GUIDE_TALK_PARTING.concat([GUIDE_NEWCOMER_ADVICE[0]]);
+        return { lines: [f(_guideTalkPick(pool))], replies: null, advice: true };
+    }
+    return null;
 }
 
 // ── OPENING SCENE (the intro card shown once, at the start of a new game) ──
@@ -5034,7 +5174,7 @@ function getGuideNextStep(backstory) {
     let text = "";
     if (p && !p.newcomerProtection) {
         key = "blessing";
-        text = "\"First, " + map.player + ", get the newcomer's blessing. Go to the shrine in " + map.chapelPlace + " and ask for it. It costs nothing, and it is the only thing between you and the end until you have a god behind you.\"";
+        text = "\"First, " + map.player + ", get the newcomer's blessing. Go to the shrine in " + map.chapelPlace + " and ask for it, or ask me to walk you there. It costs nothing, and it is the only thing between you and the end until you have a god behind you.\"";
     } else if (typeof window !== "undefined" && typeof window.getPressureGuideNext === "function" && window.getPressureGuideNext()) {
         key = "pressure";
         text = "\"" + window.getPressureGuideNext() + "\"";
@@ -5078,6 +5218,7 @@ if (typeof window !== "undefined") {
     window.resolveGuideLeadPlace = resolveGuideLeadPlace;
     window.getGuidePlanText = getGuidePlanText;
     window.getGuideMissionLine = getGuideMissionLine;
+    window.getGuideTalkBeat = getGuideTalkBeat;
     window.getGuideSpec = getGuideSpec;
     window.GUIDE_SPECIES_LINES = GUIDE_SPECIES_LINES;
     window.GUIDE_SPECIES_TEXT = GUIDE_SPECIES_TEXT;

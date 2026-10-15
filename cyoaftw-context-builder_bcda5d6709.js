@@ -856,6 +856,13 @@ function buildPlayerStandingBlock(room, npc) {
         }
     }
 
+    // Fame and infamy as THIS speaker knows them (only deeds they saw or were told named
+    // the player); someone who has heard nothing gets no line.
+    if (npc && typeof getRenownStandingNote === "function") {
+        const renownNote = getRenownStandingNote(npc);
+        if (renownNote) lines.push(renownNote);
+    }
+
     if (!lines.length) return "";
     return "PLAYER STANDING:\n" + lines.join("\n");
 }
