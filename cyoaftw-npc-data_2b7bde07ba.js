@@ -759,6 +759,8 @@ function recordNPCConversationChoice(npc, choice) {
         // A "what are people saying" option: that deed has now been told, and she will
         // not bring it up again (see markRenownDeedTold in the engine).
         if (choice.deedTalkId && typeof markRenownDeedTold === "function") markRenownDeedTold(npc, choice.deedTalkId);
+        // Greeting someone who admires something you did: they may press a small gift on you.
+        if (String(choice.intent || "").toLowerCase() === "greeting" && typeof maybeGiveRenownGift === "function") maybeGiveRenownGift(npc);
         // A guide option moves the opening story along (e.g. "plan" marks the
         // guide as having oriented the player).
         if (choice.guideBeat && typeof onGuideBeat === "function") onGuideBeat(npc, choice.guideBeat);
@@ -3224,6 +3226,19 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
 
+    // Intimidation (see INTIMIDATION in the engine): shown only when there is a demand
+    // that makes sense with this NPC (lower prices, serve anyway, tell what they know).
+    {
+        id: "intimidate",
+        priority: 156,
+        repeat: "always",
+        label: "Intimidate them...",
+        action: "intimidate",
+        intent: "aggression",
+        conditions: {
+            custom: (npc, ctx) => typeof canIntimidateNPC === "function" && canIntimidateNPC(npc)
+        }
+    },
     {
         id: "insult",
         priority: 155,
