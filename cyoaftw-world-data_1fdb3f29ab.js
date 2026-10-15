@@ -3883,13 +3883,151 @@ const GUIDE_TALK_PARTING_PLAIN = [
     "\"Good. Come back when you want company.\""
 ];
 
+// Species voice for every guide-talk beat (the guide shares the player's
+// species). Human, and any species not listed, use the base pools above. Voice
+// follows NPC_SPECIES_NATIVE_SPEECH in cyoaftw-npc-data.js: plain common tongue,
+// no invented words or phonetic spelling. Keys: checkin, fineOk, fineHurt,
+// rattled, who, react{friendly,guarded,hostile}, first, strong, coin, parting
+// (extra variants; GUIDE_SPECIES_TEXT.advice is added too), shout, plain, factIn
+// (a short lead-in bubble before the lead/suggestion answers).
+const GUIDE_TALK_VOICE = {
+    elf: {
+        checkin: ["\"You are unhurt? I heard the clash from the far wall, and came at once.\"", "\"{player}. Be still a moment. Tell me you are whole.\"", "\"I came as swiftly as my years allow. Are you harmed?\""],
+        fineOk: ["\"Good. Few leave such a morning so well.\"", "\"That is welcome. I have no wish to mourn today.\""],
+        fineHurt: ["\"That is not nothing, {player}. Pride is a poor bandage.\"", "\"You are hurt and call it fine. I shall not argue, this once.\""],
+        rattled: ["\"There is no shame in it. Breathe. The feeling will pass, as feelings do.\"", "\"Then we will go slowly. I have the patience for both of us.\""],
+        who: ["\"A fair question. I am {relation}.\"", "\"One who has waited some while to find you. I am {relation}.\""],
+        react: { friendly: ["\"Good. Then attend.\"", "\"I am glad of it.\""], guarded: ["\"Caution is no insult. I will be plain.\"", "\"Ask what you will. I have time.\""], hostile: ["\"You are sharp with me. I will bear it, and you will understand later.\"", "\"Say what you wish. I shall remain.\""] },
+        first: ["\"Where shall we begin?\"", "\"What would you have us see to first?\""],
+        strong: ["\"Then {guildPlace}. Its trainers teach for coin, and its yard asks only your sweat. Skill is grown slowly; begin now.\"", "\"{guildPlace}. Teachers, and a yard to practise in. Patience will do the rest.\""],
+        coin: ["\"The notice boards in the tavern, the inn and the town hall are never empty. Bounties pay on proof, and innkeepers and cooks will hire a willing hand.\"", "\"Work, and bounties. Read the boards, and ask the innkeeper or the cook. Coin buys lessons, and one day a road out.\""],
+        parting: ["\"Before you go, {player}, I would ask one thing of you. The shrine in {chapelPlace}: ask there for a newcomer's blessing. It is free, it binds you to no god, and it will catch you once. After that, only a patron you have served can do as much, and only if they are strong enough.\""],
+        shout: ["\"{player}, wait. Before you go far: the shrine in {chapelPlace}, and a newcomer's blessing. It costs nothing, binds you to no god, and saves you once.\""],
+        plain: ["\"Go well, {player}. I shall be near.\"", "\"Walk carefully. You know where to find me.\""],
+        factIn: ["\"Then hear it plainly.\"", "\"Patience, then. Here is the way.\""]
+    },
+    dwarf: {
+        checkin: ["\"You hurt? I heard the fighting from here.\"", "\"{player}. Still standing? Good. Any wounds?\"", "\"Came as quick as my legs go. In one piece?\""],
+        fineOk: ["\"Good. Sound as a laid stone.\"", "\"Fine is fine. No bill to pay, then.\""],
+        fineHurt: ["\"That is not fine, that is a debt. Mind it, {player}.\"", "\"You are bleeding on my good opinion of you. Sit when you can.\""],
+        rattled: ["\"No shame. Even good stone rings when struck. It settles.\"", "\"Then slow work. Slow work lasts.\""],
+        who: ["\"I am {relation}. Plain enough.\"", "\"Someone who came looking, and not for nothing. I am {relation}.\""],
+        react: { friendly: ["\"Good. Listen, then.\"", "\"Sensible. Now the work.\""], guarded: ["\"Careful is fine. I will be plain.\"", "\"Ask. I keep my answers short.\""], hostile: ["\"Prickly as a hedgehog. Fine. You will thank me.\"", "\"Say what you like. I am not leaving.\""] },
+        first: ["\"So. What first?\"", "\"Where do we start the work?\""],
+        strong: ["\"{guildPlace}. Trainers for coin, a yard for free. No shortcuts, only work.\"", "\"Then {guildPlace}. Pay the trainers, use the yard. Honest work builds honest strength.\""],
+        coin: ["\"The boards in the tavern, the inn and the town hall. Honest work, honest pay, bounties on proof. Innkeepers and cooks hire hands too.\"", "\"Work and bounties. Read the boards, ask the innkeeper. Coin buys lessons; lessons buy you another day.\""],
+        parting: ["\"One thing before you go, and mark it. Shrine in {chapelPlace}, newcomer's blessing. Free, no god owns you for it, and it saves you once. After that only a patron you have served, and only if they have the strength.\""],
+        shout: ["\"{player}! Hold. Shrine in {chapelPlace}, newcomer's blessing, before anything else. Free, ties you to no god, saves you once.\""],
+        plain: ["\"Go on, then. I will be here.\"", "\"Mind yourself out there. I will be around.\""],
+        factIn: ["\"Here is the way, then.\"", "\"Plain as I can make it.\""]
+    },
+    halfling: {
+        checkin: ["\"Oh, there you are! Are you hurt? I heard the fighting from here.\"", "\"{player}! Sit, sit. Are you hurt anywhere?\"", "\"Came as fast as my feet would carry me. Are you all in one piece, dear?\""],
+        fineOk: ["\"Oh, thank goodness. A scratch heals, and a fright I can put a kettle on for.\"", "\"Good. Then no harm done, and supper is still on.\""],
+        fineHurt: ["\"That is not nothing, {player}. Do mind it; I will not have you bleeding on an empty stomach.\"", "\"Fine, says the one who is wincing. Sit when you can, hm?\""],
+        rattled: ["\"Of course you are. Nobody is steady after that. A warm drink and a quiet minute work wonders.\"", "\"Then we go gently. No hurry at all.\""],
+        who: ["\"Oh, forgive me, I forget myself. I am {relation}.\"", "\"A friend, I hope. I am {relation}.\""],
+        react: { friendly: ["\"Lovely. Now, listen.\"", "\"That is the spirit.\""], guarded: ["\"Fair enough, ask away. I do not mind a bit.\"", "\"Take your time, dear. I will keep it simple.\""], hostile: ["\"Oh, prickly! I have met worse at a harvest fair. Hear me out anyway.\"", "\"Say what you like. I am not going anywhere.\""] },
+        first: ["\"Now, what shall we see to first?\"", "\"Where would you like to start?\""],
+        strong: ["\"{guildPlace}, then. Trainers who will teach you for coin, and a yard to practise in. Mind you eat well while you do.\"", "\"{guildPlace}. Teachers and a yard to practise in. Little by little, and you will surprise yourself.\""],
+        coin: ["\"There is always a job on a board somewhere: the tavern, the inn, the town hall. Innkeepers and cooks hire hands too, and bounties pay on proof.\"", "\"Work, dear, and bounties. Read the boards and ask the cook. Coin buys lessons, and lessons are worth it.\""],
+        parting: ["\"Oh, before you go! The shrine in {chapelPlace}: ask for a newcomer's blessing. It is free, it ties you to no god, and it saves you once. After that, only a patron you have served can do the same, if they are strong enough.\""],
+        shout: ["\"{player}! Wait! The shrine in {chapelPlace}, a newcomer's blessing, before you go far. Free, ties you to no god, and it saves you once.\""],
+        plain: ["\"Off you go, then. Do come back for a cup of something.\"", "\"Mind yourself, dear. I will be about.\""],
+        factIn: ["\"Right, here is how it goes.\"", "\"Now, listen close.\""]
+    },
+    orc: {
+        checkin: ["\"You hurt? I heard the fight from here.\"", "\"{player}. Still on your feet. Wounds?\"", "\"I came fast. Say it. Are you hurt?\""],
+        fineOk: ["\"Good. Strong.\"", "\"Good. No blood owed, then.\""],
+        fineHurt: ["\"That is not fine. That is blood. Tend it.\"", "\"You bleed and say fine. Brave, or stupid. Tend it anyway.\""],
+        rattled: ["\"No shame. Everyone shakes after. Breathe it out.\"", "\"Then we go slow. Slow is alive.\""],
+        who: ["\"I am {relation}. That is all you need.\"", "\"Someone who came for you. I am {relation}.\""],
+        react: { friendly: ["\"Good. Listen.\"", "\"Good answer.\""], guarded: ["\"Careful is fine. Ask.\"", "\"I will keep it short. Ask what you want.\""], hostile: ["\"Hot-blooded. Good. Listen anyway.\"", "\"Snarl if you like. I stay.\""] },
+        first: ["\"What first?\"", "\"Where do we begin?\""],
+        strong: ["\"{guildPlace}. Trainers, and a yard to bleed in. Hit things there, not in the street.\"", "\"{guildPlace}. Pay a trainer. Sweat in the yard. Be strong.\""],
+        coin: ["\"Take work. The boards in the tavern, the inn and the town hall. Bounties pay for proof. Innkeepers and cooks hire hands.\"", "\"Boards. Bounties. Hire out your arm. Coin buys lessons.\""],
+        parting: ["\"Before you go. Shrine in {chapelPlace}. Ask for the newcomer's blessing. Free, binds you to no god, saves you once. Do not skip it.\""],
+        shout: ["\"{player}! Stop. Shrine in {chapelPlace}. Newcomer's blessing, now. Free. Saves you once.\""],
+        plain: ["\"Go. I will be around.\"", "\"Fight well. Come back alive.\""],
+        factIn: ["\"Hear it.\"", "\"Plain words, then.\""]
+    },
+    dragonborn: {
+        checkin: ["\"Are you unhurt? I heard the clash from here.\"", "\"{player}. Stand straight and tell me: are you wounded?\"", "\"I came the moment I heard. Are you whole?\""],
+        fineOk: ["\"Good. Our line is not so easily broken.\"", "\"Good. I expected no less.\""],
+        fineHurt: ["\"That is no scratch, {player}. Pride is no armour. See to it.\"", "\"You say fine, and bleed. I shall allow it this once.\""],
+        rattled: ["\"It is no dishonour to be shaken. Master it, and it becomes strength.\"", "\"Then we proceed with care. Honour is patient.\""],
+        who: ["\"You ask rightly. I am {relation}.\"", "\"One who sought you out, as duty demands. I am {relation}.\""],
+        react: { friendly: ["\"Good. Then attend.\"", "\"Well said.\""], guarded: ["\"Caution is no weakness. I will speak plainly.\"", "\"Ask. I will answer what I can.\""], hostile: ["\"Sharp words. I have heard worse. Attend regardless.\"", "\"Speak as you like. I remain.\""] },
+        first: ["\"Where shall we begin?\"", "\"What demands your attention first?\""],
+        strong: ["\"{guildPlace}. Its trainers teach, and its yard rewards sweat. Strength is built, not given.\"", "\"Then {guildPlace}. Pay the trainers and use the yard. A line grows strong by its labour.\""],
+        coin: ["\"The notice boards in the tavern, the inn and the town hall always list work. Bounties pay on proof. Innkeepers and cooks hire hands as well.\"", "\"Take work and bounties. Read the boards and ask the innkeeper. Coin pays for training, and for the way onward.\""],
+        parting: ["\"Before you depart, mark this. The shrine in {chapelPlace}: ask there for a newcomer's blessing. It is free, it binds you to no god, and it will restore you once. Beyond that, only a patron you have served, and only if they are strong enough.\""],
+        shout: ["\"{player}! Halt. The shrine in {chapelPlace}, and a newcomer's blessing, before you go far. It costs nothing, binds you to no god, and saves you once.\""],
+        plain: ["\"Go, then, and carry yourself well.\"", "\"Walk with honour. You know where to find me.\""],
+        factIn: ["\"Attend, then.\"", "\"Hear it, and remember it.\""]
+    },
+    goblin: {
+        checkin: ["\"Hurt? Hurt? Heard the fighting from here, yes. You whole?\"", "\"{player}! Quick, quick, let me look. Any holes in you?\"", "\"Came running, yes. Anything bleeding that should not be?\""],
+        fineOk: ["\"Good, good! Whole is useful. Whole is very useful.\"", "\"Good. Fine is the best kind of luck.\""],
+        fineHurt: ["\"Fine? That is not fine, that is leaking. Mind it, {player}.\"", "\"You say fine, I see red. I will not say a word. Almost.\""],
+        rattled: ["\"Oh, yes, rattled, who is not? Shaky is only alive being loud.\"", "\"Slow then, slow. No hurry. Well, a little hurry.\""],
+        who: ["\"Me? Useful, that is who. I am {relation}.\"", "\"A friend, a good one. I am {relation}.\""],
+        react: { friendly: ["\"Good, good. Listen, listen.\"", "\"Clever. You will go far.\""], guarded: ["\"Careful, yes. Ask, ask. I answer straight, mostly.\"", "\"Take your time. I have plenty.\""], hostile: ["\"Oooh, snappy. Fine. You will thank me later.\"", "\"Snap all you like. I stay.\""] },
+        first: ["\"So, so. What first?\"", "\"Where do we start, clever one?\""],
+        strong: ["\"{guildPlace}. Trainers who teach for coin, and a yard to practise in for free. Free is best!\"", "\"{guildPlace}, yes. Teachers, and a yard to bruise yourself in. Cheaper than a real fight.\""],
+        coin: ["\"The boards! Tavern, inn, town hall, always something wanted. Bounties pay on proof. Cooks and innkeepers hire hands too.\"", "\"Work and bounties, yes. Read the boards, ask the cook. Coin buys lessons, and lessons buy another day.\""],
+        parting: ["\"Wait, wait, before you go. The shrine in {chapelPlace}: ask for a newcomer's blessing. Free! Ties you to no god, and it saves you once. After, only a patron you have served, if they are strong enough.\""],
+        shout: ["\"{player}! Wait, wait! Shrine in {chapelPlace}, newcomer's blessing, before you go far. Free, no god, saves you once.\""],
+        plain: ["\"Off you go, then. I will be about, yes.\"", "\"Mind yourself. Stay useful.\""],
+        factIn: ["\"Listen, listen.\"", "\"Here is how, yes.\""]
+    },
+    lizardfolk: {
+        checkin: ["\"You are hurt? We heard the fighting from here.\"", "\"{player}. You stand. Any wounds?\"", "\"We came fast. You are whole?\""],
+        fineOk: ["\"Good. Whole is strong.\"", "\"Good. No blood to tend.\""],
+        fineHurt: ["\"That is not fine. That is blood. Tend it.\"", "\"You say fine. We see the wound. Tend it.\""],
+        rattled: ["\"It passes. Breathe. The hunt is quiet now.\"", "\"Then slow. Slow is safe.\""],
+        who: ["\"I am {relation}. That is enough.\"", "\"I came for you. I am {relation}.\""],
+        react: { friendly: ["\"Good. Listen.\"", "\"Good. Now.\""], guarded: ["\"Ask. We answer.\"", "\"Careful is good. We speak plainly.\""], hostile: ["\"You snarl. It is fine. Listen.\"", "\"Snarl if you like. We stay.\""] },
+        first: ["\"What first?\"", "\"Where do we start?\""],
+        strong: ["\"{guildPlace}. Trainers and a yard. You pay, you learn, you grow strong.\"", "\"{guildPlace}. Teachers there. A yard to practise. Strength is earned.\""],
+        coin: ["\"Boards in the tavern, the inn, the town hall. Work and bounties. Bounties pay for proof. Cooks and innkeepers hire hands.\"", "\"Work. Bounties. Read the boards. Coin buys lessons.\""],
+        parting: ["\"Before you go. The shrine in {chapelPlace}. Ask for the newcomer's blessing. It is free. It binds you to no god. It saves you once. After, only a patron you have served, if strong enough.\""],
+        shout: ["\"{player}. Stop. The shrine in {chapelPlace}. Newcomer's blessing, first. Free. Saves you once.\""],
+        plain: ["\"Go. We will be near.\"", "\"Hunt well. Return.\""],
+        factIn: ["\"Listen.\"", "\"We tell it plain.\""]
+    },
+    kobold: {
+        checkin: ["\"You are hurt? We heard the fighting, yes, from here! Are you whole?\"", "\"{player}! Oh, good, there. Any wounds? Please say no.\"", "\"We came so fast! Are you all in one piece?\""],
+        fineOk: ["\"Oh, good! Good good good. Whole is best.\"", "\"Yes, fine, wonderful. We worried. A little.\""],
+        fineHurt: ["\"That is not fine, {player}! That is bleeding! Please, mind it.\"", "\"You say fine, but we see it. Please sit. Please.\""],
+        rattled: ["\"Oh, yes, of course. We are rattled too. Everyone is. Breathe.\"", "\"Then slowly. We will go slowly. No trouble at all.\""],
+        who: ["\"We came to help. Truly. I am {relation}.\"", "\"A friend, we hope. I am {relation}.\""],
+        react: { friendly: ["\"Oh, good! Listen, then, please.\"", "\"Yes, yes, that is it.\""], guarded: ["\"Ask anything. We will answer, we promise.\"", "\"Careful is wise. Careful keeps us alive.\""], hostile: ["\"Oh, you are cross. That is fine, that is fine. Please listen.\"", "\"Say what you like. We stay. We insist, a little.\""] },
+        first: ["\"So, what first? Please say.\"", "\"Where do we begin? We will follow.\""],
+        strong: ["\"{guildPlace}, please. Trainers for coin, a yard for nothing. Strong is safer.\"", "\"{guildPlace}. Teachers and a yard. Strong is how we survive.\""],
+        coin: ["\"The boards! Tavern, inn, town hall. Work and bounties. Bounties pay on proof. Cooks and innkeepers hire hands, yes.\"", "\"Work, bounties. Read the boards, ask the cook. Coin buys lessons, and lessons keep us alive.\""],
+        parting: ["\"Oh, before you go, please! The shrine in {chapelPlace}: ask for the newcomer's blessing. Free, ties you to no god, saves you once. Then only a patron you have served, if they are strong enough.\""],
+        shout: ["\"{player}! Please, wait! The shrine in {chapelPlace}, the newcomer's blessing, before you go far! Free, no god, saves you once!\""],
+        plain: ["\"Go, go, but stay safe. We will be here.\"", "\"Be careful, please. Come back.\""],
+        factIn: ["\"Please listen, yes.\"", "\"We will say it plain.\""]
+    }
+};
+
+// The pool for a beat in the guide's (= the player's) species voice, else base.
+function _guideTalkVoicePool(key, base, sub) {
+    const v = GUIDE_TALK_VOICE[_guideOwnSpeciesKey()];
+    if (!v || !v[key]) return base;
+    const entry = sub ? v[key][sub] : v[key];
+    return Array.isArray(entry) && entry.length ? entry : base;
+}
+
 function _guideTalkPick(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
 // beatId -> { lines: [bubbles], replies: [...] | null, plan: bool, offerParty: bool }.
 // ctx: { hpFrac, relation, stance, plan, blessed }. Returns null for an unknown beat.
-function getGuideTalkBeat(beatId, backstory, ctx) {
+function _buildGuideTalkBeat(beatId, backstory, ctx) {
     const c = ctx || {};
     const map = getBackstoryFillMap(backstory);
     if (c.relation) map.relation = c.relation;
@@ -3902,17 +4040,28 @@ function getGuideTalkBeat(beatId, backstory, ctx) {
     };
     const hook = function () { return getGuideOpeningLine(backstory); };
     const firstBeat = function (lines) {
-        return { lines: lines.concat([f(_guideTalkPick(GUIDE_TALK_FIRST))]), replies: copy(GUIDE_TALK_FIRST_REPLIES) };
+        return { lines: lines.concat([f(_guideTalkPick(_guideTalkVoicePool("first", GUIDE_TALK_FIRST)))]), replies: copy(GUIDE_TALK_FIRST_REPLIES) };
     };
-    const answer = function (line) { return { lines: [line], replies: null, plan: true, offerParty: true }; };
+    // One answer, then (when this backstory has a party offer) a single "Sounds
+    // good" button that leads to the offer on the guide's NEXT turn.
+    const answer = function (line, lead) {
+        const hasOffer = typeof getGuidePartyOffer === "function" && !!getGuidePartyOffer(backstory);
+        const replies = hasOffer ? [{ label: "Sounds good", say: "Sounds good.", stance: "friendly", guideTalk: "offer" }] : null;
+        return { lines: lead ? [f(_guideTalkPick(lead)), line] : [line], replies: replies, plan: true };
+    };
+    const leadIn = function () { const v = GUIDE_TALK_VOICE[_guideOwnSpeciesKey()]; return v && v.factIn ? v.factIn : null; };
 
     if (beatId === "checkin") {
-        return { lines: [f(_guideTalkPick(GUIDE_TALK_CHECKIN))], replies: copy(GUIDE_TALK_CHECKIN_REPLIES) };
+        return { lines: [f(_guideTalkPick(_guideTalkVoicePool("checkin", GUIDE_TALK_CHECKIN)))], replies: copy(GUIDE_TALK_CHECKIN_REPLIES) };
     }
     if (beatId === "checkin-fine" || beatId === "checkin-rattled" || beatId === "checkin-who") {
-        let pool = GUIDE_TALK_RATTLED;
-        if (beatId === "checkin-who") pool = GUIDE_TALK_WHO;
-        else if (beatId === "checkin-fine") pool = (typeof c.hpFrac === "number" && c.hpFrac < 0.7) ? GUIDE_TALK_FINE_HURT : GUIDE_TALK_FINE_OK;
+        let pool = _guideTalkVoicePool("rattled", GUIDE_TALK_RATTLED);
+        if (beatId === "checkin-who") pool = _guideTalkVoicePool("who", GUIDE_TALK_WHO);
+        else if (beatId === "checkin-fine") {
+            pool = (typeof c.hpFrac === "number" && c.hpFrac < 0.7)
+                ? _guideTalkVoicePool("fineHurt", GUIDE_TALK_FINE_HURT)
+                : _guideTalkVoicePool("fineOk", GUIDE_TALK_FINE_OK);
+        }
         const hookReplyList = hookReplies();
         const lines = [f(_guideTalkPick(pool)), hook()].filter(function (x) { return !!x; });
         // An archetype with no replies skips straight to "what first?".
@@ -3920,28 +4069,45 @@ function getGuideTalkBeat(beatId, backstory, ctx) {
         return { lines: lines, replies: hookReplyList };
     }
     if (beatId === "hook-react") {
-        const pool = GUIDE_TALK_HOOK_REACT[c.stance] || GUIDE_TALK_HOOK_REACT.guarded;
+        const stanceKey = GUIDE_TALK_HOOK_REACT[c.stance] ? c.stance : "guarded";
+        const pool = _guideTalkVoicePool("react", GUIDE_TALK_HOOK_REACT[stanceKey], stanceKey);
         return firstBeat([f(_guideTalkPick(pool))]);
     }
-    if (beatId === "first-strong") return answer(f(_guideTalkPick(GUIDE_TALK_STRONG)));
-    if (beatId === "first-coin") return answer(f(_guideTalkPick(GUIDE_TALK_COIN)));
+    if (beatId === "first-strong") return answer(f(_guideTalkPick(_guideTalkVoicePool("strong", GUIDE_TALK_STRONG))));
+    if (beatId === "first-coin") return answer(f(_guideTalkPick(_guideTalkVoicePool("coin", GUIDE_TALK_COIN))));
     if (beatId === "first-lead") {
         const plan = getGuidePlanText(backstory);
-        return answer(plan ? "\"" + f(plan) + "\"" : f(_guideTalkPick(GUIDE_TALK_STRONG)));
+        return answer(plan ? "\"" + f(plan) + "\"" : f(_guideTalkPick(_guideTalkVoicePool("strong", GUIDE_TALK_STRONG))), leadIn());
     }
     if (beatId === "first-suggest") {
         let t = getGuideTopicAnswer("next", backstory);
         if (t && t.charAt(0) !== "\"") t = "\"" + t + "\"";
-        return answer(t || f(_guideTalkPick(GUIDE_TALK_STRONG)));
+        return answer(t || f(_guideTalkPick(_guideTalkVoicePool("strong", GUIDE_TALK_STRONG))), leadIn());
+    }
+    if (beatId === "offer") {
+        const offer = typeof getGuidePartyOffer === "function" ? getGuidePartyOffer(backstory) : null;
+        if (!offer) return null;
+        return { lines: [offer.line], replies: offer.replies, offered: true };
     }
     if (beatId === "parting" || beatId === "parting-shout") {
-        if (c.blessed) return { lines: [f(_guideTalkPick(GUIDE_TALK_PARTING_PLAIN))], replies: null, advice: false };
-        if (beatId === "parting-shout") return { lines: [f(_guideTalkPick(GUIDE_TALK_PARTING_SHOUT))], replies: null, advice: true };
+        if (c.blessed) return { lines: [f(_guideTalkPick(_guideTalkVoicePool("plain", GUIDE_TALK_PARTING_PLAIN)))], replies: null, advice: false };
+        if (beatId === "parting-shout") return { lines: [f(_guideTalkPick(_guideTalkVoicePool("shout", GUIDE_TALK_PARTING_SHOUT)))], replies: null, advice: true };
         const sp = GUIDE_SPECIES_TEXT[_guideOwnSpeciesKey()];
-        const pool = sp ? [sp.advice] : GUIDE_TALK_PARTING.concat([GUIDE_NEWCOMER_ADVICE[0]]);
+        const pool = _guideTalkVoicePool("parting", GUIDE_TALK_PARTING).concat(sp ? [sp.advice] : [GUIDE_NEWCOMER_ADVICE[0]]);
         return { lines: [f(_guideTalkPick(pool))], replies: null, advice: true };
     }
     return null;
+}
+
+// The guide speaks ONE bubble per turn, then waits for the player: whatever a
+// beat builds (reaction + next line, lead-in + answer) is joined into a single
+// message here.
+function getGuideTalkBeat(beatId, backstory, ctx) {
+    const beat = _buildGuideTalkBeat(beatId, backstory, ctx);
+    if (beat && Array.isArray(beat.lines) && beat.lines.length > 1) {
+        beat.lines = [beat.lines.join(" ")];
+    }
+    return beat;
 }
 
 // ── OPENING SCENE (the intro card shown once, at the start of a new game) ──
@@ -5108,7 +5274,7 @@ const GUIDE_KNOWLEDGE = [
 ];
 
 // The guide's turn when asked something outside what they know.
-const GUIDE_UNKNOWN_NOTE = "You are a local with only common knowledge: the places in town, how people make coin, that gods and shrines exist, that a portal leads to harder towns, that death is final, and what you have told them of who is after you. If the player asks about fighting technique, spells, weapons, stats or other fine rules, say plainly that you do not know the details and suggest asking the trainers at the guildhall. Never invent numbers, prices, odds or rules.";
+const GUIDE_UNKNOWN_NOTE = "You and the player have already met and been talking: never greet them as if you have just found or reached them, never re-introduce yourself, and never say you finally caught up. Carry on mid-conversation. You are a local with only common knowledge: the places in town, how people make coin, that gods and shrines exist, that a portal leads to harder towns, that death is final, and what you have told them of who is after you. If the player asks about fighting technique, spells, weapons, stats or other fine rules, say plainly that you do not know the details and suggest asking the trainers at the guildhall. Never invent numbers, prices, odds or rules.";
 
 function getGuideTopic(id) {
     for (let i = 0; i < GUIDE_KNOWLEDGE.length; i++) if (GUIDE_KNOWLEDGE[i].id === id) return GUIDE_KNOWLEDGE[i];

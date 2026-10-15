@@ -2424,7 +2424,9 @@ const NPC_CONVERSATION_CATALOGUE = [
         contextNote: _npcIntroNote,
         revealsName: _npcWillIntroduce,
         cacheSig: (npc, ctx) => _npcWillIntroduce(npc, ctx) ? "intro" : "",
-        conditions: { metPlayer: false }
+        // The guide opens the conversation themselves (see startGuideArrival);
+        // a generic greeting would read as a second meeting.
+        conditions: { metPlayer: false, custom: (npc) => !(npc && npc.guide) }
     },
     {
         id: "greet-known",
@@ -2468,7 +2470,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             metPlayer: true,
             // The guide's opening line and a door-answerer's "Yes? Can I help
             // you?" already are the greeting for this conversation.
-            custom: (npc, ctx) => !(ctx.sessionUsedOptionIds.includes("greet-knock-answer") || ctx.sessionUsedOptionIds.includes("greet-guide-opening"))
+            custom: (npc, ctx) => !(npc && npc.guide) && !(ctx.sessionUsedOptionIds.includes("greet-knock-answer") || ctx.sessionUsedOptionIds.includes("greet-guide-opening"))
         }
     },
     {
