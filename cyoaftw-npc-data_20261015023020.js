@@ -782,7 +782,791 @@ function recordNPCConversationChoice(npc, choice) {
 
     state.interactionCount += 1;
     state.sessionInteractionCount += 1;
+    // Durable memory of what the player did (see NPC MEMORY). Never lets a
+    // memory problem break a conversation.
+    try { if (typeof recordNPCConversationMemory === "function") recordNPCConversationMemory(npc, choice); } catch (memErr) { console.warn("[NPC Memory] record failed", memErr); }
     return state;
+}
+
+// ── NPC TAGS AND FACT SELECTOR ───────────────────────────────────────
+// One closed tag vocabulary shared by memories and facts. A reply is steered by
+// "wanted" tags worked out from what the player chose or typed plus the
+// situation; the selector then sends only the few records that match, inside a
+// small budget, instead of everything the NPC knows. Nothing here calls the AI.
+//   topic tags       what the line is about (work, money, family, food, ...)
+//   relation tags    how the NPC stands to the player or others (kin, friend, ...)
+//   memory kinds     what happened between them (told, gift, insult, debt, ...)
+//   situation tags   the moment (time:night, hurt, fight-here, mood:*)
+// Records are { id, tags[], text, weight, always }. A record scores
+//   3 x topic tags matched + 1.5 x situation tags matched + 3 x keyword hits + weight
+// and is only sent when it matches something (or the line is generic and the
+// record has weight); `always` records (a marriage rule, what was already told)
+// are always sent. When nothing matches, no facts are sent and the reply prompt
+// tells the speaker to say they do not know rather than invent.
+const NPC_TOPIC_KEYWORDS = {
+    work: ["job", "work", "working", "trade", "wage", "wages", "employ", "employer", "hire", "hired", "shop", "craft", "apprentice", "labor", "labour", "boss", "customer", "business", "duty", "duties", "profession", "living"],
+    money: ["coin", "coins", "pay", "paid", "price", "prices", "cost", "gold", "silver", "copper", "rent", "debt", "owe", "owed", "afford", "cheap", "expensive", "sell", "buy", "bargain", "fee", "wealth", "rich", "poor", "purse"],
+    home: ["home", "house", "live", "lodging", "lodge", "bed", "roof", "neighbor", "neighbour", "village", "hearth", "shelter"],
+    family: ["family", "wife", "husband", "brother", "sister", "mother", "father", "son", "daughter", "kin", "child", "children", "parent", "parents", "married", "spouse", "cousin", "uncle", "aunt"],
+    food: ["eat", "food", "hungry", "hunger", "meal", "drink", "ale", "wine", "bread", "stew", "cook", "supper", "breakfast", "dinner", "tavern", "thirsty", "mug"],
+    faith: ["god", "gods", "pray", "prayer", "shrine", "temple", "priest", "faith", "deity", "blessing", "holy", "divine", "patron", "worship"],
+    law: ["guard", "guards", "crime", "steal", "stole", "thief", "theft", "bounty", "law", "jail", "wanted", "murder", "prison", "crown", "justice"],
+    danger: ["danger", "dangerous", "fight", "monster", "bandit", "bandits", "attack", "safe", "threat", "dungeon", "kill", "killed", "wounded", "hurt", "blood", "war", "beast", "afraid", "fear"],
+    rumor: ["rumor", "rumors", "rumour", "news", "heard", "gossip", "happening", "happened", "story", "stories", "tale", "lately", "whisper"],
+    place: ["where", "town", "road", "north", "south", "east", "west", "direction", "directions", "street", "building", "map", "nearby", "find", "far", "zone", "place"],
+    self: ["yourself", "background", "past", "born", "grew", "name", "life", "age", "species", "race", "people", "kind"],
+    looks: ["look", "looks", "face", "hair", "eyes", "tall", "short", "scar", "beautiful", "handsome", "pretty", "ugly", "wear", "wearing", "dress", "clothes", "strong", "muscles", "tattoo", "skin"],
+    routine: ["daily", "routine", "schedule", "usual", "usually", "typical", "morning", "evening", "midday", "everyday"],
+    leisure: ["hobby", "hobbies", "pastime", "pastimes", "leisure", "spare", "fun", "relax", "unwind", "amuse", "enjoy"],
+    love: ["love", "kiss", "flirt", "lover", "romance", "romantic", "marry", "date", "darling", "sweetheart", "charming", "desire", "attracted", "adore"]
+};
+const NPC_RELATION_TAGS = ["kin", "mate", "friend", "colleague", "packmate", "master", "stranger"];
+const NPC_MEMORY_KIND_TAGS = ["told", "learned", "gift", "help", "insult", "debt", "promise", "betrayal", "said"];
+const NPC_SITUATION_TAGS = ["time:dawn", "time:day", "time:dusk", "time:night", "at:home", "at:work", "hurt", "fight-here", "rel:friend", "rel:stranger", "rel:acquaintance"];
+const NPC_TAG_VOCAB = Object.keys(NPC_TOPIC_KEYWORDS).concat(NPC_RELATION_TAGS, NPC_MEMORY_KIND_TAGS, NPC_SITUATION_TAGS);
+
+// What each conversation option is about. An option id not listed falls back to
+// keywords in its label. Memory kinds (debt, insult, ...) are listed where an
+// option should also bring back an old memory of that kind.
+const NPC_OPTION_TAGS = {
+    "ask-name": ["self"],
+    "ask-teacher-arcane": ["work"],
+    "ask-teacher-faith": ["faith", "work"],
+    "ask-teacher-roguery": ["work", "law"],
+    "accept-share-offer": ["food"],
+    "decline-share-offer": ["food"],
+    "join-their-table": ["food"],
+    "meal-leave-table": ["food"],
+    "offer-to-buy-drink": ["food", "money"],
+    "offer-to-buy-both-drinks": ["food", "money"],
+    "bar-order-refused": ["food", "money"],
+    "bar-ask-cellar": ["work", "place"],
+    "ask-about-work": ["work", "money", "debt", "promise"],
+    "ask-about-event": ["rumor", "danger"],
+    "ask-about-lore": ["rumor", "place"],
+    "ask-lore-source": ["rumor"],
+    "ask-rumor": ["rumor"],
+    "offer-help": ["work", "help", "debt"],
+    "keep-calm": ["danger"],
+    "ask-standing": ["self", "work"],
+    "ask-need": ["money", "work", "help"],
+    "ask-worry": ["self", "danger"],
+    "ask-liking": ["self", "food"],
+    "ask-secret": ["self", "law", "betrayal"],
+    "ask-ties": ["family", "friend", "colleague"],
+    "rent-room": ["home", "money"],
+    "browse-wares": ["money", "work"],
+    "trade": ["money", "work", "debt"],
+    "ask-deity": ["faith"],
+    "ask-their-deity": ["faith"],
+    "compliment": ["looks", "love"],
+    "win-them-over": ["looks", "love"],
+    "tease": ["looks", "love"],
+    "apologize": ["insult", "betrayal"],
+    "comfort": ["self", "help"],
+    "insult": ["insult"],
+    "sharp-question": ["rumor"],
+    "listen-closely": ["self"],
+    "push-for-answers": ["rumor"],
+    "steady-nerve": ["danger"],
+    "pressure-what": ["law", "money"],
+    "pressure-pay": ["money", "debt"],
+    "pressure-report": ["law"],
+    "pressure-time": ["law"],
+    "pressure-ready": ["law"],
+    "pressure-refuse": ["law"],
+    "guide-first-step": ["place", "work"],
+    "guide-ask-question": ["self"],
+    "lead-stage-ask": ["place", "rumor"],
+    "ask-directions": ["place"],
+    "offer-drink": ["food", "money"],
+    "party-loot-revisit": ["money"]
+};
+// Memory kinds a conversation intent leaves behind.
+const NPC_INTENT_MEMORY_KINDS = { insult: ["insult"], aggression: ["insult"], help: ["help"], apology: ["insult"] };
+
+const NPC_TAG_SUFFIX = /^(s|es|ed|er|ers|ing|ly|'s)$/;
+// Option ids that come in families (one per drink, say) share tags by prefix.
+const NPC_OPTION_TAG_PREFIXES = [["bar-order-", ["food", "money"]], ["bar-round-", ["food", "money"]]];
+const NPC_FACT_BUDGET = { maxLines: 5, maxChars: 800 };
+const NPC_TURN_PHASES = [[6, "dawn"], [24, "day"], [30, "dusk"], [Infinity, "night"]];
+
+function _npcTagTokens(text) {
+    return String(text || "").toLowerCase().replace(/[^a-z0-9' ]+/g, " ").split(/\s+/).filter(Boolean);
+}
+
+// Topic tags for free text: a word matches a tag's keyword when equal, or when
+// it is the keyword plus a plain ending (so "brothers" matches "brother" but
+// "shortcake" does not match "short").
+function getNPCTagsForText(text) {
+    const tokens = _npcTagTokens(text);
+    const out = [];
+    if (!tokens.length) return out;
+    Object.keys(NPC_TOPIC_KEYWORDS).forEach(function (tag) {
+        const kws = NPC_TOPIC_KEYWORDS[tag];
+        const hit = tokens.some(function (tok) {
+            return kws.some(function (kw) { return tok === kw || (kw.length >= 3 && tok.indexOf(kw) === 0 && NPC_TAG_SUFFIX.test(tok.slice(kw.length))); });
+        });
+        if (hit) out.push(tag);
+    });
+    return out;
+}
+
+function getNPCOptionTags(optionId) {
+    const id = String(optionId || "");
+    if (Object.prototype.hasOwnProperty.call(NPC_OPTION_TAGS, id)) return NPC_OPTION_TAGS[id].slice();
+    for (let i = 0; i < NPC_OPTION_TAG_PREFIXES.length; i++) {
+        if (id.indexOf(NPC_OPTION_TAG_PREFIXES[i][0]) === 0) return NPC_OPTION_TAG_PREFIXES[i][1].slice();
+    }
+    return [];
+}
+
+function getNPCTurnPhase(turnOfDay) {
+    for (let i = 0; i < NPC_TURN_PHASES.length; i++) {
+        if (turnOfDay < NPC_TURN_PHASES[i][0]) return NPC_TURN_PHASES[i][1];
+    }
+    return "day";
+}
+
+// Tags for the moment: time of day, the NPC's mood, a visibly hurt player, a
+// fight in this room, and how the NPC stands to the player (rel:friend,
+// rel:stranger, kept apart from the relation tags records use for the people in
+// the NPC's own life).
+function getNPCSituationTags(npc, room) {
+    const tags = [];
+    if (typeof getTurnOfDay === "function") tags.push("time:" + getNPCTurnPhase(getTurnOfDay()));
+    const mood = npc && ((npc.currentState && npc.currentState.mood) || (npc.memory && npc.memory.lastMood));
+    const moodWord = String(mood || "").toLowerCase().split(/[^a-z]+/)[0];
+    if (moodWord && moodWord !== "neutral") tags.push("mood:" + moodWord);
+    if (typeof G === "object" && G) {
+        if (G.player && typeof getHealthBandIndex === "function" && getHealthBandIndex(G.player) >= 2) tags.push("hurt");
+        if (typeof G._lastCombatTurn === "number" && room && G._lastCombatRoom === (room.id || room.name || "") &&
+            typeof getCurrentStoryTurn === "function" && getCurrentStoryTurn() - G._lastCombatTurn <= 6) tags.push("fight-here");
+    }
+    const mem = npc && npc.memory ? npc.memory : {};
+    const favor = typeof mem.favorability === "number" ? mem.favorability : 0;
+    if (npc && (npc.isGuide || npc._inParty || favor >= 40)) tags.push("rel:friend");
+    else if (!mem.metPlayer) tags.push("rel:stranger");
+    else tags.push("rel:acquaintance");
+    // Where they are: at their own home, or at the building they work in.
+    if (npc && room) {
+        if (typeof isNPCHomeRoom === "function" && isNPCHomeRoom(room)) tags.push("at:home");
+        else if (room.buildingName && typeof NPC_TIE_WORK_ROLES !== "undefined" && NPC_TIE_WORK_ROLES.indexOf(npc.role) >= 0) tags.push("at:work");
+    }
+    return tags;
+}
+
+// Works out what a reply is about. choices: the option objects (or one) the
+// reply answers, each with id, label, promptText / text, typedText, contextNote.
+// Returns { topic: tags from the options and their words, keywords: content
+// words for overlap scoring, situation: tags for the moment }.
+function getWantedNPCTags(npc, choices, room) {
+    const list = Array.isArray(choices) ? choices : (choices ? [choices] : []);
+    const topic = [];
+    const texts = [];
+    function add(tag) { if (tag && topic.indexOf(tag) < 0) topic.push(tag); }
+    list.forEach(function (c) {
+        if (!c) return;
+        getNPCOptionTags(c.id).forEach(add);
+        const typed = String(c.id || "").indexOf("respond-") === 0;
+        const said = String(c.typedText || (typed ? c.promptText : "") || "");
+        // A menu option's label and a typed line say what it is about; plain
+        // menu options with a table entry are already tagged by id.
+        if (said) { texts.push(said); getNPCTagsForText(said).forEach(add); }
+        if (!getNPCOptionTags(c.id).length && c.label && !typed) { texts.push(String(c.label)); getNPCTagsForText(c.label).forEach(add); }
+        if (c.contextNote) { texts.push(String(c.contextNote)); getNPCTagsForText(c.contextNote).forEach(add); }
+    });
+    const keywords = typeof _npcFactWords === "function" ? _npcFactWords(texts.join(" ")) : [];
+    return { topic: topic, keywords: keywords, situation: getNPCSituationTags(npc, room) };
+}
+
+function _npcFactRecord(id, tags, text, weight, always) {
+    return { id: id, tags: _npcMemoryTags(tags), text: String(text || ""), weight: typeof weight === "number" ? weight : 0, always: always === true };
+}
+
+// Turns the data an NPC already has into tagged records. Hidden facts are never
+// included (only what the player has been told, or what is public).
+// ── NPC PROFILE FACETS (looks, trade, home, people, values, lover) ────
+// Turns the profile data an NPC already carries into tagged fact records, so
+// the selector sends a facet only when the player's line is about it. In
+// conversation prompts the persona block no longer sends the bulky ones (see
+// buildNPCPersonaBlock, options.conversation), so nothing is sent twice.
+const NPC_FACET_MAX = { looks: 320, kind: 240, values: 160 };
+
+function _npcClipText(text, max) {
+    const s = String(text || "").replace(/\s+/g, " ").trim();
+    return s.length > max ? s.slice(0, max - 1).replace(/[ ,;]+$/, "") + "…" : s;
+}
+
+function _npcWithArticle(word) {
+    const w = String(word || "").trim();
+    return w ? (/^[aeiou]/i.test(w) ? "an " : "a ") + w : "";
+}
+
+// ── NPC ROUTINE FACETS (what a day is like: work, pay, meals, free hours) ──
+// Descriptive only: nobody moves because of it (see the NPC Life design, step 4).
+// Each role has duties, how it is paid (never a number), a shift for each part
+// of the day [dawn, day, dusk, night] and a pastime. Roles not listed fall back
+// to NPC_ROUTINE_DEFAULT; "home" in a shift means they would be at home or abed.
+const NPC_ROUTINE_DEFAULT = {
+    duties: "odd jobs and whatever honest work turns up",
+    pay: "small coin for each job, or a meal and a roof",
+    shifts: ["rising and finding the day's work", "working wherever there is work", "finishing up and looking for supper", "home"],
+    pastime: "resting, and swapping news with neighbours"
+};
+const NPC_ROUTINES = {
+    Innkeeper: { duties: "running the inn: rooms, the common room, the cellar and keeping order", pay: "what guests pay for rooms and meals; you answer for the till", shifts: ["lighting the fires and starting the cooking", "settling rooms and keeping stock", "the common room fills and you keep the peace", "closing up, then bed"], pastime: "talking with regulars and tallying the week's takings" },
+    Bartender: { duties: "pouring drinks, keeping the bar clean and watching the room", pay: "wages from the house plus whatever tips come over the bar", shifts: ["home", "cleaning and stocking the bar", "pouring for the evening crowd", "last pours, then clearing up"], pastime: "listening to the room's gossip" },
+    Cook: { duties: "cooking for the house and keeping the pantry stocked", pay: "wages and your own meals from the kitchen", shifts: ["baking and prepping", "cooking the midday meal", "the supper rush", "scrubbing pots, then home"], pastime: "trying small changes to old recipes" },
+    Servant: { duties: "carrying, cleaning, fetching and serving", pay: "a small wage, with meals and a bed", shifts: ["up first to light fires", "cleaning and fetching", "serving the evening meal", "banking the fires, then sleep"], pastime: "a quiet rest when the work lets you" },
+    Blacksmith: { duties: "forging, mending and sharpening iron and steel for the town", pay: "coin from customers and commissions, with ore bought as needed", shifts: ["lighting the forge", "at the anvil on orders and repairs", "banking the forge", "home"], pastime: "admiring good steel and arguing over it" },
+    Shopkeeper: { duties: "keeping the shop, buying and selling goods and watching for thieves", pay: "the margin between what you buy and sell", shifts: ["opening up and checking stock", "serving customers", "tallying the day's sales", "home"], pastime: "haggling for the sport of it" },
+    Vendor: { duties: "selling goods from a stall or a corner of the market", pay: "whatever your goods sell for, day by day", shifts: ["setting out the stall", "calling for customers", "packing up unsold stock", "home"], pastime: "watching the crowd go by" },
+    Merchant: { duties: "buying and selling goods, and keeping accounts", pay: "profit on what you trade", shifts: ["checking the books", "dealing with buyers and sellers", "settling the day's accounts", "home"], pastime: "counting coin and comparing prices" },
+    Trader: { duties: "carrying goods between places and selling them at a profit", pay: "profit on what you carry", shifts: ["loading up", "on the road or at the counter", "making camp or settling accounts", "resting"], pastime: "swapping road news" },
+    "Wandering Merchant": { duties: "travelling with goods from place to place", pay: "profit on what you carry", shifts: ["breaking camp", "on the road or selling", "making camp", "resting by a fire"], pastime: "road stories" },
+    Healer: { duties: "tending the sick and the hurt, and preparing salves and herbs", pay: "coin or goods from patients, and charity where you must", shifts: ["gathering and preparing herbs", "seeing patients", "checking on the worst cases", "on call at the infirmary, dozing between patients"], pastime: "studying herbs" },
+    Priest: { duties: "keeping the shrine, leading prayers and blessing those who ask", pay: "offerings and donations, and little else", shifts: ["morning prayers", "tending the shrine and counselling", "evening prayers", "keeping an all-night vigil at the shrine"], pastime: "quiet prayer and reading" },
+    Archivist: { duties: "keeping records and books and helping those who come to read them", pay: "a stipend, and fees for searches", shifts: ["opening the stacks", "cataloguing and fetching", "closing the stacks", "home"], pastime: "reading what is not on the shelf" },
+    Guildmaster: { duties: "running the guild: dues, contracts, members and quarrels", pay: "dues and a cut of contracts", shifts: ["reviewing the day's contracts", "meeting members and clients", "settling disputes", "home"], pastime: "scheming for the guild's good name" },
+    Enchanter: { duties: "working enchantments on goods and gear", pay: "commissions paid in coin", shifts: ["preparing materials", "working on commissions", "cleaning up residues", "home"], pastime: "studying odd magic" },
+    Arcanist: { duties: "studying and practising the arcane arts", pay: "commissions and patrons", shifts: ["reading", "experiments and commissions", "recording results", "late study"], pastime: "arguing theory" },
+    Reliquarian: { duties: "keeping, appraising and trading sacred and odd relics", pay: "fees and sales", shifts: ["checking the cases", "appraising and selling", "locking up", "home"], pastime: "reading old inscriptions" },
+    "Town Guard": { duties: "keeping the peace, watching the gates and answering complaints", pay: "a guard's wage from the town, paid in coin and grain", shifts: ["relieving the night watch", "patrolling and answering complaints", "walking the evening round", "off duty, or the night watch"], pastime: "dice and bad wine off duty" },
+    "Stone Guard": { duties: "holding the gates and watching the ways in", pay: "keep and a wage from the city", shifts: ["relieving the night watch", "standing the gate", "the evening round", "off duty, or the night watch"], pastime: "polishing gear and grumbling" },
+    Miner: { duties: "digging ore and stone and shoring the tunnels", pay: "a share of what the crew brings up", shifts: ["heading down", "digging", "hauling up and weighing the day's take", "home"], pastime: "drinking with the crew" },
+    Scout: { duties: "watching the roads and reporting what moves on them", pay: "keep, and coin when the reports are good", shifts: ["checking the trails", "ranging out", "returning with news", "a cold camp or home"], pastime: "reading tracks" },
+    Scavenger: { duties: "picking over ruins and wrecks for anything that sells", pay: "whatever you find and can sell", shifts: ["setting out", "searching", "hauling finds to sell", "hiding somewhere safe to sleep"], pastime: "sorting the day's finds" },
+    Raider: { duties: "raiding for loot and keeping your band fed", pay: "your share of the plunder", shifts: ["planning the day's raid", "raiding or lying in wait", "dividing the spoils", "camp"], pastime: "boasting and gambling" },
+    Cultist: { duties: "serving the cult's secret rites", pay: "no coin; the cult keeps you and promises more", shifts: ["private prayers", "quiet errands", "rites at dusk", "night rites"], pastime: "whispering with the faithful" },
+    Pilgrim: { duties: "travelling to holy places and giving offerings", pay: "no wage; you live on alms and savings", shifts: ["breaking camp", "walking the road", "praying and finding a bed", "sleeping at a shrine or camp"], pastime: "prayer and old hymns" },
+    Patron: { duties: "none; you are here to drink, eat and talk", pay: "you pay your own way", shifts: ["home", "about your own business", "at the tavern", "home or at the tavern"], pastime: "drinking and talk" },
+    Guest: { duties: "none; you are passing through", pay: "you pay for your own room and meals", shifts: ["breakfast", "seeing the town", "supper", "your room"], pastime: "resting from the road" },
+    Mercenary: { duties: "fighting for hire", pay: "coin per contract", shifts: ["checking gear", "looking for a contract", "drinking the day's earnings", "a bunk"], pastime: "dice and war stories" },
+    Adventurer: { duties: "taking on dangerous jobs and bounties and delving for treasure", pay: "bounties and loot, which come irregularly", shifts: ["checking gear and the job board", "out on a job", "selling loot, then a drink at the tavern", "a bed at the inn"], pastime: "swapping tall tales" },
+    Delver: { duties: "delving old ruins, vaults and tombs for relics and anything that sells", pay: "whatever the ruins give up, sold on quietly", shifts: ["checking rope, lamps and picks", "down in the ruins", "selling finds, then a drink", "a cheap bed or a cold camp"], pastime: "cleaning and appraising finds" },
+    Scholar: { duties: "studying, copying and arguing over texts", pay: "a stipend or a patron's coin", shifts: ["reading before the day starts", "in the stacks", "talking the day's reading over with a drink", "candlelit reading, then bed"], pastime: "arguing over footnotes" },
+    Wanderer: { duties: "drifting from place to place and taking odd work", pay: "odd coin for odd jobs", shifts: ["breaking camp", "walking or working", "at the tavern for supper and a drink", "a rough bed"], pastime: "road songs and stories" },
+    Townsfolk: { duties: "everyday work in the town, whatever trade the day brings", pay: "a day's wage for a day's work, nothing more", shifts: ["rising and doing chores", "at your day's work", "at the tavern with neighbours, if you feel like a drink", "home"], pastime: "a drink and chat with neighbours at the tavern" },
+    Villager: { duties: "everyday work in the village, tending animals, crops and home", pay: "you live on what you grow and sell", shifts: ["chores and feeding animals", "at the day's work", "at the tavern with neighbours, if you feel like a drink", "home"], pastime: "a drink and chat with neighbours" }
+};
+// What each people eats, in a few plain words.
+const NPC_SPECIES_FOOD = {
+    Human: "bread, stew, cheese and ale",
+    Elf: "bread, fruit, greens and light wine",
+    Dwarf: "hearty stew, mushrooms, roast meat and strong ale",
+    Halfling: "pies, bread, cheese and many small meals a day",
+    Orc: "roast meat, hard bread and thick brews",
+    Goblin: "scraps, stews of whatever is to hand and sour drink",
+    Lizardfolk: "fish, raw or roasted meat and little else",
+    Kobold: "scraps, grubs, roasted rats and whatever they can steal",
+    Dragonborn: "roast meat, spiced dishes and strong drink"
+};
+
+function _npcRoutineFor(npc) {
+    return NPC_ROUTINES[npc && npc.role] || NPC_ROUTINE_DEFAULT;
+}
+
+// What this NPC would normally be doing at this hour: { phase, activity, where }.
+// where is "home" or "out" (work, road or town). Descriptive; nobody is moved.
+function getNPCRoutineNow(npc, turnOfDay) {
+    const turn = typeof turnOfDay === "number" ? turnOfDay : (typeof getTurnOfDay === "function" ? getTurnOfDay() : 12);
+    const phase = typeof getNPCTurnPhase === "function" ? getNPCTurnPhase(turn) : "day";
+    const idx = { dawn: 0, day: 1, dusk: 2, night: 3 }[phase];
+    const routine = _npcRoutineFor(npc);
+    const activity = routine.shifts[idx] || NPC_ROUTINE_DEFAULT.shifts[idx];
+    return { phase: phase, activity: activity, where: activity === "home" || /^home\b|a bed|your room|a bunk|rough bed|sleep/.test(activity) ? "home" : "out" };
+}
+
+function getNPCRoutineRecords(npc) {
+    const records = [];
+    if (!npc || npc.isHumanoid !== true || npc.isGuide) return records;
+    const r = _npcRoutineFor(npc);
+    const now = getNPCRoutineNow(npc);
+    const names = ["dawn", "day", "dusk", "night"];
+    records.push(_npcFactRecord("facet:duties", ["work", "money"],
+        "- Your work: " + r.duties + ". How you are paid: " + r.pay + ". Never name a sum you were not given.", 0, false));
+    const day = r.shifts.map(function (s, i) { return names[i] + ": " + (s === "home" ? "at home" : s); }).join("; ");
+    records.push(_npcFactRecord("facet:day", ["routine"],
+        "- A usual day for you (" + day + "). Right now it is " + now.phase + ", when you would usually be " + (now.activity === "home" ? "at home" : now.activity) + ".", 0, false));
+    const food = NPC_SPECIES_FOOD[npc.species] || "plain food";
+    records.push(_npcFactRecord("facet:meals", ["food"], "- What you eat: " + food + ".", 0, false));
+    records.push(_npcFactRecord("facet:pastime", ["leisure"], "- In your free hours: " + r.pastime + ".", 0, false));
+    return records;
+}
+
+function getNPCFacetRecords(npc, ctx, room) {
+    const records = [];
+    if (!npc) return records;
+    const enr = npc.enrichment && typeof npc.enrichment === "object" ? npc.enrichment : {};
+    const rm = room || (ctx && ctx.room) || null;
+
+    // Looks and body: what they look like and how they move.
+    const looks = [];
+    if (npc.physicalTraits) looks.push(String(npc.physicalTraits));
+    const highlights = Array.isArray(npc.appearanceHighlights) ? npc.appearanceHighlights : [];
+    if (highlights.length) looks.push("notable: " + highlights.join(", "));
+    const anatomy = npc.anatomy && typeof npc.anatomy === "object" ? npc.anatomy : {};
+    const bodyBits = [];
+    if (anatomy.size) bodyBits.push("size " + anatomy.size);
+    if (anatomy.movement) bodyBits.push(anatomy.movement);
+    if (bodyBits.length) looks.push(bodyBits.join(", "));
+    if (looks.length) {
+        records.push(_npcFactRecord("facet:looks", ["looks", "self"],
+            "- Your looks (describe them only if asked or natural, and stay consistent): " + _npcClipText(looks.join("; "), NPC_FACET_MAX.looks), 0, false));
+    }
+
+    // Their people.
+    const lore = npc.loreNotes || enr.speciesLore || "";
+    if (lore) {
+        records.push(_npcFactRecord("facet:kind", ["self", "kin"],
+            "- Your people (" + (npc.species || "your kind") + "): " + _npcClipText(lore, NPC_FACET_MAX.kind), 0, false));
+    }
+
+    // What they value.
+    const values = Array.isArray(enr.values) ? enr.values : [];
+    if (values.length) {
+        records.push(_npcFactRecord("facet:values", ["self"],
+            "- What you value: " + _npcClipText(values.join(", "), NPC_FACET_MAX.values), 0, false));
+    }
+
+    // Trade and place of work. Names the building only while they stand in it.
+    if (npc.isHumanoid === true && !npc.isGuide && npc.role) {
+        const atWork = rm && rm.buildingName && typeof NPC_TIE_WORK_ROLES !== "undefined" && NPC_TIE_WORK_ROLES.indexOf(npc.role) >= 0;
+        records.push(_npcFactRecord("facet:trade", ["work", "money"],
+            "- Your trade: you are " + _npcWithArticle(String(npc.role).toLowerCase()) + (atWork ? " at " + rm.buildingName : "") + ". Speak about the work from experience, never with numbers you were not given.",
+            0, false));
+    }
+
+    // Home.
+    if (npc.isHumanoid === true && !npc.isGuide && npc._homeCoords && typeof G === "object" && G && G.roomMap && G.roomMap[npc._homeCoords]) {
+        const homeRoom = G.roomMap[npc._homeCoords];
+        records.push(_npcFactRecord("facet:home", ["home"],
+            "- Your home: you keep a modest place of your own" + (homeRoom.zone ? " in " + homeRoom.zone : "") + " and go back to it to rest.", 0, false));
+    }
+
+    // Off duty at home: the shop or work is closed until they are back at their post.
+    if (typeof isNPCOffDuty === "function" && isNPCOffDuty(npc, room || (ctx && ctx.room))) {
+        records.push(_npcFactRecord("facet:hours", ["work", "money", "home"],
+            "- You are at home and off duty; your work is shut until you are back at your post. If asked to trade, buy, sell or for your services, say it waits until then.", 1, false));
+    }
+
+    // An evening out: someone off the clock at a taproom or an inn's common room.
+    const evRoom = room || (ctx && ctx.room) || null;
+    if (typeof isPastimeNPC === "function" && isPastimeNPC(npc) && evRoom && typeof isPastimeRoom === "function" && isPastimeRoom(evRoom) &&
+        typeof getTurnOfDay === "function" && getTurnOfDay() >= NPC_PASTIME_START) {
+        records.push(_npcFactRecord("facet:evening", ["food", "leisure"],
+            "- It is evening and you are here for a drink and company, off the clock; keep it easy and sociable.", 0.5, false));
+    }
+
+    // Daily routine: duties and pay, a usual day, meals, free hours.
+    getNPCRoutineRecords(npc).forEach(function (r) { records.push(r); });
+
+    // A lover who is not a spouse; shrugs off flirting the same way a spouse does.
+    if (typeof getNPCLover === "function" && getNPCLover(npc)) {
+        const lover = getNPCLover(npc);
+        const shrug = typeof npcShrugsOffRomance === "function" && npcShrugsOffRomance(npc);
+        records.push(_npcFactRecord("facet:lover", ["love", "mate"],
+            "- You have a lover (" + (_npcWithArticle(String(lover.role || "someone").toLowerCase())) + ")." + (shrug
+                ? " You politely turn aside flirting and do not respond to it."
+                : " Drink or mood has loosened you; you may respond to flirting, awkwardly."), 3, true));
+    }
+    return records;
+}
+
+function getNPCFactRecords(npc, ctx, room, words) {
+    const records = [];
+    if (!npc) return records;
+
+    // Their place in society, and what they have already told the player.
+    if (typeof getNPCSocialPromptLines === "function") {
+        String(getNPCSocialPromptLines(npc) || "").split("\n").forEach(function (line) {
+            if (!line) return;
+            const told = line.indexOf("already told the player") >= 0;
+            records.push(told
+                ? _npcFactRecord("social-told", ["told", "self"], line, 2, true)
+                : _npcFactRecord("social-place", ["self", "work", "family"], line, 2, false));
+        });
+    }
+    if (npc.tiesKnown && typeof getNPCTiesAnswer === "function") {
+        const ties = getNPCTiesAnswer(npc);
+        if (ties) records.push(_npcFactRecord("ties", ["family", "friend", "colleague", "kin", "work"], "- You have already told the player about the people in your life: " + String(ties).slice(0, 220), 0, false));
+    }
+    if (typeof getNPCPartner === "function" && getNPCPartner(npc)) {
+        records.push(_npcFactRecord("partner", ["love", "family", "mate"], typeof npcShrugsOffRomance === "function" && npcShrugsOffRomance(npc)
+            ? "You are married. You politely turn aside flirting and do not respond to it."
+            : "You are married, but drink or mood has loosened you; you may respond to flirting, awkwardly.", 3, true));
+    }
+
+    // What the player has overheard in taverns (G.player.rumours, flagged lines
+    // only). Weight 0: it only comes up when the talk is about rumours or news.
+    const heardRumours = typeof G !== "undefined" && G && G.player && Array.isArray(G.player.rumours) ? G.player.rumours : [];
+    if (heardRumours.length) {
+        const recent = heardRumours.slice(-2).map(function (r) { return "\"" + String(r.text).slice(0, 120) + "\""; });
+        records.push(_npcFactRecord("facet:overheard", ["rumor"],
+            "- The player has mentioned overhearing in a tavern: " + recent.join(" and ") + ". You may know more, or know better; do not claim to have been there.", 0, false));
+    }
+
+    // Local knowledge: lore this NPC knows.
+    if (ctx && typeof getNPCKnownLoreFacts === "function" && typeof getWorldLoreFactText === "function") {
+        const lore = typeof ensureWorldLore === "function" ? ensureWorldLore() : null;
+        const seed = lore ? lore.seed : null;
+        const told = npc.memory && npc.memory.loreTold ? npc.memory.loreTold : {};
+        const known = getNPCKnownLoreFacts(npc, ctx);
+        let anyOverlap = false;
+        known.forEach(function (entry) {
+            const text = getWorldLoreFactText(entry.fact, seed, entry.distorted);
+            if (!text) return;
+            const overlap = _npcFactOverlap(words, String(entry.fact.topic || "") + " " + text);
+            if (overlap > 0) anyOverlap = true;
+            const tags = ["rumor"].concat(getNPCTagsForText(String(entry.fact.topic || "") + " " + text));
+            records.push(_npcFactRecord("lore:" + entry.fact.id, tags,
+                "- Local knowledge (" + (entry.firsthand ? "knows firsthand" : "only heard secondhand") + "): " + String(text).slice(0, 260),
+                (entry.firsthand ? 1 : 0.5) - (told[entry.fact.id] ? 2 : 0), false));
+        });
+        // With nothing matching the player's words, one fact they might ask about.
+        if (!anyOverlap && typeof pickNPCLoreFact === "function") {
+            const fallback = pickNPCLoreFact(npc, ctx, "topic");
+            if (fallback) {
+                const text = getWorldLoreFactText(fallback.fact, seed, fallback.distorted);
+                if (text) records.push(_npcFactRecord("lore-fallback", ["rumor", "place"],
+                    "- Local knowledge (" + (fallback.firsthand ? "knows firsthand" : "only heard secondhand") + "): " + String(text).slice(0, 260), 0.8, false));
+            }
+        }
+    }
+
+    // Recent events this speaker plausibly saw or heard about.
+    if (typeof getNPCAwareStoryEvents === "function") {
+        getNPCAwareStoryEvents(npc, { room: room || (ctx && ctx.room) }).slice(0, 3).forEach(function (ev, i) {
+            const tags = ["rumor", "danger"].concat(ev.here ? ["fight-here"] : [], getNPCTagsForText(ev.text));
+            records.push(_npcFactRecord("event:" + i, tags,
+                "- Recent event (" + (ev.here ? "happened here" : "word has reached them") + "): " + String(ev.text || "").slice(0, 160), ev.here ? 1.5 : 1, false));
+        });
+    }
+
+    // Profile facets: looks, people, values, trade, home, lover.
+    if (typeof getNPCFacetRecords === "function") {
+        try { getNPCFacetRecords(npc, ctx, room).forEach(function (r) { records.push(r); }); } catch (facetErr) { console.warn("[NPC Facets] failed", facetErr); }
+    }
+
+    // Who else is here, by name and trade.
+    const rm = room || (ctx && ctx.room) || null;
+    if (rm && Array.isArray(rm.creatures)) {
+        const others = rm.creatures.filter(function (c) {
+            return c && c !== npc && !c.dead && !c.unconscious && c.isHumanoid === true && (c.name || c.descriptorName);
+        }).slice(0, 3).map(function (c) { return (c.name || c.descriptorName) + (c.role ? " (" + c.role + ")" : ""); });
+        if (others.length) records.push(_npcFactRecord("others", ["place"], "- Others here: " + others.join(", "), 0.6, false));
+    }
+    return records;
+}
+
+// Ranks records against the wanted tags and keeps the best few inside the
+// budget. Returns [{ rec, score, matched }] in the order they should be sent
+// (always-records first); everything not sent is in .dropped for debugging.
+function selectNPCFacts(records, wanted, budget) {
+    const b = budget || NPC_FACT_BUDGET;
+    const topicWanted = wanted && Array.isArray(wanted.topic) ? wanted.topic : [];
+    const sitWanted = wanted && Array.isArray(wanted.situation) ? wanted.situation : [];
+    const words = wanted && Array.isArray(wanted.keywords) ? wanted.keywords : [];
+    const specific = topicWanted.length > 0 || words.length > 0;
+    const scored = (records || []).map(function (rec) {
+        let overlap = 0;
+        let sit = 0;
+        (rec.tags || []).forEach(function (t) {
+            if (topicWanted.indexOf(t) >= 0) overlap += 1;
+            if (sitWanted.indexOf(t) >= 0) sit += 1;
+        });
+        const kw = typeof _npcFactOverlap === "function" ? _npcFactOverlap(words, rec.text) : 0;
+        // The speaker's own facts (facet:*) outrank hearsay and lore once their topic is asked about.
+        const facetBonus = overlap > 0 && String(rec.id).indexOf("facet:") === 0 ? 4 : 0;
+        return { rec: rec, score: overlap * 3 + sit * 1.5 + kw * 3 + rec.weight + facetBonus, matched: overlap > 0 || kw > 0 || sit > 0 };
+    });
+    const picked = scored.filter(function (s) { return s.rec.always; });
+    let chars = picked.reduce(function (sum, s) { return sum + s.rec.text.length; }, 0);
+    const rest = scored.filter(function (s) { return !s.rec.always && (s.matched || (!specific && s.rec.weight > 0)); })
+        .sort(function (a, c) { return c.score - a.score; });
+    let lines = 0;
+    rest.forEach(function (s) {
+        if (lines >= b.maxLines || chars + s.rec.text.length > b.maxChars) return;
+        picked.push(s);
+        lines += 1;
+        chars += s.rec.text.length;
+    });
+    picked.dropped = scored.filter(function (s) { return picked.indexOf(s) < 0; });
+    return picked;
+}
+
+// The whole pipeline: wanted tags -> records -> selection. Returns
+// { wanted, picked, lines } so callers (and tests) can see why.
+function getNPCFactSelection(npc, ctx, room, choices, playerTexts) {
+    const wanted = getWantedNPCTags(npc, choices, room);
+    if (!wanted.keywords.length && Array.isArray(playerTexts) && playerTexts.length && typeof _npcFactWords === "function") {
+        wanted.keywords = _npcFactWords(playerTexts.join(" "));
+        getNPCTagsForText(playerTexts.join(" ")).forEach(function (t) { if (wanted.topic.indexOf(t) < 0) wanted.topic.push(t); });
+    }
+    const records = getNPCFactRecords(npc, ctx, room, wanted.keywords);
+    const picked = selectNPCFacts(records, wanted, NPC_FACT_BUDGET);
+    return { wanted: wanted, picked: picked, lines: picked.map(function (s) { return s.rec.text; }) };
+}
+
+// ── NPC MEMORY (tagged, importance-ranked, capped) ───────────────────
+// Durable per-NPC memory of the player, kept in npc.memory.memoryEntries.
+// Each entry: { id, tags[], text, importance 1-10, turn, pinned, count }.
+//   - Over the cap, the lowest-importance entry is dropped (oldest first among
+//     equals). The newest NPC_MEMORY_PROTECT_NEWEST entries cannot be evicted,
+//     so fresh small talk is not purged the moment it is written.
+//   - The same id again merges into the existing entry (count + 1) instead of
+//     adding a new one; a repeated act gains importance at 3 and 6 repeats.
+//   - Pinned entries (the guide's told ledger) sit outside the cap.
+//   - Entries tagged "told" form the told ledger: what this NPC has already
+//     said, so it is not repeated as if new.
+// The cap grows with the relationship (stranger < acquaintance < close) and
+// never shrinks once earned. Mobs and other non-humanoids remember nothing.
+// Callers go through addNPCMemory / getNPCRelevantMemories / getNPCToldMemories
+// only, so the storage can later move behind a server without touching them.
+const NPC_MEMORY_CAPS = { stranger: 10, acquaintance: 18, close: 32 };
+const NPC_MEMORY_TIER_ORDER = ["stranger", "acquaintance", "close"];
+const NPC_MEMORY_PROTECT_NEWEST = 3;
+const NPC_MEMORY_PINNED_MAX = 40;
+const NPC_MEMORY_TEXT_MAX = 140;
+const NPC_MEMORY_IMPORTANCE_DEFAULT = 3;
+// Verbatim recent lines (npc.memory.recentLines) expire by story turns, not
+// real minutes, so a pause or a walk away does not wipe the conversation.
+const NPC_RECENT_LINE_TURNS = 30;
+const NPC_MEMORY_INTENT_PHRASES = {
+    flattery: "flattered you",
+    insult: "insulted you",
+    aggression: "pressed you sharply",
+    empathy: "showed you kindness",
+    help: "offered you help",
+    calm: "tried to calm you",
+    apology: "apologised to you",
+    curious: "asked you something",
+    bold: "spoke boldly to you",
+    introduction: "asked who you are",
+    tease: "teased you"
+};
+let _npcMemoryTypedSeq = 0;
+
+function _npcMemoryNow() {
+    return typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : 0;
+}
+
+function _npcMemoryClip(text, max) {
+    const clean = String(text || "").replace(/\s+/g, " ").trim();
+    return clean.length > max ? clean.slice(0, Math.max(0, max - 1)).trim() + "…" : clean;
+}
+
+function _npcMemoryTags(list) {
+    const out = [];
+    (Array.isArray(list) ? list : []).forEach(function (tag) {
+        const t = String(tag || "").toLowerCase().trim();
+        if (t && out.indexOf(t) < 0 && out.length < 8) out.push(t);
+    });
+    return out;
+}
+
+function ensureNPCMemoryEntries(npc) {
+    if (!npc) return null;
+    if (!npc.memory || typeof npc.memory !== "object") npc.memory = {};
+    if (!Array.isArray(npc.memory.memoryEntries)) npc.memory.memoryEntries = [];
+    return npc.memory.memoryEntries;
+}
+
+// "none" (remembers nothing), "stranger", "acquaintance" or "close". The tier
+// is a high-water mark: a friend who falls out of favour keeps their room.
+function getNPCMemoryTier(npc) {
+    if (!npc || npc.isHumanoid !== true) return "none";
+    const mem = npc.memory && typeof npc.memory === "object" ? npc.memory : {};
+    const favor = typeof mem.favorability === "number" ? mem.favorability : 0;
+    let tier = "stranger";
+    if (npc.isGuide || npc._inParty || favor >= 40) tier = "close";
+    else if (mem.metPlayer === true && Math.abs(favor) >= 10) tier = "acquaintance";
+    const earned = NPC_MEMORY_TIER_ORDER.indexOf(mem.memoryTier);
+    if (earned > NPC_MEMORY_TIER_ORDER.indexOf(tier)) tier = NPC_MEMORY_TIER_ORDER[earned];
+    return tier;
+}
+
+function getNPCMemoryCap(npc) {
+    const tier = getNPCMemoryTier(npc);
+    return NPC_MEMORY_CAPS[tier] || 0;
+}
+
+function _npcMemoryEvict(npc, list) {
+    const cap = NPC_MEMORY_CAPS[npc.memory.memoryTier] || 0;
+    let pinned = list.filter(function (e) { return e && e.pinned; });
+    while (pinned.length > NPC_MEMORY_PINNED_MAX) {
+        list.splice(list.indexOf(pinned[0]), 1);
+        pinned = pinned.slice(1);
+    }
+    for (;;) {
+        const free = list.filter(function (e) { return e && !e.pinned; });
+        if (free.length <= cap) break;
+        const candidates = free.slice(0, Math.max(0, free.length - NPC_MEMORY_PROTECT_NEWEST));
+        if (!candidates.length) break;
+        let victim = candidates[0];
+        for (let i = 1; i < candidates.length; i++) {
+            if (candidates[i].importance < victim.importance) victim = candidates[i];
+        }
+        list.splice(list.indexOf(victim), 1);
+    }
+}
+
+// Adds or merges one memory. Returns the stored entry, or null when this NPC
+// cannot remember (not humanoid, or the entry is empty).
+function addNPCMemory(npc, entry) {
+    if (!npc || !entry) return null;
+    const id = String(entry.id || "").trim().slice(0, 60);
+    const text = _npcMemoryClip(entry.text, NPC_MEMORY_TEXT_MAX);
+    if (!id || !text) return null;
+    const tier = getNPCMemoryTier(npc);
+    if (tier === "none") return null;
+    const list = ensureNPCMemoryEntries(npc);
+    npc.memory.memoryTier = tier;
+
+    const turn = _npcMemoryNow();
+    const rawImportance = Math.round(Number(entry.importance));
+    const importance = Math.min(10, Math.max(1, isNaN(rawImportance) ? NPC_MEMORY_IMPORTANCE_DEFAULT : rawImportance));
+    const tags = _npcMemoryTags(entry.tags);
+
+    const at = list.findIndex(function (e) { return e && e.id === id; });
+    if (at >= 0) {
+        const existing = list.splice(at, 1)[0];
+        existing.count = (typeof existing.count === "number" ? existing.count : 1) + 1;
+        existing.turn = turn;
+        existing.text = text;
+        existing.importance = Math.max(existing.importance || 1, importance);
+        if ((existing.count === 3 || existing.count === 6) && existing.importance < 8) existing.importance += 1;
+        existing.tags = _npcMemoryTags((existing.tags || []).concat(tags));
+        if (entry.pinned === true) existing.pinned = true;
+        list.push(existing);
+        return existing;
+    }
+
+    const created = { id: id, tags: tags, text: text, importance: importance, turn: turn, pinned: entry.pinned === true, count: 1 };
+    list.push(created);
+    _npcMemoryEvict(npc, list);
+    return created;
+}
+
+// The told ledger: "I told them about X". Pinned for the guide, capped like any
+// other memory for everyone else.
+function registerNPCToldMemory(npc, key, text, opts) {
+    const o = opts || {};
+    return addNPCMemory(npc, {
+        id: "told:" + key,
+        tags: ["told"].concat(o.tags || []),
+        text: text,
+        importance: typeof o.importance === "number" ? o.importance : 4,
+        pinned: o.pinned === true
+    });
+}
+
+// Best memories for a reply. wantedTags (optional) steers the pick: an entry
+// that shares no tag is skipped unless it is important (6+). Told-ledger
+// entries are excluded (see getNPCToldMemories) unless includeTold is set.
+function getNPCRelevantMemories(npc, wantedTags, opts) {
+    const o = opts || {};
+    const list = npc && npc.memory && Array.isArray(npc.memory.memoryEntries) ? npc.memory.memoryEntries : [];
+    if (!list.length) return [];
+    const wanted = _npcMemoryTags(wantedTags);
+    const max = typeof o.max === "number" ? o.max : 4;
+    const minImportance = typeof o.minImportance === "number" ? o.minImportance : 0;
+    const now = _npcMemoryNow();
+    const scored = [];
+    list.forEach(function (e) {
+        if (!e || !e.text) return;
+        const isTold = (e.tags || []).indexOf("told") >= 0;
+        if (isTold && o.includeTold !== true) return;
+        if (e.importance < minImportance) return;
+        let overlap = 0;
+        (e.tags || []).forEach(function (t) { if (wanted.indexOf(t) >= 0) overlap += 1; });
+        if (wanted.length && !overlap && e.importance < 6) return;
+        const recency = now > 0 ? Math.min(1, (e.turn || 0) / now) : 0;
+        scored.push({ entry: e, score: overlap * 3 + e.importance + Math.min(e.count || 1, 5) * 0.2 + recency });
+    });
+    scored.sort(function (a, b) { return b.score - a.score; });
+    return scored.slice(0, max).map(function (s) { return s.entry; });
+}
+
+// What this NPC has already told the player, oldest first.
+function getNPCToldMemories(npc, max) {
+    const list = npc && npc.memory && Array.isArray(npc.memory.memoryEntries) ? npc.memory.memoryEntries : [];
+    const told = list.filter(function (e) { return e && e.text && (e.tags || []).indexOf("told") >= 0; });
+    return told.slice(-(typeof max === "number" ? max : 8));
+}
+
+function serializeNPCMemory(npc) {
+    const list = npc && npc.memory && Array.isArray(npc.memory.memoryEntries) ? npc.memory.memoryEntries : [];
+    return JSON.parse(JSON.stringify({ tier: npc && npc.memory ? npc.memory.memoryTier || "" : "", entries: list }));
+}
+
+function loadNPCMemory(npc, data) {
+    if (!npc || !data || !Array.isArray(data.entries)) return false;
+    const list = ensureNPCMemoryEntries(npc);
+    list.length = 0;
+    data.entries.forEach(function (e) {
+        if (!e || !e.id || !e.text) return;
+        list.push({
+            id: String(e.id), tags: _npcMemoryTags(e.tags), text: _npcMemoryClip(e.text, NPC_MEMORY_TEXT_MAX),
+            importance: Math.min(10, Math.max(1, Math.round(Number(e.importance)) || NPC_MEMORY_IMPORTANCE_DEFAULT)),
+            turn: typeof e.turn === "number" ? e.turn : 0, pinned: e.pinned === true,
+            count: typeof e.count === "number" ? e.count : 1
+        });
+    });
+    if (NPC_MEMORY_TIER_ORDER.indexOf(data.tier) >= 0) npc.memory.memoryTier = data.tier;
+    return true;
+}
+
+function _npcMemoryImportanceFromImpact(impact) {
+    const src = impact && typeof impact === "object" ? impact : {};
+    const m = Math.max(Math.abs(Number(src.favor) || 0), Math.abs(Number(src.hostility) || 0));
+    let value = m >= 8 ? 6 : m >= 5 ? 5 : m >= 3 ? 4 : m >= 1 ? 3 : 2;
+    if (Number(src.aggression) >= 1) value += 1;
+    return Math.min(8, value);
+}
+
+// Writes a memory for a conversation choice, from its id, intent and impact -
+// no AI call. Catalogue entries may carry memory: { importance, tags, text,
+// skip }. Greetings and farewells are not worth remembering (metPlayer already
+// covers them). Intimacy and encounter options belong to the nsfw layer, which
+// writes its own memories, so they are ignored here. Internal calls with no
+// label or text (guide and social-fact handlers) write their own told entries.
+function recordNPCConversationMemory(npc, choice) {
+    if (!npc || !choice) return null;
+    if (choice.action === "intimacy" || choice.startEncounter || choice.intimacyAction) return null;
+    const optionId = String(choice.id || "").trim();
+    if (!optionId) return null;
+    const intent = String(choice.intent || "").toLowerCase();
+    if (intent === "greeting" || intent === "goodbye" || optionId.indexOf("greet") === 0 || optionId === "goodbye") return null;
+    const spec = choice.memory && typeof choice.memory === "object" ? choice.memory : {};
+    if (spec.skip === true) return null;
+
+    const typed = optionId.indexOf("respond-typed-") === 0 || optionId.indexOf("respond-canned-") === 0;
+    if (typed) {
+        const said = String(choice.typedText || choice.promptText || "").trim();
+        if (!said) return null;
+        _npcMemoryTypedSeq += 1;
+        return addNPCMemory(npc, {
+            id: "said-" + _npcMemoryNow() + "-" + _npcMemoryTypedSeq,
+            tags: ["said"].concat(getNPCTagsForText(said)),
+            text: "The player said: \"" + _npcMemoryClip(said, 100) + "\"",
+            importance: typeof spec.importance === "number" ? spec.importance : 2
+        });
+    }
+
+    const label = String(choice.label || choice.promptText || choice.text || "").trim();
+    if (!label) return null;
+    const phrase = NPC_MEMORY_INTENT_PHRASES[intent] || "said something to you";
+    const text = typeof spec.text === "string" && spec.text
+        ? spec.text
+        : "The player " + phrase + ": \"" + _npcMemoryClip(label, 80) + "\"";
+    return addNPCMemory(npc, {
+        id: "did-" + optionId,
+        tags: [intent || "talk"].concat(Array.isArray(spec.tags) ? spec.tags : [], getNPCOptionTags(optionId), NPC_INTENT_MEMORY_KINDS[intent] || []),
+        text: text,
+        importance: typeof spec.importance === "number" ? spec.importance : _npcMemoryImportanceFromImpact(choice.relationshipImpact)
+    });
 }
 
 function _npcHasNamedFlags(source, required) {
@@ -886,7 +1670,7 @@ const NPC_ROLE_TOPIC_POOLS = {
     "raider": ["their territory", "targets", "rival raiders"],
     "scavenger": ["salvage", "safe pickings", "close calls"],
     "cultist": ["the cause", "secrecy", "outsiders"],
-    "tomb robber": ["loot", "traps", "competitors"]
+    "delver": ["loot", "traps", "competitors"]
 };
 
 const NPC_LOCATION_TOPIC_POOLS = (function () {
@@ -1096,7 +1880,7 @@ const NPC_LORE_ROLE_TIERS = [
     { match: ["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "cook", "servant"], tiers: ["trade", "local"] },
     { match: ["blacksmith", "smith", "miner", "stone guard"], tiers: ["deep", "trade"] },
     { match: ["townsfolk", "villager", "guest", "patron", "wanderer", "healer"], tiers: ["local"] },
-    { match: ["scavenger", "tomb robber"], tiers: ["deep", "military"] }
+    { match: ["scavenger", "delver"], tiers: ["deep", "military"] }
 ];
 
 const NPC_LORE_SPECIES_TIERS = {
@@ -1171,7 +1955,7 @@ function getNPCLoreLeaning(npc, ctx) {
     if (species === "goblin" || species === "orc" || species === "kobold") banners += 30;
     if (species === "dwarf" || species === "lizardfolk") { crown -= 15; banners -= 15; }
     if (_npcTextIncludesAny(role, ["guard", "town hall"])) crown += 10;
-    if (_npcTextIncludesAny(role, ["raider", "scavenger", "tomb robber"])) banners += 15;
+    if (_npcTextIncludesAny(role, ["raider", "scavenger", "delver"])) banners += 15;
     if (_npcTextIncludesAny(role, ["priest", "pilgrim"])) { crown -= 10; banners -= 10; }
     const roll = _loreHash(_loreNpcKey(npc) + ":lean");
     if (roll < crown) return "crown";
@@ -1312,62 +2096,11 @@ function _npcFactOverlap(words, text) {
 
 // Returns a multi-line string ("" when there is nothing to offer).
 // playerTexts: the player's lines this prompt answers (array of strings).
-function buildNPCConversationFactSheet(npc, ctx, playerTexts, room) {
+function buildNPCConversationFactSheet(npc, ctx, playerTexts, room, choices) {
     if (!npc) return "";
-    const lines = [];
-    const words = _npcFactWords((playerTexts || []).join(" "));
-
-    // 0. Their place in society, and anything they have already told the player.
-    if (typeof getNPCSocialPromptLines === "function") {
-        const socialLines = getNPCSocialPromptLines(npc);
-        if (socialLines) socialLines.split("\n").forEach(function (l) { if (l) lines.push(l); });
-    }
-    if (typeof getNPCPartner === "function" && getNPCPartner(npc)) {
-        lines.push(typeof npcShrugsOffRomance === "function" && npcShrugsOffRomance(npc)
-            ? "You are married. You politely turn aside flirting and do not respond to it."
-            : "You are married, but drink or mood has loosened you; you may respond to flirting, awkwardly.");
-    }
-
-    // 1. Local knowledge: lore this NPC knows, best match for the player's words first.
-    if (ctx && typeof getNPCKnownLoreFacts === "function" && typeof getWorldLoreFactText === "function") {
-        const lore = typeof ensureWorldLore === "function" ? ensureWorldLore() : null;
-        const seed = lore ? lore.seed : null;
-        const told = npc.memory && npc.memory.loreTold ? npc.memory.loreTold : {};
-        const ranked = getNPCKnownLoreFacts(npc, ctx).map(function (entry) {
-            const text = getWorldLoreFactText(entry.fact, seed, entry.distorted);
-            const overlap = _npcFactOverlap(words, String(entry.fact.topic || "") + " " + text);
-            return { entry: entry, text: text, overlap: overlap, score: overlap * 3 + (entry.firsthand ? 1 : 0) - (told[entry.fact.id] ? 2 : 0) };
-        }).filter(function (r) { return r.text; }).sort(function (a, b) { return b.score - a.score; });
-        let picked = ranked.filter(function (r) { return r.overlap > 0; }).slice(0, 2);
-        if (!picked.length && typeof pickNPCLoreFact === "function") {
-            const fallback = pickNPCLoreFact(npc, ctx, "topic");
-            if (fallback) {
-                const text = getWorldLoreFactText(fallback.fact, seed, fallback.distorted);
-                if (text) picked = [{ entry: fallback, text: text }];
-            }
-        }
-        picked.forEach(function (r) {
-            lines.push("- Local knowledge (" + (r.entry.firsthand ? "knows firsthand" : "only heard secondhand") + "): " + String(r.text).slice(0, 260));
-        });
-    }
-
-    // 2. Recent events this speaker plausibly saw or heard about.
-    if (typeof getNPCAwareStoryEvents === "function") {
-        getNPCAwareStoryEvents(npc, { room: room || (ctx && ctx.room) }).slice(0, 2).forEach(function (ev) {
-            lines.push("- Recent event (" + (ev.here ? "happened here" : "word has reached them") + "): " + String(ev.text || "").slice(0, 160));
-        });
-    }
-
-    // 3. Who else is here, by name and trade.
-    const rm = room || (ctx && ctx.room) || null;
-    if (rm && Array.isArray(rm.creatures)) {
-        const others = rm.creatures.filter(function (c) {
-            return c && c !== npc && !c.dead && !c.unconscious && c.isHumanoid === true && (c.name || c.descriptorName);
-        }).slice(0, 3).map(function (c) { return (c.name || c.descriptorName) + (c.role ? " (" + c.role + ")" : ""); });
-        if (others.length) lines.push("- Others here: " + others.join(", "));
-    }
-
-    return lines.join("\n");
+    // Which facts reach the prompt is decided by tags and a small budget
+    // (see NPC TAGS AND FACT SELECTOR). choices: the options this reply answers.
+    return getNPCFactSelection(npc, ctx, room, choices, playerTexts).lines.join("\n");
 }
 if (typeof window !== "undefined") window.buildNPCConversationFactSheet = buildNPCConversationFactSheet;
 
@@ -2349,7 +3082,8 @@ const NPC_CONVERSATION_CATALOGUE = [
             metPlayer: true,
             roleIncludes: ["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "blacksmith"],
             maxHostility: 79,
-            minFavor: -69
+            minFavor: -69,
+            custom: (npc, ctx) => !ctx.offDuty
         }
     },
     {
@@ -2770,7 +3504,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             metPlayer: true,
             maxHostility: 60,
             minFavor: -20,
-            custom: (npc, ctx) => ctx.isHumanoid && typeof getDirectionsCandidates === "function" && getDirectionsCandidates(npc, ctx).length > 0
+            custom: (npc, ctx) => ctx.isHumanoid && typeof getGuideDestinations === "function" && getGuideDestinations(npc, ctx).length > 0
         }
     },
     // Free-text bridge. When the NPC's last line expects an answer the engine
@@ -2873,6 +3607,8 @@ function getNPCConversationContext(npc, extraContext = {}) {
         hasOwnDeity: !!(typeof ensureNPCDeity === "function" ? ensureNPCDeity(npc) : npc.deity),
         romanceEligible: typeof isAdultHumanoidNPC === "function" ? isAdultHumanoidNPC(npc) : false,
         tradeAvailable: typeof shouldShowPostReplyTradeAction === "function" ? shouldShowPostReplyTradeAction(npc) : false,
+        // Staff who have gone home are off duty (see SHOP HOURS in the engine).
+        offDuty: typeof isNPCOffDuty === "function" ? isNPCOffDuty(npc, room) : false,
         actionTags,
         roomType: String(room && room.type || "").toLowerCase(),
         roomRole: String(room && room.role || "").toLowerCase(),
@@ -3290,7 +4026,9 @@ function buildConversationOption(entry, npc, ctx) {
         guideBeat: entry.guideBeat,
         guideParty: entry.guideParty,
         guideAnswer: entry.guideAnswer,
-        socialFact: entry.socialFact
+        socialFact: entry.socialFact,
+        // Optional memory hints: { importance, tags, text, skip } (see recordNPCConversationMemory).
+        memory: entry.memory
     };
 }
 
@@ -3616,6 +4354,10 @@ if (typeof window !== "undefined") {
     window.getNPCTiesAnswer = getNPCTiesAnswer;
 window.getNPCPartner = getNPCPartner;
 window.npcShrugsOffRomance = npcShrugsOffRomance;
+window.getNPCLover = getNPCLover;
+window.getNPCRoutineNow = getNPCRoutineNow;
+window.getNPCRoutineRecords = getNPCRoutineRecords;
+window.getNPCFacetRecords = getNPCFacetRecords;
 }
 window.SOMATOTYPE_INFO = SOMATOTYPE_INFO;
 window.isValidSomatotype = isValidSomatotype;
@@ -3846,7 +4588,7 @@ function generateNPCSocial(npc, room, zoneTemplate) {
             let r = sheet.castes.wage;
             if (REALM_MASTER_ROLES.indexOf(npc.role) >= 0) r = sheet.castes.master;
             else if (REALM_TRADE_ROLES.indexOf(npc.role) >= 0) r = sheet.castes.tradesperson;
-            else if (["Wanderer", "Pilgrim", "Tomb Robber", "Cultist", "Adventurer"].indexOf(npc.role) >= 0) r = sheet.castes.drifter;
+            else if (["Wanderer", "Pilgrim", "Delver", "Cultist", "Adventurer"].indexOf(npc.role) >= 0) r = sheet.castes.drifter;
             social.rank = r.label; social.tier = r.tier;
             social.group = (room && room.buildingName) ? (npc.role ? npc.role + " at " + room.buildingName : room.buildingName) : (npc.role || "the town");
             standingList = sheet.standingsByCaste.commoner;
@@ -3937,7 +4679,7 @@ function getNPCSocialPromptLines(npc) {
 
 // ============================================================================
 // NPC TIES - base-level relationships (family, friends, workmates)
-// npc.ties = [{ type, id }] where type is one of spouse, parent, child, sibling,
+// npc.ties = [{ type, id }] where type is one of spouse, lover, parent, child, sibling,
 // friend, coworker, employer, employee (the tie as seen FROM this NPC).
 // Ties are same-species only (cross-species ties are taboo here), match age and
 // job, and are made when an NPC is created by linking it to NPCs that already
@@ -3951,7 +4693,8 @@ const NPC_TIE_MAX = 3;
 const NPC_TIE_FAMILY_CHANCE = 0.16;
 const NPC_TIE_WORK_CHANCE = 0.55;
 const NPC_TIE_FRIEND_CHANCE = 0.18;
-const NPC_TIE_RECIPROCAL = { spouse: "spouse", parent: "child", child: "parent", sibling: "sibling", friend: "friend", coworker: "coworker", employer: "employee", employee: "employer" };
+const NPC_TIE_LOVER_CHANCE = 0.10;
+const NPC_TIE_RECIPROCAL = { spouse: "spouse", parent: "child", child: "parent", sibling: "sibling", friend: "friend", coworker: "coworker", employer: "employee", employee: "employer", lover: "lover" };
 const NPC_TIE_FAMILY = ["spouse", "parent", "child", "sibling"];
 // Roles that are staff of the building they stand in (a place of work).
 const NPC_TIE_WORK_ROLES = ["Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
@@ -4044,6 +4787,22 @@ function pickNPCTies(npc, room) {
             break;
         }
     }
+    // Lover: an unmarried adult of the same species and near age, never kin of the
+    // family tie picked above and never someone already married or taken.
+    const pendingSpouse = pending.some(function (p) { return p.type === "spouse"; });
+    if (!pendingSpouse && npc.age >= 22 && Math.random() < NPC_TIE_LOVER_CHANCE) {
+        const famOther = pending.length ? pending[0].other : null;
+        for (let i = 0; i < shuffled.length; i++) {
+            const c = shuffled[i].npc;
+            if (used[c.id] || typeof c.age !== "number" || c.age < 22 || Math.abs(c.age - npc.age) > 15) continue;
+            if (!npc.gender || !c.gender || npc.gender === "none" || c.gender === "none" || npc.gender === c.gender) continue;
+            if (_tieCount(c, "spouse") > 0 || _tieCount(c, "lover") > 0) continue;
+            if (famOther && (c === famOther || _tieHas(c, famOther.id))) continue;
+            pending.push({ type: "lover", other: c });
+            used[c.id] = true;
+            break;
+        }
+    }
     // Work: someone in the same building or team.
     if (Math.random() < NPC_TIE_WORK_CHANCE) {
         for (let i = 0; i < shuffled.length; i++) {
@@ -4101,8 +4860,21 @@ function finalizeNPCTies(npc) {
     });
 }
 
-function _tieRelationWord(type, otherGender) {
+// How each society says spouse and lover (the realm uses the common words).
+const NPC_SOCIETY_TIE_WORDS = {
+    "orc-clan": { spouse: "bonded mate", lover: "lover" },
+    "goblin-tribe": { spouse: "mate", lover: "lover" },
+    "lizardfolk-tribe": { spouse: "clutch-mate", lover: "lover" },
+    "kobold": { spouse: "mate", lover: "lover" },
+    "dragonborn-house": { spouse: "consort", lover: "paramour" }
+};
+
+function _tieRelationWord(type, otherGender, species) {
     const male = otherGender === "male", female = otherGender === "female";
+    const societyId = typeof SOCIETY_BY_SPECIES !== "undefined" && species ? SOCIETY_BY_SPECIES[species] : "";
+    const special = NPC_SOCIETY_TIE_WORDS[societyId];
+    if (special && special[type]) return special[type];
+    if (type === "lover") return "lover";
     if (type === "spouse") return male ? "husband" : (female ? "wife" : "partner");
     if (type === "parent") return male ? "father" : (female ? "mother" : "parent");
     if (type === "child") return male ? "son" : (female ? "daughter" : "child");
@@ -4121,8 +4893,8 @@ function describeNPCTie(npc, tie) {
     const role = other.role ? String(other.role).toLowerCase() : "";
     const roleBit = role ? _tieAnOrA(role) + role : "someone";
     const t = tie.type;
-    if (NPC_TIE_FAMILY.indexOf(t) >= 0) {
-        const word = _tieRelationWord(t, other.gender);
+    if (NPC_TIE_FAMILY.indexOf(t) >= 0 || t === "lover") {
+        const word = _tieRelationWord(t, other.gender, npc.species);
         return "My " + word + " is " + roleBit + (where || "") + ".";
     }
     if (t === "coworker") return "I work alongside " + roleBit + (where || "") + ".";
@@ -4134,9 +4906,8 @@ function describeNPCTie(npc, tie) {
 
 // The reveal line: up to two ties, family first.
 function getNPCTiesAnswer(npc) {
-    const ties = (npc.ties || []).slice().sort(function (a, b) {
-        return (NPC_TIE_FAMILY.indexOf(b.type) >= 0 ? 1 : 0) - (NPC_TIE_FAMILY.indexOf(a.type) >= 0 ? 1 : 0);
-    });
+    function tieRank(t) { return NPC_TIE_FAMILY.indexOf(t.type) >= 0 ? 2 : (t.type === "lover" ? 1 : 0); }
+    const ties = (npc.ties || []).slice().sort(function (a, b) { return tieRank(b) - tieRank(a); });
     const lines = [];
     for (let i = 0; i < ties.length && lines.length < 2; i++) {
         const l = describeNPCTie(npc, ties[i]);
@@ -4159,8 +4930,20 @@ function getNPCPartner(npc) {
     return null;
 }
 
+// A living lover (a tie of type "lover"), or null. A lover is not a spouse: no
+// shared surname and no family tie, but flirting is turned aside the same way.
+function getNPCLover(npc) {
+    if (!npc || !npc.ties) return null;
+    for (let i = 0; i < npc.ties.length; i++) {
+        if (npc.ties[i].type !== "lover") continue;
+        const other = typeof findNPCById === "function" ? findNPCById(npc.ties[i].id) : null;
+        if (other && !other.dead) return other;
+    }
+    return null;
+}
+
 function npcShrugsOffRomance(npc) {
-    if (!getNPCPartner(npc)) return false;
+    if (!getNPCPartner(npc) && !getNPCLover(npc)) return false;
     const d = npc.memory && typeof npc.memory.disinhibition === "number" ? npc.memory.disinhibition : 0;
     return d < NPC_PARTNER_DISINHIBITION_MIN;
 }
@@ -4363,6 +5146,7 @@ function ensureNPCRelationshipState(npc) {
     if (!Array.isArray(npc.memory.playerActions)) npc.memory.playerActions = [];
     if (!Array.isArray(npc.memory.playerActionTags)) npc.memory.playerActionTags = [];
     if (!Array.isArray(npc.memory.recentLines)) npc.memory.recentLines = [];
+    if (!Array.isArray(npc.memory.memoryEntries)) npc.memory.memoryEntries = [];
     if (typeof npc.memory.metPlayer !== "boolean") npc.memory.metPlayer = false;
     if (typeof npc.memory.aggressionCount !== "number") npc.memory.aggressionCount = 0;
     if (typeof npc.memory.lastSpokenTo !== "number") npc.memory.lastSpokenTo = 0;
@@ -5568,7 +6352,7 @@ function getAgeCategoryForRole(role, archetype) {
         ["sage", "caretaker", "guardian"].includes(archetype)) {
         return ["adult", "middle-aged", "elderly"][Math.floor(Math.random() * 3)];
     }
-    if (["Adventurer", "Bartender", "Patron", "Guest", "Scout", "Tomb Robber"].includes(role) ||
+    if (["Adventurer", "Bartender", "Patron", "Guest", "Scout", "Delver"].includes(role) ||
         ["hero", "romantic", "scoundrel"].includes(archetype)) {
         return ["young", "adult"][Math.floor(Math.random() * 2)];
     }
@@ -5695,4 +6479,25 @@ if (typeof window !== "undefined") {
     // getActDisinhibition above for the storage shape.
     window.applyActDisinhibitionDelta = applyActDisinhibitionDelta;
     window.getActDisinhibition = getActDisinhibition;
+    // NPC memory (see NPC MEMORY above).
+    window.addNPCMemory = addNPCMemory;
+    window.registerNPCToldMemory = registerNPCToldMemory;
+    window.getNPCRelevantMemories = getNPCRelevantMemories;
+    window.getNPCToldMemories = getNPCToldMemories;
+    window.getNPCMemoryTier = getNPCMemoryTier;
+    window.getNPCMemoryCap = getNPCMemoryCap;
+    window.serializeNPCMemory = serializeNPCMemory;
+    window.loadNPCMemory = loadNPCMemory;
+    window.recordNPCConversationMemory = recordNPCConversationMemory;
+    window.NPC_RECENT_LINE_TURNS = NPC_RECENT_LINE_TURNS;
+    // NPC tags and fact selector (see NPC TAGS AND FACT SELECTOR above).
+    window.NPC_TAG_VOCAB = NPC_TAG_VOCAB;
+    window.NPC_OPTION_TAGS = NPC_OPTION_TAGS;
+    window.getNPCTagsForText = getNPCTagsForText;
+    window.getNPCOptionTags = getNPCOptionTags;
+    window.getNPCSituationTags = getNPCSituationTags;
+    window.getWantedNPCTags = getWantedNPCTags;
+    window.getNPCFactRecords = getNPCFactRecords;
+    window.selectNPCFacts = selectNPCFacts;
+    window.getNPCFactSelection = getNPCFactSelection;
 }

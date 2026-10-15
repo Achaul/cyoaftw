@@ -330,15 +330,48 @@ function serializeNPCAwarenessBlock(npc) {
 }
 
 // ── BUILD NPC PERSONA BLOCK ──────────────────────────────────────
+// A recent line expires with the story (NPC_RECENT_LINE_TURNS story turns), not
+// the clock. Lines saved before turns were recorded keep the old 10-minute rule.
+function isRecentNPCLine(line, now, turnNow) {
+    if (!line || !line.text) return false;
+    if (typeof line.turn === "number" && turnNow !== null) {
+        const limit = typeof NPC_RECENT_LINE_TURNS === "number" ? NPC_RECENT_LINE_TURNS : 30;
+        return (turnNow - line.turn) <= limit;
+    }
+    return !!(line.timestamp && (now - line.timestamp) < 10 * 60 * 1000);
+}
+
+// Durable memory: what this NPC has already told the player (so it is not
+// repeated as new) plus the few most notable things the player did. See NPC
+// MEMORY in cyoaftw-npc-data.js. wantedTags (options.memoryTags) will steer the
+// pick once the tag selector is wired in.
+function buildNPCMemoryBlock(npc, wantedTags, maxNotable = 4, maxTold = 6) {
+    if (!npc || !npc.memory || !Array.isArray(npc.memory.memoryEntries) || !npc.memory.memoryEntries.length) return "";
+    const told = typeof getNPCToldMemories === "function" ? getNPCToldMemories(npc, maxTold) : [];
+    const notable = typeof getNPCRelevantMemories === "function"
+        ? getNPCRelevantMemories(npc, wantedTags || [], { max: maxNotable, minImportance: wantedTags && wantedTags.length ? 3 : 4 })
+        : [];
+    if (!told.length && !notable.length) return "";
+    const lines = ["WHAT YOU REMEMBER ABOUT THE PLAYER:"];
+    if (told.length) {
+        lines.push("- Already told them (do not repeat these as if new): " + told.map(e => e.text.replace(/[.!]+$/, "")).join("; "));
+    }
+    notable.forEach(e => {
+        lines.push("- " + e.text + (e.count > 1 ? " (" + e.count + " times)" : ""));
+    });
+    return lines.join("\n");
+}
+
 function buildNPCRecentExchangeBlock(npc, maxTurns = 4) {
     if (!npc || !npc.memory || !Array.isArray(npc.memory.recentLines) || !npc.memory.recentLines.length) {
         return "";
     }
 
     const now = Date.now();
+    const turnNow = typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : null;
     const lines = npc.memory.recentLines
         .slice(-maxTurns)
-        .filter(line => line && line.text && line.timestamp && (now - line.timestamp) < 10 * 60 * 1000)
+        .filter(line => isRecentNPCLine(line, now, turnNow))
         .map(line => {
             const speaker = line.speaker === "player" ? "Player" : (npc.name || "NPC");
             return `- ${speaker}: ${String(line.text).replace(/\s+/g, " ").trim()}`;
@@ -652,6 +685,8 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
     }
 
 
+    const facetsViaSelector = !!config.conversation && typeof getNPCFacetRecords === "function";
+
     const lines = [
         `${title}:`,
         `- Name: ${npc.givenName || npc.name || "Unknown"}${npc.givenName && !(npc.memory && npc.memory.nameKnown) ? " (the player has NOT learned this name; never say it unless they ask or you are told to introduce yourself, and never invent a different name)" : " (the player knows this name; never use any other)"}`,
@@ -681,11 +716,13 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         speechAvoid.length ? `- Avoid in speech: ${speechAvoid.join("; ")}` : "",
         voice ? `- Voice: ${voice}` : "",
         articulation ? `- Articulation: ${articulation}` : "",
-        physicalTraits ? `- Appearance: ${physicalTraits}` : "",
-        appearanceHighlights.length ? `- Notable details: ${appearanceHighlights.join(", ")}` : "",
-        anatomyBits.length ? `- Anatomy/movement: ${anatomyBits.join(", ")}` : "",
-        lore ? `- Species lore: ${String(lore).slice(0, 240)}` : "",
-        values.length ? `- Values: ${values.join(", ")}` : "",
+        // In conversation prompts these arrive as tagged facets when the player's
+        // line is about them (getNPCFacetRecords), so they are not sent every time.
+        !facetsViaSelector && physicalTraits ? `- Appearance: ${physicalTraits}` : "",
+        !facetsViaSelector && appearanceHighlights.length ? `- Notable details: ${appearanceHighlights.join(", ")}` : "",
+        !facetsViaSelector && anatomyBits.length ? `- Anatomy/movement: ${anatomyBits.join(", ")}` : "",
+        !facetsViaSelector && lore ? `- Species lore: ${String(lore).slice(0, 240)}` : "",
+        !facetsViaSelector && values.length ? `- Values: ${values.join(", ")}` : "",
         preferredTopics.length ? `- Comfortable topics: ${preferredTopics.join(", ")}` : "",
         tabooTopics.length ? `- Sensitive topics: ${tabooTopics.join(", ")}` : "",
         reactionNotes.length ? `- Reaction biases: ${reactionNotes.join("; ")}` : "",
@@ -841,6 +878,7 @@ function buildPrompt(room, npc, instruction, options = {}) {
     const npcBlock = npc ? buildNPCPersonaBlock(npc, "SPEAKER CONTEXT", options) : "";
     const standingBlock = buildPlayerStandingBlock(room, npc);
     const recentExchangeBlock = npc ? buildNPCRecentExchangeBlock(npc) : "";
+    const memoryBlock = npc ? buildNPCMemoryBlock(npc, options && options.memoryTags) : "";
     const overheardBlock = npc ? buildNPCOverheardBlock(npc) : "";
 
     return [
@@ -849,6 +887,7 @@ function buildPrompt(room, npc, instruction, options = {}) {
         awarenessBlock,
         npcBlock,
         standingBlock,
+        memoryBlock,
         recentExchangeBlock,
         overheardBlock,
         `INSTRUCTION: ${instruction}`
