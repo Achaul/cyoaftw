@@ -5700,7 +5700,8 @@ avoidNote,
         perspective,
       cacheKey: "part::" + part + "::" + stateKey + "::" + actId +
         "::" + (fluidBits.length ? fluidBits.join("|") : "clean") +
-        (withSceneContext ? "::ctx::" + (act ? act.id : "-") + "::" + (posId || "-") : "") +
+        // Always include action context in cache key so new actions trigger regeneration
+        (act ? "::ctx::" + act.id + "::" + (posId || "-") : "") +
         (fluidFocus ? "::cum" : "")
     };
   };
