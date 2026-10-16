@@ -4429,6 +4429,8 @@ if (typeof window !== "undefined") {
     window.getSocialFactLabel = getSocialFactLabel;
     window.getSocialFactAnswer = getSocialFactAnswer;
     window.getSocialFactQuestion = getSocialFactQuestion;
+    window.getSocialIdentity = getSocialIdentity;
+    window.getSocialFactBrief = getSocialFactBrief;
     window.getNPCSocialPromptLines = getNPCSocialPromptLines;
     window.pickNPCTies = pickNPCTies;
     window.finalizeNPCTies = finalizeNPCTies;
@@ -4622,7 +4624,7 @@ function generateNPCSocial(npc, room, zoneTemplate) {
     if (!sheet) return null;
 
     const zone = (room && room.zone) || (zoneTemplate && zoneTemplate.name) || "";
-    const fill = { zone: zone, place: (room && room.buildingName) || zone || "this place", group: "", rank: "", house: "", landlord: "" };
+    const fill = { zone: zone, place: (room && room.buildingName) || zone || "this place", group: "", rank: "", house: "", landlord: "", creditor: "" };
     const social = { society: society, group: "", rank: "", tier: 0, standing: "" };
     let standingList = sheet.standings || [];
     let factSource = sheet;
@@ -4672,7 +4674,12 @@ function generateNPCSocial(npc, room, zoneTemplate) {
             else if (REALM_TRADE_ROLES.indexOf(npc.role) >= 0) r = sheet.castes.tradesperson;
             else if (["Wanderer", "Pilgrim", "Delver", "Cultist", "Adventurer"].indexOf(npc.role) >= 0) r = sheet.castes.drifter;
             social.rank = r.label; social.tier = r.tier;
-            social.group = (room && room.buildingName) ? (npc.role ? npc.role + " at " + room.buildingName : room.buildingName) : (npc.role || "the town");
+            // The group is where they work, never the bare role ("wage-earner of Townsfolk").
+            social.workplace = (room && room.buildingName) ? room.buildingName : "";
+            social.group = social.workplace || "the town";
+            const creditors = ["a moneylender in the market streets", "a merchant who fronted me coin", "the guild", fill.landlord && fill.landlord !== "the landlord" ? fill.landlord : "my landlord"];
+            fill.creditor = creditors[_npcRandInt(0, creditors.length - 1)];
+            social.creditor = fill.creditor;
             standingList = sheet.standingsByCaste.commoner;
         }
     }
@@ -4728,15 +4735,66 @@ function getSocialFactLabel(npc, key) {
     return q ? q.label : "";
 }
 
-// What the NPC says. A standing answer joins group, rank and how they got it.
+// Who they are, as a phrase ("a wage-earner at the Rusty Flagon", "a captain of
+// Clan Ashhide"). A commoner is placed at their workplace, never "of <role>";
+// older saves stored the group as "<Role> at <Building>" or the bare role, so
+// those are cleaned up here.
+function getSocialIdentity(npc) {
+    const social = ensureNPCSocial(npc);
+    if (!social || !social.rank) return "";
+    const lead = _npcWithArticle(social.rank);
+    if (social.caste === "commoner") {
+        let place = social.workplace || "";
+        if (!place && social.group) {
+            const m = String(social.group).match(/^.+? at (.+)$/);
+            if (m) place = m[1];
+            else if (social.group !== (npc && npc.role) && social.group !== "the town") place = social.group;
+        }
+        return lead + (place ? " at " + place : " here in town");
+    }
+    return lead + (social.group ? " of " + social.group : "");
+}
+
+// A commoner's living in plain first person: role, pay (when it reads cleanly), place in town.
+function getSocialLivingAnswer(npc) {
+    const social = ensureNPCSocial(npc);
+    if (!social) return "";
+    const r = _npcRoutineFor(npc);
+    const parts = ["I am " + getSocialIdentity(npc) + "."];
+    if (r.duties && !/^none/i.test(r.duties)) parts.push("My days go to " + r.duties.replace(/\byour\b/g, "my").replace(/\byou\b/g, "I") + ".");
+    if (r.pay && !/\byou\b/i.test(r.pay) && !/^no /i.test(r.pay)) parts.push("Pay is " + r.pay + ".");
+    if (social.standing) parts.push(social.standing);
+    return parts.join(" ");
+}
+
+// What the NPC says (scripted fallback, and the canonical record of what was told).
 function getSocialFactAnswer(npc, key) {
     const social = ensureNPCSocial(npc);
     if (!social) return "";
     if (key === "ties") return getNPCTiesAnswer(npc);
     if (key === "standing") {
-        return "I am " + (/^[aeiou]/i.test(social.rank) ? "an " : "a ") + social.rank + (social.group ? " of " + social.group : "") + "." + (social.standing ? " " + social.standing : "");
+        if (social.caste === "commoner") return getSocialLivingAnswer(npc);
+        return "I am " + getSocialIdentity(npc) + "." + (social.standing ? " " + social.standing : "");
     }
     return social[key] ? social[key].text : "";
+}
+
+// The facts handed to the live AI so it can voice a social answer in the
+// speaker's own words. Nothing here is shown as written.
+function getSocialFactBrief(npc, key) {
+    const social = ensureNPCSocial(npc);
+    if (!social) return "";
+    const canon = getSocialFactAnswer(npc, key);
+    if (!canon) return "";
+    if (key === "standing" && social.caste === "commoner") {
+        const r = _npcRoutineFor(npc);
+        const bits = ["You are " + getSocialIdentity(npc) + "."];
+        if (r.duties && !/^none/i.test(r.duties)) bits.push("Your work: " + r.duties + ".");
+        if (r.pay) bits.push("How you are paid: " + r.pay + ".");
+        if (social.standing) bits.push("Your own circumstance: " + social.standing);
+        return bits.join(" ") + " Answer how you earn your living first (what the work is, how it pays), then work in that one circumstance. Speak as yourself; do not recite your station label, and never say 'of Townsfolk' or any bare role as if it were a group. Keep any names and debts exactly as given.";
+    }
+    return "Say this in your own words and your own manner, keeping every name, number and detail exactly: " + canon;
 }
 
 function getSocialFactQuestion(npc, key) {
@@ -4752,7 +4810,7 @@ function getNPCSocialPromptLines(npc) {
     const social = npc && npc.isHumanoid === true && !npc.isGuide ? ensureNPCSocial(npc) : null;
     if (!social) return "";
     const lines = [];
-    if (social.rank) lines.push("- Your place: " + social.rank + (social.group ? " of " + social.group : "") + (social.master ? " (bonded to " + social.master + ")" : "") + (social.standing ? ". In your own words: \"" + social.standing + "\"" : ""));
+    if (social.rank) lines.push("- Your place: " + getSocialIdentity(npc) + (social.master ? " (bonded to " + social.master + ")" : "") + (social.standing ? ". In your own words: \"" + social.standing + "\"" : ""));
     const told = ["need", "worry", "liking", "secret"].filter(function (k) { return social[k] && social[k].known; }).slice(0, 2)
         .map(function (k) { return k + ": " + social[k].text; });
     if (told.length) lines.push("- You have already told the player (stay consistent): " + told.join(" | "));

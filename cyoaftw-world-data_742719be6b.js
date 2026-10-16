@@ -4009,7 +4009,7 @@ function getGuideNewcomerAdvice(backstory) {
 // newcomer's blessing) stay scripted. Works for any guide NPC: the name and
 // species come from the NPC, the places from the fill map.
 const GUIDE_TALK_CHECKIN = [
-    "\"Are you unhurt? I heard the fighting from here.\"",
+    "\"Are you unhurt? You look like you have come a long way.\"",
     "\"{player}. Easy. Are you hurt?\"",
     "\"There you are. Breathe. Any wounds I should know about?\"",
     "\"I came as fast as I could. Are you in one piece?\""
@@ -4089,7 +4089,7 @@ const GUIDE_TALK_PARTING_PLAIN = [
 // (a short lead-in bubble before the lead/suggestion answers).
 const GUIDE_TALK_VOICE = {
     elf: {
-        checkin: ["\"You are unhurt? I heard the clash from the far wall, and came at once.\"", "\"{player}. Be still a moment. Tell me you are whole.\"", "\"I came as swiftly as my years allow. Are you harmed?\""],
+        checkin: ["\"You are unhurt? I saw you from the far wall, and came at once.\"", "\"{player}. Be still a moment. Tell me you are whole.\"", "\"I came as swiftly as my years allow. Are you harmed?\""],
         fineOk: ["\"Good. Few leave such a morning so well.\"", "\"That is welcome. I have no wish to mourn today.\""],
         fineHurt: ["\"That is not nothing, {player}. Pride is a poor bandage.\"", "\"You are hurt and call it fine. I shall not argue, this once.\""],
         rattled: ["\"There is no shame in it. Breathe. The feeling will pass, as feelings do.\"", "\"Then we will go slowly. I have the patience for both of us.\""],
@@ -4104,7 +4104,7 @@ const GUIDE_TALK_VOICE = {
         factIn: ["\"Then hear it plainly.\"", "\"Patience, then. Here is the way.\""]
     },
     dwarf: {
-        checkin: ["\"You hurt? I heard the fighting from here.\"", "\"{player}. Still standing? Good. Any wounds?\"", "\"Came as quick as my legs go. In one piece?\""],
+        checkin: ["\"You hurt? You are walking stiff.\"", "\"{player}. Still standing? Good. Any wounds?\"", "\"Came as quick as my legs go. In one piece?\""],
         fineOk: ["\"Good. Sound as a laid stone.\"", "\"Fine is fine. No bill to pay, then.\""],
         fineHurt: ["\"That is not fine, that is a debt. Mind it, {player}.\"", "\"You are bleeding on my good opinion of you. Sit when you can.\""],
         rattled: ["\"No shame. Even good stone rings when struck. It settles.\"", "\"Then slow work. Slow work lasts.\""],
@@ -4119,7 +4119,7 @@ const GUIDE_TALK_VOICE = {
         factIn: ["\"Here is the way, then.\"", "\"Plain as I can make it.\""]
     },
     halfling: {
-        checkin: ["\"Oh, there you are! Are you hurt? I heard the fighting from here.\"", "\"{player}! Sit, sit. Are you hurt anywhere?\"", "\"Came as fast as my feet would carry me. Are you all in one piece, dear?\""],
+        checkin: ["\"Oh, there you are! Are you hurt? You look peaky.\"", "\"{player}! Sit, sit. Are you hurt anywhere?\"", "\"Came as fast as my feet would carry me. Are you all in one piece, dear?\""],
         fineOk: ["\"Oh, thank goodness. A scratch heals, and a fright I can put a kettle on for.\"", "\"Good. Then no harm done, and supper is still on.\""],
         fineHurt: ["\"That is not nothing, {player}. Do mind it; I will not have you bleeding on an empty stomach.\"", "\"Fine, says the one who is wincing. Sit when you can, hm?\""],
         rattled: ["\"Of course you are. Nobody is steady after that. A warm drink and a quiet minute work wonders.\"", "\"Then we go gently. No hurry at all.\""],
@@ -4134,7 +4134,7 @@ const GUIDE_TALK_VOICE = {
         factIn: ["\"Right, here is how it goes.\"", "\"Now, listen close.\""]
     },
     orc: {
-        checkin: ["\"You hurt? I heard the fight from here.\"", "\"{player}. Still on your feet. Wounds?\"", "\"I came fast. Say it. Are you hurt?\""],
+        checkin: ["\"You hurt? Speak plain.\"", "\"{player}. Still on your feet. Wounds?\"", "\"I came fast. Say it. Are you hurt?\""],
         fineOk: ["\"Good. Strong.\"", "\"Good. No blood owed, then.\""],
         fineHurt: ["\"That is not fine. That is blood. Tend it.\"", "\"You bleed and say fine. Brave, or stupid. Tend it anyway.\""],
         rattled: ["\"No shame. Everyone shakes after. Breathe it out.\"", "\"Then we go slow. Slow is alive.\""],
@@ -4149,7 +4149,7 @@ const GUIDE_TALK_VOICE = {
         factIn: ["\"Hear it.\"", "\"Plain words, then.\""]
     },
     dragonborn: {
-        checkin: ["\"Are you unhurt? I heard the clash from here.\"", "\"{player}. Stand straight and tell me: are you wounded?\"", "\"I came the moment I heard. Are you whole?\""],
+        checkin: ["\"Are you unhurt? You carry yourself stiffly.\"", "\"{player}. Stand straight and tell me: are you wounded?\"", "\"I came the moment I saw you. Are you whole?\""],
         fineOk: ["\"Good. Our line is not so easily broken.\"", "\"Good. I expected no less.\""],
         fineHurt: ["\"That is no scratch, {player}. Pride is no armour. See to it.\"", "\"You say fine, and bleed. I shall allow it this once.\""],
         rattled: ["\"It is no dishonour to be shaken. Master it, and it becomes strength.\"", "\"Then we proceed with care. Honour is patient.\""],
@@ -4164,7 +4164,7 @@ const GUIDE_TALK_VOICE = {
         factIn: ["\"Attend, then.\"", "\"Hear it, and remember it.\""]
     },
     goblin: {
-        checkin: ["\"Hurt? Hurt? Heard the fighting from here, yes. You whole?\"", "\"{player}! Quick, quick, let me look. Any holes in you?\"", "\"Came running, yes. Anything bleeding that should not be?\""],
+        checkin: ["\"Hurt? Hurt? You look rough, yes. You whole?\"", "\"{player}! Quick, quick, let me look. Any holes in you?\"", "\"Came running, yes. Anything bleeding that should not be?\""],
         fineOk: ["\"Good, good! Whole is useful. Whole is very useful.\"", "\"Good. Fine is the best kind of luck.\""],
         fineHurt: ["\"Fine? That is not fine, that is leaking. Mind it, {player}.\"", "\"You say fine, I see red. I will not say a word. Almost.\""],
         rattled: ["\"Oh, yes, rattled, who is not? Shaky is only alive being loud.\"", "\"Slow then, slow. No hurry. Well, a little hurry.\""],
@@ -4179,7 +4179,7 @@ const GUIDE_TALK_VOICE = {
         factIn: ["\"Listen, listen.\"", "\"Here is how, yes.\""]
     },
     lizardfolk: {
-        checkin: ["\"You are hurt? We heard the fighting from here.\"", "\"{player}. You stand. Any wounds?\"", "\"We came fast. You are whole?\""],
+        checkin: ["\"You are hurt? You walk like it.\"", "\"{player}. You stand. Any wounds?\"", "\"We came fast. You are whole?\""],
         fineOk: ["\"Good. Whole is strong.\"", "\"Good. No blood to tend.\""],
         fineHurt: ["\"That is not fine. That is blood. Tend it.\"", "\"You say fine. We see the wound. Tend it.\""],
         rattled: ["\"It passes. Breathe. The hunt is quiet now.\"", "\"Then slow. Slow is safe.\""],
@@ -4194,7 +4194,7 @@ const GUIDE_TALK_VOICE = {
         factIn: ["\"Listen.\"", "\"We tell it plain.\""]
     },
     kobold: {
-        checkin: ["\"You are hurt? We heard the fighting, yes, from here! Are you whole?\"", "\"{player}! Oh, good, there. Any wounds? Please say no.\"", "\"We came so fast! Are you all in one piece?\""],
+        checkin: ["\"You are hurt? We saw you, yes, from here! Are you whole?\"", "\"{player}! Oh, good, there. Any wounds? Please say no.\"", "\"We came so fast! Are you all in one piece?\""],
         fineOk: ["\"Oh, good! Good good good. Whole is best.\"", "\"Yes, fine, wonderful. We worried. A little.\""],
         fineHurt: ["\"That is not fine, {player}! That is bleeding! Please, mind it.\"", "\"You say fine, but we see it. Please sit. Please.\""],
         rattled: ["\"Oh, yes, of course. We are rattled too. Everyone is. Breathe.\"", "\"Then slowly. We will go slowly. No trouble at all.\""],
@@ -4216,6 +4216,119 @@ function _guideTalkVoicePool(key, base, sub) {
     if (!v || !v[key]) return base;
     const entry = sub ? v[key][sub] : v[key];
     return Array.isArray(entry) && entry.length ? entry : base;
+}
+
+// ── GUIDE INFLECTION ───────────────────────────────────────────────────────
+// How the guide sounds. A base inflection per backstory (their temperament in
+// speech), then up to two situational shifts that come from the live state
+// (see getGuideShifts in the engine). The text goes to the AI as direction
+// (see getGuideContextLine); when the AI is off, a short species-voiced lead
+// line stands in for the shift (GUIDE_SHIFT_LEADS). No invented languages:
+// this is rhythm, warmth and word choice in the common tongue.
+const GUIDE_INFLECTION_BASE = {
+    "coming-of-age": "warm, dry and a little teasing; gentle pride, jokes that land softly, never mocking",
+    "revenge": "low, quiet and clipped; says little, never raises their voice, loyal without being soft about it",
+    "redemption": "calm, unhurried and gentle; plain words, comfortable with a pause, never flattering",
+    "missing-kin": "careful and urgent; lowers their voice, keeps checking the room, wants answers more than small talk",
+    "fortune": "quick, wry and playful; talks with a grin, enjoys the angle, light about serious things",
+    "exile": "hushed and watchful; short sentences, an eye on the door, trusts slowly",
+    "calling": "serene and a little reverent; speaks as if the words matter, patient with questions"
+};
+
+const GUIDE_INFLECTION_SHIFTS = {
+    pursued: "Trouble from the player's past is close, so you are tighter and more watchful: shorter sentences, a glance toward the door.",
+    hurt: "The player is hurt, so you slow down and soften: shorter sentences, concern under the surface, no jokes at their expense.",
+    firm: "The player has been curt with you, so you stay patient but firmer: no grovelling, no picking a fight.",
+    night: "It is night, so you keep your voice low and speak a little slower.",
+    success: "The player has been doing well lately, so you ease up a little: more warmth, a touch of pride, a looser rhythm.",
+    gap: "It has been a while since you last spoke, so you are relaxed and unhurried, like picking up an old thread."
+};
+const GUIDE_SHIFT_ORDER = ["pursued", "hurt", "firm", "night", "success", "gap"];
+
+// Direction text for the AI: base inflection plus up to two shifts.
+function getGuideInflection(archetypeId, shifts) {
+    const base = GUIDE_INFLECTION_BASE[archetypeId] || "plain, steady and friendly";
+    const list = Array.isArray(shifts) ? shifts.slice(0, 2) : [];
+    const extra = list.map(function (k) { return GUIDE_INFLECTION_SHIFTS[k]; }).filter(function (x) { return !!x; });
+    return "Your usual manner is " + base + "." + (extra.length ? " " + extra.join(" ") : "");
+}
+
+// Scripted stand-ins for a shift when the AI is off (or its line was rejected).
+// One short line each, in the guide's species manner. No "firm" line: it only
+// matters in free speech.
+const GUIDE_SHIFT_LEADS = {
+    human: {
+        hurt: "\"You look worse than you let on.\"",
+        pursued: "\"Keep your eyes open. Trouble from your past is close.\"",
+        night: "\"Keep your voice down, it is late.\"",
+        success: "\"You are doing better than I expected, and I expected plenty.\"",
+        gap: "\"It has been a while. Good to see you again.\""
+    },
+    elf: {
+        hurt: "\"You carry that wound badly, and hide it worse.\"",
+        pursued: "\"Stay watchful. Your past is nearer than you would like.\"",
+        night: "\"It is late. Let us speak softly.\"",
+        success: "\"You have done well. I am glad to say it.\"",
+        gap: "\"It has been some time. I am glad to see you.\""
+    },
+    dwarf: {
+        hurt: "\"You look rough. That wants tending. Do not be stubborn.\"",
+        pursued: "\"Eyes up. Your old trouble is close.\"",
+        night: "\"Late. Keep it short and quiet.\"",
+        success: "\"Good work so far. Do not let it go to your head.\"",
+        gap: "\"Been a while. Good.\""
+    },
+    halfling: {
+        hurt: "\"Look at you, pale as milk. Sit when you can.\"",
+        pursued: "\"Quietly now, and keep glancing back. Your old trouble is near.\"",
+        night: "\"Late, isn't it? Let us keep it hushed.\"",
+        success: "\"Look at you go! I am proud of you, truly.\"",
+        gap: "\"There you are again! It has been ages.\""
+    },
+    orc: {
+        hurt: "\"You are hurt. Do not hide it. Heal before you fight.\"",
+        pursued: "\"Stay sharp. Your enemies are close.\"",
+        night: "\"Night. Speak low.\"",
+        success: "\"You fight well. I see it.\"",
+        gap: "\"You return. Good.\""
+    },
+    dragonborn: {
+        hurt: "\"You are wounded. Do not insult me by hiding it.\"",
+        pursued: "\"Be vigilant. Those who follow you are near.\"",
+        night: "\"The hour is late. Speak quietly.\"",
+        success: "\"You acquit yourself well. I note it.\"",
+        gap: "\"You return. Well met again.\""
+    },
+    goblin: {
+        hurt: "\"Hurt, hurt. You look rough, yes. Sit, heal.\"",
+        pursued: "\"Eyes open, eyes open. Old trouble is close, yes.\"",
+        night: "\"Night, night. Quiet voices.\"",
+        success: "\"Useful, you are. Good.\"",
+        gap: "\"Back again, yes. Good.\""
+    },
+    lizardfolk: {
+        hurt: "\"You are hurt. Rest. We watch.\"",
+        pursued: "\"Watch. The ones hunting you are near.\"",
+        night: "\"Night. Speak low.\"",
+        success: "\"You hunt well. We see.\"",
+        gap: "\"You return. Good.\""
+    },
+    kobold: {
+        hurt: "\"You are hurt! We worry. Please rest.\"",
+        pursued: "\"Careful, careful. We think your hunters are near.\"",
+        night: "\"It is night. We whisper.\"",
+        success: "\"You do well! We are glad.\"",
+        gap: "\"You are back! We are glad.\""
+    }
+};
+
+function getGuideShiftLead(shifts, speciesKey) {
+    const set = GUIDE_SHIFT_LEADS[String(speciesKey || "").toLowerCase()] || GUIDE_SHIFT_LEADS.human;
+    const list = Array.isArray(shifts) ? shifts : [];
+    for (let i = 0; i < list.length; i++) {
+        if (set[list[i]]) return set[list[i]];
+    }
+    return "";
 }
 
 function _guideTalkPick(arr) {
@@ -4260,7 +4373,10 @@ function _buildGuideTalkBeat(beatId, backstory, ctx) {
                 : _guideTalkVoicePool("fineOk", GUIDE_TALK_FINE_OK);
         }
         const hookReplyList = hookReplies();
-        const lines = [f(_guideTalkPick(pool)), hook()].filter(function (x) { return !!x; });
+        // "Who are you?" already states the relation; the coming-of-age opening
+        // restates it (the promise to the family), so it is not said twice.
+        const skipHook = beatId === "checkin-who" && backstory && backstory.archetype === "coming-of-age";
+        const lines = [f(_guideTalkPick(pool)), skipHook ? "" : hook()].filter(function (x) { return !!x; });
         // An archetype with no replies skips straight to "what first?".
         if (!hookReplyList.length) return firstBeat(lines);
         return { lines: lines, replies: hookReplyList };
@@ -5284,7 +5400,7 @@ const SOCIETY_SHEETS = {
                 "I earned my trade the hard way and mean to pass it on.",
                 "I came here new, like most, and I am still finding my place.",
                 "I work for others and rent from {landlord}, like nearly everyone in town.",
-                "I owe a debt that has hung over me longer than I like."
+                "I owe {creditor} a debt that has hung over me longer than I like."
             ]
         },
         needs: [
@@ -5582,6 +5698,9 @@ if (typeof window !== "undefined") {
     window.getGuidePlanText = getGuidePlanText;
     window.getGuideMissionLine = getGuideMissionLine;
     window.getGuideTalkBeat = getGuideTalkBeat;
+    window.getGuideInflection = getGuideInflection;
+    window.getGuideShiftLead = getGuideShiftLead;
+    window.GUIDE_SHIFT_ORDER = GUIDE_SHIFT_ORDER;
     window.getGuideSpec = getGuideSpec;
     window.GUIDE_SPECIES_LINES = GUIDE_SPECIES_LINES;
     window.GUIDE_SPECIES_TEXT = GUIDE_SPECIES_TEXT;
