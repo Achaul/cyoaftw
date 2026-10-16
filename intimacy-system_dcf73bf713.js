@@ -66,6 +66,37 @@ function npcHasCloacaFlag(npc) {
     return false;
 }
 
+/**
+ * Check if a gender string represents female. Handles various formats
+ * like "female", "f", "woman", "girl", "Female Elf", etc.
+ * Mirrors the female check in getPronouns from intimacy-data-acts.js.
+ */
+function isGenderFemale(gender) {
+    const normalizedGender = String(gender || "").toLowerCase();
+    // Check female first with exact or prefix match to avoid "male" matching before "female"
+    if (normalizedGender === "female" || normalizedGender === "f" || 
+        normalizedGender.includes(" woman") || normalizedGender.includes(" girl") ||
+        normalizedGender.includes("female ") || normalizedGender.startsWith("female")) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Check if a gender string represents male. Handles various formats
+ * like "male", "m", "man", "boy", "Male Elf", etc.
+ * Mirrors the male check in getPronouns from intimacy-data-acts.js.
+ */
+function isGenderMale(gender) {
+    const normalizedGender = String(gender || "").toLowerCase();
+    if (normalizedGender === "male" || normalizedGender === "m" || 
+        normalizedGender.includes(" man") || normalizedGender.includes(" boy") ||
+        normalizedGender.includes("male ") || normalizedGender.startsWith("male")) {
+        return true;
+    }
+    return false;
+}
+
 
 // Cloaca narration wording: reptilian-kin have a single vent instead of a
 // separate anus, so canned anal narrative swaps its mammalian nouns for vent
@@ -1865,27 +1896,27 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     // Check gender requirements
     if (act.maleOnly || act.femaleOnly || act.requiresNpcMale || act.requiresNpcFemale || act.requiresActorMale || act.requiresActorFemale || act.requiresPlayerMale || act.requiresPlayerFemale) {
         const playerGender = getPlayerGenderForGates(player);
-        const npcGender = (npc.gender || "female").toLowerCase();
+        const npcGenderRaw = npc.gender || "female";
         const actorIsPlayer = !act.playerIsBottom;
         
         if (act.maleOnly) {
             if (actorIsPlayer && !playerGateMale(playerGender)) return { valid: false, reason: "wrong gender" };
-            if (!actorIsPlayer && npcGender !== "male") return { valid: false, reason: "wrong gender" };
+            if (!actorIsPlayer && !isGenderMale(npcGenderRaw)) return { valid: false, reason: "wrong gender" };
         }
         if (act.femaleOnly) {
             if (actorIsPlayer && !playerGateFemale(playerGender)) return { valid: false, reason: "wrong gender" };
-            if (!actorIsPlayer && npcGender !== "female") return { valid: false, reason: "wrong gender" };
+            if (!actorIsPlayer && !isGenderFemale(npcGenderRaw)) return { valid: false, reason: "wrong gender" };
         }
         if (act.requiresActorMale) {
             if (actorIsPlayer && !playerGateMale(playerGender)) return { valid: false, reason: "wrong gender" };
-            if (!actorIsPlayer && npcGender !== "male") return { valid: false, reason: "wrong gender" };
+            if (!actorIsPlayer && !isGenderMale(npcGenderRaw)) return { valid: false, reason: "wrong gender" };
         }
         if (act.requiresActorFemale) {
             if (actorIsPlayer && !playerGateFemale(playerGender)) return { valid: false, reason: "wrong gender" };
-            if (!actorIsPlayer && npcGender !== "female") return { valid: false, reason: "wrong gender" };
+            if (!actorIsPlayer && !isGenderFemale(npcGenderRaw)) return { valid: false, reason: "wrong gender" };
         }
-        if (act.requiresNpcMale && npcGender !== "male") return { valid: false, reason: "wrong gender" };
-        if (act.requiresNpcFemale && npcGender !== "female") return { valid: false, reason: "wrong gender" };
+        if (act.requiresNpcMale && !isGenderMale(npcGenderRaw)) return { valid: false, reason: "wrong gender" };
+        if (act.requiresNpcFemale && !isGenderFemale(npcGenderRaw)) return { valid: false, reason: "wrong gender" };
         if (act.requiresPlayerMale && !playerGateMale(playerGender)) return { valid: false, reason: "wrong gender" };
         if (act.requiresPlayerFemale && !playerGateFemale(playerGender)) return { valid: false, reason: "wrong gender" };
     }

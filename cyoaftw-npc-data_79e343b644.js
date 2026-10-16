@@ -222,6 +222,18 @@ const NPC_SPECIES_NATIVE_SPEECH = {
     kobold: {
         line: "anxious, eager and quick to defer; speaks of masters, dragons and the clan, calls itself 'we', trap-wise and wary; grovels to dragonborn and spits at everyone else",
         kin: "with another kobold they whisper about masters and who is in favour"
+    },
+    catfolk: {
+        line: "smooth, unhurried and a little sly; speaks in bargains, favours and half-hints, answers a question with a question when it suits, curious about everything and committed to nothing, a purr of amusement under dry remarks; owes nobody and keeps careful account",
+        kin: "with another catfolk they swap road-news, troupe gossip and who owes whom, and drop the bargaining"
+    },
+    wolfkin: {
+        line: "low, plain and sparing; short sentences, speaks of the pack, the hunt and the land, says 'we' for the pack, trusts slowly and watches before answering; loyalty is stated, not flattered; blunt without cruelty",
+        kin: "with another wolfkin they speak of pack, den and range, and whether the other is pack or stranger"
+    },
+    satyr: {
+        line: "bright, playful and quick; lilting patter full of jokes, music and wine, teases everyone, never quite serious and never quite lying; fond of a dare, allergic to solemnity, flatters and needles in the same breath",
+        kin: "with another satyr they trade pranks, gossip about revels and who is owed a cup"
     }
 };
 const NPC_NATIVE_SPEECH_RULES = "plain common tongue only: no invented words, no apostrophe names, no phonetic accent spelling";
@@ -252,7 +264,10 @@ const NPC_SPECIES_SPEECH_STYLE_BIAS = {
     orc: "direct",
     dragonborn: "formal",
     lizardfolk: "clipped",
-    kobold: "nervous"
+    kobold: "nervous",
+    catfolk: "wry",
+    wolfkin: "direct",
+    satyr: "boisterous"
 };
 
 // One in-character sample per conversable species (humans keep the style
@@ -292,6 +307,18 @@ const NPC_SPECIES_SPEECH_SAMPLES = {
     kobold: [
         "We- I- yes, two of them, before dark! Big ones, walking soft. Soft-walkers spring traps, you know. Not that- not that there are traps. But we watched them.",
         "Oh, we saw them, yes! They did not look for us, so we looked for them. That is the proper order of things."
+    ],
+    catfolk: [
+        "Two, yes, with the dusk. One walked like a debtor. The other walked like a creditor. I had a thought to ask what price they put on that information, but I am feeling generous. Which way were you hoping they went?",
+        "Mm. Two travellers, about the hour the shadows get long. I do not give away what I see for free, but you have a pleasant face. What can you offer?"
+    ],
+    wolfkin: [
+        "Two. At dusk. They kept to the road and did not look at the trees. That is how you know someone has been hunted before.",
+        "I scented them before I saw them. Two travellers, wary, no meat on them. They did not stay. Whatever they run from, it is not near."
+    ],
+    satyr: [
+        "Two? Two! Ha, I saw them, I did - one stumbling, the other pretending not to be. Poor souls, no song between them. I offered a cup and they ran. Their loss, my gain, and a good cup it was!",
+        "Oh, I saw them, friend, I saw them. Two travellers, long faces, nary a smile. I tried a joke. It did not land. I will think of a better one by midnight."
     ]
 };
 
@@ -1069,7 +1096,10 @@ const NPC_SPECIES_FOOD = {
     Goblin: "scraps, stews of whatever is to hand and sour drink",
     Lizardfolk: "fish, raw or roasted meat and little else",
     Kobold: "scraps, grubs, roasted rats and whatever they can steal",
-    Dragonborn: "roast meat, spiced dishes and strong drink"
+    Dragonborn: "roast meat, spiced dishes and strong drink",
+    Catfolk: "fish, cream, small game and sweet pastries",
+    Wolfkin: "rare meat, bone-broth and hard bread shared round the fire",
+    Satyr: "wine, cheese, ripe fruit and whatever bread is left over"
 };
 
 function _npcRoutineFor(npc) {
@@ -1912,7 +1942,10 @@ const NPC_LORE_SPECIES_TIERS = {
     "kobold": ["deep", "military"],
     "lizardfolk": ["swamp"],
     "skeleton": ["military"],
-    "ghost": ["military", "faith", "secret"]
+    "ghost": ["military", "faith", "secret"],
+    "catfolk": ["trade", "local"],
+    "wolfkin": ["deep", "military"],
+    "satyr": ["local", "trade"]
 };
 
 function getNPCLoreTiers(npc, ctx) {
@@ -3297,6 +3330,72 @@ const NPC_CONVERSATION_CATALOGUE = [
     // lives in the NSFW catalogue. Building favour here is how a spark turns
     // into friendship; the NPC may also start asking the player questions back
     // (see getNPCCuriosityLines in the engine).
+    {
+        id: "rapport-catfolk-sunspot",
+        priority: 122,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Share a warm, sunny spot with them",
+        textVariants: [
+            "You settle onto the warmest patch of stone beside them and say nothing, just offering the company.",
+            "You find the sunny spot they favour and sit close enough to share it, easy and quiet."
+        ],
+        intent: "flirt",
+        contextNote: "The player sits close beside you in a warm spot, quietly sharing it. For a catfolk this is a gentle, chaste sign of trust and fondness. React as your feelings and temperament would: a purr, a flick of the tail, teasing, or reserve. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 2, intent: "flirt", markMet: true, actionTag: "rapport-catfolk-sunspot" },
+        conditions: {
+            metPlayer: true,
+            species: ["catfolk"],
+            minAttraction: 12,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
+        id: "rapport-wolfkin-pack",
+        priority: 122,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Offer to walk their boundary with them",
+        textVariants: [
+            "You offer to walk the edge of their ground with them, shoulder to shoulder, and keep the watch.",
+            "You say you would be glad to share their watch for an hour, and fall in beside them."
+        ],
+        intent: "flirt",
+        contextNote: "The player offers to walk your boundary and share your watch. For a wolfkin this is a gentle, chaste sign of trust, the way a stranger starts to be counted as pack. React as your feelings and temperament would: guarded warmth, a quiet nod, or reserve. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 2, intent: "flirt", markMet: true, actionTag: "rapport-wolfkin-pack" },
+        conditions: {
+            metPlayer: true,
+            species: ["wolfkin"],
+            minAttraction: 12,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
+        id: "rapport-satyr-toast",
+        priority: 122,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Propose a toast, just the two of you",
+        textVariants: [
+            "You raise an imaginary cup and propose a toast to the two of you, and to whatever mischief comes next.",
+            "You grin and offer a toast, just the pair of you, to good company and bad ideas."
+        ],
+        intent: "flirt",
+        contextNote: "The player proposes a playful toast to the two of you. For a satyr, a shared cup and a bit of banter is a warm, chaste way of showing fondness. React as your feelings and temperament would: laughing, teasing back, a flourish, or reserve. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 2, intent: "flirt", markMet: true, actionTag: "rapport-satyr-toast" },
+        conditions: {
+            metPlayer: true,
+            species: ["satyr"],
+            minAttraction: 12,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
     {
         id: "rapport-gaze",
         priority: 121,
@@ -4859,9 +4958,9 @@ function generateNPCSocial(npc, room, zoneTemplate) {
     let status = null;
 
     const kin = npc._kinSocial && npc._kinSocial.society === society ? npc._kinSocial : null;
-    if (society === "orc-clan" || society === "goblin-tribe" || society === "lizardfolk-tribe" || society === "dragonborn-house") {
+    if (society === "orc-clan" || society === "goblin-tribe" || society === "lizardfolk-tribe" || society === "dragonborn-house" || society === "catfolk-troupe" || society === "wolfkin-pack" || society === "satyr-revel") {
         const name = sheet.groupNames[_npcRandInt(0, sheet.groupNames.length - 1)];
-        social.group = kin ? kin.group : (sheet.groupPrefix || "") + name + (society === "lizardfolk-tribe" ? " tribe" : "");
+        social.group = kin ? kin.group : (sheet.groupPrefix || "") + name + (society === "lizardfolk-tribe" ? " tribe" : (society === "wolfkin-pack" ? " pack" : (society === "satyr-revel" ? " revel" : (society === "catfolk-troupe" ? " troupe" : ""))));
         if (kin && society === "dragonborn-house") fill.house = kin.group;
         const rank = _socialWeightedPick(sheet.ranks);
         social.rank = rank.label; social.tier = rank.tier; social.rankKey = rank.key;
@@ -5234,6 +5333,9 @@ const NPC_SOCIETY_TIE_WORDS = {
     "goblin-tribe": { spouse: "mate", lover: "lover" },
     "lizardfolk-tribe": { spouse: "clutch-mate", lover: "lover" },
     "kobold": { spouse: "mate", lover: "lover" },
+    "catfolk-troupe": { spouse: "troupe-mate", lover: "lover" },
+    "wolfkin-pack": { spouse: "pack-mate", lover: "lover" },
+    "satyr-revel": { spouse: "consort", lover: "fling" },
     "dragonborn-house": { spouse: "consort", lover: "paramour" }
 };
 
@@ -5379,7 +5481,7 @@ function getBaseHostilityForTemperament(temperament) {
     const ranges = {
         aggressive: [72, 92],
         hostile: [62, 86],
-        wary: [42, 66],
+        wary: [36, 58],
         skittish: [28, 52],
         neutral: [24, 46],
         curious: [18, 38],
@@ -5400,6 +5502,179 @@ function getBaseFavorabilityForTemperament(temperament) {
     if (key === "curious") return 8;
     if (key === "calm") return 10;
     return 0;
+}
+
+// ── LORE-DRIVEN TEMPERAMENT ──────────────────────────────────────────
+// An NPC's temperament (and so its starting hostility and favour, see
+// getBaseHostilityForTemperament) is a weighted pick, not a coin toss. Layers:
+//   1. ROLE: what they do. Keepers, priests and healers are settled and civil,
+//      guards are watchful, raiders and cultists are dangerous.
+//   2. SPECIES: the confirmed cultures (orcs love a fight, goblins are sneaky
+//      and fear magic, lizardfolk guard territory, kobolds are timid, dragonborn
+//      are proud). Realm species are left alone.
+//   3. SOCIETY (second pass, once the social sheet exists): rank, status and
+//      standing. A feral kobold is hostile, a bonded one is not; an orc
+//      chieftain is bold, an outcast is wary; an oathless dragonborn is on edge.
+//   4. ZONE: hostile areas raise the odds of hostile and aggressive for
+//      everyone except staff and guards.
+//   5. MOBS: skeletons are always aggressive, rats are skittish (or feral in a
+//      hostile area), ghosts are on edge.
+// Town keeps a small pool of troublemakers (rowdy patrons, drifters, thieves).
+// Weights are relative; keys not listed count as 0.
+const NPC_TEMPER_KEYS = ["friendly", "neutral", "curious", "bold", "wary", "skittish", "hostile", "aggressive"];
+
+const NPC_ROLE_TEMPER_CLASS = {
+    "Innkeeper": "staff", "Bartender": "staff", "Cook": "staff", "Shopkeeper": "staff", "Vendor": "staff",
+    "Wandering Merchant": "staff", "Blacksmith": "staff", "Healer": "staff", "Priest": "staff", "Archivist": "staff",
+    "Scholar": "staff", "Enchanter": "staff", "Arcanist": "staff", "Reliquarian": "staff", "Servant": "staff",
+    "Town Guard": "law", "Stone Guard": "law", "Scout": "law", "Guildmaster": "law",
+    "Townsfolk": "common", "Villager": "common", "Patron": "common", "Guest": "common", "Miner": "common",
+    "Pilgrim": "pilgrim",
+    "Adventurer": "adventurer", "Delver": "adventurer",
+    "Wanderer": "wanderer",
+    "Scavenger": "scavenger",
+    "Raider": "raider",
+    "Cultist": "cultist"
+};
+
+const NPC_TEMPER_BY_CLASS = {
+    staff:      { friendly: 5, neutral: 5, curious: 2, bold: 1, wary: 1, skittish: 1, hostile: 0.1 },
+    law:        { friendly: 1, neutral: 5, curious: 1, bold: 3, wary: 4, hostile: 0.3, aggressive: 0.1 },
+    common:     { friendly: 3, neutral: 5, curious: 3, bold: 1, wary: 2, skittish: 1, hostile: 0.9, aggressive: 0.4 },
+    pilgrim:    { friendly: 4, neutral: 4, curious: 3, wary: 2, skittish: 1, hostile: 0.1 },
+    adventurer: { friendly: 2, neutral: 3, curious: 3, bold: 4, wary: 2, skittish: 0.5, hostile: 1.6, aggressive: 0.6 },
+    wanderer:   { friendly: 2, neutral: 3, curious: 2, bold: 1, wary: 4, skittish: 2, hostile: 1.2, aggressive: 0.5 },
+    scavenger:  { neutral: 2, wary: 4, skittish: 2, bold: 1, hostile: 2.5, aggressive: 0.6 },
+    raider:     { neutral: 0.5, bold: 2, wary: 1, hostile: 5, aggressive: 5 },
+    cultist:    { neutral: 1, curious: 1, bold: 1, wary: 3, hostile: 4, aggressive: 2 }
+};
+
+// Multipliers for a species' nature. Realm species (human, elf, dwarf, halfling)
+// have none: their society is the ordinary one.
+const NPC_SPECIES_TEMPER_TINT = {
+    orc:        { bold: 2, aggressive: 2.5, hostile: 2, friendly: 0.4, curious: 0.6 },
+    goblin:     { wary: 2.5, skittish: 1.5, hostile: 1.5, friendly: 0.4, bold: 0.6 },
+    lizardfolk: { wary: 2, hostile: 2, aggressive: 1.5, friendly: 0.5, curious: 0.7 },
+    kobold:     { skittish: 2, wary: 1.5, friendly: 0.7, bold: 0.5 },
+    dragonborn: { bold: 1.8, friendly: 0.6, skittish: 0.3, curious: 0.8 },
+    catfolk:    { curious: 2, skittish: 1.2, wary: 1.2, bold: 0.8, aggressive: 0.7 },
+    wolfkin:    { wary: 2, bold: 1.5, friendly: 0.6, hostile: 1.3, skittish: 0.5 },
+    satyr:      { friendly: 1.8, curious: 1.8, bold: 1.5, wary: 0.5, aggressive: 0.5 }
+};
+
+// Keyed "society:rank-or-status". `replace` is the whole weight table (used for
+// everyone except staff and guards); `mult` multiplies the role's table (the
+// only thing staff and guards take from their society).
+const NPC_SOCIETY_TEMPER = {
+    "orc-clan:chieftain":   { replace: { bold: 5, aggressive: 3, hostile: 1, neutral: 1 } },
+    "orc-clan:war-leader":  { replace: { bold: 4, aggressive: 3, hostile: 2, neutral: 1 } },
+    "orc-clan:champion":    { replace: { bold: 5, aggressive: 2, hostile: 1, neutral: 2 } },
+    "orc-clan:warrior":     { mult: { bold: 2, aggressive: 2.5, hostile: 2, friendly: 0.4, curious: 0.6 } },
+    "orc-clan:whelp":       { mult: { bold: 2.5, curious: 1.5, aggressive: 1.5, skittish: 0.5 } },
+    "orc-clan:outcast":     { replace: { wary: 4, hostile: 3, skittish: 2, neutral: 2, bold: 1 } },
+    "goblin-tribe:chieftain": { replace: { bold: 3, hostile: 3, aggressive: 2, wary: 2 } },
+    "goblin-tribe:shaman":    { replace: { wary: 4, curious: 3, neutral: 2, hostile: 1 } },
+    "goblin-tribe:boss":      { replace: { aggressive: 4, hostile: 4, bold: 3 } },
+    "goblin-tribe:sneak":     { replace: { wary: 5, hostile: 3, skittish: 1, neutral: 1, curious: 1 } },
+    "goblin-tribe:scrounger": { replace: { skittish: 4, wary: 4, neutral: 2, hostile: 1 } },
+    "goblin-tribe:runt":      { replace: { skittish: 6, wary: 3, hostile: 1 } },
+    "lizardfolk-tribe:elder":       { replace: { neutral: 4, wary: 4, bold: 1, curious: 1 } },
+    "lizardfolk-tribe:hunt-leader": { replace: { hostile: 3, wary: 4, bold: 3 } },
+    "lizardfolk-tribe:warden":      { replace: { hostile: 4, wary: 4, aggressive: 2 } },
+    "lizardfolk-tribe:hunter":      { replace: { wary: 5, hostile: 3, neutral: 2, bold: 1 } },
+    "lizardfolk-tribe:forager":     { replace: { neutral: 4, wary: 3, curious: 2, friendly: 1 } },
+    "lizardfolk-tribe:hatch-tender":{ replace: { wary: 4, neutral: 3, hostile: 2, friendly: 1 } },
+    "dragonborn-house:head":     { replace: { bold: 4, neutral: 3, wary: 2 } },
+    "dragonborn-house:pure":     { replace: { bold: 4, neutral: 3, wary: 2, hostile: 0.5 } },
+    "dragonborn-house:thin":     { replace: { neutral: 4, wary: 3, bold: 2, curious: 1 } },
+    "dragonborn-house:mixed":    { replace: { neutral: 4, wary: 3, curious: 2, friendly: 1, skittish: 1 } },
+    "dragonborn-house:oathless": { replace: { wary: 4, hostile: 2, bold: 2, neutral: 1 } },
+    "kobold:bonded":     { replace: { wary: 4, skittish: 4, neutral: 2, curious: 1 } },
+    "kobold:feral":      { replace: { hostile: 7, aggressive: 2, wary: 1 } },
+    "kobold:runaway":    { replace: { skittish: 5, wary: 4, hostile: 1 } },
+    "kobold:tribute":    { replace: { wary: 4, neutral: 3, skittish: 2, hostile: 1 } },
+    "kobold:worshipper": { replace: { curious: 3, neutral: 3, wary: 3, bold: 1 } },
+    "catfolk-troupe:troupe-elder": { replace: { neutral: 4, wary: 3, curious: 2, bold: 1 } },
+    "catfolk-troupe:pathfinder":   { replace: { curious: 3, neutral: 3, bold: 2, wary: 2 } },
+    "catfolk-troupe:peddler":      { replace: { friendly: 3, neutral: 3, curious: 3, wary: 1 } },
+    "catfolk-troupe:nimble":       { replace: { curious: 3, neutral: 2, wary: 3, skittish: 2, hostile: 0.5 } },
+    "catfolk-troupe:dreamer":      { replace: { neutral: 4, curious: 3, friendly: 2, skittish: 1 } },
+    "catfolk-troupe:stray":        { replace: { wary: 4, skittish: 3, neutral: 2, hostile: 1 } },
+    "wolfkin-pack:alpha":          { replace: { bold: 4, neutral: 3, wary: 3, hostile: 1 } },
+    "wolfkin-pack:warden":         { replace: { wary: 4, bold: 3, neutral: 2, hostile: 2 } },
+    "wolfkin-pack:hunter":         { replace: { wary: 4, bold: 3, neutral: 2, hostile: 2, aggressive: 0.5 } },
+    "wolfkin-pack:scout":          { replace: { wary: 4, neutral: 3, curious: 2, hostile: 1.5, skittish: 1 } },
+    "wolfkin-pack:cub-keeper":     { replace: { wary: 4, neutral: 3, friendly: 1, hostile: 2 } },
+    "wolfkin-pack:lone":           { replace: { wary: 4, hostile: 3, skittish: 2, neutral: 2, aggressive: 1 } },
+    "satyr-revel:master-of-revels": { replace: { friendly: 4, bold: 3, curious: 2, neutral: 1 } },
+    "satyr-revel:piper":            { replace: { friendly: 3, curious: 3, neutral: 2, bold: 2 } },
+    "satyr-revel:cup-bearer":       { replace: { friendly: 4, curious: 3, neutral: 2 } },
+    "satyr-revel:troublemaker":     { replace: { curious: 3, bold: 3, friendly: 2, neutral: 2, hostile: 1.2, aggressive: 0.3 } },
+    "satyr-revel:reveller":         { replace: { friendly: 4, curious: 3, neutral: 2, bold: 1 } },
+    "satyr-revel:sulker":           { replace: { wary: 3, neutral: 3, hostile: 2, skittish: 1 } },
+    "realm:noble":       { replace: { neutral: 4, bold: 3, wary: 2, friendly: 1, curious: 1 } }
+};
+
+// Zone pressure on everyone who is not staff or a guard.
+const NPC_HOSTILE_ZONE_TEMPER_MULT = { hostile: 2.5, aggressive: 3, wary: 1.4, friendly: 0.5, curious: 0.8 };
+
+// The society key for an NPC's social sheet, or "" when none applies.
+function getNPCSocietyTemperKey(npc) {
+    const s = npc && npc.social;
+    if (!s || !s.society) return "";
+    let key = "";
+    if (s.society === "kobold") key = s.status ? "kobold:" + s.status : "";
+    else if (s.society === "realm") key = s.caste === "noble" ? "realm:noble" : "";
+    else key = s.rankKey ? s.society + ":" + s.rankKey : "";
+    return NPC_SOCIETY_TEMPER[key] ? key : "";
+}
+
+function _npcTemperScale(weights, mult) {
+    Object.keys(mult).forEach(function (k) {
+        if (typeof weights[k] === "number") weights[k] *= mult[k];
+    });
+}
+
+// A weighted temperament for an NPC-like object: { species, isHumanoid, role,
+// social? }. Pass the room and zone template for the zone layer.
+function getLoreTemperament(npc, room, zoneTemplate) {
+    const hostileArea = !!(zoneTemplate && zoneTemplate.hostileArea);
+    const species = String((npc && npc.species) || "").toLowerCase();
+    let w;
+    if (npc && npc.isHumanoid === false) {
+        if (species === "skeleton") return "aggressive";
+        if (species === "rat") w = hostileArea ? { aggressive: 5, hostile: 3, wary: 2, skittish: 2 } : { skittish: 5, wary: 3, aggressive: 1 };
+        else if (species === "ghost") w = { hostile: 4, aggressive: 3, wary: 3, skittish: 1 };
+        else if (species === "slime") w = { aggressive: 6, hostile: 3, neutral: 1 };
+        else w = hostileArea ? { aggressive: 6, hostile: 3, wary: 1 } : { wary: 4, skittish: 3, neutral: 2, curious: 1, hostile: 0.5 };
+    } else {
+        const cls = NPC_ROLE_TEMPER_CLASS[String((npc && npc.role) || "")] || "common";
+        const protectedRole = cls === "staff" || cls === "law";
+        w = Object.assign({}, NPC_TEMPER_BY_CLASS[cls]);
+        const key = getNPCSocietyTemperKey(npc);
+        const entry = key ? NPC_SOCIETY_TEMPER[key] : null;
+        if (entry && entry.replace && !protectedRole) {
+            w = Object.assign({}, entry.replace);
+        } else if (entry && entry.mult) {
+            _npcTemperScale(w, entry.mult);
+        } else if (NPC_SPECIES_TEMPER_TINT[species]) {
+            _npcTemperScale(w, NPC_SPECIES_TEMPER_TINT[species]);
+        }
+        if (hostileArea && !protectedRole) _npcTemperScale(w, NPC_HOSTILE_ZONE_TEMPER_MULT);
+    }
+    let total = 0;
+    NPC_TEMPER_KEYS.forEach(function (k) { total += w[k] || 0; });
+    if (total <= 0) return "neutral";
+    let roll = Math.random() * total;
+    for (let i = 0; i < NPC_TEMPER_KEYS.length; i++) {
+        roll -= w[NPC_TEMPER_KEYS[i]] || 0;
+        if (roll < 0) return NPC_TEMPER_KEYS[i];
+    }
+    return "neutral";
+}
+if (typeof window !== "undefined") {
+    window.getLoreTemperament = getLoreTemperament;
+    window.getNPCSocietyTemperKey = getNPCSocietyTemperKey;
 }
 
 // ── GIVEN NAMES ─────────────────────────────────────────────────────
@@ -5452,6 +5727,24 @@ const NPC_GIVEN_NAME_POOLS = {
     },
     Kobold: {
         any: ["Yip", "Dink", "Rik", "Skrib", "Tamp", "Zik", "Nubb", "Pip"]
+    },
+    Catfolk: {
+        male: ["Tamsin", "Rurrik", "Sable", "Mirro", "Jinx", "Brindle", "Cassel", "Fenn"],
+        female: ["Mirri", "Saffra", "Nyla", "Tabbi", "Velvet", "Ember", "Pallo", "Sorrel"],
+        surnames: ["Quietpaw", "Softstep", "Lanternfoot", "Silkwhisker", "Duskpelt"]
+    },
+    Wolfkin: {
+        male: ["Garrok", "Fenrik", "Rurik", "Vask", "Haldor", "Torgrim", "Kael", "Brannoch"],
+        female: ["Varra", "Skadi", "Lyssa", "Ysolt", "Hedra", "Maera", "Torva", "Kaida"],
+        surnames: ["Greyfang", "Ashmane", "Ridgehowl", "Frostpaw", "Stonetrail"]
+    },
+    Satyr: {
+        male: ["Pip", "Bromius", "Tivo", "Corin", "Lyssander", "Merrick", "Dorrin", "Fennick"],
+        female: ["Thessa", "Melia", "Daphnis", "Lilla", "Rosalind", "Vinia", "Calla", "Ione"],
+        surnames: ["Goatsong", "Reedpipe", "Wineleaf", "Crookhorn", "Hoofbeat"]
+    },
+    Slime: {
+        any: ["Blob", "Gloop", "Ooze", "Squelch", "Glob", "Drip"]
     }
 };
 
@@ -6015,7 +6308,26 @@ function _npcEvaluateTypePref(pref, profile) {
     }
     var appearance = profile.appearance;
     if (!appearance || typeof appearance[pref.axis] !== "string") return 0;
-    return values.indexOf(appearance[pref.axis]) !== -1 ? 1 : -0.5;
+    if (values.indexOf(appearance[pref.axis]) !== -1) return 1;
+    // Fur, mane and species build words (ginger, silver, lithe, rangy...) are
+    // read as their nearest human-pool word; a word with no near match is
+    // neutral, never a mismatch.
+    var near = _npcNearTypeValue(pref.axis, appearance[pref.axis]);
+    var pool = NPC_TYPE_PHYSICAL_VALUES[pref.axis] || [];
+    if (near === null) return pool.indexOf(appearance[pref.axis]) !== -1 ? -0.5 : 0;
+    return values.indexOf(near) !== -1 ? 1 : -0.5;
+}
+
+var NPC_TYPE_NEAR_WORDS = {
+    hairColor: { ginger: "red", russet: "red", copper: "red", auburn: "auburn", cream: "blond", tawny: "blond", straw: "blond", golden: "blond", silver: "gray", grey: "gray", "silver-grey": "gray", "dark grey": "gray", "timber-grey": "gray", ash: "gray", "tabby brown": "brown", chestnut: "brown", tan: "brown", dark: "black", "dark brown": "dark brown" },
+    build: { lithe: "slight", slender: "slight", sleek: "lean", wiry: "lean", rangy: "lean", springy: "lean", compact: "sturdy", stocky: "sturdy", powerful: "athletic", muscular: "athletic", "broad-shouldered": "broad", wolfish: "athletic", sturdy: "sturdy", lean: "lean" },
+    hairStyle: { "a short mane": "short", "a long shaggy mane": "long", "a wild mane": "messy", "shaggy curls": "curly", "a wild mop": "messy", "a loose tangle": "messy", "unkempt waves": "loose", "a sleek short cut": "short", "a close-cropped pelt": "cropped", "a braided tuft": "braided", "a braided scruff": "braided", "a braided top-knot": "tied back", "a topknot": "tied back", "a loose ruff": "loose", "a thick ruff": "loose" },
+    eyeColor: { gold: "amber", yellow: "amber", copper: "amber", "pale blue": "blue", "dark brown": "brown" }
+};
+function _npcNearTypeValue(axis, value) {
+    var table = NPC_TYPE_NEAR_WORDS[axis];
+    var key = String(value || "").toLowerCase();
+    return table && table[key] ? table[key] : null;
 }
 
 // Raw match score (before charisma), summed over the NPC's preferences.

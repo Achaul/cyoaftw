@@ -89,7 +89,7 @@ var INTIMACY_MATRIX = {
         groin: ["kiss", "lick", "nuzzle", "nibble"],
         buttocks: ["kiss", "lick"],
         anus: ["kiss", "lick", "suck", "rim", "tongue", "nuzzle"],
-        vagina: ["kiss", "lick", "penetrate", "eat", "tongue", "suck", "lap"],
+        vagina: ["kiss", "lick", "penetrate", "eat", "tongue", "suck", "lap", "nibble"],
         penis: ["kiss", "lick", "suck", "deepthroat", "swallow", "nibble"],
         
         thighs: ["kiss", "lick", "nibble"],

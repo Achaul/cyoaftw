@@ -81,6 +81,317 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
     if (!npc.memory.orientation) npc.memory.orientation = "bi";
   }
 
+  // ============================================================================
+  // CREATURE TEMPLATES - NSFW anatomy extensions for species
+  // ============================================================================
+  // These templates extend the SFW SPECIES_TEMPLATES with NSFW-specific fields:
+  // - allowedSkinTones: array of skin/fur/scale color options
+  // - visualProfile.surface: surface type and texture details
+  // - allowedHairColors: array of hair color options
+  // - allowedEyeColors: array of eye color options
+  // - appearanceProfile: body appearance type (mapped from SFW anatomyType)
+  // - sensualProfile: erotic anatomy details (breasts, genitals)
+  // - cloaca: boolean for species with cloaca instead of separate genitals
+  // - isHumanoid, isCivilized, size: matched from SFW templates
+  //
+  // The type field must match the species name (case-insensitive).
+  // These are merged with SFW templates at runtime via getCreatureTemplate.
+
+  var CREATURE_TEMPLATES = [
+    // === Human ===
+    {
+      type: "Human",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "medium",
+      allowedSkinTones: ["pale", "fair", "tan", "olive", "brown", "dark brown"],
+      visualProfile: {
+        surface: { type: "skin", texture: ["smooth", "soft", "slightly rough", "supple"], sheen: "matte" }
+      },
+      allowedHairColors: ["black", "brown", "auburn", "blond", "gray", "white"],
+      allowedEyeColors: ["brown", "hazel", "green", "blue", "gray", "amber"],
+      appearanceProfile: "humanoid",
+      sensualProfile: {
+        breasts: { description: "a modest bust" }
+      },
+      cloaca: false
+    },
+    // === Elf ===
+    {
+      type: "Elf",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "medium",
+      allowedSkinTones: ["pale", "warm ivory", "olive", "copper", "moonlit brown"],
+      visualProfile: {
+        surface: { type: "skin", texture: ["smooth", "velvety", "slightly luminous", "delicate"], sheen: "glowing" }
+      },
+      allowedHairColors: ["silver", "black", "gold", "chestnut", "white", "auburn"],
+      allowedEyeColors: ["green", "violet", "silver", "amber", "blue", "hazel"],
+      appearanceProfile: "humanoid",
+      sensualProfile: {
+        breasts: { description: "a graceful, elven bust" }
+      },
+      cloaca: false
+    },
+    // === Dwarf ===
+    {
+      type: "Dwarf",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "small",
+      allowedSkinTones: ["ruddy", "tan", "deep brown", "umber", "stone-pale"],
+      visualProfile: {
+        surface: { type: "skin", texture: ["rough", "weathered", "sturdy", "calloused"], sheen: "matte" }
+      },
+      allowedHairColors: ["black", "brown", "red", "iron-gray", "white", "auburn"],
+      allowedEyeColors: ["brown", "amber", "gray", "green", "black", "hazel"],
+      appearanceProfile: "humanoid",
+      sensualProfile: {
+        breasts: { description: "a sturdy, compact bust" }
+      },
+      cloaca: false
+    },
+    // === Halfling ===
+    {
+      type: "Halfling",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "small",
+      allowedSkinTones: ["fair", "sun-browned", "warm tan", "olive", "brown"],
+      visualProfile: {
+        surface: { type: "skin", texture: ["smooth", "soft", "supple", "warm"], sheen: "soft" }
+      },
+      allowedHairColors: ["brown", "black", "sandy", "auburn", "gray", "blonde"],
+      allowedEyeColors: ["brown", "hazel", "green", "blue", "amber"],
+      appearanceProfile: "humanoid",
+      sensualProfile: {
+        breasts: { description: "a soft, round bust" }
+      },
+      cloaca: false
+    },
+    // === Goblin ===
+    {
+      type: "Goblin",
+      isHumanoid: true,
+      isCivilized: false,
+      size: "small",
+      allowedSkinTones: ["moss green", "yellow-green", "ash gray", "mud brown", "sallow ochre"],
+      visualProfile: {
+        surface: { type: "skin", texture: ["leathery", "wrinkled", "rough", "scaly patches"], sheen: "dull" }
+      },
+      allowedHairColors: ["black", "mud-brown", "rust", "patchy gray", "none"],
+      allowedEyeColors: ["amber", "red-brown", "black", "yellow", "pale green"],
+      appearanceProfile: "humanoid",
+      sensualProfile: {
+        breasts: { description: "small, knobby mounds" }
+      },
+      cloaca: false
+    },
+    // === Orc ===
+    {
+      type: "Orc",
+      isHumanoid: true,
+      isCivilized: false,
+      size: "large",
+      allowedSkinTones: ["deep green", "gray-green", "ash gray", "dark umber", "olive"],
+      visualProfile: {
+        surface: { type: "skin", texture: ["leathery", "thick", "weathered", "scarred"], sheen: "dull" }
+      },
+      allowedHairColors: ["black", "dark brown", "iron-gray", "rust", "shaved", "white"],
+      allowedEyeColors: ["amber", "brown", "red-brown", "gray", "black"],
+      appearanceProfile: "humanoid",
+      sensualProfile: {
+        breasts: { description: "heavy, powerful mounds" }
+      },
+      cloaca: false
+    },
+    // === Lizardfolk ===
+    {
+      type: "Lizardfolk",
+      isHumanoid: true,
+      isCivilized: false,
+      size: "medium",
+      allowedSkinTones: ["moss green", "swamp brown", "olive", "dark green", "gray-green"],
+      visualProfile: {
+        surface: { type: "scales", texture: ["smooth", "overlapping", "glossy", "matted"], sheen: "shiny" }
+      },
+      allowedHairColors: ["none"],
+      allowedEyeColors: ["amber", "yellow", "red", "black", "gold"],
+      appearanceProfile: "reptilian",
+      sensualProfile: {
+        breasts: { description: "firm, scaled swells" }
+      },
+      cloaca: true
+    },
+    // === Kobold ===
+    {
+      type: "Kobold",
+      isHumanoid: true,
+      isCivilized: false,
+      size: "tiny",
+      allowedSkinTones: ["rust red", "dark brown", "deep orange", "mottled brown", "dusty red"],
+      visualProfile: {
+        surface: { type: "scales", texture: ["fine", "dry", "smooth", "slightly rough"], sheen: "matte" }
+      },
+      allowedHairColors: ["none"],
+      allowedEyeColors: ["amber", "red", "yellow", "pale orange"],
+      appearanceProfile: "reptilian",
+      sensualProfile: {
+        breasts: { description: "tiny, underdeveloped swells" }
+      },
+      cloaca: true
+    },
+    // === Skeleton ===
+    {
+      type: "Skeleton",
+      isHumanoid: false,
+      isCivilized: false,
+      size: "medium",
+      allowedSkinTones: ["ivory", "yellowed", "ash-white", "smoke-stained", "old brown"],
+      visualProfile: {
+        surface: { type: "bone", texture: ["smooth", "cracked", "pitted", "polished"], sheen: "glossy" }
+      },
+      allowedHairColors: ["none"],
+      allowedEyeColors: ["blue witchlight", "green witchlight", "empty shadow", "red pinpricks"],
+      appearanceProfile: "undead",
+      sensualProfile: {},
+      cloaca: false
+    },
+    // === Ghost ===
+    {
+      type: "Ghost",
+      isHumanoid: false,
+      isCivilized: false,
+      size: "medium",
+      allowedSkinTones: ["pale blue", "silver-white", "faint green", "smoky gray", "candlelit gold"],
+      visualProfile: {
+        surface: { type: "translucent form", texture: ["wispy", "ethereal", "misty", "shimmering"], sheen: "ghostly" }
+      },
+      allowedHairColors: ["none"],
+      allowedEyeColors: ["white", "blue", "hollow black", "silver", "faint green"],
+      appearanceProfile: "ethereal",
+      sensualProfile: {},
+      cloaca: false
+    },
+    // === Rat ===
+    {
+      type: "Rat",
+      isHumanoid: true,
+      isCivilized: false,
+      size: "small",
+      allowedSkinTones: ["brown", "black", "gray", "mottled", "pale"],
+      visualProfile: {
+        surface: { type: "fur", texture: ["short", "coarse", "patchy", "sleek"], sheen: "dull" }
+      },
+      allowedHairColors: ["none"],
+      allowedEyeColors: ["black", "red", "dark brown"],
+      appearanceProfile: "vermin",
+      sensualProfile: {
+        breasts: { description: "small, fur-covered teats" }
+      },
+      cloaca: false
+    },
+    // === Dragonborn ===
+    {
+      type: "Dragonborn",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "large",
+      allowedSkinTones: ["deep green", "bronze", "crimson", "deep blue", "black", "gold"],
+      visualProfile: {
+        surface: { type: "scales", texture: ["thick", "overlapping", "glossy", "metallic"], sheen: "shiny" }
+      },
+      allowedHairColors: ["none"],
+      allowedEyeColors: ["gold", "amber", "red", "green", "bronze", "copper"],
+      appearanceProfile: "draconic",
+      sensualProfile: {
+        breasts: { description: "firm, draconic swells" }
+      },
+      cloaca: false
+    },
+    // === Catfolk ===
+    {
+      type: "Catfolk",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "medium",
+      allowedSkinTones: ["tabby brown", "black", "ginger", "cream", "silver-grey", "calico", "tortoiseshell", "white", "smoky grey", "golden tabby"],
+      visualProfile: {
+        surface: { type: "fur", texture: ["soft", "silky", "dense", "plush", "sleek"], sheen: "softly shining" }
+      },
+      allowedHairColors: ["black", "ginger", "silver", "cream", "brown", "white", "golden", "charcoal"],
+      allowedEyeColors: ["amber", "green", "gold", "blue", "copper", "violet", "emerald"],
+      appearanceProfile: "mixed",
+      sensualProfile: {
+        breasts: { description: "soft, fur-dusted swells" },
+        fur: { description: "silky fur that covers their body, soft to the touch" }
+      },
+      cloaca: false
+    },
+    // === Wolfkin ===
+    {
+      type: "Wolfkin",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "medium",
+      allowedSkinTones: ["grey", "dark grey", "brown", "black", "russet", "white", "tawny", "timber-grey", "ashen grey", "snow white"],
+      visualProfile: {
+        surface: { type: "fur", texture: ["thick", "coarse", "shaggy", "dense", "wild"], sheen: "matte" }
+      },
+      allowedHairColors: ["grey", "black", "brown", "russet", "white", "tawny", "silver", "charcoal"],
+      allowedEyeColors: ["amber", "yellow", "pale blue", "brown", "gold", "hazel", "copper"],
+      appearanceProfile: "mixed",
+      sensualProfile: {
+        breasts: { description: "firm, fur-covered mounds" },
+        fur: { description: "thick, wild fur that covers their body with a musky scent" }
+      },
+      cloaca: false
+    },
+    // === Satyr ===
+    {
+      type: "Satyr",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "medium",
+      allowedSkinTones: ["tanned", "ruddy", "olive", "sun-browned", "copper", "pale freckled", "golden brown", "weathered bronze", "rosy"],
+      visualProfile: {
+        surface: { type: "skin", texture: ["smooth", "warm", "slightly rough", "sun-kissed"], sheen: "soft" }
+      },
+      allowedHairColors: ["black", "dark brown", "chestnut", "auburn", "grey", "straw", "silver", "wild blonde"],
+      allowedEyeColors: ["amber", "hazel", "green", "dark brown", "gold", "twinkling blue", "mischievous violet"],
+      appearanceProfile: "mixed",
+      sensualProfile: {
+        breasts: { description: "wiry, compact swells" },
+        hooves: { description: "cloven hooves with rough, calloused soles" }
+      },
+      cloaca: false
+    },
+    // === Slime ===
+    {
+      type: "Slime",
+      isHumanoid: false,
+      isCivilized: false,
+      size: "small",
+      allowedSkinTones: ["emerald green", "deep blue", "fiery red", "slate grey", "swamp green", "frost blue", "crimson", "stone grey"],
+      visualProfile: {
+        surface: { type: "gel", texture: ["slick", "quivering", "translucent", "glistening", "cool"], sheen: "wet" }
+      },
+      allowedHairColors: ["none"],
+      allowedEyeColors: ["none"],
+      appearanceProfile: "amorphous",
+      sensualProfile: {
+        body: { description: "a shifting, gelatinous mass with a cool, damp touch" }
+      },
+      cloaca: false
+    }
+  ];
+
+  // Expose to window for getCreatureTemplate
+  if (typeof window !== "undefined") {
+    window.creatureTemplates = CREATURE_TEMPLATES;
+  }
+
   function getCreatureTemplate(type) {
     if (Array.isArray(window.creatureTemplates)) {
       const lowerType = String(type || "").toLowerCase();

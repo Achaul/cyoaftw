@@ -20,7 +20,7 @@ const ZONE_TEMPLATES = [
         // Shrine" is this zone's guaranteed shrine room (ZONE_SHRINE_ROOMS)
         // in the same style - odd for a Town, tucked away below a tavern.
         roomTypes: ["Tavern", "Taproom", "Inn", "Kitchen", "Cellar", "Smithy", "Street", "Alleyway", "Square", "Avenue", "Gate", "Town Hall", "Cellar Shrine"],
-        allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling", "Dragonborn"],
+        allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling", "Dragonborn", "Satyr", "Catfolk"],
         lightLevel: "bright",
         defaultDanger: "safe"
     },
@@ -31,7 +31,7 @@ const ZONE_TEMPLATES = [
         // "Buried Shrine" is this zone's guaranteed shrine room
         // (ZONE_SHRINE_ROOMS) - sealed behind a cave-in, easy to miss.
         roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel", "Armory", "Collapsed Gallery", "Throne Room", "Buried Shrine", "Smugglers' Den"],
-        allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat", "Kobold", "Lizardfolk"],
+        allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat", "Kobold", "Lizardfolk", "Wolfkin", "Slime"],
         lightLevel: "dark",
         defaultDanger: "hostile"
     },
@@ -43,7 +43,7 @@ const ZONE_TEMPLATES = [
         // (ZONE_SHRINE_ROOMS) - "Altar" is a second, bonus prayer-capable
         // room type that can also turn up here at ordinary flat odds.
         roomTypes: ["Hallway", "Ruins Passage", "Altar", "Library", "Tower", "Shrine", "Inner Sanctum", "Smugglers' Den"],
-        allowedSpecies: ["Skeleton", "Ghost", "Goblin", "Lizardfolk"],
+        allowedSpecies: ["Skeleton", "Ghost", "Goblin", "Lizardfolk", "Wolfkin"],
         lightLevel: "dim",
         defaultDanger: "hostile"
     },
@@ -55,7 +55,7 @@ const ZONE_TEMPLATES = [
         // (ZONE_SHRINE_ROOMS) - built around a dried-up well shaft, tucked
         // between otherwise mundane tunnels.
         roomTypes: ["Cavern", "Mine Shaft", "Vault", "Deep Forge", "Underground Hallway", "Underground Gate", "Chieftain's Hall", "Deep Well Shrine", "Smugglers' Den"],
-        allowedSpecies: ["Dwarf", "Goblin", "Human", "Kobold", "Dragonborn"],
+        allowedSpecies: ["Dwarf", "Goblin", "Human", "Kobold", "Dragonborn", "Catfolk", "Slime"],
         lightLevel: "dim",
         defaultDanger: "tense"
     },
@@ -67,7 +67,7 @@ const ZONE_TEMPLATES = [
         // (ZONE_SHRINE_ROOMS) - half-submerged, easy to mistake for just
         // another ruin until you're standing in it.
         roomTypes: ["Marsh", "Broken Ground", "Swamp Camp", "Submerged Ruin", "Witch's Lair", "Sunken Chapel"],
-        allowedSpecies: ["Lizardfolk", "Rat", "Kobold"],
+        allowedSpecies: ["Lizardfolk", "Rat", "Kobold", "Slime"],
         lightLevel: "dim",
         defaultDanger: "hostile"
     }
@@ -403,6 +403,118 @@ const SPECIES_TEMPLATES = [
             values: ["traps", "numbers", "dragon worship", "cleverness"],
             topics: ["tunnel routes", "trap designs", "the dragon they serve", "intruders in the warren"],
             taboos: ["damaging traps carelessly", "mentioning the dragon's wrath", "stealing from the hoard"]
+        }
+    },
+    {
+        species: "Catfolk",
+        portraitProfile: { face: "feline face, cat ears, slit pupils, whiskers, short fur-covered muzzle, soft fur on cheeks", negatives: "human ears, bare human skin, scales, horns, wings" },
+        isHumanoid: true,
+        size: "medium",
+        isCivilized: true,
+        speechStyle: "wry",
+        anatomyType: "mixed",
+        hasTail: true,
+        lore: "Catfolk are lithe, curious wanderers who travel in family troupes and caravans, trading small luxuries, stories and favours. They prize freedom, independence and a clever bargain, bow to no throne, and hold grudges and debts with equal care. A catfolk who stays in one place has usually been given a very good reason.",
+        articulation: "A short muzzle and sharp canines give words a soft, purring roll on the r's, with the occasional trill when amused.",
+        anatomyProfile: {
+            surfaceType: "fur",
+            skinTones: ["tabby brown", "black", "ginger", "cream", "silver-grey", "calico", "tortoiseshell", "white", "smoky grey", "golden tabby"],
+            hairColors: ["black", "ginger", "silver", "cream", "brown", "white", "golden", "charcoal"],
+            hairStyles: ["a short mane", "a braided tuft", "a loose ruff", "a topknot", "a sleek short cut", "a wild tangled mass", "a carefully groomed coat", "long flowing fur"],
+            eyeColors: ["amber", "green", "gold", "blue", "copper", "violet", "emerald"],
+            builds: ["lithe", "slender", "wiry", "sleek", "compact", "graceful", "nimble"],
+            features: ["pointed furred ears", "long whiskers", "a long swishing tail", "slit-pupil eyes", "retractable claws", "soft padded hands", "a delicate muzzle", "fur that ripples with movement", "sharp curved claws"],
+            movements: ["moves with a silent, rolling stride", "stretches lazily before answering", "settles into a watchful crouch", "flicks their tail while thinking", "pads forward on silent paws", "arches their back playfully", "freezes mid-movement to listen"],
+            voices: ["purring", "smooth", "low and lilting", "sly", "trilling", "a soft growl", "a melodic hum"]
+        },
+        culture: {
+            values: ["freedom", "clever bargains", "family troupe", "comfort"],
+            topics: ["roads and caravans", "good deals", "old debts", "warm places to sleep"],
+            taboos: ["being caged", "being ordered about", "wet fur", "broken bargains"]
+        }
+    },
+    {
+        species: "Wolfkin",
+        portraitProfile: { face: "lupine face, long muzzle, pointed upright wolf ears, amber eyes, thick fur ruff", negatives: "human ears, bare human skin, scales, horns, wings" },
+        isHumanoid: true,
+        size: "medium",
+        isCivilized: true,
+        speechStyle: "direct",
+        anatomyType: "mixed",
+        hasTail: true,
+        lore: "Wolfkin live and hunt in packs, and the pack is everything: its hunt, its territory, its word. They are loyal to a fault and slow to trust outsiders, but once you are counted pack they will follow you into the dark. A lone wolfkin is an exile, a scout, or a hunter on a long trail.",
+        articulation: "A long muzzle shapes words into a low, rumbling growl at the edges, and the occasional half-howl slips out when emotions run high.",
+        anatomyProfile: {
+            surfaceType: "fur",
+            skinTones: ["grey", "dark grey", "brown", "black", "russet", "white", "tawny", "timber-grey", "ashen grey", "snow white"],
+            hairColors: ["grey", "black", "brown", "russet", "white", "tawny", "silver", "charcoal"],
+            hairStyles: ["a thick ruff", "a wild mane", "a braided scruff", "a close-cropped pelt", "a long shaggy mane", "a neatly combed coat", "a wind-tousled mess", "a winter-thick pelt"],
+            eyeColors: ["amber", "yellow", "pale blue", "brown", "gold", "hazel", "copper"],
+            builds: ["rangy", "powerful", "lean", "broad-shouldered", "wolfish", "muscular", "lanky"],
+            features: ["upright furred ears", "a bushy tail", "a long muzzle with sharp fangs", "heavy clawed hands", "a thick neck ruff", "keen amber eyes", "a powerful jaw", "thick calloused pads", "a battle-scarred muzzle"],
+            movements: ["moves with a loping, tireless gait", "scents the air before speaking", "stands braced as if ready to spring", "paces in restless circles", "drops to all fours when running", "sniffs at the ground intently", "freezes with ears pricked forward"],
+            voices: ["low growl", "rumbling", "gravelly", "even and quiet", "half-howling", "a deep bark", "a throaty snarl"]
+        },
+        culture: {
+            values: ["the pack", "the hunt", "loyalty", "territory"],
+            topics: ["the pack and its hunt", "tracks and scents", "territory lines", "strangers near the den"],
+            taboos: ["abandoning the pack", "breaking a hunt-oath", "wasting kill", "cages and chains"]
+        }
+    },
+    {
+        species: "Satyr",
+        portraitProfile: { face: "humanoid face with pointed ears, small curved goat horns, mischievous grin, shaggy hair", negatives: "scales, snout, wings, feathers, bare human legs" },
+        isHumanoid: true,
+        size: "medium",
+        isCivilized: true,
+        speechStyle: "boisterous",
+        anatomyType: "mixed",
+        hasTail: true,
+        lore: "Satyrs are horned, goat-legged revellers who live for wine, music and the next good prank. They are mischievous, quick-witted and fickle, and they treat rules as suggestions. Most are harmless tricksters; a few take the joke too far. Their circles gather wherever there is a party to start or a stuffy neighbour to unsettle.",
+        articulation: "Words come out in a lilting, sing-song rhythm, quick to laughter and prone to bleating when startled or when a joke lands.",
+        anatomyProfile: {
+            surfaceType: "skin",
+            skinTones: ["tanned", "ruddy", "olive", "sun-browned", "copper", "pale freckled", "golden brown", "weathered bronze", "rosy"],
+            hairColors: ["black", "dark brown", "chestnut", "auburn", "grey", "straw", "silver", "wild blonde"],
+            hairStyles: ["shaggy curls", "a wild mop", "a loose tangle", "unkempt waves", "a braided top-knot", "long flowing locks", "tied back with vines", "completely unmanaged"],
+            eyeColors: ["amber", "hazel", "green", "dark brown", "gold", "twinkling blue", "mischievous violet"],
+            builds: ["wiry", "stocky", "lean", "sturdy", "springy", "lanky", "barrel-chested"],
+            features: ["small curved goat horns", "shaggy goat legs with cloven hooves", "pointed furred ears", "a short tufted tail", "a scruffy goatee", "a crooked grin", "a mischievous glint in their eye", "hooves that click on stone", "a permanent smirk"],
+            movements: ["capers rather than walks", "cocks their head with a grin", "leans on one hip, hooves tapping", "dances a few steps for no reason", "spins with arms outstretched", "prances in a circle", "drums fingers on their thigh"],
+            voices: ["lilting", "bleating laugh", "sing-song", "husky and playful", "booming", "a deep chuckle", "a musical hum"]
+        },
+        culture: {
+            values: ["revelry", "music", "wine and good company", "pranks"],
+            topics: ["the next party", "pipes and songs", "tricks played on the stuffy", "good wine"],
+            taboos: ["sour company", "cages", "empty cups", "being bored"]
+        }
+    },
+    {
+        species: "Slime",
+        portraitProfile: { face: "a glistening translucent gelatinous blob, no face, faint core visible inside", negatives: "human face, eyes, mouth, limbs, hair" },
+        isHumanoid: false,
+        isCivilized: false,
+        size: "small",
+        speechStyle: "broken",
+        anatomyType: "amorphous",
+        hasTail: false,
+        lore: "Slimes are mindless blobs of living gel that drift through damp stone, eating whatever rots or moves. They do not think or speak, only seep toward warmth and food. Some take on the temper of the place they grew: acid from the swamp's rot, frost from cold deep stone, or the heat of old forges.",
+        articulation: "A slime has no mouth to speak of; it only gurgles, wobbles and slurps.",
+        anatomyProfile: {
+            surfaceType: "gel",
+            skinTones: ["emerald green", "deep blue", "fiery red", "slate grey", "swamp green", "frost blue", "crimson", "stone grey"],
+            hairColors: ["none"],
+            hairStyles: ["none"],
+            eyeColors: ["none"],
+            builds: ["squat", "wobbling", "pooled", "bulbous", "sprawling", "flat", "glistening", "pulsing"],
+            features: ["a translucent quivering body", "a dim core inside the gel", "bits of bone and coin suspended within", "a trail of sticky slime", "faint internal light", "a rippling surface", "a cool damp touch", "bits of digested debris"],
+            movements: ["oozes forward", "quivers in place", "slides along the wall", "pools and swells", "drips from ceiling", "seeps under door gaps", "pulses rhythmically", "splits and rejoins"],
+            voices: ["gurgling", "silent", "slurping", "blubbering", "squelching", "dripping"]
+        },
+        culture: {
+            values: ["food", "warmth", "damp"],
+            topics: ["nothing it can say"],
+            taboos: ["fire", "salt"]
         }
     }
 ];
@@ -2670,7 +2782,7 @@ function planTownLayout(rngIn) {
 const ZONE_HUBS = {
     "Underground City": {
         name: "Lantern Quarter",
-        npcSpecies: ["Dwarf", "Dwarf", "Human", "Human", "Dragonborn", "Kobold", "Goblin"],
+        npcSpecies: ["Dwarf", "Dwarf", "Human", "Human", "Dragonborn", "Kobold", "Goblin", "Catfolk", "Catfolk"],
         hostilityCap: 35,
         rooms: {
             gate:    { type: "Underground Gate",     at: [0, 0] },
@@ -2729,7 +2841,7 @@ const ZONE_HUBS = {
     },
     "Ruins": {
         name: "Pilgrims' Camp",
-        npcSpecies: ["Human", "Human", "Dwarf", "Halfling", "Elf"],
+        npcSpecies: ["Human", "Human", "Dwarf", "Halfling", "Elf", "Wolfkin"],
         hostilityCap: 40,
         rooms: {
             fire:   { type: "Camp Fire Ring",     at: [0, 0] },
@@ -3722,8 +3834,14 @@ function buildPlayerBackstory(choices) {
     if (!arch) return null;
     const slots = Object.assign({}, choices.slots || {});
     const craft = slots.craft || "made your own way in the world";
-    const template = arch.build(slots, { name: choices.playerName, cls: choices.cls, craft: craft });
-    return {
+    // Free-form start ("Write my own"): the player's own words replace the
+    // template text and, when given, the goal line. The archetype and slots
+    // still drive the guide, the lead and the pressure terms.
+    const fr = choices.freeform || null;
+    const frText = fr && typeof cleanFreeformText === "function" ? cleanFreeformText(fr.background, FREEFORM_BACKGROUND_MAX) : "";
+    const frMotive = fr && typeof cleanFreeformText === "function" ? cleanFreeformText(fr.motive, FREEFORM_MOTIVE_MAX) : "";
+    const template = frText || arch.build(slots, { name: choices.playerName, cls: choices.cls, craft: craft });
+    const out = {
         archetype: choices.archetype,
         label: arch.label,
         cls: choices.cls,
@@ -3731,10 +3849,139 @@ function buildPlayerBackstory(choices) {
         slots: slots,
         template: template,
         text: template,
-        goal: arch.goal(slots),
+        goal: frMotive || arch.goal(slots),
         guide: { state: "pending" },
         version: 1
     };
+    if (frText) { out.freeform = true; if (frMotive) out.motive = frMotive; }
+    return out;
+}
+
+// ── FREE-FORM BACKSTORY ("Write my own") ─────────────────────────
+// The player writes the background and motive in their own words and picks
+// the archetype that best fits. The archetype feeds the guide, the lead and
+// the pressure system; a few optional fields (a name, a faction, an amount)
+// fill the slots those systems read. Typed text is cleaned before it is
+// stored: no braces (Perchance list syntax and {placeholder} fills), angle
+// brackets, backticks, backslashes or double quotes, one line, length capped.
+const FREEFORM_BACKGROUND_MIN = 20;
+const FREEFORM_BACKGROUND_MAX = 700;
+const FREEFORM_MOTIVE_MAX = 200;
+const FREEFORM_NAME_MAX = 60;
+const FREEFORM_AMOUNT_MIN = 100;
+const FREEFORM_AMOUNT_MAX = 800;
+
+function cleanFreeformText(value, max) {
+    return String(value == null ? "" : value)
+        .replace(/[{}<>`\\]/g, " ")
+        .replace(/["\u201c\u201d]/g, "'")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, max || FREEFORM_BACKGROUND_MAX)
+        .trim();
+}
+
+// 0 when blank or not a positive number; otherwise clamped to a sane range so
+// a typed amount can neither erase the pressure terms nor make them absurd.
+function clampFreeformAmount(value) {
+    const n = Math.round(Number(value));
+    if (!isFinite(n) || n <= 0) return 0;
+    return Math.max(FREEFORM_AMOUNT_MIN, Math.min(FREEFORM_AMOUNT_MAX, n));
+}
+
+// Per archetype: a one-line note on what the choice does, and the optional
+// follow-up fields. kind: "text" (a name), "select" (a category the code
+// recognises) or "amount" (coins).
+const FREEFORM_ARCHETYPE_FIELDS = {
+    "coming-of-age": {
+        note: "Someone from your past has promised to see you started, and a rival from home may follow. No names needed.",
+        fields: []
+    },
+    "revenge": {
+        note: "A trail to follow and an enemy who will send people when they learn of you.",
+        fields: [
+            { key: "quarryFaction", kind: "select", label: "Is your enemy part of a larger group?", options: [
+                { value: "", label: "No, someone on their own" },
+                { value: "crown", label: "The Ashen Court (the Crown's agents)" },
+                { value: "banners", label: "The Tattered Banners (sellswords)" } ] },
+            { key: "quarryName", kind: "text", label: "Their name, if you know it (optional)", placeholder: "e.g. Captain Varn" }
+        ]
+    },
+    "redemption": {
+        note: "Something you cannot undo. Those you wronged may come to name terms.",
+        fields: [
+            { key: "amount", kind: "amount", label: "Coins you would pay to make it right (optional, 100 to 800)", placeholder: "300" }
+        ]
+    },
+    "missing-kin": {
+        note: "Someone vanished and the trail leads here. Someone else would rather it ended.",
+        fields: [
+            { key: "who", kind: "text", label: "Who are you looking for? (a name or a relation)", placeholder: "e.g. my brother Tomas" }
+        ]
+    },
+    "fortune": {
+        note: "You need coin, and whoever you owe will send collectors.",
+        fields: [
+            { key: "need", kind: "select", label: "Who is after your coin?", options: [
+                { value: "poor", label: "No one in particular, I am just tired of being poor" },
+                { value: "lender", label: "A moneylender" },
+                { value: "venture", label: "The backers of a venture that failed" },
+                { value: "gambled", label: "A gambling house" } ] },
+            { key: "amount", kind: "amount", label: "What you owe, in coins (optional, 100 to 800)", placeholder: "500" }
+        ]
+    },
+    "exile": {
+        note: "You cannot go home. Someone may come looking, and they may name a price.",
+        fields: [
+            { key: "hunters", kind: "select", label: "Who might be looking for you?", options: [
+                { value: "nobody", label: "Nobody, if I am careful" },
+                { value: "crown", label: "The Crown's magistrates" },
+                { value: "company", label: "My former company" },
+                { value: "family", label: "A powerful family" } ] },
+            { key: "amount", kind: "amount", label: "The price of being left alone, in coins (optional, 100 to 800)", placeholder: "400" }
+        ]
+    },
+    "calling": {
+        note: "A sign drew you here, and a rival seeker believes it was meant for them. No names needed.",
+        fields: []
+    }
+};
+
+// Values from the free-form page -> the slots the rest of the game reads.
+// values = { fieldKey: typed or chosen value }. Anything blank gets a neutral
+// default so no {placeholder} is ever left raw in a guide line or lore fact.
+function resolveFreeformSlots(archetypeId, values) {
+    const v = values || {};
+    const slots = {};
+    if (archetypeId === "revenge") {
+        const faction = v.quarryFaction === "crown" || v.quarryFaction === "banners" ? v.quarryFaction : "";
+        const name = cleanFreeformText(v.quarryName, FREEFORM_NAME_MAX);
+        const group = faction === "crown" ? "the Ashen Court" : (faction === "banners" ? "the Tattered Banners" : "");
+        slots.quarryFaction = faction;
+        slots.quarry = name && group ? name + " of " + group : (name || group || "the one who wronged you");
+    } else if (archetypeId === "missing-kin") {
+        slots.who = cleanFreeformText(v.who, FREEFORM_NAME_MAX) || "the one you are searching for";
+    } else if (archetypeId === "fortune") {
+        const NEED = {
+            lender: "a moneylender called in your family's debt",
+            venture: "a venture of yours failed badly and took everything with it",
+            gambled: "you gambled away a good deal more than you owned",
+            poor: "you grew tired of being poor and decided to do something about it"
+        };
+        slots.need = NEED[v.need] || NEED.poor;
+        slots.dream = "make something of yourself";
+    } else if (archetypeId === "exile") {
+        const HUNTERS = {
+            crown: "the Crown's old magistrates",
+            company: "your former company",
+            family: "a powerful family with long arms",
+            nobody: "nobody, as long as you stay careful"
+        };
+        slots.hunters = HUNTERS[v.hunters] || HUNTERS.nobody;
+    }
+    const amt = clampFreeformAmount(v.amount);
+    if (amt && (archetypeId === "redemption" || archetypeId === "fortune" || archetypeId === "exile")) slots.amount = amt;
+    return slots;
 }
 
 // The guide's opening line for this backstory (one of the variants, stable per player).
@@ -4329,6 +4576,209 @@ const GUIDE_SHIFT_LEADS = {
     }
 };
 
+// ── Guide voices for the Catfolk, Wolfkin and Satyr (playable). Same facts as
+// the base lines; only the voice changes. Merged into the tables above.
+const GUIDE_SPECIES_LINES_EXTRA = {
+    "coming-of-age": {
+        catfolk: {
+            relation: "an old family friend from the caravan road who promised to see you started",
+            opening: "\"{player}, there you are. I told your family I would see you properly started, and I always collect on a promise, mine included. Walk with me. Slowly. There is no sense in being hurried when we can be clever.\""
+        },
+        wolfkin: {
+            relation: "a pack elder who swore to see you started",
+            opening: "\"{player}. You are here. Good. I gave your pack my word that I would see you started, and a pack's word is not broken. Stay close, watch the street, and learn the place before it learns you.\""
+        },
+        satyr: {
+            relation: "a family friend with a bottomless flask who swore to see you started",
+            opening: "\"{player}! At last! I promised your family I would see you started, and I always keep a promise, provided it comes with a drink. Come on, come on, the day is wasting and so is the wine!\""
+        }
+    },
+    "revenge": {
+        catfolk: {
+            relation: "an old companion of the road who shares your grudge and keeps its accounts",
+            opening: "\"{player}. Softly. A trace of {quarry} turned up at {leadPlace}. We ask nicely, we pay for quiet, and nobody learns who is asking. A cat does not pounce until she is sure.\""
+        },
+        wolfkin: {
+            relation: "a packmate who hunts the same quarry you do",
+            opening: "\"{player}. Low voice. {quarry} left a trail that ends near {leadPlace}. We follow it quietly, we tell no one, and when we find them, we finish it.\""
+        },
+        satyr: {
+            relation: "an old drinking companion who shares your grudge and a very long memory",
+            opening: "\"{player}, shh, come closer. A whisper says {quarry} has been seen at {leadPlace}. We ask softly, we do not say who is asking, and when the time comes we make a terrible joke of them.\""
+        }
+    },
+    "redemption": {
+        catfolk: {
+            relation: "an old troupe elder who offered you a way to begin making amends",
+            opening: "\"{player}. You came. I was not sure you would. Amends are a debt like any other, and I keep honest accounts. This town has people who need help, and a shrine that is pleasant to sit in. Start at {leadPlace}.\""
+        },
+        wolfkin: {
+            relation: "a pack elder who offered you a way back to honour",
+            opening: "\"{player}. You came. That is the first hard step. A hunter pays what he owes. This town has folk who need help and a shrine worth sitting in. Begin at {leadPlace}.\""
+        },
+        satyr: {
+            relation: "a patient old reveller who offered you a way to begin making amends, and a cup besides",
+            opening: "\"{player}, you came! I was half sure you would not, and half sure you would, so I brought wine either way. Amends first, wine after. This town has folk who need help, and a shrine that is good to sit in. Start at {leadPlace}.\""
+        }
+    },
+    "missing-kin": {
+        catfolk: {
+            relation: "a close friend of the troupe who wants answers as badly as you do",
+            opening: "\"{player}, here, quickly. The clerk at {leadPlace} keeps a ledger of who comes and goes, and clerks adore being asked nicely, or paid. If {who} passed through, a name is in it.\""
+        },
+        wolfkin: {
+            relation: "a packmate who wants answers as badly as you do",
+            opening: "\"{player}. Here. The clerk at {leadPlace} keeps a ledger of who comes and goes. If {who} passed through, the name is written. We read it, and then we follow the trail.\""
+        },
+        satyr: {
+            relation: "a dear friend who wants answers as badly as you do and would sooner be laughing",
+            opening: "\"{player}, over here! The clerk at {leadPlace} keeps a ledger of who comes and goes, and clerks cannot resist a charming visitor. If {who} passed through, a name is in it. Let us be charming.\""
+        }
+    },
+    "fortune": {
+        catfolk: {
+            relation: "a fellow chancer, sleek and sly, who got you into this",
+            opening: "\"{player}. Well, well. Here we are. More coin in this town than either of us has seen in a year, and someone always pays for a quiet pair of paws. Begin at {leadPlace}, and keep an eye on your purse.\""
+        },
+        wolfkin: {
+            relation: "a fellow wanderer who talked you into this on a hard winter",
+            opening: "\"{player}. We are here. The hunt was poor at home, and this town has coin. Someone always pays for a steady hand. Begin at {leadPlace}, and watch who watches you.\""
+        },
+        satyr: {
+            relation: "a fellow chancer and the reason you are here at all",
+            opening: "\"{player}! Look at this place! More coin than either of us has seen in a year, and somebody always pays for a pair of nimble hands. Start at {leadPlace}, and do not let me near the dice.\""
+        }
+    },
+    "exile": {
+        catfolk: {
+            relation: "a friend from the road who vouched for you when no troupe would",
+            opening: "\"Softly, {player}. Nobody followed us, and I checked twice, because I always do. This town asks few questions, so give no true name where you can avoid it. {leadPlace} is a good place to start being nobody.\""
+        },
+        wolfkin: {
+            relation: "a former packmate who stood by you when the pack cast you out",
+            opening: "\"Easy, {player}. Nobody followed. I watched the road. This town asks few questions, so use no true name if you can help it. {leadPlace} is a good place to begin again.\""
+        },
+        satyr: {
+            relation: "a friend who vouched for you when everyone else was shouting",
+            opening: "\"Easy, {player}, easy. Nobody followed, and I looked behind every barrel. This town asks few questions, so give no true name. {leadPlace} is a lovely place to be nobody for a while.\""
+        }
+    },
+    "calling": {
+        catfolk: {
+            relation: "someone who understands the sign that drew you here, and has seen its like on the road",
+            opening: "\"{player}. You followed it all the way. I have seen a sign like yours once, in another town. They say an old shrine tied to {leadPlace} still answers. Come, let us see whether it answers you.\""
+        },
+        wolfkin: {
+            relation: "a pack seer who understands the sign that drew you here",
+            opening: "\"{player}. You followed the sign to its end. Good. They say an old shrine tied to {leadPlace} still answers. We will go and see whether it answers you.\""
+        },
+        satyr: {
+            relation: "someone who understands the sign that drew you here, and found it rather exciting",
+            opening: "\"{player}! You followed it all the way here, marvellous! Folk say an old shrine tied to {leadPlace} still answers. Come along, let us see whether it answers you. I will bring the wine, in case it does not.\""
+        }
+    }
+};
+
+const GUIDE_SPECIES_TEXT_EXTRA = {
+    catfolk: {
+        mission: "\"Three things, {player}, and no need to rush any of them. Grow stronger: {guildPlace} keeps trainers and a quiet yard. Earn coin: the notice boards are never empty. And follow your lead, carefully; it will keep.\"",
+        missionGuild: "\"Three things, {player}, and no need to rush any of them. Grow stronger: the trainers and the quiet yard there are for that. Earn coin: the notice boards are never empty. And follow your lead, carefully.\"",
+        advice: "\"One hard thing, and I will say it plainly: death is final in this country, even for cats. Slip into the shrine in {chapelPlace} and ask for a newcomer's blessing before anything else. It is free, it binds you to no god, and it saves you once. After that, only a patron you have served can bring you back, and only if they are strong enough. I will walk you there, if you like.\""
+    },
+    wolfkin: {
+        mission: "\"Three things, {player}. Grow stronger: {guildPlace} has trainers and a yard. Earn coin: the boards always have work. And follow your lead, for a trail goes cold.\"",
+        missionGuild: "\"Three things, {player}. Grow stronger: the trainers and the yard there are for that. Earn coin: the boards always have work. And follow your lead, for a trail goes cold.\"",
+        advice: "\"One hard thing. Death is final in this country. Go to the shrine in {chapelPlace} and ask for a newcomer's blessing, first. It is free, it binds you to no god, and it saves you once. After that, only a patron you have served can bring you back, and only if they are strong enough. I will walk you there.\""
+    },
+    satyr: {
+        mission: "\"Three things, {player}, and then, I hope, a drink. Grow stronger: {guildPlace} has trainers and a yard to practise in. Earn coin: the boards are always full of work. And follow your lead, before it wanders off.\"",
+        missionGuild: "\"Three things, {player}, and then, I hope, a drink. Grow stronger: the trainers and the yard there are for that. Earn coin: the boards are always full of work. And follow your lead, before it wanders off.\"",
+        advice: "\"One serious thing, and I do not say that often: death is final in this country. Pop into the shrine in {chapelPlace} and ask for a newcomer's blessing, before anything else. It is free, it binds you to no god, and it saves you once. After that, only a patron you have served can bring you back, and only if they are strong enough. I will walk you over. Then wine.\""
+    }
+};
+
+const GUIDE_TALK_VOICE_EXTRA = {
+    catfolk: {
+        checkin: ["\"You are not hurt? I came as soon as I smelled trouble.\"", "\"{player}. Hold still. Tell me you are whole.\"", "\"I saw you from the rooftops. Are you hurt?\""],
+        fineOk: ["\"Good. I dislike mourning on an empty stomach.\"", "\"Splendid. Then no harm done, and we need not talk of it.\""],
+        fineHurt: ["\"That is not nothing, {player}. A bruise is a debt you pay later.\"", "\"Fine, says the one who is limping. I shall not argue.\""],
+        rattled: ["\"Of course. Breathe. Nobody is steady after that.\"", "\"Then we go gently. A cat knows when to sit still.\""],
+        who: ["\"Forgive me, I forget manners. I am {relation}.\"", "\"A friend, I hope. I am {relation}.\""],
+        react: { friendly: ["\"Lovely. Now, listen.\"", "\"Good. That is the spirit.\""], guarded: ["\"Wary is wise. Ask what you like.\"", "\"I will keep it short, and you may keep your distance.\""], hostile: ["\"Hissing already? Fine. Hear me out anyway.\"", "\"Claws in, please. I am here to help.\""] },
+        first: ["\"What shall we see to first?\"", "\"Where shall we begin?\""],
+        strong: ["\"{guildPlace}, then. Trainers who teach for coin, and a yard to stretch in. Do not skip the stretching.\"", "\"{guildPlace}. Teachers and a quiet yard. Little by little, and you will surprise yourself.\""],
+        coin: ["\"There is always a job on a board: the tavern, the inn, the town hall. Innkeepers and cooks hire hands too, and bounties pay on proof.\"", "\"Work, and bounties. Read the boards and ask the cook. Coin buys lessons, and lessons are worth it.\""],
+        parting: ["\"Before you go. The shrine in {chapelPlace}: ask for a newcomer's blessing. It is free, it ties you to no god, and it saves you once. After that, only a patron you have served can do the same, if they are strong enough.\""],
+        shout: ["\"{player}! Wait! The shrine in {chapelPlace}, a newcomer's blessing, before you go far. Free, ties you to no god, and it saves you once.\""],
+        plain: ["\"Off you go, then. Come back for a saucer of something.\"", "\"Mind yourself. I will be about.\""],
+        factIn: ["\"Now, here is how it goes.\"", "\"Listen closely.\""]
+    },
+    wolfkin: {
+        checkin: ["\"You are hurt? Say it.\"", "\"{player}. I smelled blood. Is it yours?\"", "\"I came fast. Are you wounded?\""],
+        fineOk: ["\"Good. The pack is whole, then.\"", "\"Good. No blood owed.\""],
+        fineHurt: ["\"That is not fine. That is blood. Tend it.\"", "\"You bleed and say fine. Stubborn. Tend it anyway.\""],
+        rattled: ["\"No shame. Every hunter shakes after. Breathe it out.\"", "\"Then we go slowly. Slow is alive.\""],
+        who: ["\"I am {relation}. That is all you need.\"", "\"One who came for you. I am {relation}.\""],
+        react: { friendly: ["\"Good. Listen.\"", "\"Good answer.\""], guarded: ["\"Careful is fine. Ask.\"", "\"I will be brief. Ask what you want.\""], hostile: ["\"Growl if you must. Hear me anyway.\"", "\"Hot-blooded. Fine. Listen.\""] },
+        first: ["\"What first?\"", "\"Where do we begin?\""],
+        strong: ["\"{guildPlace}. Trainers, and a yard to run in. Work hard there, not in the street.\"", "\"{guildPlace}. Pay a trainer. Sweat in the yard. Get strong.\""],
+        coin: ["\"Take work. The boards in the tavern, the inn and the town hall. Bounties pay on proof. Innkeepers and cooks hire hands.\"", "\"Boards. Bounties. Hire out your strength. Coin buys lessons.\""],
+        parting: ["\"Before you go. Shrine in {chapelPlace}. Ask for the newcomer's blessing. Free, binds you to no god, saves you once. Do not skip it.\""],
+        shout: ["\"{player}! Stop. Shrine in {chapelPlace}. Newcomer's blessing, now. Free. Saves you once.\""],
+        plain: ["\"Go. I will watch the road.\"", "\"Hunt well. Come back alive.\""],
+        factIn: ["\"Hear it.\"", "\"Plain words, then.\""]
+    },
+    satyr: {
+        checkin: ["\"Are you hurt?! I ran the whole way, and I never run!\"", "\"{player}! Sit, sit. Tell me nothing is broken.\"", "\"I heard the noise, I came running. Are you hurt?\""],
+        fineOk: ["\"Oh, thank goodness. A scratch heals, and a fright I can drown in wine.\"", "\"Good! Then no harm done, and the evening is still young.\""],
+        fineHurt: ["\"That is not nothing, {player}! Do mind it, I will not have you bleeding on my good boots.\"", "\"Fine, says the one who is wincing. I shall pretend to believe you.\""],
+        rattled: ["\"Of course you are. Nobody is steady after that. A quiet minute and a cup will help.\"", "\"Then we go gently. No hurry. I am very good at hurrying slowly.\""],
+        who: ["\"Forgive me, I forget my manners. I am {relation}.\"", "\"A friend, I hope! I am {relation}.\""],
+        react: { friendly: ["\"Lovely! Now, listen.\"", "\"Splendid. That is the spirit.\""], guarded: ["\"Wary? Wise. Ask away, I will not take offence.\"", "\"Take your time. I will keep it simple, for once.\""], hostile: ["\"Oh, prickly! I have met worse at a feast. Hear me anyway.\"", "\"Scowl all you like. I will say my piece.\""] },
+        first: ["\"Now, what first?\"", "\"Where shall we begin?\""],
+        strong: ["\"{guildPlace}, then. Trainers for coin, and a yard to practise in. Stretch first. Hooves are not forgiving.\"", "\"{guildPlace}. Teachers and a yard. Little by little, and you will surprise yourself.\""],
+        coin: ["\"There is always a job on a board: the tavern, the inn, the town hall. Innkeepers and cooks hire hands too, and bounties pay on proof.\"", "\"Work and bounties, my friend. Read the boards and charm the cook. Coin buys lessons, and lessons are worth it.\""],
+        parting: ["\"Oh, before you go! The shrine in {chapelPlace}: ask for a newcomer's blessing. It is free, it ties you to no god, and it saves you once. After that, only a patron you have served can do the same, if they are strong enough.\""],
+        shout: ["\"{player}! Wait! The shrine in {chapelPlace}, a newcomer's blessing, before you go far. Free, ties you to no god, and it saves you once.\""],
+        plain: ["\"Off you go, then! Come back for a cup, and a story.\"", "\"Mind yourself, friend. I will be about, probably near the wine.\""],
+        factIn: ["\"Right, here is how it goes.\"", "\"Now, listen, because I will only say it once. Possibly twice.\""]
+    }
+};
+
+const GUIDE_SHIFT_LEADS_EXTRA = {
+    catfolk: {
+        hurt: "\"You wear that wound badly, and hide it worse.\"",
+        pursued: "\"Quietly. Old trouble is close, and it has not noticed us yet.\"",
+        night: "\"It is late. Cats keep quiet hours, and so should you.\"",
+        success: "\"Look at you. Better than I expected, and I expected a great deal.\"",
+        gap: "\"There you are. I wondered when you would turn up.\""
+    },
+    wolfkin: {
+        hurt: "\"You are hurt. Do not hide it. Heal before you fight.\"",
+        pursued: "\"Stay sharp. Your old enemies are close. I smell them.\"",
+        night: "\"Night. Speak low.\"",
+        success: "\"You hunt well. I see it.\"",
+        gap: "\"You return. Good.\""
+    },
+    satyr: {
+        hurt: "\"You look dreadful, darling. Sit down before you fall down.\"",
+        pursued: "\"Quietly now, and keep glancing back. Your old trouble is near.\"",
+        night: "\"It is late, and I have just poured a drink, so speak softly.\"",
+        success: "\"Look at you go! I am proud, and a little jealous.\"",
+        gap: "\"There you are! It has been ages, and I have run out of gossip.\""
+    }
+};
+
+(function mergeGuideSpeciesExtras() {
+    Object.keys(GUIDE_SPECIES_LINES_EXTRA).forEach(function (arch) {
+        GUIDE_SPECIES_LINES[arch] = GUIDE_SPECIES_LINES[arch] || {};
+        Object.assign(GUIDE_SPECIES_LINES[arch], GUIDE_SPECIES_LINES_EXTRA[arch]);
+    });
+    Object.assign(GUIDE_SPECIES_TEXT, GUIDE_SPECIES_TEXT_EXTRA);
+    Object.assign(GUIDE_TALK_VOICE, GUIDE_TALK_VOICE_EXTRA);
+    Object.assign(GUIDE_SHIFT_LEADS, GUIDE_SHIFT_LEADS_EXTRA);
+})();
+
 function getGuideShiftLead(shifts, speciesKey) {
     const set = GUIDE_SHIFT_LEADS[String(speciesKey || "").toLowerCase()] || GUIDE_SHIFT_LEADS.human;
     const list = Array.isArray(shifts) ? shifts : [];
@@ -4770,6 +5220,12 @@ function getPressureSpec(archetypeId, slots) {
             outlastedLine: "The last of them is down. The sign is yours, and nobody left alive disputes it."
         };
     }
+    // A free-form start may name its own sum (clamped); it replaces the
+    // archetype's default coin terms.
+    if (spec && s.amount && typeof clampFreeformAmount === "function" && Array.isArray(spec.reqs)) {
+        const amt = clampFreeformAmount(s.amount);
+        if (amt) spec.reqs = spec.reqs.map(function (r) { return r.type === "pay" ? Object.assign({}, r, { amount: amt }) : r; });
+    }
     return spec;
 }
 
@@ -5159,7 +5615,8 @@ function getGuideTownSummary() {
 const SOCIETY_BY_SPECIES = {
     Orc: "orc-clan", Goblin: "goblin-tribe", Lizardfolk: "lizardfolk-tribe",
     Kobold: "kobold", Dragonborn: "dragonborn-house",
-    Human: "realm", Elf: "realm", Dwarf: "realm", Halfling: "realm"
+    Human: "realm", Elf: "realm", Dwarf: "realm", Halfling: "realm",
+    Catfolk: "catfolk-troupe", Wolfkin: "wolfkin-pack", Satyr: "satyr-revel"
 };
 
 const DRAGONBORN_HOUSES = ["House Emberscale", "House Vaelthorn", "House Ironcrest", "House Ashmaw", "House Solgard"];
@@ -5332,6 +5789,138 @@ const SOCIETY_SHEETS = {
             { only: ["bonded"], text: "I do not truly love my master. I fear them. I am too small to say it aloud." },
             { only: ["bonded"], text: "I have been skimming a few bright things from my master's hoard. A few. I mean to return them." },
             { text: "I am not sure the dragons are gods. I am too afraid to ask a dragonborn." }
+        ]
+    },
+    "catfolk-troupe": {
+        label: "troupe",
+        groupNames: ["Quiet Paw", "Lantern Road", "Silk Whisker", "Moonstep", "Copper Tail", "Dusk Caravan"],
+        groupPrefix: "the ",
+        leadership: "A troupe is a travelling family led by an elder who holds the road-map and the purse. Nobody is ordered about; everyone is persuaded, or simply leaves.",
+        ranks: [
+            { key: "troupe-elder", label: "troupe elder", tier: 4, weight: 3 },
+            { key: "pathfinder", label: "pathfinder", tier: 3, weight: 10 },
+            { key: "peddler", label: "peddler", tier: 2, weight: 32 },
+            { key: "nimble", label: "nimble-fingered cousin", tier: 1, weight: 24 },
+            { key: "dreamer", label: "idle dreamer", tier: 1, weight: 20 },
+            { key: "stray", label: "stray from the troupe", tier: 0, weight: 11 }
+        ],
+        standings: [
+            "I carry a share of the troupe's goods and I keep my accounts spotless, for once.",
+            "I left my troupe on a quarrel and I am too proud to go back.",
+            "I am the family's best bargainer, and I do not let them forget it.",
+            "I sleep wherever the sun lands, and the troupe lets me, so long as I earn my keep.",
+            "I took a debt for the troupe and I mean to clear it before the next thaw."
+        ],
+        needs: [
+            { kind: "coin", text: "Coin for a debt I would rather the troupe never heard about." },
+            { kind: "item", text: "Good fish, or anything cream-sweet. I have been living on stale bread, and I am sulking about it." },
+            { kind: "news", text: "Which road is open and which is watched. A troupe lives on that." },
+            { kind: "help", text: "Someone to carry a parcel across a gate I would rather not be seen at." }
+        ],
+        likings: [
+            "A warm windowsill and an hour of nothing.",
+            "A clever bargain won fair.",
+            "Fresh fish, cream, anything that smells of the river.",
+            "A good tale, told twice."
+        ],
+        worries: [
+            "Being shut in. Cages, cellars, locked doors.",
+            "That the troupe will move on without me.",
+            "A debt that outlasts the road.",
+            "Rain on the caravan. It is never just rain."
+        ],
+        secrets: [
+            { text: "I have a hidden cache beneath a stone in {zone}, in case I have to run. No one in {group} knows." },
+            { text: "I once cheated a fellow troupe-cousin. We have not spoken since, and I miss them." },
+            { text: "I can read, though I pretend I cannot. It keeps me from being handed the ledger." }
+        ]
+    },
+    "wolfkin-pack": {
+        label: "pack",
+        groupNames: ["Greyfang", "Ashmane", "Ridgehowl", "Frostpaw", "Stonetrail", "Nightwatch"],
+        groupPrefix: "the ",
+        leadership: "A mated pair leads, the alpha and the steady-hand; the hunters follow their word. Disobedience is answered with exile.",
+        ranks: [
+            { key: "alpha", label: "pack alpha", tier: 4, weight: 3 },
+            { key: "warden", label: "den-warden", tier: 3, weight: 10 },
+            { key: "hunter", label: "hunter", tier: 2, weight: 33 },
+            { key: "scout", label: "trail-scout", tier: 1, weight: 28 },
+            { key: "cub-keeper", label: "cub-keeper", tier: 1, weight: 12 },
+            { key: "lone", label: "lone wolf", tier: 0, weight: 14 }
+        ],
+        standings: [
+            "I earned my place on the hunt, and I keep it by never coming home empty.",
+            "I am sworn to the pack. Whatever it asks, I do.",
+            "I was cast out of my pack and I am still not sure whether I was wronged.",
+            "I watch the den and the cubs. It is quieter work, and it matters more than most think.",
+            "I walk the boundary and report what I find. Silence is the pack's first defence."
+        ],
+        needs: [
+            { kind: "help", text: "A stranger has been tracking the pack's boundary. I would have a witness to what I find." },
+            { kind: "item", text: "Salt and a good knife. The hunt has been lean, and a wolf with a dull knife is a hungry wolf." },
+            { kind: "coin", text: "Coin to buy meat for the cubs. We do not beg, but the season has been poor." },
+            { kind: "news", text: "Word of any hunters or trappers working these roads. The pack must know." }
+        ],
+        likings: [
+            "Meat, rare, shared with company.",
+            "A good run on a cold morning.",
+            "Silence broken only by the pack's howling.",
+            "A story of a long hunt, told true."
+        ],
+        worries: [
+            "That the pack will scatter, and I will be alone.",
+            "A hunter who takes more than the pack can answer for.",
+            "Cubs lost to a hard winter.",
+            "The silver-smell of a trap. Chains. Cages."
+        ],
+        secrets: [
+            { text: "I once broke a hunt-oath for a stranger, and {group} does not know. If they learned it, I would be driven out." },
+            { text: "I am tired of the pack. I would rather walk alone than follow another order. That is a shame I keep behind my teeth." },
+            { text: "I have been feeding a stray from beyond the territory. The pack would call it treason." }
+        ]
+    },
+    "satyr-revel": {
+        label: "revel",
+        groupNames: ["Merry Hooves", "Goat-Horn Chorus", "Wine-Dark Circle", "Reed-Pipe Band", "Moonlit Fauns", "Crooked Smile"],
+        groupPrefix: "the ",
+        leadership: "No rulers, only a most-charismatic reveller who calls the next party. Everyone follows the music until the cup runs dry.",
+        ranks: [
+            { key: "master-of-revels", label: "master of revels", tier: 4, weight: 2 },
+            { key: "piper", label: "piper", tier: 3, weight: 10 },
+            { key: "cup-bearer", label: "cup-bearer", tier: 2, weight: 24 },
+            { key: "troublemaker", label: "known troublemaker", tier: 1, weight: 34 },
+            { key: "reveller", label: "reveller", tier: 1, weight: 24 },
+            { key: "sulker", label: "sulking outcast", tier: 0, weight: 6 }
+        ],
+        standings: [
+            "I am the best piper in three valleys, and nobody can prove otherwise.",
+            "I was thrown out of the last revel for a prank gone sour, and I am hoping for a second chance.",
+            "I keep the cups full and the secrets quiet.",
+            "I have been the reason for most of the trouble in {group}, and I am proud of it.",
+            "I am only here until the next party. Do not tell {group} I said so."
+        ],
+        needs: [
+            { kind: "item", text: "Good wine, a flask of it, and I will owe you a song." },
+            { kind: "coin", text: "Coin for a tab I ran at the tavern. The barkeep has the look of a man planning something." },
+            { kind: "help", text: "A friend to bear witness that the whole thing was a prank. Entirely a prank." },
+            { kind: "news", text: "Where the next feast is. I will find the cheese myself." }
+        ],
+        likings: [
+            "Wine. Any wine. Better with company.",
+            "A well-played prank, at someone else's expense.",
+            "Pipes and drums at dusk.",
+            "Cheese, ripe fruit, the last of a loaf."
+        ],
+        worries: [
+            "A stern neighbour who might finally call the guard on me.",
+            "Running out of wine.",
+            "A prank turning out to hurt someone I like.",
+            "Quiet. Dreadful quiet. It makes me think."
+        ],
+        secrets: [
+            { text: "I swapped the wine of a very stern man for vinegar, and the stern man is now town magistrate. I keep my hat low." },
+            { text: "I do not actually know how to play the pipes. I only learned to look like I do." },
+            { text: "I owe {group} more than I can ever repay, and I have begun to avoid them for it." }
         ]
     },
     "dragonborn-house": {
@@ -5692,6 +6281,10 @@ function getGuideNextStep(backstory) {
 
 if (typeof window !== "undefined") {
     window.PLAYER_ARCHETYPES = PLAYER_ARCHETYPES;
+    window.FREEFORM_ARCHETYPE_FIELDS = FREEFORM_ARCHETYPE_FIELDS;
+    window.cleanFreeformText = cleanFreeformText;
+    window.clampFreeformAmount = clampFreeformAmount;
+    window.resolveFreeformSlots = resolveFreeformSlots;
     window.CLASS_CRAFT_QUESTIONS = CLASS_CRAFT_QUESTIONS;
     window.APPROACH_QUESTION_POOL = APPROACH_QUESTION_POOL;
     window.APPROACH_QUESTION_COUNT = APPROACH_QUESTION_COUNT;
