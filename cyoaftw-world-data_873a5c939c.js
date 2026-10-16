@@ -1,3 +1,10 @@
+// ── cyoaftw-world-data.js v2026-10-15-001 ── Commoner standing line "I owe a debt" now names who is owed ({creditor}, filled in generateNPCSocial).
+// Version identifier for debugging cached files
+if (typeof window !== "undefined") {
+    window.WORLD_DATA_VERSION = "2026-10-15-001";
+    console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
+}
+
 // ── ZONE TEMPLATES ───────────────────────────────────────────────
 
 const ZONE_TEMPLATES = [
