@@ -5886,7 +5886,25 @@ function _npcBodySize(npc, partKey) {
     return "";
 }
 
+// Penis size taste (small / medium / large). Reads anatomy.genitals through the
+// same size words as the chest / butt tastes, but only for NPCs that actually
+// have a penis: never female NPCs, and a non-binary NPC only when their
+// genitals carry no clitoris. No genital anatomy (or no size word) -> "" and
+// the taste never matches.
+function _npcPenisSize(npc) {
+    var g = String(npc && npc.gender || "").toLowerCase();
+    if (g === "female") return "";
+    var gen = npc && npc.anatomy ? npc.anatomy.genitals : null;
+    if (!gen || typeof gen !== "object") return "";
+    if (g !== "male" && gen.clitoris) return "";
+    var size = _npcBodySize(npc, "genitals");
+    if (size === "very large") return "large";
+    if (size === "flat") return "small";
+    return size;
+}
+
 function _npcTasteValue(npc, axis) {
+    if (axis === "penis") return _npcPenisSize(npc);
     if (axis === "gender") return String(npc.gender || "").toLowerCase();
     if (axis === "looks") return String(npc.looks || NPC_LOOKS_BY_GENDER[String(npc.gender || "").toLowerCase()] || "").toLowerCase();
     if (axis === "chest") return _npcBodySize(npc, "breasts");

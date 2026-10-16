@@ -23,7 +23,7 @@ const ZONE_TEMPLATES = [
         ambiance: "The air is cold and stale. Distant sounds echo from unseen passages.",
         // "Buried Shrine" is this zone's guaranteed shrine room
         // (ZONE_SHRINE_ROOMS) - sealed behind a cave-in, easy to miss.
-        roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel", "Armory", "Collapsed Gallery", "Throne Room", "Buried Shrine"],
+        roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel", "Armory", "Collapsed Gallery", "Throne Room", "Buried Shrine", "Smugglers' Den"],
         allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat", "Kobold", "Lizardfolk"],
         lightLevel: "dark",
         defaultDanger: "hostile"
@@ -35,7 +35,7 @@ const ZONE_TEMPLATES = [
         // "Shrine" doubles as this zone's guaranteed shrine room
         // (ZONE_SHRINE_ROOMS) - "Altar" is a second, bonus prayer-capable
         // room type that can also turn up here at ordinary flat odds.
-        roomTypes: ["Hallway", "Ruins Passage", "Altar", "Library", "Tower", "Shrine", "Inner Sanctum"],
+        roomTypes: ["Hallway", "Ruins Passage", "Altar", "Library", "Tower", "Shrine", "Inner Sanctum", "Smugglers' Den"],
         allowedSpecies: ["Skeleton", "Ghost", "Goblin", "Lizardfolk"],
         lightLevel: "dim",
         defaultDanger: "hostile"
@@ -47,7 +47,7 @@ const ZONE_TEMPLATES = [
         // "Deep Well Shrine" is this zone's guaranteed shrine room
         // (ZONE_SHRINE_ROOMS) - built around a dried-up well shaft, tucked
         // between otherwise mundane tunnels.
-        roomTypes: ["Cavern", "Mine Shaft", "Vault", "Deep Forge", "Underground Hallway", "Underground Gate", "Chieftain's Hall", "Deep Well Shrine"],
+        roomTypes: ["Cavern", "Mine Shaft", "Vault", "Deep Forge", "Underground Hallway", "Underground Gate", "Chieftain's Hall", "Deep Well Shrine", "Smugglers' Den"],
         allowedSpecies: ["Dwarf", "Goblin", "Human", "Kobold", "Dragonborn"],
         lightLevel: "dim",
         defaultDanger: "tense"
@@ -1834,6 +1834,168 @@ const ROOM_TEMPLATES = [
             { id: "cauldron",       name: "bubbling cauldron",  tags: ["danger", "work", "cauldron"], alwaysShow: true }
         ],
         imageKey: "Witch's Lair"
+    },
+
+    // ── THE QUIET ARTS: rogue cluster ────────────────────────────────
+    // Town: the "Quiet House" building (see BUILDING_BLUEPRINTS): a pawnbroker's
+    // front, a counting room where rogues drink and teach, a locked workroom
+    // with the alchemy table, and a cellar hideaway. Never rolled randomly.
+    // Wild: the Smugglers' Den (Dungeon, Ruins, Underground City; one per zone)
+    // brings a locked Hidden Workroom and a Cache with it (sideRooms, see
+    // attachRoomClusterSideRooms in the engine). The alchemy table stands only
+    // in the two workrooms.
+    {
+        type: "Pawnbroker",
+        zone: "Town",
+        role: "landmark",
+        displayName: "Pawnbroker's Shop",
+        baseDescription: "A narrow shop crowded with other people's belongings: pocket watches, a saddle, a single boot, a stuffed owl. Every piece has a paper tag in a neat hand, and nobody here asks where anything came from.",
+        allowedZones: ["town"],
+        parentCluster: ["quiet-house"],
+        isConnector: false,
+        minNpcs: 1,
+        requiredRole: "Shopkeeper",
+        roleTable: [
+            { role: "Shopkeeper", weight: 7, unique: true },
+            { role: "Townsfolk", weight: 2 },
+            { role: "Wanderer", weight: 2 }
+        ],
+        structural: [
+            { id: "pawn-counter", name: "pawn counter", tags: ["surface", "commerce"] },
+            { id: "glass-case",   name: "locked glass case", tags: ["storage", "commerce"] },
+            { id: "pledge-shelves", name: "shelves of pledged goods", tags: ["storage", "commerce"] }
+        ],
+        imageKey: "Smithy"
+    },
+    {
+        type: "Counting Room",
+        zone: "Town",
+        role: "interior",
+        displayName: "Counting Room",
+        baseDescription: "A back room with the shutters closed and a lamp turned low. A round table is scattered with dice, ledgers and a few cheerfully mismatched cups. People here lower their voices when a stranger comes in, and raise them again if the stranger knows the right word.",
+        allowedZones: ["town"],
+        parentCluster: ["quiet-house"],
+        isConnector: false,
+        minNpcs: 1,
+        roleTable: [
+            { role: "Scout", weight: 4 },
+            { role: "Wanderer", weight: 3 },
+            { role: "Delver", weight: 1 },
+            { role: "Townsfolk", weight: 2 }
+        ],
+        structural: [
+            { id: "round-table", name: "round table", tags: ["social", "surface"] },
+            { id: "ledger-stand", name: "ledger stand", tags: ["information"] },
+            { id: "lamp-low",    name: "shaded lamp", tags: ["light"] }
+        ],
+        imageKey: "Library"
+    },
+    {
+        type: "Alchemy Workroom",
+        zone: "Town",
+        role: "interior",
+        displayName: "Alchemist's Workroom",
+        baseDescription: "A cramped room that smells of crushed leaves, hot glass and something faintly bitter. Bunches of herbs hang drying from the beams, jars of powders line the shelves, and an alchemist's table takes up most of the floor.",
+        allowedZones: ["town"],
+        parentCluster: ["quiet-house"],
+        isConnector: false,
+        roleTable: [
+            { role: "Wanderer", weight: 3 },
+            { role: "Scout", weight: 3 },
+            { role: "Scholar", weight: 2 },
+            { role: "Townsfolk", weight: 1 }
+        ],
+        structural: [
+            { id: "alchemy-table", name: "alchemist's table", tags: ["work", "lab", "alchemy"], alwaysShow: true },
+            { id: "drying-herbs",  name: "bunches of drying herbs", tags: ["storage"] },
+            { id: "powder-jars",   name: "shelves of stoppered jars", tags: ["storage"] }
+        ],
+        imageKey: "Library"
+    },
+    {
+        type: "Quiet Hideaway",
+        zone: "Town",
+        role: "interior",
+        displayName: "Hideaway Cellar",
+        baseDescription: "A low brick cellar kept dry and tidy by someone who expects to need it in a hurry: a cot, a lantern, a rack of plain cloaks, and a floor board that does not quite sit flush.",
+        allowedZones: ["town"],
+        parentCluster: ["quiet-house"],
+        isConnector: false,
+        roleTable: [
+            { role: "Wanderer", weight: 3 },
+            { role: "Scout", weight: 3 },
+            { role: "Townsfolk", weight: 1 }
+        ],
+        structural: [
+            { id: "cot",          name: "cot", tags: ["rest"] },
+            { id: "cloak-rack",   name: "rack of plain cloaks", tags: ["storage"] },
+            { id: "loose-board",  name: "loose floor board", tags: ["storage", "landmark"] }
+        ],
+        imageKey: "Cellar"
+    },
+    {
+        type: "Smugglers' Den",
+        zone: "Dungeon",
+        role: "landmark",
+        displayName: "Smugglers' Den",
+        baseDescription: "A broad chamber turned into a crooked market after dark: crates stencilled with other people's marks, a dice table, a tally board chalked with debts. Conversation stops when you walk in, and everyone has quietly found somewhere to put their hands.",
+        allowedZones: ["dungeon", "ruins", "underground city"],
+        parentCluster: ["smugglers"],
+        isConnector: false,
+        minNpcs: 1,
+        // Brings two private rooms with it (see attachRoomClusterSideRooms).
+        sideRooms: [
+            { type: "Hidden Workroom", lock: { level: [2, 3] } },
+            { type: "Smugglers' Cache", lock: { level: [1, 2] }, parent: "previous" }
+        ],
+        roleTable: [
+            { role: "Scout", weight: 4 },
+            { role: "Wanderer", weight: 3 },
+            { role: "Scavenger", weight: 2 },
+            { role: "Delver", weight: 2 }
+        ],
+        structural: [
+            { id: "marked-crates", name: "stencilled crates", tags: ["storage", "loot"] },
+            { id: "dice-table",    name: "dice table", tags: ["social", "surface"] },
+            { id: "tally-board",   name: "chalked tally board", tags: ["information"] }
+        ],
+        imageKey: "Vault"
+    },
+    {
+        type: "Hidden Workroom",
+        zone: "Dungeon",
+        role: "interior",
+        displayName: "Hidden Workroom",
+        baseDescription: "A small side room sealed off from the den behind a plain door. Glassware, a spirit lamp and a stained alchemist's table have been set up with the care of someone who plans to come back.",
+        allowedZones: ["dungeon", "ruins", "underground city"],
+        parentCluster: ["smugglers"],
+        isConnector: false,
+        roleTable: [
+            { role: "Scout", weight: 3 },
+            { role: "Wanderer", weight: 3 },
+            { role: "Scavenger", weight: 1 }
+        ],
+        structural: [
+            { id: "alchemy-table", name: "alchemist's table", tags: ["work", "lab", "alchemy"], alwaysShow: true },
+            { id: "drying-herbs",  name: "bunches of drying herbs", tags: ["storage"] }
+        ],
+        imageKey: "Library"
+    },
+    {
+        type: "Smugglers' Cache",
+        zone: "Dungeon",
+        role: "interior",
+        displayName: "Smugglers' Cache",
+        baseDescription: "A cramped storeroom of bundled cloth, kegs and barrels with their stamps scraped off. Whatever is kept here was not meant to be found by anyone, least of all the people who lost it.",
+        allowedZones: ["dungeon", "ruins", "underground city"],
+        parentCluster: ["smugglers"],
+        isConnector: false,
+        noNpcs: true,
+        structural: [
+            { id: "scraped-kegs", name: "kegs with the stamps scraped off", tags: ["storage", "loot"] },
+            { id: "cloth-bundles", name: "bundles of oiled cloth", tags: ["storage", "loot"] }
+        ],
+        imageKey: "Vault"
     }
 ];
 
@@ -2095,6 +2257,26 @@ const BUILDING_BLUEPRINTS = {
             ["storeroom", "quarters", "door", { chance: 0.6, level: 2 }]
         ],
         backLock: { chance: 1, level: 2 }
+    },
+    // The quiet arts: a pawnbroker's shop on the street, a counting room behind it
+    // where rogues gather, a (usually locked) workroom with the alchemy table and a
+    // cellar hideaway. One door onto the street. At most one per town.
+    "Quiet House": {
+        zone: "Town",
+        entrance: "Pawnbroker",
+        front: "counting",
+        frontDoor: "door",
+        back: null,
+        names: ["The Grey Ledger", "Lamp & Latch", "The Hollow Coin", "Third Drawer Pawnbrokers", "The Quiet Door"],
+        rooms: [
+            { key: "counting",  type: "Counting Room",    floor: 0,  at: [0, 0] },
+            { key: "workroom",  type: "Alchemy Workroom", floor: 0,  at: [1, 0] },
+            { key: "hideaway",  type: "Quiet Hideaway",   floor: -1, at: [0, 0] }
+        ],
+        links: [
+            ["counting", "workroom", "door", { chance: 0.8, level: [2, 3] }],
+            ["counting", "hideaway", "door", { chance: 0.5, level: 2 }]
+        ]
     },
     // An ordinary home: front room onto the street, a bedroom behind a door.
     // One door in or out. Fills out larger towns.
@@ -2409,6 +2591,20 @@ function planTownLayout(rngIn) {
         if (roll < 0.10) assignment.push({ type: "Inn", slot: slot });
         else if (roll < 0.70) assignment.push({ type: "House", slot: slot });
     });
+
+    // Most towns have one Quiet House (the rogues' pawnshop). It takes over one
+    // plot that would have been a house, or an empty plot. Rolled after the rest
+    // so the layout above rolls exactly as before for a given rng sequence.
+    if (rng() < 0.8) {
+        const houses = assignment.filter(entry => entry.type === "House");
+        if (houses.length) {
+            houses[Math.floor(rng() * houses.length)].type = "Quiet House";
+        } else {
+            const used = new Set(assignment.map(entry => entry.slot));
+            const free = rest.filter(slot => !used.has(slot));
+            if (free.length) assignment.push({ type: "Quiet House", slot: free[Math.floor(rng() * free.length)] });
+        }
+    }
 
     assignment.forEach((entry, idx) => {
         const slot = entry.slot;
@@ -3428,7 +3624,8 @@ const BUILDING_MENTOR_HINTS = {
     "Chapel": "The priest here takes in the faithful and the lost alike, and teaches those who show a true calling. Ask after the vestry's prayer books.",
     "Tavern": "The kind of people who teach a rogue drink in the taproom. Ask the bartender who is worth knowing.",
     "Town Hall": "The records office at the Town Hall is the nearest thing this town has to a library. Ask the clerk who here can teach.",
-    "Inn": "Travellers pass through the inn with all sorts of skills. Ask the innkeeper who is worth learning from."
+    "Inn": "Travellers pass through the inn with all sorts of skills. Ask the innkeeper who is worth learning from.",
+    "Quiet House": "Some trades are not taught in the open. Look for the pawnbroker's shop, and the room behind it."
 };
 // If a town (an old save, say) has no such building, lead somewhere that does.
 const LEAD_FALLBACKS = {
