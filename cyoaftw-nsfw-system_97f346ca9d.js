@@ -5486,11 +5486,12 @@ avoidNote,
       || { top: true, bottom: true, undergarments: true };
     const parts = ["mouth"];
     if (!clothing.top) parts.push(feminine ? "boobs" : "chest");
-    if (!clothing.bottom && !clothing.undergarments) {
+    if (!clothing.bottom) {
       parts.push(feminine ? "vulva" : "penis");
       parts.push("butt");
       parts.push("anus");
-    } else if (!clothing.bottom) {
+    } else if (!clothing.undergarments) {
+      parts.push(feminine ? "vulva" : "penis");
       parts.push("butt");
       parts.push("anus");
     }
@@ -5612,7 +5613,7 @@ avoidNote,
     const act = (window.SEX_ACTS && last.actId && window.SEX_ACTS[last.actId]) || null;
     let actState = "";
     let actId = "none";
-    if (act && act.target && act.verb && !act.playerIsBottom) {
+    if (act && act.target && act.verb) {
       const actTarget = String(act.target).toLowerCase();
       const actRegion = Object.keys(REGION_TARGETS).filter(function (r) {
         return REGION_TARGETS[r].indexOf(actTarget) >= 0;
@@ -5663,11 +5664,19 @@ avoidNote,
     // abandon the close-up framing and draw the whole sex scene instead.
     // Deterministic act words (verb, target, position) - never raw AI
     // narration, which is too long and too loose for an image prompt.
+    // For penis specifically, include WHO is doing the action to avoid
+    // defaulting to wrong scenarios (e.g., vaginal when it should be oral).
     let sceneCtx = "";
-    if (withSceneContext && act) {
+    if (act && act.target && act.verb) {
       const ctxBits = ["mid-act state: being " + act.verb];
       if (act.target) ctxBits.push("at the " + act.target);
       if (posId) ctxBits.push(posId + " position");
+      // For penis part: make it clear who is acting on it
+      if (part === "penis" && act.tool && act.playerIsBottom !== undefined) {
+        const actor = act.playerIsBottom ? "NPC" : "player";
+        const receiver = act.playerIsBottom ? "player" : "NPC";
+        ctxBits.push(actor + "'s " + (act.tool === "mouth" ? "mouth" : act.tool) + " on " + receiver + "'s penis");
+      }
       sceneCtx = ctxBits.join(", ");
     }
 
