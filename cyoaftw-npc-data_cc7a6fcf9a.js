@@ -2216,6 +2216,68 @@ function _npcPlayerCausedFriction(ctx) {
     return NPC_FRICTION_ACTION_TAGS.some(function (tag) { return tags.indexOf(tag) >= 0; });
 }
 
+// ── CONVERSATION CONTEXT (what was just said) ────────────────────────────
+// The engine notes a small record after every NPC reply (npcNoteReplyMeta, from
+// npcRespond): was it to a question, did the NPC dodge it, did they hint at
+// trouble. Reactive options use it so they only appear when they make sense:
+// "Push for a straight answer" after a dodge, "Offer help" after the NPC
+// mentions a problem, no second "hello" in the middle of a chat.
+const NPC_EVASIVE_RE = /\b(don'?t know|do not know|no idea|can'?t say|cannot say|won'?t say|will not say|none of your|not my place|couldn'?t say|wouldn'?t know|can'?t tell you|cannot tell you|nothing to say|rather not|not telling|ask someone else|can'?t help you with that|that is not for)\b/i;
+const NPC_TROUBLE_RE = /\b(trouble|problem|worr|struggl|behind on|short of|short on|can'?t afford|cannot afford|in debt|a debt|owe |lost|stolen|robbed|afraid|scared|hurt|sick|alone|desperate|don'?t know what to do|could use)/i;
+const NPC_QUESTION_START_RE = /^(who|what|where|why|how|when|which|do you|are you|did you|have you|can you|could you|is there|was there|will you|would you)\b/i;
+const NPC_REPLY_LIVE_TURNS = 2;
+
+function npcLooksLikeQuestion(text, id, intent) {
+    const t = String(text || "").replace(/^you (say|ask),?\s*/i, "").replace(/^["'<(]+/, "").trim();
+    if (/^ask-|^rapport-evening|^press-topic|^ask-about/.test(String(id || ""))) return true;
+    if (["curious", "rumor", "introduction"].indexOf(String(intent || "")) >= 0 && !/^respond-/.test(String(id || ""))) return true;
+    return /\?\s*["'>)]*$/.test(t) || NPC_QUESTION_START_RE.test(t) || /^you ask\b/i.test(String(text || ""));
+}
+
+// Called by npcRespond after each reply (and safe to call with no choice).
+function npcNoteReplyMeta(npc, choice, replyText, affirmative) {
+    if (!npc || !npc.memory) return;
+    const text = String(replyText || "");
+    npc.memory.lastReplyMeta = {
+        turn: typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : 0,
+        optionId: choice && choice.id ? String(choice.id) : "",
+        asked: !!choice && npcLooksLikeQuestion(choice.typedText || choice.promptText || choice.text, choice.id, choice.intent),
+        negative: affirmative === false,
+        evasive: NPC_EVASIVE_RE.test(text),
+        trouble: NPC_TROUBLE_RE.test(text)
+    };
+}
+
+// The record of the last reply, only while the conversation is still live.
+function _npcLiveReplyMeta(npc, ctx) {
+    const m = npc && npc.memory ? npc.memory.lastReplyMeta : null;
+    if (!m || typeof m.turn !== "number") return null;
+    const now = ctx && typeof ctx.storyTurn === "number" ? ctx.storyTurn : (typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : 0);
+    return (now - m.turn) <= NPC_REPLY_LIVE_TURNS ? m : null;
+}
+
+// The player asked something and the NPC dodged, refused or did not know.
+function _npcDodgedQuestion(npc, ctx) {
+    const m = _npcLiveReplyMeta(npc, ctx);
+    return !!(m && m.asked && (m.evasive || m.negative));
+}
+
+// The NPC just mentioned a problem or opened up about something.
+function _npcOpenedUp(npc, ctx) {
+    const m = _npcLiveReplyMeta(npc, ctx);
+    if (m && m.trouble) return true;
+    const last = ctx ? String(ctx.lastOptionId || "") : "";
+    return ["ask-need", "ask-worry", "ask-secret", "ask-standing"].indexOf(last) >= 0 && !!m;
+}
+
+// A second "hello" in the middle of a chat reads oddly; hide it while a reply
+// is fresh (a first greeting this session is never hidden).
+function _npcMidConversation(npc, ctx) {
+    const used = ctx && Array.isArray(ctx.sessionUsedOptionIds) ? ctx.sessionUsedOptionIds : [];
+    const greeted = used.indexOf("greet-known") >= 0 || used.indexOf("greet-intro") >= 0;
+    return greeted && !!_npcLiveReplyMeta(npc, ctx);
+}
+
 // True when the NPC looks like they could use comforting: hurt, rattled by
 // something recent, surrendered, or in a sour mood.
 function _npcNeedsComfort(npc, ctx) {
@@ -2226,6 +2288,15 @@ function _npcNeedsComfort(npc, ctx) {
     if (["wary", "angry", "furious"].indexOf(ctx.mood) >= 0) return true;
     if (_npcPlayerCausedFriction(ctx)) return true;
     return _npcRecentEventMatches(ctx.storyRecentEvents, { types: ["combat", "danger", "death"] });
+}
+
+// Gate for the warm-rapport options: an adult humanoid, on duty, not a guide,
+// and (for the romantic-leaning ones) not spoken for.
+function _npcRapportOpen(npc, ctx, romantic) {
+    if (!npc || !ctx || !ctx.isHumanoid || npc.isGuide || npc.guide || ctx.offDuty) return false;
+    if (typeof isRomanceEligibleNPC === "function" && !isRomanceEligibleNPC(npc)) return false;
+    if (romantic && typeof npcShrugsOffRomance === "function" && npcShrugsOffRomance(npc)) return false;
+    return true;
 }
 
 // Menu ranking + cap. Only entries from the base catalogue are re-ranked or
@@ -2470,7 +2541,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             metPlayer: true,
             // The guide's opening line and a door-answerer's "Yes? Can I help
             // you?" already are the greeting for this conversation.
-            custom: (npc, ctx) => !(npc && npc.guide) && !(ctx.sessionUsedOptionIds.includes("greet-knock-answer") || ctx.sessionUsedOptionIds.includes("greet-guide-opening"))
+            custom: (npc, ctx) => !(npc && npc.guide) && !(ctx.sessionUsedOptionIds.includes("greet-knock-answer") || ctx.sessionUsedOptionIds.includes("greet-guide-opening")) && !_npcMidConversation(npc, ctx)
         }
     },
     {
@@ -2925,7 +2996,10 @@ const NPC_CONVERSATION_CATALOGUE = [
             "You give them an opening to ask for help without pressing."
         ],
         intent: "help",
-        relationshipImpact: { mood: 1, favor: 5, hostility: -1, intent: "help", markMet: true, actionTag: "offer-help" }
+        relationshipImpact: { mood: 1, favor: 5, hostility: -1, intent: "help", markMet: true, actionTag: "offer-help" },
+        // Only once there is something to help with: they mentioned a problem,
+        // opened up, or look hurt or rattled.
+        conditions: { custom: (npc, ctx) => _npcOpenedUp(npc, ctx) || _npcNeedsComfort(npc, ctx) }
     },
     {
         id: "keep-calm",
@@ -3190,6 +3264,126 @@ const NPC_CONVERSATION_CATALOGUE = [
         intent: "flattery",
         relationshipImpact: { mood: 1, favor: 6, hostility: -1, attraction: 3, arousal: 1, intent: "flattery", markMet: true, actionTag: "compliment" }
     },
+    // WARM RAPPORT (SFW): gentle, chaste ways to build on mutual interest. They
+    // open only once the NPC is attracted to the player (attraction already
+    // reflects orientation and the player's appeal), likes them and is not
+    // hostile, and never for an NPC who is spoken for. Nothing explicit: a
+    // look, a kind word, curiosity, wanting to talk again. Anything stronger
+    // lives in the NSFW catalogue. Building favour here is how a spark turns
+    // into friendship; the NPC may also start asking the player questions back
+    // (see getNPCCuriosityLines in the engine).
+    {
+        id: "rapport-gaze",
+        priority: 121,
+        repeat: "session",
+        resetTimer: { turns: 8 },
+        label: "Hold their gaze a moment",
+        textVariants: [
+            "You let your eyes meet theirs a moment longer than you need to, and smile.",
+            "You hold their gaze and let a quiet smile say what you have not.",
+            "You look at them a beat too long, easy and unhurried."
+        ],
+        intent: "flirt",
+        contextNote: "The player is giving you a long, warm look and a smile. It is gentle and chaste. React as your feelings and temperament would: pleased, shy, amused, or reserved. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 2, hostility: -1, attraction: 3, intent: "flirt", markMet: true, actionTag: "rapport-gaze" },
+        conditions: {
+            metPlayer: true,
+            minAttraction: 15,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
+        id: "rapport-company",
+        priority: 123,
+        repeat: "session",
+        resetTimer: { turns: 8 },
+        label: "Say you enjoy their company",
+        textVariants: [
+            "You tell them, plainly and warmly, that you are enjoying their company.",
+            "You admit that talking with them has been the best part of the day.",
+            "You say it is a pleasure to have someone like them to talk to."
+        ],
+        intent: "flattery",
+        contextNote: "The player says they enjoy your company. It is sincere and gentle. Answer honestly in your own manner, warm if you feel it, and you may say something about what you enjoy of theirs.",
+        relationshipImpact: { mood: 1, favor: 4, hostility: -1, attraction: 2, intent: "flattery", markMet: true, actionTag: "rapport-company" },
+        conditions: {
+            metPlayer: true,
+            minAttraction: 15,
+            minFavor: 10,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
+        id: "rapport-tease",
+        priority: 124,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Ask what they make of you",
+        textVariants: [
+            "You ask, with a half smile, what they have made of you so far.",
+            "You wonder aloud what first impression you gave them, and wait with a grin.",
+            "You ask what they think of you, lightly, daring them to be honest."
+        ],
+        intent: "tease",
+        contextNote: "The player playfully asks what you make of them. Answer honestly and specifically from what you have actually seen of them (their looks, manner or deeds), with the playfulness your temperament allows. Gentle and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 2, hostility: 0, attraction: 2, intent: "tease", markMet: true, actionTag: "rapport-tease" },
+        conditions: {
+            metPlayer: true,
+            minAttraction: 20,
+            minFavor: 10,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
+        id: "rapport-evening",
+        priority: 126,
+        rankBoost: 25,
+        repeat: "session",
+        resetTimer: { turns: 8 },
+        label: "Ask how they spend a free evening",
+        textVariants: [
+            "You ask what they like to do when the work is done and an evening is their own.",
+            "You ask how they spend a free evening, and what they would do with one.",
+            "You ask what a good evening looks like to them."
+        ],
+        intent: "curious",
+        contextNote: "The player asks how you like to spend a free evening. Answer from your own life, habits and pastimes, in a friendly, personal way. You may ask them something small in return.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 1, intent: "curious", markMet: true, actionTag: "rapport-evening" },
+        conditions: {
+            metPlayer: true,
+            minAttraction: 12,
+            minFavor: 10,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, false)
+        }
+    },
+    {
+        id: "rapport-again",
+        priority: 128,
+        rankBoost: 25,
+        repeat: "session",
+        resetTimer: { turns: 12 },
+        label: "Say you hope to see them again",
+        textVariants: [
+            "You tell them you hope your paths cross again, and that you mean it.",
+            "You say you would like to talk with them again, whenever they have the time.",
+            "You say you would be glad to see them again, and let it sit there."
+        ],
+        intent: "curious",
+        contextNote: "The player says they hope to see you again. It is a friendly, open offer of friendship that may carry some warmth. Answer as you honestly feel: glad, shy, careful or teasing, and you may name a time or place you can usually be found.",
+        relationshipImpact: { mood: 1, favor: 4, hostility: -1, attraction: 2, intent: "curious", markMet: true, actionTag: "rapport-again" },
+        conditions: {
+            metPlayer: true,
+            minAttraction: 18,
+            minFavor: 15,
+            maxHostility: 30,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, false)
+        }
+    },
     {
         id: "apologize",
         priority: 130,
@@ -3299,7 +3493,10 @@ const NPC_CONVERSATION_CATALOGUE = [
                 : "You challenge them to stop circling and answer plainly."
         ],
         intent: "aggression",
-        relationshipImpact: { mood: -1, favor: -5, hostility: 5, aggression: 1, intent: "aggression", markMet: true, actionTag: "sharp-question" }
+        relationshipImpact: { mood: -1, favor: -5, hostility: 5, aggression: 1, intent: "aggression", markMet: true, actionTag: "sharp-question" },
+        // A warning when they are already hostile; otherwise only after they
+        // dodged a question you asked.
+        conditions: { custom: (npc, ctx) => ctx.hostility >= 55 || _npcDodgedQuestion(npc, ctx) }
     },
     // ===== PLAYER-PERSONALITY OPTIONS =====
     // Gated on the traits tallied from the character-creation questions
@@ -3324,6 +3521,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             metPlayer: true,
             maxHostility: 75,
             minPlayerTraits: { empathy: 2 },
+            custom: (npc, ctx) => _npcOpenedUp(npc, ctx) || _npcNeedsComfort(npc, ctx),
             excludedActionTags: ["listen-closely"]
         }
     },
@@ -3345,6 +3543,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         conditions: {
             metPlayer: true,
             minPlayerTraits: { boldness: 2 },
+            custom: (npc, ctx) => _npcDodgedQuestion(npc, ctx),
             excludedActionTags: ["push-for-answers"]
         }
     },
@@ -4430,6 +4629,7 @@ if (typeof window !== "undefined") {
     window.getSocialFactAnswer = getSocialFactAnswer;
     window.getSocialFactQuestion = getSocialFactQuestion;
     window.getSocialIdentity = getSocialIdentity;
+    window.npcNoteReplyMeta = npcNoteReplyMeta;
     window.getSocialFactBrief = getSocialFactBrief;
     window.getNPCSocialPromptLines = getNPCSocialPromptLines;
     window.pickNPCTies = pickNPCTies;
