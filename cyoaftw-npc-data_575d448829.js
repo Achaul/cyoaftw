@@ -2344,10 +2344,35 @@ function _npcWillIntroduce(npc, ctx) {
 }
 // Extra steer for a repeat greeting: the player never left (just spoke a moment
 // ago) versus coming back after being away.
+const NPC_SAME_CONVERSATION_TURNS = 4;
+
+// Following the player (leading them, a session follower or a party member).
+function _npcWalkingWithPlayer(npc) {
+    if (!npc || typeof G !== "object" || !G) return false;
+    if (npc._guiding || npc._inParty) return true;
+    return Array.isArray(G.sessionFollowers) && G.sessionFollowers.indexOf(npc) >= 0;
+}
+
+// Still the same conversation as the last time they spoke: no room change, or
+// walking together, or only a few story turns have passed.
+function _npcSameConversation(npc) {
+    const m = npc && npc.memory;
+    if (!m || typeof m.lastTalkMoveSeq !== "number" || typeof G !== "object" || !G || !G.player) return false;
+    if (m.lastTalkMoveSeq === (G.player.moveSeq || 0)) return true;
+    if (_npcWalkingWithPlayer(npc)) return true;
+    if (typeof m.lastTalkTurn === "number" && typeof getCurrentStoryTurn === "function") {
+        return (getCurrentStoryTurn() - m.lastTalkTurn) <= NPC_SAME_CONVERSATION_TURNS;
+    }
+    return false;
+}
+
 function _npcGreetRepeatNote(npc, ctx) {
     if (!ctx || !npc || !npc.memory || typeof npc.memory.lastTalkMoveSeq !== "number") return "";
+    if (ctx.walkingTogether) {
+        return " You are travelling with the player and were talking moments ago. This is the same conversation: greet them as a companion mid-journey would, lightly. Do NOT say it has been a while, do not say you have not seen them, and do not re-introduce yourself.";
+    }
     if (ctx.stayedSinceLastTalk) {
-        return " The player has not left; you were talking with them moments ago. React to the quick repeat greeting lightly, with patience, humor or mild puzzlement as suits you. Do not re-introduce yourself and do not act as if you had not seen them for a while.";
+        return " The player has not left (or only just stepped away); you were talking with them moments ago. React to the quick repeat greeting lightly, with patience, humor or mild puzzlement as suits you. Do not re-introduce yourself and do not act as if you had not seen them for a while.";
     }
     return " You have not seen the player for a little while. Greet them like someone returning, and you may briefly note the time apart.";
 }
@@ -2536,7 +2561,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             : { mood: 1, favor: 2, hostility: -1, intent: "greeting", markMet: true, actionTag: "greeting" },
         contextNote: (npc, ctx) => _npcIntroNote(npc, ctx) + _npcGreetRepeatNote(npc, ctx),
         revealsName: _npcWillIntroduce,
-        cacheSig: (npc, ctx) => (_npcWillIntroduce(npc, ctx) ? "intro" : "") + (ctx.stayedSinceLastTalk ? "stay" : "away"),
+        cacheSig: (npc, ctx) => (_npcWillIntroduce(npc, ctx) ? "intro" : "") + (ctx.walkingTogether ? "walk" : (ctx.stayedSinceLastTalk ? "stay" : "away")),
         conditions: {
             metPlayer: true,
             // The guide's opening line and a door-answerer's "Yes? Can I help
@@ -3869,9 +3894,12 @@ function getNPCConversationContext(npc, extraContext = {}) {
         metPlayer: !!(npc.memory && npc.memory.metPlayer),
         nameKnown: !!(npc.memory && npc.memory.nameKnown),
         everGreeted: !!(npc.memory && npc.memory.everGreeted),
-        // True when the player has not changed rooms since last talking to this NPC.
-        stayedSinceLastTalk: !!(npc.memory && typeof npc.memory.lastTalkMoveSeq === "number" &&
-            typeof G === "object" && G && G.player && npc.memory.lastTalkMoveSeq === (G.player.moveSeq || 0)),
+        // True while this is still the same conversation: the player has not
+        // changed rooms since last talking to this NPC, OR the NPC is walking
+        // with the player (follower, guide, party), OR it was only a few story
+        // turns ago. Used so a greeting never says "it has been a while" mid-chat.
+        stayedSinceLastTalk: _npcSameConversation(npc),
+        walkingTogether: _npcWalkingWithPlayer(npc),
         mood: String(npc.memory && npc.memory.lastMood || "neutral").toLowerCase(),
         disposition: typeof getCurrentNPCDisposition === "function"
             ? String(getCurrentNPCDisposition(npc) || "").toLowerCase()
