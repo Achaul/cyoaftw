@@ -5664,19 +5664,80 @@ avoidNote,
     // abandon the close-up framing and draw the whole sex scene instead.
     // Deterministic act words (verb, target, position) - never raw AI
     // narration, which is too long and too loose for an image prompt.
-    // For penis specifically, include WHO is doing the action to avoid
-    // defaulting to wrong scenarios (e.g., vaginal when it should be oral).
+    // For clarity: explicitly classify the sex act type to prevent AI from
+    // defaulting to vaginal. Use crystal-clear, unambiguous language.
     let sceneCtx = "";
     if (act && act.target && act.verb) {
-      const ctxBits = ["mid-act state: being " + act.verb];
-      if (act.target) ctxBits.push("at the " + act.target);
-      if (posId) ctxBits.push(posId + " position");
-      // For penis part: make it clear who is acting on it
-      if (part === "penis" && act.tool && act.playerIsBottom !== undefined) {
-        const actor = act.playerIsBottom ? "NPC" : "player";
-        const receiver = act.playerIsBottom ? "player" : "NPC";
-        ctxBits.push(actor + "'s " + (act.tool === "mouth" ? "mouth" : act.tool) + " on " + receiver + "'s penis");
+      const ctxBits = [];
+      const actTargetLower = String(act.target).toLowerCase();
+      const actToolLower = String(act.tool).toLowerCase();
+      
+      // Explicitly classify the sex act type based on tool and target
+      if (part === "penis") {
+        const actorIsPlayer = !act.playerIsBottom;
+        const actor = actorIsPlayer ? "player" : "NPC";
+        const receiver = actorIsPlayer ? "NPC" : "player";
+        
+        if (actToolLower === "mouth" || actToolLower === "tongue" || actToolLower === "lips") {
+          ctxBits.push("ORAL SEX: " + receiver + "'s penis being " + act.verb + "ed by " + actor + "'s mouth");
+        } else if (actToolLower === "vagina" || actToolLower === "pussy" || actToolLower === "clitoris" || actToolLower === "clit") {
+          ctxBits.push("VAGINAL SEX: " + receiver + "'s penis inside " + actor + "'s vagina");
+        } else if (actToolLower === "anus" || actToolLower === "butt" || actToolLower === "ass" || actToolLower === "buttocks") {
+          ctxBits.push("ANAL SEX: " + receiver + "'s penis inside " + actor + "'s anus");
+        } else if (actToolLower === "hand" || actToolLower === "fingers") {
+          ctxBits.push("HAND STIMULATION: " + receiver + "'s penis being " + act.verb + "ed by " + actor + "'s " + actToolLower);
+        } else {
+          ctxBits.push("ACT: " + receiver + "'s penis being " + act.verb + "ed by " + actor);
+        }
+      } else if (part === "vulva") {
+        // Vulva close-up: what's happening to it?
+        const actorIsPlayer = !act.playerIsBottom;
+        const actor = actorIsPlayer ? "player" : "NPC";
+        
+        if (actToolLower === "mouth" || actToolLower === "tongue" || actToolLower === "lips") {
+          ctxBits.push("ORAL SEX: " + actor + "'s mouth on NPC's vulva");
+        } else if (actToolLower === "penis" || actToolLower === "cock" || actToolLower === "dick") {
+          ctxBits.push("VAGINAL SEX: NPC's vulva receiving " + actor + "'s penis");
+        } else if (actToolLower === "fingers" || actToolLower === "hand") {
+          ctxBits.push("MANUAL STIMULATION: NPC's vulva being " + act.verb + "ed by " + actor + "'s " + actToolLower);
+        } else {
+          ctxBits.push("ACT: NPC's vulva being " + act.verb + "ed by " + actor);
+        }
+      } else if (part === "mouth") {
+        // Mouth close-up: what's happening to/with it?
+        const actorIsPlayer = !act.playerIsBottom;
+        const actor = actorIsPlayer ? "player" : "NPC";
+        
+        if (actTargetLower === "penis" || actTargetLower === "cock" || actTargetLower === "dick") {
+          ctxBits.push("ORAL SEX: " + actor + "'s mouth receiving penis");
+        } else if (actTargetLower === "vagina" || actTargetLower === "pussy" || actTargetLower === "clitoris" || actTargetLower === "clit") {
+          ctxBits.push("ORAL SEX: " + actor + "'s mouth on vulva");
+        } else if (actTargetLower === "anus" || actTargetLower === "butt" || actTargetLower === "ass") {
+          ctxBits.push("RIMMING: " + actor + "'s mouth on anus");
+        } else {
+          ctxBits.push("ACT: " + actor + "'s mouth " + act.verb + "ing");
+        }
+      } else if (part === "anus" || part === "butt") {
+        // Anus close-up: what's happening to it?
+        const actorIsPlayer = !act.playerIsBottom;
+        const actor = actorIsPlayer ? "player" : "NPC";
+        
+        if (actToolLower === "penis" || actToolLower === "cock" || actToolLower === "dick") {
+          ctxBits.push("ANAL SEX: " + actor + "'s anus receiving penis");
+        } else if (actToolLower === "mouth" || actToolLower === "tongue" || actToolLower === "lips") {
+          ctxBits.push("RIMMING: " + actor + "'s anus being " + act.verb + "ed by mouth");
+        } else if (actToolLower === "fingers" || actToolLower === "hand") {
+          ctxBits.push("ANAL STIMULATION: " + actor + "'s anus being " + act.verb + "ed by " + (act.tool || "hand"));
+        } else {
+          ctxBits.push("ACT: " + actor + "'s anus being " + act.verb + "ed");
+        }
+      } else {
+        // Generic context for other parts
+        ctxBits.push("mid-act state: being " + act.verb);
+        if (act.target) ctxBits.push("at the " + act.target);
       }
+      
+      if (posId) ctxBits.push(posId + " position");
       sceneCtx = ctxBits.join(", ");
     }
 

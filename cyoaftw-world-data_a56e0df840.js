@@ -498,11 +498,11 @@ const SPECIES_TEMPLATES = [
         speechStyle: "broken",
         anatomyType: "amorphous",
         hasTail: false,
-        lore: "Slimes are mindless blobs of living gel that drift through damp stone, eating whatever rots or moves. They do not think or speak, only seep toward warmth and food. Some take on the temper of the place they grew: acid from the swamp's rot, frost from cold deep stone, or the heat of old forges.",
+        lore: "Slimes are mindless blobs of living gel that drift through damp stone, eating whatever rots or moves. They do not think or speak, only seep toward warmth and food. Some take on the temper of the place they grew: acid or poison from the swamp's rot, or frost from cold deep stone.",
         articulation: "A slime has no mouth to speak of; it only gurgles, wobbles and slurps.",
         anatomyProfile: {
             surfaceType: "gel",
-            skinTones: ["emerald green", "deep blue", "fiery red", "slate grey", "swamp green", "frost blue", "crimson", "stone grey"],
+            skinTones: ["emerald green", "deep blue", "murky purple", "slate grey", "swamp green", "frost blue", "dusky violet", "stone grey"],
             hairColors: ["none"],
             hairStyles: ["none"],
             eyeColors: ["none"],
