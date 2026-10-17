@@ -23,14 +23,18 @@ function element(tag = 'div') {
         set innerHTML(value) { assert.equal(value, ''); content = ''; this.children = []; }
     };
 }
-function harness() {
+function harness(options = {}) {
     const inventory = element();
     const trade = element();
     const elements = Object.fromEntries(['itemModal', 'itemModalTitle', 'itemModalDesc', 'itemModalStats', 'itemModalActions', 'itemModalClose',
         ...['head', 'weapon', 'hand', 'upper', 'hands', 'lower', 'feet', 'neck', 'belt', 'coinPouch'].map(slot => 'eq-slot-' + slot)].map(id => [id, element()]));
     let uid = 0;
+    const displayStorage = new Map();
+    if (options.view !== null) displayStorage.set('cyoaftw.inventoryDisplay', JSON.stringify({ view: options.view || 'expanded', sort: options.sort || 'name' }));
     const c = {
         console, window: {}, G: { player: null, activeRoom: { items: [] } },
+        displayStorage,
+        localStorage: { getItem: key => displayStorage.get(key) || null, setItem: (key, value) => displayStorage.set(key, value) },
         document: { createElement: element, getElementById(id) { return id === 'equipmentInventory' ? inventory : (id === 'chatOptionsEl' ? trade : (elements[id] || null)); } },
         assignLootUID(item) { item._uid = item._uid || 'test-' + ++uid; item.id = item.id || item._uid; return item; },
         getItemName(item) { return item && item.name || 'item'; },
@@ -107,6 +111,14 @@ function harness() {
     return { c, p, inventory, bag, trade, elements, enableEquipmentDetails };
 }
 function allElements(node) { return [node, ...node.children.flatMap(allElements)]; }
+function containerSection(inventory, name) {
+    return allElements(inventory).find(node => node.className === 'equipment-container' && node.children.some(child => child.className === 'equipment-container-title' && child.textContent.startsWith(name + ' ·')));
+}
+function primaryButton(parent, label) {
+    const header = parent.children.find(node => node.className === 'equipment-row-header') || parent;
+    const actions = header.children.find(node => node.className === 'equipment-row-actions');
+    return actions && actions.children.find(node => node.tag === 'button' && node.textContent === label);
+}
 function test(name, run) { run(); console.log('PASS ' + name); }
 
 test('weapon sizes follow item names; legacy defaults upgrade and explicit sizes survive', () => {
@@ -243,7 +255,7 @@ test('move selector transfers one item from the displayed stack', () => {
     const herb = { name: 'Herb', quantity: 2, stowed: c.getGarmentPlaces(p.rucksack).storage[0].id };
     p.inventory.push(herb);
     c.renderEquipment();
-    const select = allElements(inventory).find(node => node.tag === 'select');
+    const select = allElements(inventory).find(node => node.tag === 'select' && node.className.includes('equipment-move-select'));
     assert.ok(select);
     const beltOption = select.children.find(node => node.textContent === 'Utility belt');
     assert.ok(beltOption);
@@ -273,7 +285,7 @@ test('empty packs retain controls; tied gear and overflow are separate from occu
     const { c, p, inventory } = harness();
     c.renderEquipment();
     assert.match(inventory.textContent, /Rucksack: 0\/18 units · Combined storage: 0\/24 units/);
-    assert.match(inventory.textContent, /Set rucksack down/);
+    assert.ok(primaryButton(containerSection(inventory, 'Rucksack'), 'Drop'));
     assert.match(inventory.textContent, /Travel trousers/);
     const tie = c.getGarmentPlaces(p.equipped.belt).ties[0];
     p.inventory.push({ name: 'Staff', type: ['weapon'], stowed: tie.id }, { name: 'Anvil', unitSize: 50 });
@@ -430,7 +442,7 @@ test('worn containers have direct Remove and Drop controls, with carried Equip a
     const herb = { name: 'Herb', stowed: c.getGarmentPlaces(belt).storage[0].id };
     p.inventory.push(herb);
     c.renderEquipment();
-    allElements(inventory).find(node => node.tag === 'button' && node.textContent === 'Remove Utility belt').onclick();
+    primaryButton(containerSection(inventory, 'Utility belt'), 'Remove').onclick();
     assert.equal(p.equipped.belt, undefined);
     assert.ok(p.inventory.includes(belt));
     assert.ok(p.inventory.includes(herb));
@@ -440,7 +452,7 @@ test('worn containers have direct Remove and Drop controls, with carried Equip a
     allElements(row).find(node => node.tag === 'button' && node.textContent === 'Equip').onclick();
     assert.equal(p.equipped.belt.name, 'Utility belt');
     assert.equal(herb.stowed, c.getGarmentPlaces(p.equipped.belt).storage[0].id);
-    allElements(inventory).find(node => node.tag === 'button' && node.textContent === 'Drop Utility belt').onclick();
+    primaryButton(containerSection(inventory, 'Utility belt'), 'Drop').onclick();
     assert.equal(p.equipped.belt, undefined);
     assert.ok(!p.inventory.includes(herb));
     assert.equal(c.G.activeRoom.items[0].packed[0], herb);
@@ -534,6 +546,160 @@ test('worn gear retains the existing Swap recommended upgrade action', () => {
     swap.onclick();
     assert.equal(p.equipped.head.name, helmet.name);
     assert.ok(p.inventory.includes(current));
+});
+
+test('carried rows show only Equip, Drop and ellipsis; extra controls toggle per item', () => {
+    const { c, p, inventory } = harness();
+    p.inventory.push({ name: 'Dagger', type: ['weapon'] }, { name: 'Herb', type: ['misc'] });
+    c.renderEquipment();
+    const rows = allElements(inventory).filter(node => node.className === 'equipment-row');
+    const dagger = rows.find(row => row.children[0].textContent.includes('Dagger'));
+    const herb = rows.find(row => row.children[0].textContent.includes('Herb'));
+    for (const row of [dagger, herb]) {
+        const header = row.children.find(node => node.className === 'equipment-row-header');
+        const primary = header.children.find(node => node.className === 'equipment-row-actions');
+        assert.deepEqual(primary.children.filter(node => node.tag === 'button').map(node => node.textContent), ['Equip', 'Drop', '…']);
+        const extra = row.children.find(node => node.className.includes('equipment-more-actions'));
+        assert.equal(extra.hidden, true);
+        assert.equal(extra.style.display, 'none');
+        assert.ok(allElements(extra).some(node => node.textContent === 'Examine'));
+    }
+    assert.equal(primaryButton(dagger, 'Equip').disabled, false);
+    assert.equal(primaryButton(herb, 'Equip').disabled, true);
+    primaryButton(dagger, '…').onclick();
+    const daggerExtra = dagger.children.find(node => node.className.includes('equipment-more-actions'));
+    assert.equal(daggerExtra.hidden, false);
+    assert.equal(primaryButton(dagger, '…').attributes['aria-expanded'], 'true');
+    primaryButton(herb, '…').onclick();
+    assert.equal(daggerExtra.hidden, true, 'Opening another item closes the previous menu');
+    const herbExtra = herb.children.find(node => node.className.includes('equipment-more-actions'));
+    assert.equal(herbExtra.hidden, false);
+    herbExtra.onkeydown({ key: 'Escape', preventDefault() {}, stopPropagation() {} });
+    assert.equal(herbExtra.hidden, true);
+    assert.equal(primaryButton(herb, '…').attributes['aria-expanded'], 'false');
+});
+
+test('pack Remove and Equip keep nested contents attached, and worn containers retain Search in ellipsis', () => {
+    const { c, p, inventory } = harness();
+    const pack = p.rucksack;
+    const herb = { name: 'Herb', stowed: c.getGarmentPlaces(pack).storage[0].id };
+    p.inventory.push(herb);
+    c.renderEquipment();
+    const packGroup = containerSection(inventory, 'Rucksack');
+    assert.ok(primaryButton(packGroup, 'Remove'));
+    assert.ok(primaryButton(packGroup, 'Drop'));
+    const extra = packGroup.children.find(node => node.className.includes('equipment-more-actions'));
+    assert.equal(extra.hidden, true);
+    assert.ok(allElements(extra).some(node => node.tag === 'button' && node.textContent === 'Search'));
+    primaryButton(packGroup, 'Remove').onclick();
+    assert.equal(p.rucksack, null);
+    assert.ok(p.inventory.includes(pack));
+    assert.ok(p.inventory.includes(herb));
+    assert.equal(herb.stowed, c.getGarmentPlaces(pack).storage[0].id);
+    const packRow = allElements(inventory).find(node => node.className === 'equipment-row' && node.children[0].textContent.startsWith('Rucksack'));
+    const equip = primaryButton(packRow, 'Equip');
+    assert.equal(equip.disabled, false);
+    equip.onclick();
+    assert.equal(p.rucksack, pack);
+    assert.ok(!p.inventory.includes(pack));
+    assert.ok(p.inventory.includes(herb));
+    assert.equal(herb.stowed, c.getGarmentPlaces(pack).storage[0].id);
+});
+
+test('carried container Equip works through the primary action and Drop still transfers descendants', () => {
+    const { c, p, inventory, bag } = harness();
+    const spare = bag('Spare bag');
+    const child = { name: 'Herb', stowed: c.getGarmentPlaces(spare).storage[0].id };
+    p.inventory.push(spare, child);
+    c.renderEquipment();
+    const row = allElements(inventory).find(node => node.className === 'equipment-row' && node.children[0].textContent.startsWith('Spare bag'));
+    assert.ok(primaryButton(row, 'Equip'));
+    assert.equal(primaryButton(row, 'Equip').disabled, true, 'Occupied back slot has an explanatory disabled Equip');
+    assert.match(primaryButton(row, 'Equip').title, /Remove your current pack/);
+    primaryButton(row, 'Drop').onclick();
+    assert.ok(!p.inventory.includes(spare));
+    assert.ok(!p.inventory.includes(child));
+    assert.equal(c.G.activeRoom.items[0].packed[0], child);
+});
+
+test('quantity Drop stays directly accessible and preserves the rest of the stack', () => {
+    const { c, p, inventory } = harness();
+    p.inventory.push({ name: 'Bandage', type: ['misc'], quantity: 5, stowed: c.getGarmentPlaces(p.rucksack).storage[0].id });
+    c.renderEquipment();
+    const row = allElements(inventory).find(node => node.className === 'equipment-row' && node.children[0].textContent.startsWith('Bandage'));
+    const quantity = allElements(row).find(node => node.tag === 'input');
+    quantity.value = '2';
+    primaryButton(row, 'Drop').onclick();
+    assert.equal(c.G.activeRoom.items[0].quantity, 2);
+    assert.equal(p.inventory.find(item => item.name === 'Bandage').quantity, 3);
+});
+
+test('compact is the default flat list, with item details available through ellipsis', () => {
+    const { c, p, inventory, bag } = harness({ view: null });
+    const pouch = bag('Small pouch', 6, 2);
+    const herb = { name: 'Herb', stowed: c.getGarmentPlaces(pouch).storage[0].id };
+    p.inventory.push(pouch, herb);
+    c.renderEquipment();
+    assert.equal(c.getInventoryDisplayPreferences().view, 'compact');
+    assert.equal(allElements(inventory).filter(node => node.className === 'equipment-container').length, 0);
+    const rows = inventory.children.filter(node => node.className === 'equipment-row');
+    assert.equal(rows.length, 3, 'Worn pack and both carried items appear exactly once');
+    const row = rows.find(node => node.children[0].textContent.startsWith('Herb'));
+    assert.ok(primaryButton(row, 'Drop'));
+    primaryButton(row, '…').onclick();
+    assert.match(row.textContent, /Stored in: Small pouch/);
+    assert.ok(allElements(row).some(node => node.tag === 'button' && node.textContent === 'Examine'));
+});
+
+test('view toggle restores container groups and persists without changing inventory', () => {
+    const { c, p, inventory } = harness({ view: null });
+    const herb = { name: 'Herb', stowed: c.getGarmentPlaces(p.rucksack).storage[0].id };
+    p.inventory.push(herb);
+    c.renderEquipment();
+    const toolbar = inventory.children.find(node => node.className === 'inventory-display-toolbar');
+    const select = allElements(toolbar).find(node => node.id === 'inventoryViewSelect');
+    select.value = 'expanded'; select.onchange();
+    assert.ok(containerSection(inventory, 'Rucksack'));
+    assert.equal(p.inventory.length, 1);
+    assert.equal(p.inventory[0], herb);
+    assert.equal(JSON.parse(c.displayStorage.get('cyoaftw.inventoryDisplay')).view, 'expanded');
+    c.setInventoryDisplayPreference('view', 'compact');
+    assert.equal(inventory.children.filter(node => node.className === 'equipment-container').length, 0);
+    assert.equal(JSON.parse(c.displayStorage.get('cyoaftw.inventoryDisplay')).view, 'compact');
+});
+
+test('sorting uses A–Z names or descending unit value, retaining stack and source identity', () => {
+    for (const view of ['compact', 'expanded']) {
+        const { c, p, inventory } = harness({ view });
+        const place = c.getGarmentPlaces(p.rucksack).storage[0].id;
+        const cheapStack = { name: 'Amber', value: 1, quantity: 5, stowed: place };
+        const dear = { name: 'Zircon', value: 20, stowed: place };
+        const medium = { name: 'Copper', value: 3, stowed: place };
+        p.inventory.push(dear, cheapStack, medium);
+        c.renderEquipment();
+        function names() {
+            return allElements(inventory).filter(node => node.className === 'equipment-row-title' && /Amber|Copper|Zircon/.test(node.textContent)).map(node => node.textContent.split(' ')[0]);
+        }
+        assert.deepEqual(names(), ['Amber', 'Copper', 'Zircon']);
+        c.setInventoryDisplayPreference('sort', 'value');
+        assert.deepEqual(names(), ['Zircon', 'Copper', 'Amber']);
+        assert.equal(JSON.parse(c.displayStorage.get('cyoaftw.inventoryDisplay')).sort, 'value');
+        assert.equal(p.inventory.length, 3);
+        assert.equal(cheapStack.quantity, 5);
+        assert.equal(cheapStack.stowed, place);
+    }
+});
+
+test('compact empty inventory has one empty message, including when storage preferences are unavailable', () => {
+    const { c, p, inventory } = harness({ view: null });
+    c.localStorage = { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); } };
+    p.rucksack = null;
+    p.equipped = { hand: { name: 'Relic', type: ['boss-relic'] } };
+    c.renderEquipment();
+    assert.equal(c.getInventoryDisplayPreferences().view, 'compact');
+    assert.equal(allElements(inventory).filter(node => node.className === 'equipment-empty').length, 1);
+    c.setInventoryDisplayPreference('sort', 'value');
+    assert.equal(c.getInventoryDisplayPreferences().sort, 'value');
 });
 
 console.log('Equipment management checks passed.');
