@@ -1,10 +1,11 @@
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-17-002
-// Latest: Slimes are described as gelatinous piles without eyes or human gestures, including creatures from older saves.
+// Core Engine Version: 2026-10-17-003
+// Latest: Expanded inventory grouped by container, container item controls, empty-slot Swap, item-size balance and filled-container sale protection; fixture movement actions; slime remains and collection; compact calendar with a saved realm year; zone- and trade-aware shop names.
+// Previous: Slimes are described as gelatinous piles without eyes or human gestures, including creatures from older saves.
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk stops only for real combat and shows its lines as typed bubbles; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-17-002";
+window.__ENGINE_CORE_VERSION = "2026-10-17-003";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -26429,6 +26430,204 @@ function touchSlime(npc) {
     saveGameState();
 }
 
+function stickFingerInSlime(npc) {
+    if (!npc || !isSlimeEntity(npc)) return;
+    
+    const variant = getSlimeVariant(npc);
+    const adj = variant ? variant.adj : "gelatinous";
+    const name = npc.name || "the slime";
+    
+    let desc = `You slowly extend your finger and press it into ${name}.`;
+    
+    if (variant && variant.acid) {
+        desc += ` The acidic gel is cooler than expected, with a slight effervescent tingle as it makes contact. Tiny bubbles form around your fingertip, and the slime pulls back slightly, as if recoiling from the intrusion.`;
+    } else if (variant && variant.venom) {
+        desc += ` The toxic slime is warm and almost pulsates around your finger. A faint numbness begins to spread from the contact point, and the slime ripples with what seems like curiosity rather than aggression.`;
+    } else if (variant && variant.element === "frost") {
+        desc += ` The frigid jelly is surprisingly cold, sending a chill up your arm. The slime seems sluggish, but still reacts by flowing around your finger, as if testing the foreign object.`;
+    } else {
+        desc += ` The cool, thick gel yields easily, flowing around your finger like liquid silk. The slime quivers slightly, its translucent body shifting as it senses the intrusion.`;
+    }
+    
+    desc += ` You withdraw your finger, now coated with a thin layer of slime.`;
+    
+    const reactions = [
+        `It gives a small, almost playful pulse.`,
+        `The gel shivers, as if startled.`,
+        `A ripple travels across its surface, then fades.`,
+        `It seems to watch your finger as you pull it back.`,
+        `The slime settles, returning to its slow, rhythmic pulsing.`
+    ];
+    desc += ` ` + reactions[Math.floor(Math.random() * reactions.length)];
+    
+    if (!G.player._slimedParts) G.player._slimedParts = [];
+    if (!G.player._slimedParts.includes("hands")) {
+        G.player._slimedParts.push("hands");
+    }
+    
+    advanceStoryTurn(1);
+    setNarration(desc);
+    renderNPCActionMenu(npc);
+    saveGameState();
+}
+
+function scoopSlimeWithHands(npc) {
+    if (!npc || !isSlimeEntity(npc)) return;
+    
+    const variant = getSlimeVariant(npc);
+    const name = npc.name || "the slime";
+    
+    let desc = `You cup your hands together and pull some of ${name} to collect it in your hands.`;
+    
+    if (variant && variant.acid) {
+        desc += ` The acidic gel clings aggressively, bubbling as you work it into your palms. The slime shivers, clearly unhappy with the disturbance.`;
+    } else if (variant && variant.venom) {
+        desc += ` The toxic slime resists slightly, its warm gel trying to flow between your fingers. A prickling sensation spreads across your hands as you gather it.`;
+    } else if (variant && variant.element === "frost") {
+        desc += ` The frigid jelly is thick and clings coldly to your skin as you gather it. The slime moves sluggishly, almost reluctantly.`;
+    } else {
+        desc += ` The cool gel is thick and yielding, forming a glossy mound in your cupped hands.`;
+    }
+    
+    advanceStoryTurn(1);
+    G.activeNPCMode = "scoop-hands";
+    setNarration(desc);
+    openSlimeUseMenu(npc);
+    saveGameState();
+}
+
+function openSlimeUseMenu(npc) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return;
+    el.innerHTML = "";
+    const buttons = [];
+    
+    buttons.push(createCombatButton("Taste it", function() { tasteSlimedHands(npc); }, { title: "Bring your slimed hands to your mouth and taste the gel." }));
+    
+    const bodyParts = [];
+    if (G.player.anatomy && G.player.anatomy.face) {
+        bodyParts.push({ id: "face", label: "Face" });
+    }
+    if ((G.player.anatomy && G.player.anatomy.chest && G.player.anatomy.chestSize) || playerHasBreasts(G.player)) {
+        bodyParts.push({ id: "chest", label: "Chest/Breasts" });
+    }
+    bodyParts.push({ id: "hands", label: "Hands" });
+    if (playerHasPenis(G.player)) {
+        bodyParts.push({ id: "penis", label: "Penis" });
+    }
+    if (playerHasVagina(G.player)) {
+        bodyParts.push({ id: "vagina", label: "Vagina" });
+    }
+    bodyParts.push({ id: "anus", label: "Asshole" });
+    
+    bodyParts.forEach(part => {
+        buttons.push(createCombatButton("Rub it on my " + part.label, function() { rubSlimeOnBodyPart(part.id, npc); }, { title: "Rub the slime from your hands onto your " + part.label.toLowerCase() }));
+    });
+    
+    buttons.push(createCombatButton("Rub it on item", function() { openSlimeItemMenu(npc); }, { title: "Select an item from your equipment to coat with slime." }));
+    buttons.push(createCombatButton("Back", function() { G.activeNPCMode = "menu"; renderNPCActionMenu(npc); }));
+    appendCombatGroup(el, "What do you do with it?", buttons);
+}
+
+function tasteSlimedHands(npc) {
+    const variant = getSlimeVariant(npc);
+    let desc = "You bring your slimed hands to your mouth and taste the gel.";
+    if (variant && variant.acid) {
+        desc += ` The acidic slime burns your tongue fiercely. You spit it out immediately, your mouth watering as you try to rid yourself of the taste.`;
+        G.player.hp = Math.max(1, G.player.hp - 2);
+    } else if (variant && variant.venom) {
+        desc += ` The toxic gel has a bitter, metallic taste. A numbness spreads from your tongue, and you feel slightly lightheaded.`;
+        givePlayerPoison({ key: "venom", damage: 1, rounds: 2, stunChance: 0 }, []);
+    } else if (variant && variant.element === "frost") {
+        desc += ` The frigid slime is cold and slightly sweet, like melted frost. It cools your mouth pleasantly.`;
+    } else {
+        desc += ` The gel is cool and slightly sweet, with a mild mineral aftertaste.`;
+    }
+    G.player._slimedParts = G.player._slimedParts ? G.player._slimedParts.filter(p => p !== "hands") : [];
+    advanceStoryTurn(1);
+    setNarration(desc);
+    renderStats();
+    G.activeNPCMode = "menu";
+    renderNPCActionMenu(npc);
+    saveGameState();
+}
+
+function rubSlimeOnBodyPart(partId, npc) {
+    const variant = getSlimeVariant(npc);
+    const partLabels = { face: "face", chest: "chest", hands: "hands", penis: "penis", vagina: "vagina", anus: "anus" };
+    const label = partLabels[partId] || partId;
+    let desc = `You rub the slime from your hands onto your ${label}.`;
+    if (variant && variant.acid) {
+        desc += ` The acidic gel immediately begins to eat away at your skin, causing a sharp stinging sensation.`;
+        G.player.hp = Math.max(1, G.player.hp - 1);
+    } else if (variant && variant.venom) {
+        desc += ` The toxic slime leaves a warm, tingling sensation where it touches.`;
+        givePlayerPoison({ key: "venom", damage: 1, rounds: 1, stunChance: 0 }, []);
+    } else if (variant && variant.element === "frost") {
+        desc += ` The frigid gel cools your ${label} rapidly, making your skin tingle.`;
+    } else {
+        desc += ` The cool gel coats your ${label}, making it slick and shiny.`;
+    }
+    if (!G.player._slimedParts) G.player._slimedParts = [];
+    if (!G.player._slimedParts.includes(partId)) {
+        G.player._slimedParts.push(partId);
+    }
+    G.player._slimedParts = G.player._slimedParts.filter(p => p !== "hands");
+    advanceStoryTurn(1);
+    setNarration(desc);
+    renderStats();
+    G.activeNPCMode = "menu";
+    renderNPCActionMenu(npc);
+    saveGameState();
+}
+
+function openSlimeItemMenu(npc) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return;
+    el.innerHTML = "";
+    const equippedItems = Object.values(G.player.equipped || {}).filter(item => item && !item.hidden);
+    const inventoryItems = (G.player.inventory || []).filter(item => item && !item.hidden && !item.isHidden);
+    const allItems = [...equippedItems, ...inventoryItems];
+    if (allItems.length === 0) {
+        setNarration("You have no items to apply slime to.");
+        G.activeNPCMode = "scoop-hands";
+        openSlimeUseMenu(npc);
+        return;
+    }
+    const buttons = allItems.map(item => {
+        return createCombatButton("Apply to: " + getItemName(item), function() { applySlimeToItem(item, npc); }, { title: "Coat " + getItemName(item) + " with slime." });
+    });
+    buttons.push(createCombatButton("Back", function() { G.activeNPCMode = "scoop-hands"; openSlimeUseMenu(npc); }));
+    appendCombatGroup(el, "Select an item to coat with slime:", buttons);
+}
+
+function applySlimeToItem(item, npc) {
+    const variant = getSlimeVariant(npc);
+    let desc = `You rub the slime onto ${getItemName(item)}.`;
+    if (variant && variant.acid) {
+        desc += ` The acidic gel immediately begins to corrode the ${getItemName(item)}, eating into its surface.`;
+        const d = ensureDurability(item, "item");
+        if (d) { damageDurability(item, 2, "corrosion", { lines: [] }); }
+    } else if (variant && variant.venom) {
+        desc += ` The toxic slime leaves a residue on the ${getItemName(item)} that might be dangerous to handle.`;
+    } else if (variant && variant.element === "frost") {
+        desc += ` The frigid gel freezes slightly on contact, leaving a cool coating on the ${getItemName(item)}.`;
+    } else {
+        desc += ` The cool gel coats the ${getItemName(item)}, making it slick and slippery.`;
+    }
+    item._slimed = true;
+    item._slimedUntil = getCurrentStoryTurn() + 20;
+    G.player._slimedParts = G.player._slimedParts ? G.player._slimedParts.filter(p => p !== "hands") : [];
+    advanceStoryTurn(1);
+    setNarration(desc);
+    renderStats();
+    if (typeof refreshInventoryUi === "function") refreshInventoryUi();
+    G.activeNPCMode = "menu";
+    renderNPCActionMenu(npc);
+    saveGameState();
+}
+
+
 function offerNectarToSlime(npc) {
     if (!npc || !isSlimeEntity(npc)) return;
     const vial = findInventoryItemById(G.player, "moonbloom-nectar");
@@ -26991,8 +27190,8 @@ function renderNPCActionMenu(npc) {
         actions.push({ label: "Give something", action: "give", title: `Hand ${npc.name} something from your pack, outside of any trade.` });
     }
     
-    // Use slime as lube (if player has slime vial or slime in room)
-    if (canUseSlime()) {
+    // Use slime as lube (if player has slime vial or slime in room, but not when interacting with a slime)
+    if (canUseSlime() && !isSlimeEntity(npc)) {
         actions.push({ label: "Use slime", action: "use-slime", title: "Apply slime as super lube to yourself or " + (npc.name || "them") });
     }
     
@@ -27001,7 +27200,11 @@ function renderNPCActionMenu(npc) {
         // Basic observation
         actions.push({ label: "Observe", action: "observe-slime", title: `Watch ${npc.name} and its behavior.` });
         
-        // Physical contact
+        // Physical contact - NEW: Replace old "Use slime" options
+        actions.push({ label: "Stick your finger in", action: "stick-finger-slime", title: `Press your finger into ${npc.name} to feel its texture and get its reaction.` });
+        actions.push({ label: "Scoop a bit of slime", action: "scoop-hands", title: `Cup your hands to collect some of ${npc.name} and choose what to do with it.` });
+        
+        // Original slime interactions
         actions.push({ label: "Poke", action: "poke-slime", title: `Gently prod ${npc.name} to see how it reacts.` });
         actions.push({ label: "Touch", action: "touch-slime", title: `Feel ${npc.name}'s gel surface.` });
         
@@ -27075,6 +27278,17 @@ function chooseNPCAction(action) {
     }
 
     // ── SFW Slime Interactions ──────────────────────────────────────
+    if (action === "stick-finger-slime") {
+        stickFingerInSlime(npc);
+        return;
+    }
+
+    if (action === "scoop-hands") {
+        scoopSlimeWithHands(npc);
+        return;
+    }
+
+
     if (action === "observe-slime") {
         observeSlime(npc);
         return;

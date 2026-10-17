@@ -1,7 +1,8 @@
-// ── cyoaftw-world-data.js v2026-10-15-001 ── Commoner standing line "I owe a debt" now names who is owed ({creditor}, filled in generateNPCSocial).
+// ── cyoaftw-world-data.js v2026-10-17-003 ── Shop name generator uses zone and trade themes, with stable names shared by storefronts and interiors.
+// Previous: Commoner debt dialogue identifies the creditor.
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.WORLD_DATA_VERSION = "2026-10-15-001";
+    window.WORLD_DATA_VERSION = "2026-10-17-003";
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
