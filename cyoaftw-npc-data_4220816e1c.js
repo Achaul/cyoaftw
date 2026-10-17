@@ -5789,7 +5789,8 @@ const NPC_ROLE_TEMPER_CLASS = {
     "Wanderer": "wanderer",
     "Scavenger": "scavenger",
     "Raider": "raider",
-    "Cultist": "cultist"
+    "Cultist": "cultist",
+    "Shady Merchant": "shady"
 };
 
 const NPC_TEMPER_BY_CLASS = {
@@ -5801,7 +5802,8 @@ const NPC_TEMPER_BY_CLASS = {
     wanderer:   { friendly: 2, neutral: 3, curious: 2, bold: 1, wary: 4, skittish: 2, hostile: 1.2, aggressive: 0.5 },
     scavenger:  { neutral: 2, wary: 4, skittish: 2, bold: 1, hostile: 2.5, aggressive: 0.6 },
     raider:     { neutral: 0.5, bold: 2, wary: 1, hostile: 5, aggressive: 5 },
-    cultist:    { neutral: 1, curious: 1, bold: 1, wary: 3, hostile: 4, aggressive: 2 }
+    cultist:    { neutral: 1, curious: 1, bold: 1, wary: 3, hostile: 4, aggressive: 2 },
+    shady:      { neutral: 3, wary: 5, skittish: 3, distrustful: 2, curious: 1, hostile: 1 }
 };
 
 // Multipliers for a species' nature. Realm species (human, elf, dwarf, halfling)

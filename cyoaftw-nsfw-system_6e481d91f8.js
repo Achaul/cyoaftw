@@ -6110,6 +6110,155 @@ avoidNote,
     return parts.join(" ");
   }
 
+
+  // ============================================================================
+  // SHADY MERCHANT - NSFW Trade Goods
+  // ============================================================================
+
+  // NSFW items sold by Shady Merchant
+  const SHADY_MERCHANT_NSFW_GOODS = {
+    ivoryPhallus: {
+        name: "Ivory Phallus",
+        type: ["misc", "adult-toy", "nsfw"],
+        value: function() { return 30 + Math.floor(Math.random() * 71); }, // 30-100 gp
+        description: function() {
+            const species = ["Human", "Elf", "Orc", "Kobold", "Dwarf", "Goblin", "Lizardfolk", "Dragonborn", "Satyr", "Catfolk"];
+            const chosenSpecies = species[Math.floor(Math.random() * species.length)];
+            const sizes = ["petite", "modest", "average", "impressive", "huge", "monstrous"];
+            const chosenSize = sizes[Math.floor(Math.random() * sizes.length)];
+            const shapes = ["smooth and polished", "veined and realistic", "ridged for extra sensation", "flared at the tip", "slightly curved"];
+            const chosenShape = shapes[Math.floor(Math.random() * shapes.length)];
+            return `A ${chosenSize} ivory phallus carved in the likeness of a ${chosenSpecies.toLowerCase()}, ${chosenShape}. The craftsmanship is exquisite, the material smooth and cool to the touch.`;
+        },
+        aiPolish: true
+    },
+    buttPlug: {
+        name: "Butt Plug",
+        type: ["misc", "adult-toy", "nsfw"],
+        value: function() { return 30 + Math.floor(Math.random() * 71); },
+        description: function() {
+            const materials = ["smooth ivory", "polished stone", "dark wood", "cold metal", "flexible rubber"];
+            const chosenMaterial = materials[Math.floor(Math.random() * materials.length)];
+            const hasTail = Math.random() < 0.4;
+            const baseDesc = `A ${chosenMaterial} butt plug, designed for anal pleasure.`;
+            if (hasTail) {
+                const tails = ["fluffy fox tail", "sleek cat tail", "demonic barbed tail", "horse tail", "wolf tail"];
+                const chosenTail = tails[Math.floor(Math.random() * tails.length)];
+                return `${baseDesc} It has a ${chosenTail} attached to the base, adding to the visual appeal.`;
+            }
+            return baseDesc;
+        },
+        aiPolish: true
+    },
+    flavoredLube: {
+        name: "Flavored Lube",
+        type: ["misc", "consumable", "nsfw"],
+        value: function() { return 30 + Math.floor(Math.random() * 71); },
+        description: function() {
+            const flavors = ["strawberry", "honey", "mint", "vanilla", "cherry", "cinnamon", "chocolate", "peach", "pineapple", "exotic spice blend"];
+            const chosenFlavor = flavors[Math.floor(Math.random() * flavors.length)];
+            const consistencies = ["thick and long-lasting", "light and silky", "warming on contact", "cooling gel", "quick-absorbing"];
+            const chosenConsistency = consistencies[Math.floor(Math.random() * consistencies.length)];
+            return `A bottle of ${chosenFlavor}-flavored lubricant, ${chosenConsistency}. Perfect for making intimate encounters more enjoyable.`;
+        },
+        aiPolish: true
+    },
+    nakedStatuette: {
+        name: "Naked Statuette",
+        type: ["misc", "art", "nsfw"],
+        value: function() { return 30 + Math.floor(Math.random() * 71); },
+        description: function() {
+            const species = ["Human", "Elf", "Orc", "Dwarf", "Halfling", "Lizardfolk", "Tiefling", "Dragonborn", "Satyr"];
+            const chosenSpecies = species[Math.floor(Math.random() * species.length)];
+            const genders = ["female", "male", "androgynous", "non-binary"];
+            const chosenGender = genders[Math.floor(Math.random() * genders.length)];
+            const poses = [
+                "reclining seductively",
+                "standing with arms behind the head",
+                "arching their back in ecstasy",
+                "kneeling in a provocative pose",
+                "lying on their stomach with legs slightly parted",
+                "twisting to show off their form",
+                "stretching sensually"
+            ];
+            const chosenPose = poses[Math.floor(Math.random() * poses.length)];
+            const materials = ["polished marble", "smooth alabaster", "dark obsidian", "painted ceramic", "glazed pottery"];
+            const chosenMaterial = materials[Math.floor(Math.random() * materials.length)];
+            return `A ${chosenMaterial} statuette of a ${chosenGender} ${chosenSpecies.toLowerCase()} ${chosenPose}. The artist has captured every intimate detail with remarkable skill.`;
+        },
+        aiPolish: true
+    }
+  };
+
+  // Create a Shady Merchant NSFW trade good item
+  function createShadyMerchantNSFWGood(typeKey) {
+    const template = SHADY_MERCHANT_NSFW_GOODS[typeKey];
+    if (!template) return null;
+    
+    const value = typeof template.value === "function" ? template.value() : template.value;
+    const description = typeof template.description === "function" ? template.description() : template.description;
+    
+    return {
+        id: `shady-${typeKey}-${Math.random().toString(36).slice(2, 7)}`,
+        name: template.name,
+        type: template.type || ["misc", "nsfw"],
+        value: value,
+        description: description,
+        nsfw: true,
+        shadyMerchantItem: true,
+        aiPolish: template.aiPolish || false
+    };
+  }
+
+  // Generate Shady Merchant inventory (called weekly or when created)
+  function generateShadyMerchantInventory(npc) {
+    if (!npc || npc.role !== "Shady Merchant") return [];
+    
+    const inventory = [];
+    const types = ["ivoryPhallus", "buttPlug", "flavoredLube", "nakedStatuette"];
+    
+    types.forEach(type => {
+        // 1d3 items of each type
+        const count = 1 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < count; i++) {
+            const item = createShadyMerchantNSFWGood(type);
+            if (item) inventory.push(item);
+        }
+    });
+    
+    return inventory;
+  }
+
+  // Hook into NPC creation to add Shady Merchant inventory
+  window.generateShadyMerchantNSFWInventory = function(npc) {
+    if (!npc || npc.role !== "Shady Merchant") return [];
+    return generateShadyMerchantInventory(npc);
+  };
+
+  // Refresh inventory weekly
+  window.refreshShadyMerchantInventory = function(npc) {
+    if (!npc || npc.role !== "Shady Merchant") return;
+    
+    const currentTurn = window.getCurrentStoryTurn ? window.getCurrentStoryTurn() : 0;
+    const lastRefresh = npc._lastInventoryRefresh || 0;
+    const WEEK_TURNS = 54 * 7; // 7 days * 54 turns/day
+    
+    if (currentTurn >= lastRefresh + WEEK_TURNS) {
+        npc.inventory = generateShadyMerchantInventory(npc);
+        npc._lastInventoryRefresh = currentTurn;
+        console.log("[Shady Merchant] Inventory refreshed for", npc.name);
+    }
+    
+    return npc.inventory || [];
+  };
+
+  // Get price for Shady Merchant items (30-100 gp)
+  window.getShadyMerchantItemPrice = function(item) {
+    if (!item || !item.shadyMerchantItem) return item.value || 50;
+    // Already has random value from creation
+    return item.value;
+  };
+
   initNSFWSystem();
 })();
 } catch (e) {
