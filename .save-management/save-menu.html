@@ -1,0 +1,25 @@
+<!-- ── SAVE MANAGEMENT ── -->
+<div id="saveMenuModal" onclick="if (event.target === this) closeSaveMenu()">
+    <div class="item-card save-card" id="saveMenuCard" role="dialog" aria-modal="true" aria-labelledby="saveMenuTitle" aria-describedby="saveMenuIntro">
+        <button type="button" class="item-card-close" id="saveMenuCloseBtn" aria-label="Close saves" onclick="closeSaveMenu()">&times;</button>
+        <h3 id="saveMenuTitle">Your adventures</h3>
+        <p class="save-intro" id="saveMenuIntro">Keep a moment to return to, or take your adventure with you.</p>
+        <label for="manualSaveName">Name a new save</label>
+        <input type="text" id="manualSaveName" maxlength="80" placeholder="Before the shrine…">
+        <div class="save-actions">
+            <button type="button" class="save-primary" id="createManualSaveBtn" onclick="createManualSaveFromMenu()">Create manual save</button>
+        </div>
+        <div class="save-actions save-toolbar">
+            <button type="button" id="exportCurrentSaveBtn" onclick="exportCurrentSaveFromMenu()">Export current to disk</button>
+            <button type="button" id="importSaveBtn" onclick="document.getElementById('saveFileInput').click()">Import from disk</button>
+            <input type="file" id="saveFileInput" accept=".json,application/json" hidden onchange="importGameSaveFromMenu(this)">
+        </div>
+        <p id="saveMenuStatus" role="status" aria-live="polite"></p>
+        <div id="saveMenuList" aria-label="Saved adventures"></div>
+        <p class="save-storage-note">Autosave updates as you play. Manual saves stay in this browser. Export a file to keep a backup or move to another browser. Importing adds a manual save.</p>
+    </div>
+    <div id="saveMenuConfirmOverlay" onclick="if (event.target === this) cancelSaveMenuConfirmation()" hidden>
+        <div id="saveMenuConfirm" class="item-card save-confirm-card" role="dialog" aria-modal="true" aria-labelledby="saveMenuConfirmTitle" aria-describedby="saveMenuConfirmMessage" hidden></div>
+    </div>
+</div>
+

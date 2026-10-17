@@ -1,0 +1,220 @@
+/* ── SHARED DARK UI FINISH ───────────────────────────────────────
+   Map is the reference: quiet gray surfaces, 1px borders, 6px controls
+   and 10px windows. The bottom movement/action bar keeps its own rules. */
+:root {
+    color-scheme: dark;
+    --ui-panel: #1e1e1e;
+    --ui-inset: #141414;
+    --ui-control: #222;
+    --ui-control-hover: #303030;
+    --ui-border: #444;
+    --ui-border-soft: #333;
+    --ui-text: #ddd;
+    --ui-muted: #aaa;
+    --ui-focus: #d6ba78;
+    --ui-radius: 6px;
+    --ui-window-radius: 10px;
+    --ui-scroll-track: #171717;
+    --ui-scroll-thumb: #606060;
+    --ui-window-shadow: 0 18px 54px rgba(0, 0, 0, .5);
+}
+
+/* Fill in native/host defaults only. Existing conversation colors and the
+   circular navigation controls retain their more specific styling. */
+:where(button):not(:where(#interactBarEl *, #exitVerticalEl *)) {
+    color: var(--ui-text);
+    background: var(--ui-control);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    padding: 6px 12px;
+    font: inherit;
+    line-height: 1.35;
+    cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease;
+}
+:where(button:hover:not(:disabled)):not(:where(#interactBarEl *, #exitVerticalEl *)) {
+    background-color: var(--ui-control-hover);
+    border-color: #707070;
+}
+:where(button:disabled) { cursor: default; }
+:where(input, select, textarea) {
+    color: var(--ui-text);
+    background: var(--ui-inset);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    font: inherit;
+}
+:where(input[type="text"], input[type="number"], textarea, select) { padding: 8px 10px; }
+:where(input[type="checkbox"], input[type="radio"]) { accent-color: #bfa467; }
+:where(textarea) { resize: vertical; }
+:where(input, textarea)::placeholder { color: #999; opacity: 1; }
+
+/* A precise focus ring, visible only for keyboard navigation. */
+:is(button, input, select, textarea, a, [tabindex]):focus-visible {
+    outline: 2px solid var(--ui-focus);
+    outline-offset: 3px;
+}
+
+/* Rounded thumbs for Chromium/WebKit, with the standard Firefox fallback.
+   Keep a usable track instead of hiding scrollbars until hover. */
+* { scrollbar-width: thin; scrollbar-color: var(--ui-scroll-thumb) var(--ui-scroll-track); }
+@supports selector(::-webkit-scrollbar) {
+    * { scrollbar-width: auto; scrollbar-color: auto; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: var(--ui-scroll-track); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb { background: var(--ui-scroll-thumb); border: 2px solid var(--ui-scroll-track); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #808080; }
+    ::-webkit-scrollbar-thumb:active { background: #999; }
+    ::-webkit-scrollbar-corner { background: var(--ui-scroll-track); }
+    ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+    body #setupWrapper { scrollbar-width: auto; scrollbar-color: auto; }
+}
+:is(#leftPanel, #rightPanel, #chatLogEl, #chatOptionsEl, #narrationEl, #mapScroll, #equipmentManager, #mapManager, #characterSheetBody, .item-card) {
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+/* Sidebar controls use the same outline and corners as the Map window. */
+#leftPanel { gap: 10px; }
+#leftPanel > * { flex-shrink: 0; }
+#leftPanel > .sidebar-action {
+    width: 100%; margin-top: 0; min-height: 34px;
+    padding: 6px 12px; font-size: 13px; font-weight: 500;
+    background: var(--ui-control); color: var(--ui-text);
+    border: 1px solid var(--ui-border); border-radius: var(--ui-radius);
+}
+#leftPanel > .sidebar-action:hover { background: var(--ui-control-hover); border-color: #707070; }
+#leftPanel .stat-line { gap: 8px; font-size: 13px; line-height: 1.4; align-items: baseline; }
+#leftPanel .stat-line span { min-width: 0; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+#leftPanel #timeBlockEl .stat-line { justify-content: flex-start; gap: 5px; }
+#leftPanel #timeBlockEl .stat-line span { text-align: left; }
+#locationLabelEl, #npcPlaceholderEl { color: #999; }
+.npc-stat-line { color: var(--ui-muted); }
+#npcDetailBehaviorEl { color: var(--ui-muted); font-size: 12px; line-height: 1.5; }
+
+/* Bars remain visible when a portrait and long stats make the panel scroll.
+   The adjacent numeric values continue to carry the same information. */
+:is(#hpBarEl, #staminaBarEl, #manaBarEl, #faithBarEl) {
+    height: 10px; flex: 0 0 10px; margin: -4px 0 2px;
+    background: #303030; border-radius: 999px;
+}
+:is(#hpBarFillEl, #staminaBarFillEl, #manaBarFillEl, #faithBarFillEl) { border-radius: inherit; }
+
+/* Window surfaces: one border weight and a restrained shared shadow. */
+:is(#equipmentManager, #mapManager, .item-card, #characterSheetBody, .opening-box, .spinner-box) {
+    border-color: var(--ui-border); border-radius: var(--ui-window-radius);
+    box-shadow: var(--ui-window-shadow);
+}
+#equipmentManager, #mapManager, .item-card { background: var(--ui-panel); }
+#equipmentManager { min-width: 0; width: min(520px, calc(100vw - 24px)); }
+#mapManager { width: min(640px, calc(100vw - 24px)); }
+#equipmentManager, #mapManager { max-height: min(88vh, calc(100dvh - 24px)); }
+.item-card { max-width: calc(100vw - 24px); }
+.equipment-header { background: var(--ui-panel); border-color: var(--ui-border-soft); }
+.equipment-close-x, .item-card-close {
+    width: 36px; height: 36px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--ui-radius);
+}
+.item-card h3 { margin-right: 36px; }
+.item-card-close { color: #bbb; }
+.item-card-close:hover { background: var(--ui-control-hover); color: #fff; }
+.equipment-close-btn, .equipment-action-btn, .item-card-actions button {
+    border-radius: var(--ui-radius); border-color: var(--ui-border);
+    background: var(--ui-control); color: var(--ui-text);
+}
+.equipment-action-btn { min-height: 30px; padding: 5px 10px; font-size: 12px; }
+.equipment-close-btn { padding: 6px 12px; }
+.item-card-actions button { padding: 8px 10px; }
+.equipment-qty-input, .equipment-move-select { min-height: 32px; border-radius: var(--ui-radius); }
+.equipment-row, .eq-slot, #mapScroll, #savedGameSummaryEl {
+    background: var(--ui-inset); border-color: var(--ui-border-soft); border-radius: var(--ui-radius);
+}
+.equipment-container { border-color: var(--ui-border-soft); border-radius: var(--ui-radius); }
+.equipment-row-subtitle, .equipment-empty, #equipmentInventory.empty, .eq-slot span { color: #999; }
+.sidebar-toggle { gap: 12px; line-height: 1.4; }
+.prefs-card .sidebar-toggle { min-height: 40px; color: #bbb; font-size: 13px; }
+.prefs-card :is(#useAIToggleEl, #noSystemToggleEl) { flex-direction: row-reverse; }
+.prefs-card input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; }
+#playerPortraitPromptBtn { min-width: 32px; min-height: 32px; border-radius: var(--ui-radius); }
+.prefs-card select { min-height: 34px; max-width: 60%; padding: 6px 8px; }
+
+/* Save windows share the same gray chrome; destructive actions keep their
+   warning color. Conversation buttons keep their existing color categories. */
+#saveMenuModal .save-card, #saveMenuConfirm { background: var(--ui-panel); border-color: var(--ui-border); }
+.save-entry { background: #191919; border-color: var(--ui-border-soft); border-radius: var(--ui-radius); }
+#saveMenuModal button { min-height: 32px; padding: 6px 12px; background: var(--ui-control); border-color: var(--ui-border); border-radius: var(--ui-radius); }
+#saveMenuModal button:hover:not(:disabled) { background: var(--ui-control-hover); border-color: #707070; }
+#saveMenuModal .save-primary { background: #343434; border-color: #777; color: #fff; }
+#saveMenuModal .save-badge { color: #bbb; border-color: #555; }
+#saveMenuModal .item-card-close { width: 36px; min-height: 36px; background: transparent; }
+#saveMenuModal input[type="text"] { border-color: var(--ui-border); background: var(--ui-inset); }
+
+/* The setup card fits a short embedded game viewport as well as a full page. */
+body #setupWrapper {
+    width: min(480px, calc(100% - 24px)); margin: 12px auto;
+    max-height: calc(100dvh - 24px); overflow-y: auto; overflow-x: hidden;
+    border: 1px solid var(--ui-border); background: var(--ui-panel);
+    overscroll-behavior: contain; scrollbar-gutter: stable;
+}
+body #setupWrapper > * { flex-shrink: 0; }
+#setupWrapper button { padding: 7px 18px; background: #303030; border: 1px solid var(--ui-border); color: var(--ui-text); }
+#setupWrapper button:hover { background: #3a3a3a; border-color: #707070; }
+#setupWrapper button.secondary { background: var(--ui-control); }
+#setupWrapper button.secondary:hover { background: var(--ui-control-hover); }
+#setupWrapper input[type="text"], #setupWrapper textarea, #setupWrapper select { background: var(--ui-inset); border-color: var(--ui-border); border-radius: var(--ui-radius); }
+.saved-game-actions, .setup-nav { flex-wrap: wrap; gap: 8px; }
+.opening-box { background: var(--ui-panel); border-color: var(--ui-border); }
+.opening-sub { border-color: var(--ui-border-soft); color: #aaa; }
+.opening-eyebrow { color: #bfa467; }
+.opening-title { color: #eee; }
+.opening-body p { color: var(--ui-text); }
+.opening-begin { background: #303030; border-color: #777; color: #fff; }
+.opening-begin:hover { background: #3a3a3a; }
+/* Game-only mobile controls must not cover the setup heading. */
+body:has(#gameWrapper:not(.active)) :is(#mobileToggleLeft, #mobileToggleRight, #fontSizeBtn, #mobileHeader) { display: none !important; }
+
+/* Allow long labels and enlarged text to wrap inside existing panel widths. */
+#centerPanel, #rightPanel { min-width: 0; }
+.prefs-card, .item-card, #characterSheetBody { overflow-wrap: anywhere; }
+.chat-option-btn { height: auto; min-height: 30px; padding: 3px 8px; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.chat-option-btn.kind-exit { min-height: 30px; }
+@media (max-width: 900px) {
+    #leftPanel.mobile-visible { display: flex; }
+    #leftPanel.mobile-visible, #rightPanel.mobile-visible { padding-top: 54px; }
+    #equipmentManager, #mapManager { top: calc(50% + 20px); max-height: min(88vh, calc(100dvh - 72px)); }
+}
+@media (min-width: 901px) {
+    #mobileHeader { display: none !important; }
+}
+@media (max-width: 520px) {
+    body #setupWrapper { padding: 20px 16px; }
+    .equipment-row-header { align-items: flex-start; flex-wrap: wrap; }
+    #equipmentSlots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .eq-slot { min-width: 0; overflow-wrap: anywhere; }
+    .item-card-actions { flex-wrap: wrap; }
+    .item-card-actions button { flex: 1 1 120px; }
+    #mobileHeader .player-info, #mobileHeader .location-info { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #mobileHeader .player-info { flex-shrink: 0; max-width: 42%; }
+    #mobileHeader .location-info { text-align: right; }
+}
+@media (pointer: coarse) {
+    #leftPanel > .sidebar-action, .equipment-action-btn, .equipment-close-btn,
+    .equipment-close-x, .item-card-close, #saveMenuModal button, .prefs-card select,
+    .prefs-card .sidebar-toggle, .item-card-actions button, #setupWrapper button { min-height: 44px; }
+    .equipment-close-x, .item-card-close, #saveMenuModal .item-card-close { width: 44px; height: 44px; }
+    .item-card h3 { margin-right: 44px; }
+    .chat-option-btn { min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    :where(button), #hpBarFillEl, #staminaBarFillEl, #manaBarFillEl, #faithBarFillEl,
+    .chat-bubble, .opening-box, .opening-body p, #openingCard.active { transition: none; animation: none; }
+    .opening-body p { opacity: 1; }
+}
+@media (forced-colors: active) {
+    * { scrollbar-color: auto; }
+    :is(button, input, select, textarea, a, [tabindex]):focus-visible { outline-color: Highlight; }
+    :is(#hpBarEl, #staminaBarEl, #manaBarEl, #faithBarEl) { border: 1px solid CanvasText; }
+    :is(#hpBarFillEl, #staminaBarFillEl, #manaBarFillEl, #faithBarFillEl) { background: Highlight !important; }
+}
+/* ── END SHARED DARK UI FINISH ─────────────────────────────────── */
