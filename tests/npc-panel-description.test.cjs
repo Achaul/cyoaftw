@@ -4,7 +4,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '..');
 const corePath = process.argv[2] || 'C:/Git/CYOADEV/cyoaftw-engine-CORE.js';
-const dataPath = process.argv[3] || path.join(root, 'cyoaftw-npc-data_0fe23da4d0.js');
+const publishedData = fs.readdirSync(root).filter(name => /^cyoaftw-npc-data_[a-f0-9]+\.js$/.test(name));
+if (!process.argv[3] && publishedData.length !== 1) throw new Error('Expected one published NPC data file; pass its path as the third argument.');
+const dataPath = process.argv[3] || path.join(root, publishedData[0]);
 
 function harness() {
     const elements = new Map();
