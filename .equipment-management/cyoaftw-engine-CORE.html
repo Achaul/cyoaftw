@@ -577,6 +577,8 @@ body {
 }
 
 .stat-line span { color: #ddd; }
+#timeBlockEl .stat-line { justify-content: flex-start; gap: 5px; line-height: 1.5; flex-wrap: wrap; }
+#timeBlockEl .stat-line span { min-width: 0; }
 #dayStripEl { display: flex; gap: 2px; height: 4px; margin: 3px 0 6px; }
 #dayStripEl i { display: block; background: #333; border-radius: 2px; }
 #dayStripEl i.past { background: #4a4330; }
@@ -1560,6 +1562,14 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.trade-shop-name {
+    flex: 1 1 100%;
+    color: #f0dca0;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 4px 0 8px;
 }
 
 .trade-item-row .chat-option-btn {
@@ -3324,9 +3334,9 @@ body {
         <div class="stat-line">Coins <span id="statCoinsEl"></span></div>
         <!-- Time of day and calendar - see renderTimeAndDate in cyoaftw-engine-CORE.js. -->
         <div id="timeBlockEl">
-            <div class="stat-line">Time <span id="statTimeEl"></span></div>
-            <div class="stat-line">Date <span id="statDateEl"></span></div>
-            <div class="stat-line">Season <span id="statSeasonEl"></span></div>
+            <div class="stat-line">Time: <span id="statTimeEl"></span></div>
+            <div class="stat-line">Date: <span id="statDateEl"></span></div>
+            <div class="stat-line">Season: <span id="statSeasonEl"></span></div>
             <div id="dayStripEl"></div>
         </div>
         <button onclick="toggleEquipment()" style="margin-top:8px; width:100%; background:#222;">

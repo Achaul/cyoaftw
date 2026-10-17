@@ -35014,6 +35014,7 @@ function renderClothierServices(npc) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
     el.innerHTML = "";
+    appendShopNameHeading(npc, el);
     const job = G.player.clothierJob;
     if (job) {
         clothierText(el, job.serviceLabel + ": " + job.itemName + " — " + (job.turnsLeft > 0 ? job.turnsLeft + " turns remaining." : "Ready to collect."));
@@ -35703,6 +35704,7 @@ function renderForgeServices(npc) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
     el.innerHTML = "";
+    appendShopNameHeading(npc, el);
 
     const hasBlade = getForgeWeapons().some(w => isBladedWeapon(w) && !isBrokenWeapon(w));
     const hasBroken = getForgeWeapons().some(isBrokenWeapon);
@@ -36647,6 +36649,35 @@ function isVendorJunkItem(item) {
     return true;
 }
 
+function getNPCShopName(npc) {
+    if (!npc || typeof generateShopName !== "function" || typeof getShopNameTrade !== "function") return "";
+    const trade = getShopNameTrade(npc.role);
+    if (!trade) return "";
+    if (npc.shopName) return npc.shopName;
+    const room = G.activeRoom || {};
+    const locationTrade = getShopNameTrade(room.buildingType || room.type);
+    if (room.buildingName && locationTrade === trade) npc.shopName = room.buildingName;
+    else {
+        const used = new Set();
+        Object.keys(G.roomMap || {}).forEach(function (coords) {
+            const place = G.roomMap[coords];
+            if (place.buildingName) used.add(place.buildingName);
+            (place.creatures || []).forEach(function (merchant) { if (merchant.shopName) used.add(merchant.shopName); });
+        });
+        npc.shopName = generateShopName(room.zone || npc.zone || "Town", npc.role, Math.random, used);
+    }
+    return npc.shopName;
+}
+
+function appendShopNameHeading(npc, el) {
+    const name = getNPCShopName(npc);
+    if (!name || !el) return;
+    const heading = document.createElement("div");
+    heading.className = "trade-shop-name";
+    heading.textContent = name;
+    el.appendChild(heading);
+}
+
 function renderTradeOptions(npc) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
@@ -36658,6 +36689,7 @@ function renderTradeOptions(npc) {
     }
     if (typeof renderNPCPortrait === "function") renderNPCPortrait(npc);
 
+    appendShopNameHeading(npc, el);
     const stock = ensureNPCTradeStock(npc);
     const playerInventory = (Array.isArray(G.player.inventory) ? G.player.inventory : [])
         .filter(item => item && !isItemEquippedByEntity(G.player, item));
@@ -39126,6 +39158,7 @@ function removeTypingIndicator() {
 function renderRoom() {
     const room = G.activeRoom;
     if (!room) return;
+    if (typeof ensureShopNamesForRoomMap === "function") ensureShopNamesForRoomMap(G.roomMap);
 
     if (!room.coords && G.player && G.player.coords) room.coords = G.player.coords;
     ensureMarketClothier(room);
@@ -39332,8 +39365,8 @@ function getTurnOfDay(turn) {
 function isNightTime(turn) { return !getTimePhase(turn).daylight; }
 
 // ── TIME OF DAY AND CALENDAR ─────────────────────────────────────
-// Three layers, each a pure read of the one below (nothing new is saved
-// except the player's calendar style and start offset):
+// Three layers read the story clock. The calendar stores its style, start
+// offset and the realm's starting year so reloading never rerolls the era:
 //   1. the story-turn counter (G.story.turnCounter), the single source of truth
 //   2. the phase of the day (TIME_PHASES): morning, mid-day, evening, night
 //   3. the calendar (day number -> weekday, month, season, year)
@@ -39347,10 +39380,10 @@ function isNightTime(turn) { return !getTimePhase(turn).daylight; }
 // `daylight` is what isNightTime reads, so the 30 daylight / 24 night split
 // the sleep, rest and lodging code depends on is unchanged.
 const TIME_PHASES = [
-    { id: "morning", label: "Morning", daylight: true,  from: 0 },
-    { id: "midday",  label: "Mid-day", daylight: true,  from: Math.round(DAY_DAYLIGHT_TURNS / 3) },
-    { id: "evening", label: "Evening", daylight: true,  from: Math.round(DAY_DAYLIGHT_TURNS * 2 / 3) },
-    { id: "night",   label: "Night",   daylight: false, from: DAY_DAYLIGHT_TURNS }
+    { id: "morning", label: "Morning", emoji: "🌅", daylight: true,  from: 0 },
+    { id: "midday",  label: "Mid-day", emoji: "☀️", daylight: true,  from: Math.round(DAY_DAYLIGHT_TURNS / 3) },
+    { id: "evening", label: "Evening", emoji: "🌇", daylight: true,  from: Math.round(DAY_DAYLIGHT_TURNS * 2 / 3) },
+    { id: "night",   label: "Night",   emoji: "🌌", daylight: false, from: DAY_DAYLIGHT_TURNS }
 ];
 const CALENDAR_WEEK_DAYS = 7;
 const CALENDAR_MONTH_DAYS = 28;
@@ -39391,28 +39424,35 @@ function getTimePhase(turn) {
         if (t >= TIME_PHASES[i].from) { idx = i; break; }
     }
     const row = TIME_PHASES[idx];
-    return { id: row.id, label: row.label, daylight: row.daylight, from: row.from, index: idx };
+    return { id: row.id, label: row.label, emoji: row.emoji, daylight: row.daylight, from: row.from, index: idx };
 }
 
 function normalizeCalendarStyleId(id) {
     return (typeof id === "string" && Object.prototype.hasOwnProperty.call(CALENDAR_STYLES, id)) ? id : CALENDAR_DEFAULT_STYLE;
 }
 
-// { style, startDay } for a player. Saves from before the calendar existed
-// have neither, which reads as the plain style starting on day 0 (spring).
+function generateRealmStartYear() {
+    return 300 + Math.floor(Math.random() * 2101);
+}
+
+// Existing saves receive an era once; it travels in the saved calendar with
+// the same realm, including visits to its other towns and zones.
 function getCalendarState(player) {
     const p = player || (typeof G !== "undefined" ? G.player : null);
-    const c = p && p.calendar && typeof p.calendar === "object" ? p.calendar : null;
+    if (p && (!p.calendar || typeof p.calendar !== "object" || Array.isArray(p.calendar))) p.calendar = {};
+    const c = p ? p.calendar : null;
+    if (c && (!Number.isSafeInteger(c.startYear) || c.startYear <= 1)) c.startYear = generateRealmStartYear();
     const start = c && typeof c.startDay === "number" && isFinite(c.startDay) ? Math.floor(c.startDay) : 0;
     return {
         style: normalizeCalendarStyleId(c ? c.style : null),
+        startYear: c ? c.startYear : 300,
         startDay: ((start % CALENDAR_YEAR_DAYS) + CALENDAR_YEAR_DAYS) % CALENDAR_YEAR_DAYS
     };
 }
 
 // Everything the sidebar and later systems need to know about a moment.
 // dayIndex counts from 0 at the start of the player's first calendar year;
-// year starts at 1. Names come from the chosen style, indices never do.
+// years advance from the realm's saved era. Names come from the chosen style.
 function getCalendarDate(turn, player) {
     const cal = getCalendarState(player);
     const style = CALENDAR_STYLES[cal.style];
@@ -39425,7 +39465,7 @@ function getCalendarDate(turn, player) {
     return {
         dayIndex: dayIndex,
         gameDay: getGameDay(turn),
-        year: Math.floor(dayIndex / CALENDAR_YEAR_DAYS) + 1,
+        year: Math.floor(dayIndex / CALENDAR_YEAR_DAYS) + cal.startYear,
         month: month,
         monthName: style.months[month],
         dayOfMonth: (dayOfYear % CALENDAR_MONTH_DAYS) + 1,
@@ -39438,7 +39478,7 @@ function getCalendarDate(turn, player) {
 }
 
 function formatCalendarDate(d) {
-    return d.weekdayName + ", " + d.dayOfMonth + " " + d.monthName;
+    return d.dayOfMonth + " " + d.monthName;
 }
 
 // Sidebar readout: Time / Date / Season lines plus the day strip, one
@@ -39450,7 +39490,7 @@ function renderTimeAndDate() {
     const stripEl = document.getElementById("dayStripEl");
     if (!timeEl && !dateEl && !seasonEl && !stripEl) return;
     const d = getCalendarDate();
-    if (timeEl) timeEl.textContent = d.phase.label;
+    if (timeEl) timeEl.textContent = d.phase.emoji + " " + d.phase.label + " " + d.weekdayName;
     if (dateEl) dateEl.textContent = formatCalendarDate(d);
     if (seasonEl) seasonEl.textContent = d.seasonName + ", Year " + d.year;
     const lineEl = document.getElementById("timeBlockEl");
@@ -39482,7 +39522,7 @@ function collectCalendarFromSetup() {
     if (season === "random") season = String(Math.floor(Math.random() * 4));
     let seasonIdx = parseInt(season, 10);
     if (!(seasonIdx >= 0 && seasonIdx < 4)) seasonIdx = 0;
-    return { style: style, startDay: seasonIdx * CALENDAR_SEASON_DAYS };
+    return { style: style, startDay: seasonIdx * CALENDAR_SEASON_DAYS, startYear: generateRealmStartYear() };
 }
 function updateCalendarSetupHint() {
     const hintEl = document.getElementById("calendarHintEl");

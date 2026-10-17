@@ -2247,18 +2247,109 @@ function getRoomImage(roomType) {
 
 // ── HELPER: BUILD ROOM INSTANCE ──────────────────────────────────
 
+// Shop name generator: zone imagery plus a sign suited to the business.
+const SHOP_NAME_ZONE_WORDS = {
+    "town": { adjectives: ["Copper", "Golden", "Quiet", "Crooked", "Silver", "Amber", "Wayward", "Merry"], nouns: ["Fox", "Lantern", "Oak", "Stag", "Bell", "Sparrow", "Hearth", "Crown"] },
+    "underground city": { adjectives: ["Deep", "Iron", "Ember", "Runed", "Stone", "Obsidian", "Copper", "Basalt"], nouns: ["Anvil", "Rune", "Flint", "Hollow", "Crag", "Lantern", "Cavern", "Garnet"] },
+    "dungeon": { adjectives: ["Ashen", "Hidden", "Sooted", "Iron", "Guttering", "Forgotten", "Black", "Silent"], nouns: ["Key", "Lantern", "Gate", "Chain", "Vault", "Raven", "Flint", "Torch"] },
+    "swamp": { adjectives: ["Reed", "Mossy", "Willow", "Mistbound", "Green", "Sable", "Fen", "Driftwood"], nouns: ["Heron", "Reed", "Willow", "Frog", "Rush", "Turtle", "Lantern", "Otter"] },
+    "ruins": { adjectives: ["Ashen", "Weathered", "Lost", "Broken", "Faded", "Old", "Dusty", "Fallen"], nouns: ["Crown", "Arch", "Tower", "Relic", "Raven", "Bell", "Laurel", "Keystone"] }
+};
+const SHOP_NAME_TRADES = {
+    smithy: { words: ["Hammer", "Anvil", "Tongs", "Steel", "Spark", "Horseshoe"], endings: ["Forge", "Smithy", "Ironworks"] },
+    clothier: { words: ["Needle", "Spindle", "Thread", "Thimble", "Shuttle", "Bobbin"], endings: ["Clothiers", "Tailors", "Outfitters"] },
+    alchemist: { words: ["Retort", "Vial", "Mortar", "Sage", "Crucible", "Alembic"], endings: ["Apothecary", "Alchemical Supplies", "Remedies"] },
+    pawnbroker: { words: ["Coin", "Ledger", "Latch", "Balance", "Trinket", "Coffer"], endings: ["Pawnbrokers", "Exchange", "Curiosities"] },
+    general: { words: ["Pack", "Compass", "Wagon", "Lantern", "Satchel", "Wheel"], endings: ["General Goods", "Provisioners", "Trading House"] },
+    market: { words: ["Scale", "Coin", "Caravan", "Basket", "Wagon", "Bell"], endings: ["Market", "Exchange", "Bazaar"] },
+    tavern: { words: ["Flagon", "Tankard", "Stag", "Fox", "Badger", "Kettle"], endings: ["Tavern", "Alehouse", "Taproom"] },
+    inn: { words: ["Hearth", "Lantern", "Pillow", "Stag", "Willow", "Wayfarer"], endings: ["Inn", "Lodge", "Rest"] }
+};
+
+function getShopNameTrade(shopType) {
+    const type = String(shopType || "").trim().toLowerCase();
+    if (/smith|forge|blacksmith/.test(type)) return "smithy";
+    if (/clothier|tailor|outfitter|clothing/.test(type)) return "clothier";
+    if (/alchem|apothecar|herbalist/.test(type)) return "alchemist";
+    if (/pawn|quiet house|curios/.test(type)) return "pawnbroker";
+    if (/tavern|alehouse|taproom/.test(type)) return "tavern";
+    if (/\binn\b|lodging|bunk cave/.test(type)) return "inn";
+    if (/market|bazaar/.test(type)) return "market";
+    if (/shop|store|stall|trader|merchant|general goods/.test(type)) return "general";
+    return null;
+}
+
+function generateShopName(zoneName, shopType, rngIn, usedNames) {
+    const trade = SHOP_NAME_TRADES[getShopNameTrade(shopType)];
+    if (!trade) return null;
+    const zone = SHOP_NAME_ZONE_WORDS[String(zoneName || "").trim().toLowerCase()] || SHOP_NAME_ZONE_WORDS.town;
+    const rng = typeof rngIn === "function" ? rngIn : Math.random;
+    const pick = function (words) { return words[Math.min(words.length - 1, Math.max(0, Math.floor(rng() * words.length)))]; };
+    const used = usedNames && typeof usedNames.has === "function" && typeof usedNames.add === "function" ? usedNames : new Set(usedNames || []);
+    let name;
+    for (let attempt = 0; attempt < 40; attempt++) {
+        const adjective = pick(zone.adjectives);
+        let sign = rng() < 0.65 ? pick(trade.words) : pick(zone.nouns);
+        if (sign.toLowerCase() === adjective.toLowerCase()) sign = pick(trade.words);
+        name = "The " + adjective + " " + sign + " " + pick(trade.endings);
+        if (!used.has(name)) { used.add(name); return name; }
+    }
+    let branch = 2;
+    while (used.has(name + " " + branch)) branch++;
+    name += " " + branch;
+    used.add(name);
+    return name;
+}
+
+function applyShopDisplayName(room, shopName) {
+    const template = getRoomTemplate(room.type);
+    const ordinaryName = template && template.displayName || room.type;
+    const oldName = room.buildingName;
+    room.buildingName = shopName;
+    if (!room.displayName || room.displayName === ordinaryName || room.displayName === room.type || room.displayName === oldName || room.displayName === room.shopDisplayName) {
+        const label = room.isBuildingRoom && !room.isEntrance ? shopName + " — " + ordinaryName : shopName;
+        room.name = label;
+        room.displayName = label;
+        room.shopDisplayName = label;
+    }
+}
+
+// Backfill unnamed shops once, and surface names already saved on buildings.
+function ensureShopNamesForRoomMap(roomMap) {
+    const groups = new Map();
+    const used = new Set();
+    Object.keys(roomMap || {}).forEach(function (coords) {
+        const room = roomMap[coords];
+        if (!room) return;
+        if (room.buildingName) used.add(room.buildingName);
+        if (!getShopNameTrade(room.buildingType || room.type)) return;
+        const key = room.buildingId || coords;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(room);
+    });
+    groups.forEach(function (rooms) {
+        const named = rooms.find(function (room) { return !!room.buildingName; });
+        const first = rooms[0];
+        const name = named ? named.buildingName : generateShopName(first.zone, first.buildingType || first.type, Math.random, used);
+        rooms.forEach(function (room) { applyShopDisplayName(room, name); });
+    });
+}
+
 function buildRoomInstance(roomType, zoneName) {
     const template = getRoomTemplate(roomType);
     const zone = getZoneTemplate(zoneName);
 
     if (!template) return null;
 
+    const shopName = generateShopName(zoneName || template.zone, template.type);
     return {
         type: template.type,
         zone: zoneName || template.zone,
         role: template.role,
-        name: template.displayName || template.type,
-        displayName: template.displayName || template.type,
+        name: shopName || template.displayName || template.type,
+        displayName: shopName || template.displayName || template.type,
+        buildingName: shopName,
+        shopDisplayName: shopName,
         baseDescription: template.baseDescription || "",
         description: null,
         allowedZones: template.allowedZones || [],
@@ -2550,7 +2641,9 @@ function _planRollLock(spec, rng, defaultFreeFrom) {
 function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alleyCoords) {
     const bp = BUILDING_BLUEPRINTS[bpKey];
     const buildingId = bpKey.toLowerCase().replace(/[^a-z]+/g, "-") + "-" + index;
-    const name = bp.names && bp.names.length ? bp.names[Math.floor(rng() * bp.names.length)] : null;
+    const usedNames = new Set(plan.buildings.map(function (building) { return building.name; }).filter(Boolean));
+    const name = generateShopName(entranceDesc.zone || bp.zone, bpKey, rng, usedNames)
+        || (bp.names && bp.names.length ? bp.names[Math.floor(rng() * bp.names.length)] : null);
 
     entranceDesc.buildingId = buildingId;
     entranceDesc.buildingType = bpKey;
@@ -2558,6 +2651,7 @@ function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alle
     entranceDesc.isBuildingRoom = true;
     entranceDesc.isEntrance = true;
     entranceDesc.floor = 0;
+    if (name && getShopNameTrade(bpKey)) applyShopDisplayName(entranceDesc, name);
     if (bp.anchorFor) entranceDesc.anchorFor = bp.anchorFor.slice();
     if (bp.verticalLinks) entranceDesc.verticalLinks = bp.verticalLinks.slice();
 
@@ -2570,6 +2664,7 @@ function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alle
             buildingId: buildingId, buildingType: bpKey, buildingName: name,
             isBuildingRoom: true, floor: def.floor
         });
+        if (name && getShopNameTrade(bpKey)) applyShopDisplayName(desc, name);
         if (typeof def.minNpcs === "number") desc.minNpcs = def.minNpcs;
         if (def.anchorFor) desc.anchorFor = def.anchorFor.slice();
         if (def.verticalLinks) desc.verticalLinks = def.verticalLinks.slice();
