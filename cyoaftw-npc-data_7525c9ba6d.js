@@ -4837,6 +4837,8 @@ window.getSomatotypeLabel = getSomatotypeLabel;
 function generateNPCEnrichment(npc, room, zoneTemplate) {
     if (!npc) return null;
 
+    ensureNPCHeightCm(npc);
+
     const template = _npcGetSpeciesTemplate(npc.species) || {};
     const profile = template.anatomyProfile || {};
     const culture = template.culture || {};
@@ -5518,6 +5520,69 @@ function getNPCObservationDetail(npc) {
     return "with " + _npcJoinList(highlights);
 }
 
+// Standing adult height ranges for this setting, in centimetres. These are
+// shared by NPC generation and the player's species-average fallback. Actual
+// recorded heights win; anatomyProfile.heightRangeCm can override a range.
+const NPC_HEIGHT_RANGES_CM = {
+    human: [150, 200], elf: [160, 205], dwarf: [115, 145],
+    halfling: [85, 115], goblin: [95, 130], orc: [185, 230],
+    dragonborn: [185, 225], lizardfolk: [165, 210], kobold: [70, 105],
+    catfolk: [150, 190], wolfkin: [170, 210], satyr: [150, 190]
+};
+const NPC_HEIGHT_LEVEL_TOLERANCE_CM = 8;
+
+function getSpeciesHeightRangeCm(species) {
+    const key = String(species || "").toLowerCase();
+    const template = _npcGetSpeciesTemplate(species) || {};
+    const configured = template.anatomyProfile && template.anatomyProfile.heightRangeCm;
+    if (Array.isArray(configured) && configured.length === 2 &&
+        configured.every(function (n) { return typeof n === "number" && isFinite(n) && n > 0; }) && configured[1] >= configured[0]) return configured;
+    if (NPC_HEIGHT_RANGES_CM[key]) return NPC_HEIGHT_RANGES_CM[key];
+    return { tiny: [70, 105], small: [100, 145], medium: [150, 200], large: [185, 230] }[template.size] || null;
+}
+
+function ensureNPCHeightCm(npc) {
+    if (!npc || npc.isHumanoid !== true) return null;
+    if (typeof npc.heightCm === "number" && isFinite(npc.heightCm) && npc.heightCm > 0) return npc.heightCm;
+    const recorded = npc.anatomy && npc.anatomy.heightCm;
+    if (typeof recorded === "number" && isFinite(recorded) && recorded > 0) {
+        npc.heightCm = recorded;
+        return recorded;
+    }
+    if (typeof npc.age === "number" && npc.age < 18) return null;
+    const range = getSpeciesHeightRangeCm(npc.species);
+    if (!range) return null;
+    // A generated ID already contains randomness. Hashing it also migrates
+    // older saves consistently, without rerolling height on each inspection.
+    const seed = [npc.species, npc.id || npc.name || "", npc.gender || ""].join("|");
+    let hash = 2166136261;
+    for (let i = 0; i < seed.length; i++) hash = Math.imul(hash ^ seed.charCodeAt(i), 16777619);
+    npc.heightCm = range[0] + (hash >>> 0) % (range[1] - range[0] + 1);
+    return npc.heightCm;
+}
+
+function getPlayerHeightCm(player) {
+    if (!player) return null;
+    const appearance = player.appearance || {};
+    const recorded = [appearance.heightCm, player.heightCm];
+    for (let i = 0; i < recorded.length; i++) {
+        if (typeof recorded[i] === "number" && isFinite(recorded[i]) && recorded[i] > 0) return recorded[i];
+    }
+    const range = getSpeciesHeightRangeCm(appearance.species || player.species || "human");
+    return range ? (range[0] + range[1]) / 2 : null;
+}
+
+function getNPCHeightView(npc) {
+    const player = typeof G === "object" && G && G.player;
+    const height = ensureNPCHeightCm(npc);
+    const playerHeight = getPlayerHeightCm(player);
+    if (height === null || playerHeight === null || npc.unconscious ||
+        (npc.currentState && npc.currentState.sleeping)) return "";
+    const difference = height - playerHeight;
+    if (Math.abs(difference) <= NPC_HEIGHT_LEVEL_TOLERANCE_CM) return "";
+    return difference > 0 ? "up" : "down";
+}
+
 function getNPCInspectionDetail(npc) {
     if (!npc) return "";
     const p = _npcInspectionPronouns(npc);
@@ -5528,12 +5593,11 @@ function getNPCInspectionDetail(npc) {
     const identity = [age && age.label.toLowerCase(), npc.gender !== "none" && npc.gender, String(npc.species || "").toLowerCase()]
         .filter(Boolean).join(" ");
     const first = [];
-    if (identity) first.push(p.subject + " " + p.be + " " + _npcInspectionArticle(identity) + " " + identity + ".");
-    const height = _npcInspectionText(npc.heightDescriptor || npc.stature || anatomy.heightDescriptor);
+    const heightView = getNPCHeightView(npc);
+    const opening = heightView ? "You look " + heightView + " at" : p.subject + " " + p.be;
+    if (identity) first.push(opening + " " + _npcInspectionArticle(identity) + " " + identity + ".");
     const build = _npcInspectionText(anatomy.build || npc.bodyType || npc.build);
-    if (height && build) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(height) + " " + height + " stature, and " + p.possessive + " build is " + build + ".");
-    else if (height) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(height) + " " + height + " stature.");
-    else if (build) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(build) + " " + build + " build.");
+    if (build) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(build) + " " + build + " build.");
     const colouring = [];
     const surface = body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.scaleColor ? "scales" : "");
     const colour = body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.scaleColor;

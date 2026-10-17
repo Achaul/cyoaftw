@@ -37,7 +37,7 @@ function harness() {
 function npc(overrides = {}) {
     return Object.assign({
         id: 'one', name: 'Mira', species: 'Human', gender: 'female', age: 28, isHumanoid: true,
-        stature: 'average-height', somatotype: 'mesomorph',
+        heightCm: 175, somatotype: 'mesomorph',
         anatomy: { build: 'toned', body: { color: 'light brown', surfaceType: 'skin' }, features: ['curly eyelashes'] },
         eyeColor: 'blue', hairColor: 'dark brown', hairLength: 'mid-back length', hairStyle: 'swept to the side',
         nsfwTraits: { anatomy: { breasts: { sizeCategory: 'medium', description: 'a modest bust' }, buttocks: { sizeCategory: 'large' } } },
@@ -53,7 +53,7 @@ async function run() {
     const n = npc();
     let description = c.getNPCInspectionDetail(n);
     assert.match(description, /She is a young female human/);
-    assert.match(description, /average-height stature/);
+    assert.doesNotMatch(description, /look (?:up|down) at|stature|taller than|shorter than/);
     assert.match(description, /light brown skin and blue eyes/);
     assert.match(description, /mid-back length dark brown hair is swept to the side/);
     assert.match(description, /toned medium-sized breasts and a toned large butt/);
@@ -64,6 +64,37 @@ async function run() {
     assert.doesNotMatch(description, /steal|mannerism|STALE|Sword|\+2|attractive/);
     assert.ok(description.includes('\n\n'));
     assert.ok(description.indexOf('wearing') < description.indexOf('breasts'));
+
+    // Height is stored once, with shared species ranges. Only the opening
+    // shows the player's relative view; matching heights add no height line.
+    assert.match(c.getNPCInspectionDetail(npc({ heightCm: 205 })), /^You look up at/);
+    assert.match(c.getNPCInspectionDetail(npc({ heightCm: 110 })), /^You look down at/);
+    assert.doesNotMatch(c.getNPCInspectionDetail(npc({ heightCm: 180 })), /You look (?:up|down) at/);
+    assert.doesNotMatch(c.getNPCInspectionDetail(npc({ heightCm: 205, unconscious: true })), /You look (?:up|down) at/);
+    const migrated = npc({ id: 'legacy-height', species: 'Kobold', heightCm: undefined });
+    const migratedHeight = c.ensureNPCHeightCm(migrated);
+    assert.ok(migratedHeight >= 70 && migratedHeight <= 105);
+    assert.equal(c.ensureNPCHeightCm(migrated), migratedHeight);
+    assert.equal(c.ensureNPCHeightCm(JSON.parse(JSON.stringify(migrated))), migratedHeight);
+    assert.equal(c.ensureNPCHeightCm(npc({ id: 'legacy-height', species: 'Kobold', heightCm: undefined })), migratedHeight);
+    assert.equal(c.ensureNPCHeightCm(npc({ heightCm: 212 })), 212);
+    assert.equal(c.ensureNPCHeightCm(npc({ species: 'Rat', isHumanoid: false, heightCm: undefined })), null);
+    assert.equal(c.getPlayerHeightCm({ appearance: { species: 'halfling' } }), 100);
+    assert.equal(c.getPlayerHeightCm({ appearance: { species: 'human', heightCm: 190 } }), 190);
+    const playerHeightSnapshot = c.getNPCPanelDescriptionSnapshot(n);
+    c.G.player.appearance = { species: 'halfling' };
+    assert.match(c.getNPCInspectionDetail(n), /^You look up at/);
+    assert.notEqual(c.getNPCPanelDescriptionSnapshot(n), playerHeightSnapshot);
+    c.G.player.appearance = { species: 'human' };
+    assert.equal(c.npcPanelDimensionsPreserved(n, description), true);
+    assert.equal(c.npcPanelDimensionsPreserved(n, description.replace('toned medium-sized breasts', 'a soft silhouette')), false);
+    assert.equal(c.npcPanelDimensionsPreserved(n, description.replace('a toned large butt', 'a toned small butt')), false);
+    assert.equal(c.npcPanelDimensionsPreserved(n, 'You look down at her. ' + description), false);
+    const taller = npc({ heightCm: 205 });
+    const tallerDescription = c.getNPCInspectionDetail(taller);
+    assert.equal(c.npcPanelDimensionsPreserved(taller, tallerDescription), true);
+    assert.equal(c.npcPanelDimensionsPreserved(taller, tallerDescription.replace('You look up at', 'She is')), false);
+    assert.equal(c.npcPanelDimensionsPreserved(taller, tallerDescription.replace('You look up at', 'You look down at')), false);
 
     const watching = npc({ behavior: 'Keeps a close watch. Sighs dramatically.' });
     const observed = c.buildNPCLookDescription(watching);
@@ -149,7 +180,7 @@ async function run() {
     assert.equal(n._panelDescription, undefined);
     assert.equal(c.G.prefetchQueue.length, 1);
     assert.match(c.document.getElementById('npcDetailBehaviorEl').textContent, /leather coat/);
-    c.callAI = async () => ({ text: 'She wears a leather coat.\n\nYou find her mildly unattractive.' });
+    c.callAI = async () => ({ text: c.buildNPCLookDescription(n).replace('She is wearing', 'She wears') });
     await c.G.prefetchQueue.shift().run();
     assert.equal(c.npcPanelDescriptionStale(n), false);
     assert.match(n._panelDescription.text, /\n\n/);
@@ -166,7 +197,7 @@ async function run() {
     const late = c.G.prefetchQueue.shift().run();
     c.G.activeNPC = npc({ id: 'two' });
     c.document.getElementById('npcDetailBehaviorEl').textContent = 'Another NPC';
-    finish('She wears a leather coat.');
+    finish(c.buildNPCLookDescription(n).replace('She is wearing', 'She wears'));
     await late;
     assert.equal(c.document.getElementById('npcDetailBehaviorEl').textContent, 'Another NPC');
 
