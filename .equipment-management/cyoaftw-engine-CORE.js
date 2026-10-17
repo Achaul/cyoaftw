@@ -62760,10 +62760,10 @@ function describeExamineDeltas(candidate, current) {
 // (see describeExamineDeltas), or null. Used for the "better in your pack"
 // line and the Swap recommended button.
 function findBetterPackItem(item, slot) {
-    if (!item || !slot || !G.player) return null;
+    if (!slot || !G.player) return null;
     const pack = Array.isArray(G.player.inventory) ? G.player.inventory : [];
     let best = null;
-    let bestTotal = 0.25;
+    let bestTotal = item ? 0.25 : -Infinity;
     pack.forEach(candidate => {
         if (!candidate || candidate === item || getItemEquipSlot(candidate) !== slot) return;
         const total = describeExamineDeltas(candidate, item).total;
@@ -62826,21 +62826,25 @@ function openEquipmentExamine(item, options) {
 
     actionsEl.innerHTML = "";
 
-    // Examining something worn while a better piece sits in the pack: offer a
-    // one-click swap (equipInventoryEntry puts the worn piece back in the pack).
-    if (opts.equipped && slot && slot !== "coinPouch") {
-        const better = findBetterPackItem(item, slot);
+    // Worn gear recommends a better carried piece. A carried piece can also
+    // be equipped directly, including when its destination slot is empty.
+    if (slot && slot !== "coinPouch") {
+        const worn = G.player && G.player.equipped && G.player.equipped[slot];
+        const better = opts.equipped ? findBetterPackItem(item, slot)
+            : ((G.player.inventory || []).includes(item) ? item : null);
         if (better) {
             const swapBtn = document.createElement("button");
             swapBtn.type = "button";
-            swapBtn.textContent = "Swap recommended";
-            swapBtn.title = "Equip " + getItemName(better) + " in place of " + name + ".";
+            swapBtn.textContent = opts.equipped ? "Swap recommended" : "Swap";
+            swapBtn.title = "Equip " + getItemName(better) + (worn ? " in place of " + getItemName(worn) : " to your empty " + getEquipmentSlotMeta(slot).label.toLowerCase() + " slot") + ".";
             swapBtn.onclick = () => {
+                if (!(G.player.inventory || []).includes(better)) return;
                 const betterName = getItemName(better);
                 const slotLabel = getEquipmentSlotMeta(slot).label.toLowerCase();
                 if (!equipInventoryEntry(getInventoryEntryKey(better))) return;
                 closeEquipmentExamine();
-                refreshInventoryUi("You swap " + name + " for " + betterName + " on your " + slotLabel + ".");
+                refreshInventoryUi(worn ? "You swap " + getItemName(worn) + " for " + betterName + " on your " + slotLabel + "."
+                    : "You equip " + betterName + " to your " + slotLabel + ".");
             };
             actionsEl.appendChild(swapBtn);
         }
@@ -62878,13 +62882,11 @@ function renderEquipmentSlot(slot) {
     const slotEl = document.getElementById(`eq-slot-${slot}`);
     if (!slotEl) return;
 
-    // No glove-type items exist in the item data yet, so the Hands box would
-    // sit empty forever. Hide it until something is actually worn there (an
-    // item with slot "hands", or a glove/gauntlet/bracer by name, still equips
-    // into it and makes the box appear).
+    // Show Hands as soon as gloves are available, even before first equipping.
     if (slot === "hands") {
         const wornHands = G.player && G.player.equipped ? G.player.equipped.hands : null;
-        slotEl.style.display = (wornHands && !Array.isArray(wornHands)) ? "" : "none";
+        const carriedHands = (G.player.inventory || []).some(function (candidate) { return getItemEquipSlot(candidate) === "hands"; });
+        slotEl.style.display = ((wornHands && !Array.isArray(wornHands)) || carriedHands) ? "" : "none";
     }
 
     slotEl.innerHTML = "";
@@ -62941,7 +62943,24 @@ function renderEquipmentSlot(slot) {
     if (!item) valueEl.classList.add("equipment-empty");
     slotEl.appendChild(valueEl);
 
-    if (!item) return;
+    if (!item) {
+        const best = findBetterPackItem(null, slot);
+        const actions = document.createElement("div");
+        actions.className = "equipment-row-actions";
+        if (best) {
+            const recommendation = document.createElement("div");
+            recommendation.className = "equipment-row-subtitle";
+            recommendation.textContent = "Best in pack: " + getItemName(best);
+            slotEl.appendChild(recommendation);
+        }
+        actions.appendChild(createEquipmentActionButton("Swap", () => {
+            if (G.player.equipped[slot] || !(G.player.inventory || []).includes(best)) return;
+            if (!equipInventoryEntry(getInventoryEntryKey(best))) return;
+            refreshInventoryUi("You equip " + getItemName(best) + " to your " + meta.label.toLowerCase() + ".");
+        }, { disabled: !best, title: best ? "Equip " + getItemName(best) + " to this empty slot." : "No carried item fits this slot." }));
+        slotEl.appendChild(actions);
+        return;
+    }
 
     const actionsEl = document.createElement("div");
     actionsEl.className = "equipment-row-actions";
@@ -63855,6 +63874,8 @@ function buildEquipmentInventoryGroups(player) {
     }
     const overflow = { label: "No room · Overflow", storage: [], ties: [], entries: [], used: 0, tied: 0, capacity: 0, overflow: true };
     buildPlayerInventoryEntries(player).forEach(function (entry) {
+        const container = byItem.get(entry.item);
+        if (container) container.ownEntry = entry;
         const group = byPlace.get(entry.item.stowed) || overflow;
         group.entries.push(entry);
         if (isTieSpotId(entry.item.stowed)) group.tied += entry.totalQuantity;
@@ -63912,9 +63933,27 @@ function appendEquipmentMoveControl(entry, actionsEl) {
     actionsEl.appendChild(select);
 }
 
+function appendWornContainerActions(item, parent) {
+    const equipped = G.player && G.player.equipped || {};
+    const slot = Object.keys(equipped).find(function (key) { return equipped[key] === item; });
+    if (!slot || slot === "coinPouch") return;
+    const name = getItemName(item);
+    const actions = document.createElement("div");
+    actions.className = "equipment-row-actions";
+    actions.appendChild(createEquipmentActionButton("Examine " + name, () => openEquipmentExamine(item, { slot: slot, equipped: true })));
+    actions.appendChild(createEquipmentActionButton("Remove " + name, () => {
+        const removed = moveEquippedItemToInventory(slot);
+        if (removed) refreshInventoryUi("You remove " + name + " and stow it in your pack.");
+    }));
+    actions.appendChild(createEquipmentActionButton("Drop " + name, () => {
+        if (dropEquippedItemToRoom(slot)) refreshInventoryUi("You drop " + name + ".");
+    }, { disabled: !G.activeRoom }));
+    parent.appendChild(actions);
+}
+
 function renderEquipmentInventoryGroups(view, inventoryEl) {
     const rendered = new Set();
-    function renderGroup(group, parent, ownEntry) {
+    function renderGroup(group, parent) {
         if (rendered.has(group)) return;
         rendered.add(group);
         const section = document.createElement("section");
@@ -63929,7 +63968,8 @@ function renderEquipmentInventoryGroups(view, inventoryEl) {
             ties.textContent = "Tied on: " + group.tied + "/" + group.ties.length + " · uses no storage units";
             section.appendChild(ties);
         }
-        if (ownEntry) renderEquipmentInventoryEntry(ownEntry, section);
+        if (group.ownEntry) renderEquipmentInventoryEntry(group.ownEntry, section);
+        else if (group.item && group.item !== G.player.rucksack) appendWornContainerActions(group.item, section);
         if (group.item === G.player.rucksack) {
             const actions = document.createElement("div");
             actions.className = "equipment-row-actions";
@@ -63946,8 +63986,9 @@ function renderEquipmentInventoryGroups(view, inventoryEl) {
         }
         group.entries.forEach(function (entry) {
             const child = view.byItem.get(entry.item);
-            if (child && child !== group && !rendered.has(child)) renderGroup(child, section, entry);
-            else renderEquipmentInventoryEntry(entry, section);
+            if (child) {
+                if (child !== group && !rendered.has(child)) renderGroup(child, section);
+            } else renderEquipmentInventoryEntry(entry, section);
         });
         parent.appendChild(section);
     }

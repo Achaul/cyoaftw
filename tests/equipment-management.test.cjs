@@ -10,9 +10,12 @@ function extract(start, end) {
 }
 function element(tag = 'div') {
     let content = '';
+    const classes = new Set();
     return {
         tag, children: [], attributes: {}, value: '', className: '', style: {},
-        classList: { add() {}, remove() {}, contains() { return true; } },
+        classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name),
+            toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); } },
+        focus() {},
         setAttribute(name, value) { this.attributes[name] = value; },
         appendChild(child) { this.children.push(child); return child; },
         get textContent() { return content + this.children.map(child => child.textContent).join(' '); },
@@ -23,10 +26,12 @@ function element(tag = 'div') {
 function harness() {
     const inventory = element();
     const trade = element();
+    const elements = Object.fromEntries(['itemModal', 'itemModalTitle', 'itemModalDesc', 'itemModalStats', 'itemModalActions', 'itemModalClose',
+        ...['head', 'weapon', 'hand', 'upper', 'hands', 'lower', 'feet', 'neck', 'belt', 'coinPouch'].map(slot => 'eq-slot-' + slot)].map(id => [id, element()]));
     let uid = 0;
     const c = {
         console, window: {}, G: { player: null, activeRoom: { items: [] } },
-        document: { createElement: element, getElementById(id) { return id === 'equipmentInventory' ? inventory : (id === 'chatOptionsEl' ? trade : null); } },
+        document: { createElement: element, getElementById(id) { return id === 'equipmentInventory' ? inventory : (id === 'chatOptionsEl' ? trade : (elements[id] || null)); } },
         assignLootUID(item) { item._uid = item._uid || 'test-' + ++uid; item.id = item.id || item._uid; return item; },
         getItemName(item) { return item && item.name || 'item'; },
         isPotionItem(item) { return !!(item && [].concat(item.type || []).includes('potion')); },
@@ -83,7 +88,23 @@ function harness() {
     }, rucksack: bag('Rucksack') };
     c.G.player = p;
     c.restowPlayerPack(p);
-    return { c, p, inventory, bag, trade };
+    function enableEquipmentDetails() {
+        Object.assign(c, {
+            equipmentExamineItem: null, clearItemModalContents() {}, buildItemEffectLines: () => [],
+            getEffectiveItemCharisma: item => item && item.charisma || 0,
+            getItemArmorValue: item => item && item.armor || 0,
+            getItemGrimeCharismaPenalty: () => 0, getDurabilityExamineLine: () => '',
+            getCoinValue: entity => entity.coins || 0, RELIC_POWERS: {},
+            signedNumber: number => number > 0 ? '+' + number : String(number),
+            getWeaponSkillSummary: () => 'Untrained',
+            getWeaponExamineProfile: item => ({ type: 'sword', avg: ((item.damage || 4) + 1) / 2, hit: 0, skillHit: 0, die: item.damage || 4, dmg: 0 }),
+            closeItemModal() { elements.itemModal.classList.remove('active'); }, refreshRoomViewAfterClose() {}
+        });
+        vm.runInContext(extract('function getItemExamineStats(', 'function closeEquipmentExamine('), c);
+        vm.runInContext(extract('function closeEquipmentExamine(', 'document.addEventListener("keydown"'), c);
+        vm.runInContext(extract('function renderEquipmentSlot(', 'function renderEquipmentInventoryEntry('), c);
+    }
+    return { c, p, inventory, bag, trade, elements, enableEquipmentDetails };
 }
 function allElements(node) { return [node, ...node.children.flatMap(allElements)]; }
 function test(name, run) { run(); console.log('PASS ' + name); }
@@ -401,6 +422,118 @@ test('companion equipment transfers still accept filled garments', () => {
     assert.equal(p.inventory.length, 0);
     assert.equal(npc.equipped.belt, belt);
     assert.equal(npc.equipped.belt.packed[0], herb);
+});
+
+test('worn containers have direct Remove and Drop controls, with carried Equip and Drop after removal', () => {
+    const { c, p, inventory } = harness();
+    const belt = p.equipped.belt;
+    const herb = { name: 'Herb', stowed: c.getGarmentPlaces(belt).storage[0].id };
+    p.inventory.push(herb);
+    c.renderEquipment();
+    allElements(inventory).find(node => node.tag === 'button' && node.textContent === 'Remove Utility belt').onclick();
+    assert.equal(p.equipped.belt, undefined);
+    assert.ok(p.inventory.includes(belt));
+    assert.ok(p.inventory.includes(herb));
+    const row = allElements(inventory).find(node => node.className === 'equipment-row' && node.textContent.includes('Utility belt'));
+    assert.ok(row);
+    assert.ok(allElements(row).some(node => node.tag === 'button' && node.textContent === 'Drop'));
+    allElements(row).find(node => node.tag === 'button' && node.textContent === 'Equip').onclick();
+    assert.equal(p.equipped.belt.name, 'Utility belt');
+    assert.equal(herb.stowed, c.getGarmentPlaces(p.equipped.belt).storage[0].id);
+    allElements(inventory).find(node => node.tag === 'button' && node.textContent === 'Drop Utility belt').onclick();
+    assert.equal(p.equipped.belt, undefined);
+    assert.ok(!p.inventory.includes(herb));
+    assert.equal(c.G.activeRoom.items[0].packed[0], herb);
+});
+
+test('every carried container retains its own row in fallback layouts, without duplicate item actions', () => {
+    const { c, p, inventory, bag } = harness();
+    const a = bag('Satchel A', 8, 2), b = bag('Satchel B', 8, 2);
+    a.stowed = c.getGarmentPlaces(b).storage[0].id;
+    b.stowed = c.getGarmentPlaces(a).storage[0].id;
+    p.inventory.push(a, b);
+    c.renderEquipment();
+    const rows = allElements(inventory).filter(node => node.className === 'equipment-row');
+    for (const name of [a.name, b.name]) {
+        const ownRows = rows.filter(row => allElements(row).some(node => node.className === 'equipment-row-title' && node.textContent === name));
+        assert.equal(ownRows.length, 1);
+        assert.ok(allElements(ownRows[0]).some(node => node.tag === 'button' && node.textContent === 'Drop'));
+    }
+});
+
+test('empty equipment slots show Swap and equip the best carried item', () => {
+    const { c, p, elements, enableEquipmentDetails } = harness();
+    enableEquipmentDetails();
+    const weak = { name: 'Wool cap', type: ['armor', 'head'], armor: 1 };
+    const best = { name: 'Iron helmet', type: ['armor', 'head'], armor: 4 };
+    const ruined = { name: 'Ruined helmet', type: ['armor', 'head'], armor: 100, ruined: true };
+    p.inventory.push(weak, best, ruined);
+    c.renderEquipment();
+    const box = elements['eq-slot-head'];
+    assert.match(box.textContent, /Best in pack: Iron helmet/);
+    const swap = allElements(box).find(node => node.tag === 'button' && node.textContent === 'Swap');
+    assert.equal(swap.disabled, false);
+    swap.onclick();
+    assert.equal(p.equipped.head.name, best.name);
+    assert.ok(p.inventory.includes(weak));
+    assert.ok(p.inventory.includes(ruined));
+    const count = p.inventory.length;
+    swap.onclick();
+    assert.equal(p.inventory.length, count);
+});
+
+test('empty slot Swap remains visible without candidates, and available gloves reveal the Hands slot', () => {
+    const { c, p, elements, enableEquipmentDetails } = harness();
+    enableEquipmentDetails();
+    c.renderEquipmentSlot('head');
+    const swap = allElements(elements['eq-slot-head']).find(node => node.tag === 'button' && node.textContent === 'Swap');
+    assert.ok(swap);
+    assert.equal(swap.disabled, true);
+    const gloves = { name: 'Cloth gloves', type: ['clothes', 'hands'] };
+    p.inventory.push(gloves);
+    c.restowPlayerPack(p);
+    c.renderEquipmentSlot('hands');
+    assert.equal(elements['eq-slot-hands'].style.display, '');
+    const equip = allElements(elements['eq-slot-hands']).find(node => node.tag === 'button' && node.textContent === 'Swap');
+    assert.equal(equip.disabled, false);
+    equip.onclick();
+    assert.equal(p.equipped.hands.name, gloves.name);
+});
+
+test('examining a carried item offers Swap for an empty slot and an occupied one', () => {
+    for (const occupied of [false, true]) {
+        const { c, p, elements, enableEquipmentDetails } = harness();
+        enableEquipmentDetails();
+        const current = { name: 'Wool cap', type: ['armor', 'head'], armor: 1 };
+        if (occupied) p.equipped.head = current;
+        const helmet = { name: 'Iron helmet', type: ['armor', 'head'], armor: 4, examineText: 'A sturdy helmet.' };
+        p.inventory.push(helmet);
+        c.restowPlayerPack(p);
+        c.openEquipmentExamine(helmet, { slot: 'head', equipped: false });
+        const swap = elements.itemModalActions.children.find(node => node.textContent === 'Swap');
+        assert.ok(swap);
+        if (!occupied) assert.match(elements.itemModalStats.textContent, /Nothing is equipped/);
+        swap.onclick();
+        assert.equal(p.equipped.head.name, helmet.name);
+        assert.equal(p.inventory.includes(current), occupied);
+        assert.equal(elements.itemModal.classList.contains('active'), false);
+    }
+});
+
+test('worn gear retains the existing Swap recommended upgrade action', () => {
+    const { c, p, elements, enableEquipmentDetails } = harness();
+    enableEquipmentDetails();
+    const current = { name: 'Wool cap', type: ['armor', 'head'], armor: 1, examineText: 'A wool cap.' };
+    const helmet = { name: 'Iron helmet', type: ['armor', 'head'], armor: 4 };
+    p.equipped.head = current;
+    p.inventory.push(helmet);
+    c.restowPlayerPack(p);
+    c.openEquipmentExamine(current, { slot: 'head', equipped: true });
+    const swap = elements.itemModalActions.children.find(node => node.textContent === 'Swap recommended');
+    assert.ok(swap);
+    swap.onclick();
+    assert.equal(p.equipped.head.name, helmet.name);
+    assert.ok(p.inventory.includes(current));
 });
 
 console.log('Equipment management checks passed.');
