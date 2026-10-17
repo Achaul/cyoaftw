@@ -65,6 +65,47 @@ async function run() {
     assert.ok(description.includes('\n\n'));
     assert.ok(description.indexOf('wearing') < description.indexOf('breasts'));
 
+    // Slimes from old saves may have a literal "none" eye colour, cached
+    // appearance highlights, and human personality gestures. None belongs
+    // in their inspection, room observation, or behavior regeneration.
+    const slime = npc({
+        species: 'Slime', gender: 'none', isHumanoid: false, age: null, hostility: 80,
+        anatomy: { build: 'glistening', body: { color: 'swamp green', surfaceType: 'gel' }, eyes: { color: 'none' },
+            features: ['faint internal light', 'a dim core inside the gel', 'a trail of sticky slime'], marks: ['a faint herbal smell'] },
+        eyeColor: 'none', hairColor: '', equipped: {}, piercings: [], fashionStyle: '',
+        behavior: 'Looks ready to attack. Rolls their eyes.', personalityTraits: ['sarcastic'],
+        appearanceHighlights: ['swamp green gel', 'none eyes'], enrichment: { mannerisms: ['Raises an eyebrow', 'speaks in a gurgling voice'] }
+    });
+    const slimeLook = c.buildNPCLookDescription(slime);
+    assert.match(slimeLook, /It is a slime\. It has a glistening build\. It is a swamp green gelatinous pile slowly moving across the floor\./);
+    assert.match(slimeLook, /faint internal light, a dim core inside the gel, a trail of sticky slime, and a faint herbal smell/);
+    assert.match(slimeLook, /It looks ready to attack\.$/);
+    assert.doesNotMatch(slimeLook, /eyes?|eyebrow|rolls|speaks|\.\./i);
+    assert.doesNotMatch(c.getNPCObservationDetail(slime), /eyes?|swamp green gel(?:\s|,|$)/i);
+    assert.match(c.getNPCObservationDetail(slime), /gelatinous pile/);
+    assert.doesNotMatch(c.buildNPCPhysicalSummary(slime), /eyes?/i);
+    assert.equal(c.generateNPCBehavior(slime), 'Looks ready to attack');
+    assert.equal(c.generateNPCBehavior(Object.assign({}, slime, { hostility: 0 })), 'Quivers gently');
+    const loadedSlime = JSON.parse(JSON.stringify(slime));
+    assert.equal(c.buildNPCLookDescription(loadedSlime), slimeLook);
+    assert.doesNotMatch(c.getNPCInspectionDetail(Object.assign({}, slime, { dead: true })), /moving across/);
+    assert.doesNotMatch(c.getNPCInspectionDetail(Object.assign({}, slime, { unconscious: true })), /moving across/);
+    assert.doesNotMatch(c.getNPCInspectionDetail(Object.assign({}, slime, { currentState: { sleeping: true } })), /moving across/);
+    assert.match(c.getNPCInspectionDetail(Object.assign({}, slime, { anatomy: { build: 'pooled' }, surfaceColor: '' })), /It is a gelatinous pile/);
+    assert.doesNotMatch(c.getNPCInspectionDetail(npc({ eyeColor: 'none' })), /none eyes/);
+
+    // Empty eye palettes and old slime templates containing ["none"] both
+    // generate absent eyes, rather than a body part with a sentinel colour.
+    const speciesTemplate = c.getSpeciesTemplate;
+    for (const eyeColors of [[], ['none']]) {
+        c.getSpeciesTemplate = () => ({ size: 'small', anatomyProfile: { surfaceType: 'gel', skinTones: ['swamp green'], builds: ['glistening'], eyeColors } });
+        const newSlime = { id: 'new-slime', species: 'Slime', isHumanoid: false, gender: 'none' };
+        c.generateNPCEnrichment(newSlime, {}, {});
+        assert.equal(newSlime.eyeColor, '');
+        assert.equal(newSlime.anatomy.eyes, null);
+    }
+    c.getSpeciesTemplate = speciesTemplate;
+
     // Height is stored once, with shared species ranges. Only the opening
     // shows the player's relative view; matching heights add no height line.
     assert.match(c.getNPCInspectionDetail(npc({ heightCm: 205 })), /^You look up at/);

@@ -4856,7 +4856,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     const surfaceType = profile.surfaceType || (isHumanoid ? "skin" : "hide");
     const surfaceColor = _npcRand(profile.skinTones) || "unremarkable";
     const build = _npcRand(profile.builds) || (isHumanoid ? "average" : "lean");
-    const eyeColor = _npcRand(profile.eyeColors) || "";
+    const eyeColor = isSlimeNPC(npc) ? "" : _npcRand(profile.eyeColors) || "";
     const hairColors = Array.isArray(profile.hairColors) ? profile.hairColors : [];
     const hairColor = isHumanoid ? _npcRand(hairColors) : "";
     const hairStyle = hairColor && hairColor !== "none" && hairColor !== "shaved"
@@ -5483,6 +5483,31 @@ function npcShrugsOffRomance(npc) {
     return d < NPC_PARTNER_DISINHIBITION_MIN;
 }
 
+// Slimes have neither a face nor limbs, including in older saved records.
+function isSlimeNPC(npc) {
+    return !!npc && String(npc.species || "").trim().toLowerCase() === "slime";
+}
+
+function getNPCVisibleEyeColor(npc) {
+    if (!npc || isSlimeNPC(npc)) return "";
+    const anatomy = npc.anatomy || {};
+    const colour = String(npc.eyeColor || (anatomy.eyes && anatomy.eyes.color) || "").trim();
+    return /^(?:none|no eyes|eyeless|n[/]a)$/i.test(colour) ? "" : colour;
+}
+
+function getSlimeBodyDescription(npc) {
+    const body = npc.anatomy && npc.anatomy.body || {};
+    const colour = body.color || npc.surfaceColor || "";
+    const still = npc.dead || npc.unconscious || npc.isUnconsciousBody || (npc.currentState && npc.currentState.sleeping);
+    return [colour, "gelatinous pile", still ? "" : "slowly moving across the floor"].filter(Boolean).join(" ");
+}
+
+function getNPCVisibleBehavior(npc) {
+    if (!isSlimeNPC(npc)) return String(npc && npc.behavior || "");
+    if (npc.dead || npc.isUnconsciousBody) return "";
+    return (npc.hostility || 0) >= 60 ? "Looks ready to attack" : "Quivers gently";
+}
+
 function buildNPCAppearanceHighlights(npc) {
     if (!npc) return [];
     const anatomy = npc.anatomy || {};
@@ -5490,8 +5515,10 @@ function buildNPCAppearanceHighlights(npc) {
     const highlights = [];
 
     if (anatomy.build) highlights.push(anatomy.build + " build");
-    if (body.color && body.surfaceType) highlights.push(body.color + " " + body.surfaceType);
-    if (npc.eyeColor) highlights.push(npc.eyeColor + " eyes");
+    if (isSlimeNPC(npc)) highlights.push(getSlimeBodyDescription(npc));
+    else if (body.color && body.surfaceType) highlights.push(body.color + " " + body.surfaceType);
+    const eyes = getNPCVisibleEyeColor(npc);
+    if (eyes) highlights.push(eyes + " eyes");
     if (npc.hairColor) {
         highlights.push((npc.hairStyle ? npc.hairStyle + " " : "") + npc.hairColor + " hair");
     }
@@ -5521,7 +5548,7 @@ function buildNPCPhysicalSummary(npc) {
 
 function getNPCObservationDetail(npc) {
     if (!npc) return "";
-    const highlights = Array.isArray(npc.appearanceHighlights) && npc.appearanceHighlights.length
+    const highlights = !isSlimeNPC(npc) && Array.isArray(npc.appearanceHighlights) && npc.appearanceHighlights.length
         ? npc.appearanceHighlights.slice(0, 4)
         : buildNPCAppearanceHighlights(npc).slice(0, 4);
     if (!highlights.length) return "";
@@ -5609,8 +5636,11 @@ function getNPCInspectionDetail(npc) {
     const colouring = [];
     const surface = body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.scaleColor ? "scales" : "");
     const colour = body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.scaleColor;
-    if (surface && colour) colouring.push(colour + " " + surface);
-    const eyes = npc.eyeColor || (anatomy.eyes && anatomy.eyes.color);
+    if (isSlimeNPC(npc)) {
+        const pile = getSlimeBodyDescription(npc);
+        first.push("It is " + _npcInspectionArticle(pile) + " " + pile + ".");
+    } else if (surface && colour) colouring.push(colour + " " + surface);
+    const eyes = getNPCVisibleEyeColor(npc);
     if (eyes) colouring.push(eyes + " eyes");
     if (colouring.length) first.push(p.subject + " " + p.have + " " + _npcJoinList(colouring) + ".");
     const hair = anatomy.hair || {};
@@ -7305,6 +7335,7 @@ function getAgeCategoryForRole(role, archetype) {
 // ── GENERATE NPC BEHAVIOR ────────────────────────────────────────
 
 function generateNPCBehavior(npc) {
+    if (isSlimeNPC(npc)) return getNPCVisibleBehavior(npc);
     function _rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
     ensureNPCRelationshipState(npc);
