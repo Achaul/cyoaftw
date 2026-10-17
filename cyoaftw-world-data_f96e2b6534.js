@@ -1,7 +1,7 @@
-// ── cyoaftw-world-data.js v2026-10-16-001 ── Slimes are faceless piles of ooze; moonbloom nectar temporarily firms their gel.
+// ── cyoaftw-world-data.js v2026-10-15-001 ── Commoner standing line "I owe a debt" now names who is owed ({creditor}, filled in generateNPCSocial).
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.WORLD_DATA_VERSION = "2026-10-16-001";
+    window.WORLD_DATA_VERSION = "2026-10-15-001";
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
@@ -491,23 +491,23 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Slime",
-        portraitProfile: { face: "a low irregular pile of translucent slime spread across the ground, loose glistening ooze with softly slumping folds and pooled edges, a continuous faceless surface without eyes, mouth or teeth", negatives: "face, facial features, eyes, eyeballs, pupils, mouth, lips, teeth, fangs, tongue, smile, head, humanoid, limbs, hands, feet, hair, upright body, round mascot, slime girl" },
+        portraitProfile: { face: "a glistening translucent gelatinous blob, no face, faint core visible inside", negatives: "human face, eyes, mouth, limbs, hair" },
         isHumanoid: false,
         isCivilized: false,
         size: "small",
         speechStyle: "broken",
         anatomyType: "amorphous",
         hasTail: false,
-        lore: "Slimes are mindless, low irregular piles of living slime, with no eyes, mouth, teeth, head or fixed limbs. Their loose ooze slumps into folds and pools along the ground, engulfing and absorbing food directly through its surface. They do not think or speak, only seep toward warmth and food. Some take on the temper of the place they grew: acid or poison from the swamp's rot, or frost from cold deep stone. They have an unnatural love for moonbloom nectar. After absorbing it, their loose slime temporarily becomes firmer, more cohesive and visibly gelatinous, holding a wobbling jelly-like mound with a brighter internal glow and more energetic movement. They remain faceless piles of slime in either state.",
-        articulation: "A slime cannot speak and has no eyes, mouth or teeth. Its gurgles, slurps and squelches come from shifting ooze and trapped bubbles; it reacts through ripples and changes in its whole body's movement, never facial expressions.",
+        lore: "Slimes are mindless blobs of living gel that drift through damp stone, eating whatever rots or moves. They do not think or speak, only seep toward warmth and food. Some take on the temper of the place they grew: acid or poison from the swamp's rot, or frost from cold deep stone. They have an unnatural love for moonbloom nectar, which makes their bodies shimmer and move with uncharacteristic energy.",
+        articulation: "A slime has no mouth to speak of; it only gurgles, wobbles and slurps.",
         anatomyProfile: {
             surfaceType: "gel",
             skinTones: ["emerald green", "deep blue", "murky purple", "slate grey", "swamp green", "frost blue", "dusky violet", "stone grey"],
             hairColors: ["none"],
             hairStyles: ["none"],
-            eyeColors: [],
-            builds: ["low and pooled", "squat and slumping", "spread in an irregular pile", "softly heaped", "sprawling", "flat and spreading", "loosely mounded", "folded over itself"],
-            features: ["a continuous faceless surface", "translucent folds of ooze", "bits of bone and coin suspended within", "a trail of sticky slime", "faint diffuse light within the slime", "a rippling surface", "small trapped bubbles", "bits of digested debris"],
+            eyeColors: ["none"],
+            builds: ["squat", "wobbling", "pooled", "bulbous", "sprawling", "flat", "glistening", "pulsing"],
+            features: ["a translucent quivering body", "a dim core inside the gel", "bits of bone and coin suspended within", "a trail of sticky slime", "faint internal light", "a rippling surface", "a cool damp touch", "bits of digested debris"],
             movements: ["oozes forward", "quivers in place", "slides along the wall", "pools and swells", "drips from ceiling", "seeps under door gaps", "pulses rhythmically", "splits and rejoins"],
             voices: ["gurgling", "silent", "slurping", "blubbering", "squelching", "dripping"]
         },
@@ -3199,7 +3199,7 @@ const WORLD_LORE_FACTS = [
     {
         id: "slimes-and-nectar", tiers: ["common", "swamp", "scholar"], zones: ["Dungeon", "Swamp", "Underground City"], know: 75, rumor: true,
         topic: "why slimes love nectar",
-        text: "Slimes are instinctively drawn to moonbloom nectar and absorb it directly through their surface. Their normally loose piles of ooze temporarily become firmer, more cohesive and visibly gelatinous, holding wobbling jelly-like mounds with a brighter internal glow. They move faster but never develop eyes, mouths or teeth. Some dungeon delvers use nectar vials as bait to lure slimes away from valuable treasure.",
+        text: "Slimes are instinctively drawn to moonbloom nectar. When they consume it, their gelatinous bodies absorb the liquid completely and emit a faint glow. Nectar makes slimes move faster and become more cohesive. Some dungeon delvers use nectar vials as bait to lure slimes away from valuable treasure.",
         distorted: "Slimes go mad for nectar. It makes them grow huge and aggressive, so only fools carry it in slime territory."
     }
 ];
@@ -5045,15 +5045,19 @@ function getStartTierForMode(modeId, computedTier) {
     return START_TIER_ORDER[Math.max(0, Math.min(START_TIER_ORDER.length - 1, i))];
 }
 
-// Story-turn clock. warn: first warning; next: gap from the warning to the
-// emissary (settle) or scout (survive); then: gap to the first party; repeat:
-// gap between later waves.
+// Shared calendar unit: a workday (30 turns) plus a night (24 turns).
+// The engine's lodging and day/night clock use this same value.
+const STORY_DAY_TURNS = 54;
+const PRESSURE_TIMING_VERSION = 2;
+// Durations are expressed in days, converted to story turns here. warn is
+// the first warning; next is the gap to the emissary (settle) or first hunter
+// (survive); then is the emissary's deadline; repeat is between later waves.
 const PRESSURE_TIMING = {
-    settle:  { warn: 50, next: 70, then: 90, repeat: 130 },
-    survive: { warn: 30, next: 40, then: 60, repeat: 90 }
+    settle:  { warn: 3 * STORY_DAY_TURNS, next: 4 * STORY_DAY_TURNS, then: 7 * STORY_DAY_TURNS, repeat: 7 * STORY_DAY_TURNS },
+    survive: { warn: 2 * STORY_DAY_TURNS, next: 3 * STORY_DAY_TURNS, then: 4 * STORY_DAY_TURNS, repeat: 4 * STORY_DAY_TURNS }
 };
-const PRESSURE_PAY_EXTEND = 80;      // a payment buys this many turns
-const PRESSURE_TIME_EXTEND = 60;     // "ask for more time", once per visit
+const PRESSURE_PAY_EXTEND = 7 * STORY_DAY_TURNS;  // a payment buys a week
+const PRESSURE_TIME_EXTEND = 3 * STORY_DAY_TURNS; // ask for three more days, once per visit
 const PRESSURE_READY_DELAY = 30;     // "I'm ready" (defeat terms) brings the party this soon
 const PRESSURE_SURVIVE_BEATEN = 3;   // waves beaten to outlast the hunters
 const PRESSURE_MAX_ALIVE = 6;        // never more than this many pursuers alive at once
