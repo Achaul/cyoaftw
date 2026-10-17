@@ -5496,15 +5496,22 @@ function getNPCVisibleEyeColor(npc) {
 }
 
 function getSlimeBodyDescription(npc) {
+    if (typeof window.getSlimeVisibleState === "function") window.getSlimeVisibleState(npc);
     const body = npc.anatomy && npc.anatomy.body || {};
     const colour = body.color || npc.surfaceColor || "";
     const still = npc.dead || npc.unconscious || npc.isUnconsciousBody || (npc.currentState && npc.currentState.sleeping);
-    return [colour, "gelatinous pile", still ? "" : "slowly moving across the floor"].filter(Boolean).join(" ");
+    const bond = npc._slimeBond;
+    const clock = typeof getStatusClock === "function" ? getStatusClock() : 0;
+    if (!still && bond && bond.mimic && clock < bond.mimic.until && bond.reserve >= 24 && (npc.hostility || 0) < 60) {
+        return [colour, "gel holding the shape of " + bond.mimic.shape].filter(Boolean).join(" ");
+    }
+    return [colour, (bond && bond.growth > 0 ? "broad, heavy gelatinous pile" : "gelatinous pile"), still ? "" : "slowly moving across the floor"].filter(Boolean).join(" ");
 }
 
 function getNPCVisibleBehavior(npc) {
     if (!isSlimeNPC(npc)) return String(npc && npc.behavior || "");
-    if (npc.dead || npc.isUnconsciousBody) return "";
+    if (npc.dead || npc.unconscious || npc.isUnconsciousBody) return "";
+    if (typeof window.getSlimeVisibleState === "function") return window.getSlimeVisibleState(npc);
     return (npc.hostility || 0) >= 60 ? "Looks ready to attack" : "Quivers gently";
 }
 

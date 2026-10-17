@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const corePath = process.argv[2] || 'C:/Git/CYOADEV/cyoaftw-engine-CORE.js';
 const core = fs.readFileSync(corePath, 'utf8').replace(/\r\n/g, '\n');
-const data = fs.readFileSync('C:/Git/CYOADEV/cyoaftw-npc-data.js', 'utf8');
+const data = fs.readFileSync(process.argv[3] || 'C:/Git/CYOADEV/cyoaftw-npc-data.js', 'utf8');
 function extract(source, start, end) {
     const first = source.indexOf(start), last = source.indexOf(end, first);
     assert.ok(first >= 0 && last > first, 'Missing source section: ' + start);
@@ -53,7 +53,7 @@ function harness(saved = new Map()) {
         [core, 'function npcPortraitHash(', '// Downscale'],
         [core, 'function portraitResultToSrc(', '// ── ENGAGED-NPC HEADER'],
         [core, 'function clarifyPortraitGearName(', '// Bump when'],
-        [data, 'function buildNPCAppearanceHighlights(', 'function buildNPCPhysicalSummary('],
+        [data, 'function isSlimeNPC(', 'function buildNPCPhysicalSummary('],
         [core, '// ── PLAYER PORTRAIT', '// ── FULL-LENGTH PORTRAIT']
     ]) vm.runInContext(extract(source, start, end), c);
     return { c, calls, elements, saved };
