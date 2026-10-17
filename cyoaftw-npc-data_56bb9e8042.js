@@ -1247,6 +1247,14 @@ function getNPCFactRecords(npc, ctx, room, words) {
             "- The player has mentioned overhearing in a tavern: " + recent.join(" and ") + ". You may know more, or know better; do not claim to have been there.", 0, false));
     }
 
+    // Signed board notes this NPC actually read; a claim, not firsthand knowledge.
+    const noticeNotes = npc.memory && Array.isArray(npc.memory.noticeNotes) ? npc.memory.noticeNotes : [];
+    noticeNotes.forEach(function (note) {
+        if (!note || !note.text) return;
+        records.push(_npcFactRecord("notice:" + note.id, ["rumor"].concat(getNPCTagsForText(note.text)),
+            "- You read a note at " + note.place + ", signed " + note.author + ": " + JSON.stringify(note.text) + ". This is the author's claim, not something you witnessed or verified.", 1, false));
+    });
+
     // Local knowledge: lore this NPC knows.
     if (ctx && typeof getNPCKnownLoreFacts === "function" && typeof getWorldLoreFactText === "function") {
         const lore = typeof ensureWorldLore === "function" ? ensureWorldLore() : null;
