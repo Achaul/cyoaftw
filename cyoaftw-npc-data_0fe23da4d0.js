@@ -3044,6 +3044,60 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
     {
+        id: "ask-about-nectar",
+        priority: 45,
+        repeat: "session",
+        label: "Ask about moonbloom nectar",
+        textVariants: [
+            "You ask if they know anything about moonbloom nectar and where to find it.",
+            "You bring up moonbloom nectar and ask what they think of it.",
+            "You ask if they have ever tried moonbloom nectar or know where it comes from."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-nectar" },
+        conditions: {
+            metPlayer: true,
+            maxHostility: 50,
+            custom: (npc, ctx) => ctx.isHumanoid
+        }
+    },
+    {
+        id: "ask-nectar-buy",
+        priority: 40,
+        repeat: "session",
+        label: "Ask where to buy nectar",
+        textVariants: [
+            "You ask if they know where you might buy some moonbloom nectar.",
+            "You ask if there is a shop nearby that sells moonbloom nectar.",
+            "You ask if they have seen nectar for sale and where."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 0, intent: "curious", markMet: true, actionTag: "ask-nectar-buy" },
+        conditions: {
+            metPlayer: true,
+            maxHostility: 50,
+            custom: (npc, ctx) => ctx.isHumanoid && (npc.role === "Trader" || npc.role === "Merchant" || npc.role === "Alchemist" || npc.role === "Innkeeper")
+        }
+    },
+    {
+        id: "mention-slime-nectar",
+        priority: 35,
+        repeat: "session",
+        label: "Mention slimes and nectar",
+        textVariants: [
+            "You mention that you heard slimes love moonbloom nectar and ask if it is true.",
+            "You ask if it is true that slimes go crazy for nectar.",
+            "You bring up the strange fact that slimes seem drawn to nectar and ask if they have noticed it too."
+        ],
+        intent: "curious",
+        relationshipImpact: { mood: 0, favor: 0, intent: "curious", markMet: true, actionTag: "mention-slime-nectar" },
+        conditions: {
+            metPlayer: true,
+            maxHostility: 50,
+            custom: (npc, ctx) => ctx.isHumanoid && ctx.room && ctx.room.creatures && ctx.room.creatures.some(c => c && String(c.species || "").toLowerCase() === "slime")
+        }
+    },
+    {
         id: "offer-help",
         priority: 50,
         repeat: "session",
@@ -6961,6 +7015,25 @@ function decayNPCStatesInWorld(roomMap, steps = 1) {
     });
 }
 
+// Process slime cum blob absorption for all slimes in the world
+// Called from the engine's advanceStoryTurn via typeof guard
+function settleSlimeCumAbsorptionInWorld(roomMap) {
+    const map = roomMap && typeof roomMap === "object" ? roomMap : {};
+    Object.values(map).forEach(room => {
+        if (!room || !Array.isArray(room.creatures)) return;
+        room.creatures.forEach(npc => {
+            if (npc && typeof window.settleSlimeCumAbsorption === "function") {
+                const lines = window.settleSlimeCumAbsorption(npc);
+                if (Array.isArray(lines) && lines.length > 0) {
+                    if (typeof queueTurnNote === "function") {
+                        lines.forEach(line => queueTurnNote(line));
+                    }
+                }
+            }
+        });
+    });
+}
+
 // ── GET RANDOM PERSONALITY PROFILE ──────────────────────────────
 
 function getRandomPersonalityProfile(options = {}) {
@@ -7172,6 +7245,8 @@ function generatePostureOrAction(temperament) {
 // Export function to window for NSFW system access (catalogue already exported above)
 if (typeof window !== "undefined") {
     window.queryConversationCatalogue = queryConversationCatalogue;
+    // Slime cum absorption processing
+    window.settleSlimeCumAbsorptionInWorld = settleSlimeCumAbsorptionInWorld;
     // Per-act disinhibition helpers, used by intimacy-system.js to gate and
     // progress intimacy acts by body category. See applyActDisinhibitionDelta /
     // getActDisinhibition above for the storage shape.

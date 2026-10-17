@@ -2306,6 +2306,11 @@ console.log("[NSFW System] Loaded v2026-09-11-002 - stat-based fallback acceptan
   function nsfwBodyFit(item, target) {
     var player = window.G && window.G.player;
     if (!player) return "";
+    
+    // If player's penis is slimed, it acts as super lube - always easy fit
+    const penisSlimed = typeof window.isPlayerPenisSlimed === "function" && window.isPlayerPenisSlimed();
+    if (penisSlimed) return "easy";
+    
     if (typeof window.ensurePlayerIntimacyAnatomy === "function") window.ensurePlayerIntimacyAnatomy(player);
     var cock = (typeof getPlayerCockSize === "function") ? getPlayerCockSize(player) : "medium";
     var a = item && item.nsfwTraits && item.nsfwTraits.anatomy;
@@ -2957,8 +2962,11 @@ avoidNote,
     var cock = nsfwBodyCockPhrase();
     var skin = nsfwBodySkinPhrase(item);
 
+    // Check if player's penis is slimed (acts as super lube, bypasses exposure/prep checks)
+    const penisSlimed = typeof window.isPlayerPenisSlimed === "function" && window.isPlayerPenisSlimed();
+
     if (target === "vagina" || target === "cloaca") {
-      if (!nsfwRegionExposed(item, "genitals")) return;
+      if (!penisSlimed && !nsfwRegionExposed(item, "genitals")) return;
       label = (target === "cloaca") ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina";
       var fit = nsfwBodyFit(item, target);
       var entry = fit === "resistance"
@@ -2971,7 +2979,7 @@ avoidNote,
         `You position ${name}'s slack hips with both hands${skin ? `, their ${skin} warm under your palms` : ""} and press your ${cock} against their ${label}, feeding yourself in bit by bit while the unconscious body takes you in silence. ${entry}` + nsfwBodyUseClause(item, target)
       ]);
     } else if (target === "anus") {
-      if (!nsfwRegionExposed(item, "anus")) return;
+      if (!penisSlimed && !nsfwRegionExposed(item, "anus")) return;
       label = "anus";
       var fitA = nsfwBodyFit(item, target);
       var entryA = fitA === "resistance"
@@ -3594,7 +3602,9 @@ avoidNote,
     if (nsfwPlayerAnatomy() !== "both") return;
     const name = nsfwGetEntityName(item);
     var label = target === "anus" ? "anus" : (target === "cloaca" ? (nsfwGenitalLabel(item) || "cloacal vent") : "vagina");
-    if (!nsfwRegionExposed(item, target === "anus" ? "anus" : "genitals")) return;
+    // Check if player's penis is slimed (for "both" anatomy, this means their generic sex organ is slimed)
+    const penisSlimed = typeof window.isPlayerPenisSlimed === "function" && window.isPlayerPenisSlimed();
+    if (!penisSlimed && !nsfwRegionExposed(item, target === "anus" ? "anus" : "genitals")) return;
     var baseText;
     if (target === "vagina" || target === "cloaca") {
       baseText = pickFrom([
@@ -5876,6 +5886,229 @@ avoidNote,
       scene: true
     };
   };
+
+  // ── SLIME NSFW INTERACTIONS ───────────────────────────────────────
+  // Exposed to window for SFW engine to call via typeof guards
+
+  // Check if player's penis is currently slimed (allows bypassing normal penetration checks)
+  window.isPlayerPenisSlimed = function() {
+    const player = window.G && window.G.player;
+    if (!player || !player._slimedParts) return false;
+    return player._slimedParts.includes("penis");
+  };
+
+  // Check if a specific NPC body part is slimed
+  window.isNPCBodyPartSlimed = function(npc, partId) {
+    if (!npc || !npc._slimedParts) return false;
+    return npc._slimedParts.includes(partId);
+  };
+
+  // Finish inside slime - creates cum blob in slime's inventory
+  window.slimeFinishInsideInteraction = function(npc) {
+    if (!npc || !isSlimeEntity(npc) || !window.G || !window.G.player) return;
+    
+    const player = window.G.player;
+    const slimeName = npc.name || "the slime";
+    const variant = getSlimeVariant(npc);
+    const adj = variant ? variant.adj : "gelatinous";
+    
+    // Create cum blob in slime's inventory
+    const blob = window.createCumBlobItem();
+    if (!npc.inventory) npc.inventory = [];
+    npc.inventory.push(blob);
+    
+    // Build narration
+    let narration = `You thrust deeper into ${slimeName}, the ${adj} gel clinging tightly. With a final push, you release inside, your cum pumping into the slime's translucent body. The thick white fluid hangs suspended in the gel, clearly visible through the slime's semi-transparent form.`;
+    
+    // Check for poisonous/acidic slime reactions
+    if (variant && variant.venom) {
+      narration += ` The venomous slime ripples around your deposit, and you feel a strange, tingling warmth spreading from the contact.`;
+    } else if (variant && variant.acid) {
+      narration += ` The acidic slime's surface seems to bubble slightly around your cum, though the fluid itself remains intact within the gel.`;
+    }
+    
+    window.setNarration(narration);
+    window.advanceStoryTurn(1);
+    window.renderNPCActionMenu(npc);
+    window.saveGameState();
+  };
+
+  window.slimeSitInteraction = function(npc) {
+    if (!npc || !isSlimeEntity(npc) || !window.G || !window.G.player) return;
+    
+    const player = window.G.player;
+    const slimeName = npc.name || "the slime";
+    const hasNectar = npc._nectarConsumed && (getCurrentStoryTurn() - npc._nectarConsumed) < 50;
+    const isFirm = hasNectar;
+    
+    // Build narration with AI polish if available
+    const context = {
+      slime: slimeName,
+      slimeType: getSlimeVariant(npc) ? getSlimeVariant(npc).adj : "gelatinous",
+      hasNectar: hasNectar,
+      isFirm: isFirm,
+      playerAnatomy: player.anatomy || {},
+      playerGender: player.gender || "unknown"
+    };
+    
+    // Check if slime can slide into orifices (if firm from nectar)
+    const canInfiltrate = isFirm && playerHasVagina(player);
+    
+    // Generate base narration
+    let narration = `You lower yourself onto ${slimeName}. The cool gel molds perfectly to your shape, supporting you like a living cushion. It ripples slightly with each movement, and you can feel it slowly flowing around you.`;
+    
+    if (isFirm) {
+      narration += ` The nectar it consumed earlier has made its gel unusually firm and responsive, almost like it's actively cradling you.`;
+      
+      if (canInfiltrate) {
+        // NSFW: slime can slide into vaginal orifice
+        narration += ` As you shift your weight, a tendril of the gel slips inside you, filling you with a cool, strange sensation. The slime seems to pulse in time with your movements, creating an intimate, rhythmic friction.`;
+      } else {
+        // SFW or male player: slime supports bouncing/rubbing
+        narration += ` As you bounce gently, the firm gel presses against you in all the right places, creating a surprising amount of pleasant friction.`;
+      }
+    } else {
+      narration += ` The slime's usual softness makes for an unstable seat, and you sink in deeper than expected.`;
+    }
+    
+    // Add AI-polished details if available
+    if (typeof window.ai === "function") {
+      const prompt = buildSlimeSitPrompt(context);
+      // In production, this would call the AI and replace/wrap the narration
+      // For now, we use the base narration
+    }
+    
+    window.setNarration(narration);
+    window.advanceStoryTurn(1);
+    window.renderNPCActionMenu(npc);
+    window.saveGameState();
+  };
+
+  window.slimePenetrateInteraction = function(npc) {
+    if (!npc || !isSlimeEntity(npc) || !window.G || !window.G.player) return;
+    
+    const player = window.G.player;
+    const slimeName = npc.name || "the slime";
+    const hasNectar = npc._nectarConsumed && (window.getCurrentStoryTurn ? window.getCurrentStoryTurn() : 0) - npc._nectarConsumed < 50;
+    const isFirm = hasNectar;
+    const variant = getSlimeVariant(npc);
+    const adj = variant ? variant.adj : "gelatinous";
+    
+    // Build context for AI narration
+    const context = {
+      slime: slimeName,
+      slimeType: adj,
+      hasNectar: hasNectar,
+      isFirm: isFirm,
+      playerAnatomy: player.anatomy || {},
+      playerGender: player.gender || "unknown"
+    };
+    
+    let narration = `You press into ${slimeName}. The ${adj} gel parts easily, accepting and enveloping your penis with a cool, smooth tightness. The slime seems to ripple around you, creating a gentle, rhythmic pressure.`;
+    
+    if (isFirm) {
+      narration += ` The nectar has made the gel firmer, and it clings to you more tightly, almost massaging you with each movement.`;
+    } else {
+      narration += ` The soft gel yields completely, and you sink in deep, the slime flowing around you like liquid.`;
+    }
+    
+    // Check for potential climax - if player has high arousal
+    if (player.heat && player.heat > 70) {
+      narration += ` The sensations quickly build, and with a few more thrusts you feel the release building...`;
+      // In a full implementation, this would trigger climax mechanics
+      // For now, just describe the buildup
+    }
+    
+    window.setNarration(narration);
+    window.advanceStoryTurn(1);
+    window.renderNPCActionMenu(npc);
+    window.saveGameState();
+  };
+
+  // Helper to check if entity is a slime
+  function isSlimeEntity(entity) {
+    return !!entity && String(entity.species || "").toLowerCase() === "slime";
+  }
+  
+  // Helper to get slime variant info
+  function getSlimeVariant(entity) {
+    if (!isSlimeEntity(entity)) return null;
+    const color = String((entity.anatomy && entity.anatomy.body && entity.anatomy.body.color) || "grey").toLowerCase();
+    if (window.SLIME_VARIANTS && window.SLIME_VARIANTS[color]) return window.SLIME_VARIANTS[color];
+    if (window.SLIME_VARIANTS) {
+      if (/green/.test(color)) return window.SLIME_VARIANTS.green;
+      if (/purple|violet/.test(color)) return window.SLIME_VARIANTS.purple;
+      if (/blue|frost/.test(color)) return window.SLIME_VARIANTS.blue;
+    }
+    return { element: "", venom: false, acid: false, adj: "gelatinous" };
+  }
+  
+  // Helper to check player anatomy
+  function playerHasVagina(player) {
+    if (!player) return false;
+    const gender = String(player.gender || "male").toLowerCase();
+    if (gender === "female") return true;
+    if (gender === "non-binary") return true;
+    return false;
+  }
+  
+  // Cum blob item for when player cumms inside slime
+  window.createCumBlobItem = function() {
+    return {
+      id: "cum-blob-" + (Math.random() * 1000000).toFixed(0),
+      name: "Blob of cum",
+      noun: "cum",
+      value: 0,
+      type: ["misc", "fluid", "organic"],
+      description: "A thick white fluid suspended in the slime's translucent gel, visible through its body. It will be absorbed over time.",
+      _engulfed: true,
+      _cumBlob: true,
+      _absorbTurn: window.getCurrentStoryTurn ? window.getCurrentStoryTurn() + 100 : 100
+    };
+  };
+  
+  // Add cum blob to slime's inventory
+  window.addCumBlobToSlime = function(npc) {
+    if (!npc || !isSlimeEntity(npc)) return;
+    if (!npc.inventory) npc.inventory = [];
+    const blob = window.createCumBlobItem();
+    npc.inventory.push(blob);
+    return blob;
+  };
+  
+  // Process slime digestion/absorption (called from SFW engine's turn system)
+  window.settleSlimeCumAbsorption = function(npc) {
+    if (!npc || !isSlimeEntity(npc) || !Array.isArray(npc.inventory)) return [];
+    const now = window.getCurrentStoryTurn ? window.getCurrentStoryTurn() : 0;
+    const lines = [];
+    
+    for (let i = npc.inventory.length - 1; i >= 0; i--) {
+      const item = npc.inventory[i];
+      if (item && item._cumBlob && item._absorbTurn && now >= item._absorbTurn) {
+        npc.inventory.splice(i, 1);
+        lines.push(`The cum blob inside ${npc.name} has been fully absorbed, leaving only faint traces in the gel.`);
+      }
+    }
+    
+    return lines;
+  };
+
+  // AI prompt builder for slime sit interaction
+  function buildSlimeSitPrompt(context) {
+    const parts = [];
+    parts.push(`A person sits on a ${context.slimeType} slime named ${context.slime}`);
+    parts.push(`The slime has ${context.hasNectar ? "recently consumed nectar and is firm" : "its normal soft consistency"}.`);
+    parts.push(`Describe the tactile sensations: the cool gel molding to the person's body, the way it flows and ripples with movement.`);
+    
+    if (context.isFirm && context.playerAnatomy && context.playerAnatomy.vaginaSize) {
+      parts.push(`The firm gel can slip into vaginal opening, creating intimate, rhythmic friction as the person bounces.`);
+    } else {
+      parts.push(`The slime provides pleasant friction against the person's body as they move.`);
+    }
+    
+    parts.push(`Focus on the physical sensations, the temperature contrast, the way the slime moves. Be vivid and immersive.`);
+    return parts.join(" ");
+  }
 
   initNSFWSystem();
 })();

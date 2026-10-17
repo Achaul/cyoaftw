@@ -498,7 +498,7 @@ const SPECIES_TEMPLATES = [
         speechStyle: "broken",
         anatomyType: "amorphous",
         hasTail: false,
-        lore: "Slimes are mindless blobs of living gel that drift through damp stone, eating whatever rots or moves. They do not think or speak, only seep toward warmth and food. Some take on the temper of the place they grew: acid or poison from the swamp's rot, or frost from cold deep stone.",
+        lore: "Slimes are mindless blobs of living gel that drift through damp stone, eating whatever rots or moves. They do not think or speak, only seep toward warmth and food. Some take on the temper of the place they grew: acid or poison from the swamp's rot, or frost from cold deep stone. They have an unnatural love for moonbloom nectar, which makes their bodies shimmer and move with uncharacteristic energy.",
         articulation: "A slime has no mouth to speak of; it only gurgles, wobbles and slurps.",
         anatomyProfile: {
             surfaceType: "gel",
@@ -512,7 +512,7 @@ const SPECIES_TEMPLATES = [
             voices: ["gurgling", "silent", "slurping", "blubbering", "squelching", "dripping"]
         },
         culture: {
-            values: ["food", "warmth", "damp"],
+            values: ["food", "warmth", "damp", "nectar"],
             topics: ["nothing it can say"],
             taboos: ["fire", "salt"]
         }
@@ -1002,7 +1002,8 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "stalagmites",  name: "stalagmites",  tags: ["cover", "hazard"] },
             { id: "glowing-fungi",name: "glowing fungi",tags: ["light", "landmark"] },
-            { id: "underground-pool", name: "underground pool", tags: ["water"] }
+            { id: "underground-pool", name: "underground pool", tags: ["water"] },
+            { id: "moonbloom-grove", name: "grove of moonbloom flowers", tags: ["flora", "gather", "light"] }
         ],
         imageKey: "Cavern"
     },
@@ -1121,7 +1122,8 @@ const ROOM_TEMPLATES = [
         isConnector: true,
         structural: [
             { id: "twisted-roots", name: "twisted roots", tags: ["hazard", "cover"] },
-            { id: "reed-bed",      name: "reed bed",      tags: ["cover"] }
+            { id: "reed-bed",      name: "reed bed",      tags: ["cover"] },
+            { id: "moonbloom-patch", name: "pale moonbloom flowers", tags: ["flora", "gather"] }
         ],
         imageKey: "Marsh"
     },
@@ -1136,7 +1138,8 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "heaved-slabs",  name: "heaved slabs of peat", tags: ["hazard", "cover"] },
-            { id: "stagnant-pool", name: "stagnant pool",        tags: ["water", "hazard"] }
+            { id: "stagnant-pool", name: "stagnant pool",        tags: ["water", "hazard"] },
+            { id: "moonbloom-cluster", name: "cluster of glowing moonblooms", tags: ["flora", "gather", "light"] }
         ],
         imageKey: "Broken Ground"
     },
@@ -3173,6 +3176,31 @@ const WORLD_LORE_FACTS = [
                 : "There was little left of the treasury. The Crown had spent it on the war long before the fires, and the sellswords' pay was gone before the last winter.";
         },
         distorted: "A fortune in Crown gold is buried under Aldermere, and the ghosts guard it."
+    },
+    // ── nature & flora: moonblooms and nectar ────────────────────
+    {
+        id: "moonbloom-nature", tiers: ["local", "trade", "swamp"], zones: ["Swamp", "Underground City"], know: 70, rumor: false,
+        topic: "moonbloom flowers",
+        text: "Moonblooms are pale, luminous flowers that grow in damp caverns and swamp edges. They glow faintly in darkness and produce a sweet nectar that collecting creatures and careful gatherers harvest at dawn.",
+        distorted: "There are flowers in the swamp that shine like captured moonlight and make a sweet liquid that drives animals mad with desire."
+    },
+    {
+        id: "nectar-harvest", tiers: ["trade", "swamp", "scholar"], zones: ["Swamp", "Underground City", "Town"], know: 55, rumor: false,
+        topic: "harvesting moonbloom nectar",
+        text: "Moonbloom nectar is carefully collected from the flowers at dawn using small glass vials. The nectar droplets form overnight and are most potent just before sunrise. One moonbloom produces only a few drops, making pure nectar rare and valuable.",
+        distorted: "Moonbloom nectar is harvested by bleeding the flowers with silver knives under a full moon."
+    },
+    {
+        id: "nectar-uses", tiers: ["common", "trade"], zones: ["Town", "Swamp", "Underground City"], know: 80, rumor: false,
+        topic: "uses for moonbloom nectar",
+        text: "Moonbloom nectar is prized by bakers for its intense floral sweetness and subtle glow. A few drops can flavor an entire batch of pastries. Alchemists use it as a base for potions requiring purity, and some claim it has mild restorative properties.",
+        distorted: "Moonbloom nectar is a powerful aphrodisiac and people have died for trying to hoard it."
+    },
+    {
+        id: "slimes-and-nectar", tiers: ["common", "swamp", "scholar"], zones: ["Dungeon", "Swamp", "Underground City"], know: 75, rumor: true,
+        topic: "why slimes love nectar",
+        text: "Slimes are instinctively drawn to moonbloom nectar. When they consume it, their gelatinous bodies absorb the liquid completely and emit a faint glow. Nectar makes slimes move faster and become more cohesive. Some dungeon delvers use nectar vials as bait to lure slimes away from valuable treasure.",
+        distorted: "Slimes go mad for nectar. It makes them grow huge and aggressive, so only fools carry it in slime territory."
     }
 ];
 
