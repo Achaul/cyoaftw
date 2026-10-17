@@ -6054,7 +6054,7 @@ const SOCIETY_SHEETS = {
 };
 
 // A staff/trade role's standing in the Realm.
-const REALM_MASTER_ROLES = ["Guildmaster", "Innkeeper", "Blacksmith", "Shopkeeper", "Healer", "Priest", "Archivist", "Enchanter", "Arcanist", "Reliquarian"];
+const REALM_MASTER_ROLES = ["Guildmaster", "Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Healer", "Priest", "Archivist", "Enchanter", "Arcanist", "Reliquarian"];
 const REALM_TRADE_ROLES = ["Vendor", "Bartender", "Cook", "Scholar", "Merchant", "Trader"];
 const REALM_WAGE_ROLES = ["Servant", "Villager", "Townsfolk", "Miner", "Guard", "Scout", "Stone Guard"];
 

@@ -1055,6 +1055,7 @@ const NPC_ROUTINES = {
     Bartender: { duties: "pouring drinks, keeping the bar clean and watching the room", pay: "wages from the house plus whatever tips come over the bar", shifts: ["home", "cleaning and stocking the bar", "pouring for the evening crowd", "last pours, then clearing up"], pastime: "listening to the room's gossip" },
     Cook: { duties: "cooking for the house and keeping the pantry stocked", pay: "wages and your own meals from the kitchen", shifts: ["baking and prepping", "cooking the midday meal", "the supper rush", "scrubbing pots, then home"], pastime: "trying small changes to old recipes" },
     Servant: { duties: "carrying, cleaning, fetching and serving", pay: "a small wage, with meals and a bed", shifts: ["up first to light fires", "cleaning and fetching", "serving the evening meal", "banking the fires, then sleep"], pastime: "a quiet rest when the work lets you" },
+    Clothier: { duties: "selling clothing, repairing wear, altering designs and reinforcing cloth and leather", pay: "clothing sales and quoted commissions paid in coin, with materials supplied by customers", shifts: ["setting out garments and dye pots at the market stall", "fitting customers and working on commissions", "finishing seams and tallying receipts", "home"], pastime: "studying dyes, fabrics and clever stitching" },
     Blacksmith: { duties: "forging, mending and sharpening iron and steel for the town", pay: "coin from customers and commissions, with ore bought as needed", shifts: ["lighting the forge", "at the anvil on orders and repairs", "banking the forge", "home"], pastime: "admiring good steel and arguing over it" },
     Shopkeeper: { duties: "keeping the shop, buying and selling goods and watching for thieves", pay: "the margin between what you buy and sell", shifts: ["opening up and checking stock", "serving customers", "tallying the day's sales", "home"], pastime: "haggling for the sport of it" },
     Vendor: { duties: "selling goods from a stall or a corner of the market", pay: "whatever your goods sell for, day by day", shifts: ["setting out the stall", "calling for customers", "packing up unsold stock", "home"], pastime: "watching the crowd go by" },
@@ -1690,6 +1691,7 @@ const NPC_ROLE_TOPIC_POOLS = {
     "shopkeeper": ["stock", "customers", "competition"],
     "wandering merchant": ["the road", "other towns", "rare finds"],
     "blacksmith": ["commissions", "materials", "local smithing reputation"],
+    "clothier": ["clothing designs", "repairs and reinforcement", "dyes and fabrics", "tailoring commissions"],
     "innkeeper": ["guests", "rooms", "town happenings"],
     "bartender": ["drinks", "regulars", "overheard gossip"],
     "cook": ["ingredients", "the kitchen", "complaints about the food"],
@@ -1925,7 +1927,7 @@ const NPC_LORE_ROLE_TIERS = [
     { match: ["guard", "scout", "watch", "raider", "adventurer", "soldier", "mercenary", "guildmaster"], tiers: ["military", "local"] },
     { match: ["priest", "pilgrim", "cultist"], tiers: ["faith", "local"] },
     { match: ["archivist", "scholar", "librarian"], tiers: ["scholar", "faith"] },
-    { match: ["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "cook", "servant"], tiers: ["trade", "local"] },
+    { match: ["vendor", "shopkeeper", "clothier", "merchant", "trader", "bartender", "innkeeper", "cook", "servant"], tiers: ["trade", "local"] },
     { match: ["blacksmith", "smith", "miner", "stone guard"], tiers: ["deep", "trade"] },
     { match: ["townsfolk", "villager", "guest", "patron", "wanderer", "healer"], tiers: ["local"] },
     { match: ["scavenger", "delver"], tiers: ["deep", "military"] }
@@ -3144,7 +3146,7 @@ const NPC_CONVERSATION_CATALOGUE = [
                 if (role.includes("guard")) return "You ask if there's been any trouble worth watching for.";
                 if (role.includes("healer")) return "You ask if anything's been going around that has people worried.";
                 if (role.includes("priest") || role.includes("archivist")) return "You ask if they've noticed any ill omens lately.";
-                if (["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "blacksmith"].some(tag => role.includes(tag))) {
+                if (["vendor", "shopkeeper", "clothier", "merchant", "trader", "bartender", "innkeeper", "blacksmith"].some(tag => role.includes(tag))) {
                     return "You ask if trade's been good, or if something's been eating into it.";
                 }
                 return "You ask whether they have heard anything worth knowing.";
@@ -3154,7 +3156,7 @@ const NPC_CONVERSATION_CATALOGUE = [
                 if (role.includes("guard")) return "You ask what's been keeping the watch busy lately.";
                 if (role.includes("healer")) return "You ask what ailments have kept them busiest this season.";
                 if (role.includes("priest") || role.includes("archivist")) return "You ask what the old stories say about times like these.";
-                if (["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "blacksmith"].some(tag => role.includes(tag))) {
+                if (["vendor", "shopkeeper", "clothier", "merchant", "trader", "bartender", "innkeeper", "blacksmith"].some(tag => role.includes(tag))) {
                     return "You ask what's been moving through the market lately, good or bad.";
                 }
                 return "You nudge the conversation toward rumors and loose talk.";
@@ -3315,7 +3317,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "trade",
         conditions: {
             metPlayer: true,
-            roleIncludes: ["vendor", "shopkeeper", "merchant", "trader", "bartender", "innkeeper", "blacksmith"],
+            roleIncludes: ["vendor", "shopkeeper", "clothier", "merchant", "trader", "bartender", "innkeeper", "blacksmith"],
             maxHostility: 79,
             minFavor: -69,
             custom: (npc, ctx) => !ctx.offDuty
@@ -4902,8 +4904,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
         currentMotive: generateNPCMotivation(npc, template, room),
         mannerisms: [
             movement,
-            voice ? "speaks in a " + voice + " voice" : "",
-            features.length ? "draws attention to " + _npcRand(features) : ""
+            voice ? "speaks in a " + voice + " voice" : ""
         ].filter(Boolean),
         reactionNotes: [
             values.length ? "responds well to " + _npcJoinList(values) : "",
@@ -5218,9 +5219,9 @@ const NPC_TIE_LOVER_CHANCE = 0.10;
 const NPC_TIE_RECIPROCAL = { spouse: "spouse", parent: "child", child: "parent", sibling: "sibling", friend: "friend", coworker: "coworker", employer: "employee", employee: "employer", lover: "lover" };
 const NPC_TIE_FAMILY = ["spouse", "parent", "child", "sibling"];
 // Roles that are staff of the building they stand in (a place of work).
-const NPC_TIE_WORK_ROLES = ["Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
+const NPC_TIE_WORK_ROLES = ["Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
 // Employers in a building and who they plausibly employ there.
-const NPC_TIE_EMPLOYER_ROLES = ["Innkeeper", "Blacksmith", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
+const NPC_TIE_EMPLOYER_ROLES = ["Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
 const NPC_TIE_EMPLOYEE_ROLES = ["Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk"];
 // Roles that work in teams across a zone rather than in one building.
 const NPC_TIE_TEAM_ROLES = ["Town Guard", "Stone Guard", "Miner", "Scout", "Raider", "Scavenger", "Cultist"];
@@ -5519,15 +5520,106 @@ function getNPCObservationDetail(npc) {
 
 function getNPCInspectionDetail(npc) {
     if (!npc) return "";
-    const lines = [];
-    if (npc.physicalTraits) lines.push(npc.physicalTraits);
-    if (npc.enrichment && Array.isArray(npc.enrichment.mannerisms) && npc.enrichment.mannerisms.length) {
-        lines.push(_npcRand(npc.enrichment.mannerisms));
+    const p = _npcInspectionPronouns(npc);
+    const anatomy = npc.anatomy || {};
+    const body = anatomy.body || {};
+    const paragraphs = [];
+    const age = getNPCAgeDescriptor(npc);
+    const identity = [age && age.label.toLowerCase(), npc.gender !== "none" && npc.gender, String(npc.species || "").toLowerCase()]
+        .filter(Boolean).join(" ");
+    const first = [];
+    if (identity) first.push(p.subject + " " + p.be + " " + _npcInspectionArticle(identity) + " " + identity + ".");
+    const height = _npcInspectionText(npc.heightDescriptor || npc.stature || anatomy.heightDescriptor);
+    const build = _npcInspectionText(anatomy.build || npc.bodyType || npc.build);
+    if (height && build) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(height) + " " + height + " stature, and " + p.possessive + " build is " + build + ".");
+    else if (height) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(height) + " " + height + " stature.");
+    else if (build) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(build) + " " + build + " build.");
+    const colouring = [];
+    const surface = body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.scaleColor ? "scales" : "");
+    const colour = body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.scaleColor;
+    if (surface && colour) colouring.push(colour + " " + surface);
+    const eyes = npc.eyeColor || (anatomy.eyes && anatomy.eyes.color);
+    if (eyes) colouring.push(eyes + " eyes");
+    if (colouring.length) first.push(p.subject + " " + p.have + " " + _npcJoinList(colouring) + ".");
+    const hair = anatomy.hair || {};
+    const hairColour = npc.hairColor || hair.color;
+    if (hairColour && hairColour !== "none" && hairColour !== "shaved") {
+        const length = _npcInspectionText(npc.hairLength || hair.length);
+        const style = _npcInspectionText(npc.hairStyle || hair.style);
+        const styles = { cropped: "cropped close", short: "cut short", long: "worn long", loose: "worn loose", flowing: "flowing freely", curly: "curly", messy: "tousled", unstyled: "unstyled" };
+        const hairSubject = p.possessive.charAt(0).toUpperCase() + p.possessive.slice(1);
+        first.push(hairSubject + " " + [length, hairColour, "hair"].filter(Boolean).join(" ") +
+            (style ? " is " + (styles[style] || style) : "") + ".");
     }
-    if (npc.enrichment && npc.enrichment.currentMotive) {
-        lines.push("They seem driven to " + npc.enrichment.currentMotive + ".");
+    if (first.length) paragraphs.push(first.join(" "));
+
+    // Read equipment each time: inventory, weapons and removed garments are not clothing.
+    const slots = ["head", "upper", "chest", "lower", "legs", "feet", "hands", "cloak", "back", "neck", "ring"];
+    const clothing = npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active && npc.intimacy.clothing && npc.intimacy.clothing.npc;
+    const worn = [];
+    slots.forEach(function (slot) {
+        if (clothing && ((clothing.top === false && (slot === "upper" || slot === "chest")) ||
+            (clothing.bottom === false && (slot === "lower" || slot === "legs")))) return;
+        const item = npc.equipped && npc.equipped[slot];
+        const rawName = typeof getNPCLookItemName === "function" ? getNPCLookItemName(item) : _npcInspectionText(typeof item === "string" ? item : item && item.name);
+        const name = rawName && typeof withIndefiniteArticle === "function" ? withIndefiniteArticle(rawName) : rawName;
+        if (name && worn.indexOf(name) < 0) worn.push(name);
+    });
+    if (worn.length) paragraphs.push(p.subject + " " + p.be + " wearing " + _npcJoinList(worn) + ".");
+
+    // Broad silhouette only; never include hidden genital/nipple details.
+    if (isAdultHumanoidNPC(npc)) {
+        const shapes = { ectomorph: "slender", mesomorph: "toned", endomorph: "soft" };
+        const shape = shapes[String(npc.somatotype || "").toLowerCase()] || "";
+        const sizeWords = { medium: "medium-sized", small: "small", large: "large", "very large": "very large" };
+        const breastSize = _npcBodySize(npc, "breasts");
+        const buttSize = _npcBodySize(npc, "buttocks");
+        const parts = [];
+        if (sizeWords[breastSize]) parts.push([shape, sizeWords[breastSize], "breasts"].filter(Boolean).join(" "));
+        if (breastSize === "flat") parts.push("a flat chest");
+        if (sizeWords[buttSize]) {
+            const words = [shape, sizeWords[buttSize], "butt"].filter(Boolean).join(" ");
+            parts.push(_npcInspectionArticle(words) + " " + words);
+        }
+        if (parts.length) paragraphs.push(p.subject + " " + p.have + " " + _npcJoinList(parts) + ".");
     }
-    return lines.join(" ");
+
+    const features = Array.isArray(anatomy.features) ? anatomy.features : [];
+    const marks = Array.isArray(anatomy.marks) ? anatomy.marks : [];
+    const details = Array.from(new Set(features.concat(marks).map(_npcInspectionText).filter(Boolean)));
+    if (!details.length && Array.isArray(npc.specialTraits)) details.push(...npc.specialTraits.map(_npcInspectionText).filter(Boolean));
+    if (details.length) paragraphs.push("Distinguishing features include " + _npcJoinList(details) + ".");
+    const accessories = [];
+    if (Array.isArray(npc.piercings)) {
+        npc.piercings.forEach(function (piercing) {
+            const description = _npcInspectionText(piercing);
+            if (description) accessories.push(p.subject + " " + p.have + " " + description + ".");
+        });
+    }
+    const fashion = _npcInspectionText(npc.fashionStyle);
+    if (fashion) accessories.push(p.possessive.charAt(0).toUpperCase() + p.possessive.slice(1) + " fashion sense is " + fashion + ".");
+    if (accessories.length) paragraphs.push(accessories.join(" "));
+
+    const taste = getPlayerTasteForNPC(npc);
+    if (taste.label) paragraphs.push("You find " + p.object + " " + (Math.abs(taste.score) < 3 ? "mildly " : "") + taste.label + ".");
+    return paragraphs.join("\n\n");
+}
+
+function _npcInspectionText(value) {
+    if (value && typeof value === "object") value = value.description;
+    return typeof value === "string" ? value.trim().replace(/[.!]+$/, "") : "";
+}
+
+function _npcInspectionArticle(value) {
+    return /^[aeiou]/i.test(value) ? "an" : "a";
+}
+
+function _npcInspectionPronouns(npc) {
+    const gender = String(npc.gender || "").toLowerCase();
+    if (gender === "female") return { subject: "She", possessive: "her", object: "her", be: "is", have: "has" };
+    if (gender === "male") return { subject: "He", possessive: "his", object: "him", be: "is", have: "has" };
+    if (npc.isHumanoid === false) return { subject: "It", possessive: "its", object: "it", be: "is", have: "has" };
+    return { subject: "They", possessive: "their", object: "them", be: "are", have: "have" };
 }
 
 function getBaseHostilityForTemperament(temperament) {
@@ -5579,7 +5671,7 @@ const NPC_TEMPER_KEYS = ["friendly", "neutral", "curious", "bold", "wary", "skit
 
 const NPC_ROLE_TEMPER_CLASS = {
     "Innkeeper": "staff", "Bartender": "staff", "Cook": "staff", "Shopkeeper": "staff", "Vendor": "staff",
-    "Wandering Merchant": "staff", "Blacksmith": "staff", "Healer": "staff", "Priest": "staff", "Archivist": "staff",
+    "Wandering Merchant": "staff", "Blacksmith": "staff", "Clothier": "staff", "Healer": "staff", "Priest": "staff", "Archivist": "staff",
     "Scholar": "staff", "Enchanter": "staff", "Arcanist": "staff", "Reliquarian": "staff", "Servant": "staff",
     "Town Guard": "law", "Stone Guard": "law", "Scout": "law", "Guildmaster": "law",
     "Townsfolk": "common", "Villager": "common", "Patron": "common", "Guest": "common", "Miner": "common",
@@ -6525,9 +6617,14 @@ var NPC_BODY_SIZE_WORDS = [
     ["medium", ["medium", "average", "moderate", "shapely"]]
 ];
 function _npcBodySize(npc, partKey) {
-    var part = npc && npc.anatomy ? npc.anatomy[partKey] : null;
+    var part = npc && npc.anatomy && npc.anatomy[partKey];
+    if (!part && npc && npc.nsfwTraits && npc.nsfwTraits.anatomy) part = npc.nsfwTraits.anatomy[partKey];
     if (!part) return "";
-    var text = typeof part === "string" ? part : String(part.size || "") + " " + String(part.description || "");
+    // Generated anatomy uses sizeCategory; an explicit size wins over the
+    // species' generic prose (e.g. a medium chest described as a modest bust).
+    var explicit = typeof part === "object" ? String(part.sizeCategory || part.size || "").toLowerCase() : "";
+    if (["flat", "small", "medium", "large", "very large"].indexOf(explicit) >= 0) return explicit;
+    var text = typeof part === "string" ? part : explicit + " " + String(part.description || "");
     text = text.toLowerCase();
     for (var i = 0; i < NPC_BODY_SIZE_WORDS.length; i++) {
         var words = NPC_BODY_SIZE_WORDS[i][1];
@@ -7119,7 +7216,7 @@ function getRandomAge(category = null) {
 // ── GET AGE CATEGORY BY ROLE ─────────────────────────────────────
 
 function getAgeCategoryForRole(role, archetype) {
-    if (["Innkeeper", "Healer", "Blacksmith", "Priest", "Archivist", "Shopkeeper"].includes(role) ||
+    if (["Innkeeper", "Healer", "Blacksmith", "Clothier", "Priest", "Archivist", "Shopkeeper"].includes(role) ||
         ["sage", "caretaker", "guardian"].includes(archetype)) {
         return ["adult", "middle-aged", "elderly"][Math.floor(Math.random() * 3)];
     }
@@ -7202,9 +7299,14 @@ function generateNPCBehavior(npc) {
         behavior += `. ${_rand(flairOptions)}`;
     }
 
-    if (npc.enrichment && Array.isArray(npc.enrichment.mannerisms) &&
-        npc.enrichment.mannerisms.length && Math.random() < 0.45) {
-        behavior += `. ${_rand(npc.enrichment.mannerisms)}`;
+    // Older saves may still contain the former feature-to-mannerism template.
+    // A physical feature is already described as appearance, not an action.
+    const mannerisms = npc.enrichment && Array.isArray(npc.enrichment.mannerisms)
+        ? npc.enrichment.mannerisms.filter(function (text) {
+            return typeof text === "string" && text.trim() && !/^(?:(?:she|he|they|it)\s+)?draws?\s+attention\s+to\b/i.test(text.trim());
+        }) : [];
+    if (mannerisms.length && Math.random() < 0.45) {
+        behavior += `. ${_rand(mannerisms)}`;
     }
 
     if (isAdultHumanoidNPC(npc)) {
