@@ -119,6 +119,10 @@ function primaryButton(parent, label) {
     const actions = header.children.find(node => node.className === 'equipment-row-actions');
     return actions && actions.children.find(node => node.tag === 'button' && node.textContent === label);
 }
+function extraButton(parent, label) {
+    const extra = parent.children.find(node => node.className.includes('equipment-more-actions'));
+    return extra && extra.children.find(node => node.tag === 'button' && node.textContent === label);
+}
 function test(name, run) { run(); console.log('PASS ' + name); }
 
 test('weapon sizes follow item names; legacy defaults upgrade and explicit sizes survive', () => {
@@ -436,12 +440,13 @@ test('companion equipment transfers still accept filled garments', () => {
     assert.equal(npc.equipped.belt.packed[0], herb);
 });
 
-test('worn containers have direct Remove and Drop controls, with carried Equip and Drop after removal', () => {
+test('worn containers have direct Examine, Remove and Drop controls, with carried Equip under ellipsis', () => {
     const { c, p, inventory } = harness();
     const belt = p.equipped.belt;
     const herb = { name: 'Herb', stowed: c.getGarmentPlaces(belt).storage[0].id };
     p.inventory.push(herb);
     c.renderEquipment();
+    assert.ok(primaryButton(containerSection(inventory, 'Utility belt'), 'Examine'));
     primaryButton(containerSection(inventory, 'Utility belt'), 'Remove').onclick();
     assert.equal(p.equipped.belt, undefined);
     assert.ok(p.inventory.includes(belt));
@@ -548,7 +553,7 @@ test('worn gear retains the existing Swap recommended upgrade action', () => {
     assert.ok(p.inventory.includes(current));
 });
 
-test('carried rows show only Equip, Drop and ellipsis; extra controls toggle per item', () => {
+test('carried rows show Examine, Drop and ellipsis; Equip is in the item menu', () => {
     const { c, p, inventory } = harness();
     p.inventory.push({ name: 'Dagger', type: ['weapon'] }, { name: 'Herb', type: ['misc'] });
     c.renderEquipment();
@@ -558,14 +563,20 @@ test('carried rows show only Equip, Drop and ellipsis; extra controls toggle per
     for (const row of [dagger, herb]) {
         const header = row.children.find(node => node.className === 'equipment-row-header');
         const primary = header.children.find(node => node.className === 'equipment-row-actions');
-        assert.deepEqual(primary.children.filter(node => node.tag === 'button').map(node => node.textContent), ['Equip', 'Drop', '…']);
+        assert.deepEqual(primary.children.filter(node => node.tag === 'button').map(node => node.textContent), ['Examine', 'Drop', '…']);
         const extra = row.children.find(node => node.className.includes('equipment-more-actions'));
         assert.equal(extra.hidden, true);
         assert.equal(extra.style.display, 'none');
-        assert.ok(allElements(extra).some(node => node.textContent === 'Examine'));
+        assert.ok(allElements(extra).some(node => node.textContent === 'Equip'));
+        assert.ok(!allElements(extra).some(node => node.textContent === 'Examine'));
     }
-    assert.equal(primaryButton(dagger, 'Equip').disabled, false);
-    assert.equal(primaryButton(herb, 'Equip').disabled, true);
+    assert.equal(extraButton(dagger, 'Equip').disabled, false);
+    assert.equal(extraButton(herb, 'Equip').disabled, true);
+    let examined;
+    c.openEquipmentExamine = (item, options) => { examined = { item, options }; };
+    primaryButton(dagger, 'Examine').onclick();
+    assert.equal(examined.item.name, 'Dagger');
+    assert.equal(examined.options.equipped, false);
     primaryButton(dagger, '…').onclick();
     const daggerExtra = dagger.children.find(node => node.className.includes('equipment-more-actions'));
     assert.equal(daggerExtra.hidden, false);
@@ -586,6 +597,7 @@ test('pack Remove and Equip keep nested contents attached, and worn containers r
     p.inventory.push(herb);
     c.renderEquipment();
     const packGroup = containerSection(inventory, 'Rucksack');
+    assert.ok(primaryButton(packGroup, 'Examine'));
     assert.ok(primaryButton(packGroup, 'Remove'));
     assert.ok(primaryButton(packGroup, 'Drop'));
     const extra = packGroup.children.find(node => node.className.includes('equipment-more-actions'));
@@ -597,7 +609,9 @@ test('pack Remove and Equip keep nested contents attached, and worn containers r
     assert.ok(p.inventory.includes(herb));
     assert.equal(herb.stowed, c.getGarmentPlaces(pack).storage[0].id);
     const packRow = allElements(inventory).find(node => node.className === 'equipment-row' && node.children[0].textContent.startsWith('Rucksack'));
-    const equip = primaryButton(packRow, 'Equip');
+    assert.ok(primaryButton(packRow, 'Examine'));
+    primaryButton(packRow, '…').onclick();
+    const equip = extraButton(packRow, 'Equip');
     assert.equal(equip.disabled, false);
     equip.onclick();
     assert.equal(p.rucksack, pack);
@@ -606,16 +620,17 @@ test('pack Remove and Equip keep nested contents attached, and worn containers r
     assert.equal(herb.stowed, c.getGarmentPlaces(pack).storage[0].id);
 });
 
-test('carried container Equip works through the primary action and Drop still transfers descendants', () => {
+test('carried container Equip moves to ellipsis and Drop still transfers descendants', () => {
     const { c, p, inventory, bag } = harness();
     const spare = bag('Spare bag');
     const child = { name: 'Herb', stowed: c.getGarmentPlaces(spare).storage[0].id };
     p.inventory.push(spare, child);
     c.renderEquipment();
     const row = allElements(inventory).find(node => node.className === 'equipment-row' && node.children[0].textContent.startsWith('Spare bag'));
-    assert.ok(primaryButton(row, 'Equip'));
-    assert.equal(primaryButton(row, 'Equip').disabled, true, 'Occupied back slot has an explanatory disabled Equip');
-    assert.match(primaryButton(row, 'Equip').title, /Remove your current pack/);
+    assert.ok(primaryButton(row, 'Examine'));
+    assert.equal(primaryButton(row, 'Equip'), undefined);
+    assert.equal(extraButton(row, 'Equip').disabled, true, 'Occupied back slot has an explanatory disabled Equip');
+    assert.match(extraButton(row, 'Equip').title, /Remove your current pack/);
     primaryButton(row, 'Drop').onclick();
     assert.ok(!p.inventory.includes(spare));
     assert.ok(!p.inventory.includes(child));
@@ -645,6 +660,7 @@ test('compact is the default flat list, with item details available through elli
     const rows = inventory.children.filter(node => node.className === 'equipment-row');
     assert.equal(rows.length, 3, 'Worn pack and both carried items appear exactly once');
     const row = rows.find(node => node.children[0].textContent.startsWith('Herb'));
+    assert.ok(primaryButton(row, 'Examine'));
     assert.ok(primaryButton(row, 'Drop'));
     primaryButton(row, '…').onclick();
     assert.match(row.textContent, /Stored in: Small pouch/);
