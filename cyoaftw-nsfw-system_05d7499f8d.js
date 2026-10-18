@@ -1,6 +1,6 @@
-// === cyoaftw-nsfw-system.js === - 2026-10-17-017
+// === cyoaftw-nsfw-system.js === - 2026-10-17-017              
 // Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply
-window.__NSFW_SYSTEM_VERSION = "22026-10-17-017";
+window.__NSFW_SYSTEM_VERSION = "2026-10-17-017";
 console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
 try {
 (function() {
