@@ -2,7 +2,7 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-09-11-019
+ * Version: 2026-10-17-017
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,13 +12,8 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-10-17-001";
+window.__INTIMACY_SYSTEM_VERSION = "2026-10-17-017";
 
-// Version identifier for debugging cached files
-if (typeof window !== "undefined") {
-    window.INTIMACY_SYSTEM_VERSION = "2026-09-05-001";
-    console.log("[Intimacy System] Loaded v2026-09-11-019 - realistic anal pain/discomfort system based on size, lube, experience, temperament");
-}
 
 // ============================================================================
 // PLAYER GENDER RESOLUTION
