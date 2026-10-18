@@ -53,7 +53,11 @@ function harness(options = {}) {
         getItemLiquid() { return null; }
     };
     for (const name of ['isAlcoholItem', 'isHerbItem', 'isDeityTomeItem', 'isGenericLoreItem', 'isSpellScrollItem', 'isSpellbookItem', 'isClassPrimerItem', 'isClassGearItem']) c[name] = () => false;
+    c.getLootSearchActions = () => []; // Discovery actions are exercised by their engine/browser tests.
+    // Reading buttons have their own shared-action and browser coverage.
+    c.appendReadableInventoryActions = () => {};
     vm.createContext(c);
+    if (source.includes('function isLootItemVisible(')) vm.runInContext(extract('function isLootItemVisible(', 'function takeLootUnitsFromList('), c);
     vm.runInContext(extract('function cloneLootTemplate(', 'function pickLootQuality('), c);
     vm.runInContext(extract('function ensurePlayerEquipmentState(', 'function isPotionItem('), c);
     vm.runInContext(extract('function dropItemIntoCurrentRoom(', '// Remove a worn item'), c);
@@ -602,7 +606,8 @@ test('pack Remove and Equip keep nested contents attached, and worn containers r
     assert.ok(primaryButton(packGroup, 'Drop'));
     const extra = packGroup.children.find(node => node.className.includes('equipment-more-actions'));
     assert.equal(extra.hidden, true);
-    assert.ok(allElements(extra).some(node => node.tag === 'button' && node.textContent === 'Search'));
+    assert.ok(allElements(extra).some(node => node.tag === 'button' && /^Search(?: \(1 stamina, 1 turn\))?$/.test(node.textContent)));
+    if (source.includes('function performLootContentsSearch(')) assert.ok(allElements(extra).some(node => node.tag === 'button' && node.textContent === 'Contents'));
     primaryButton(packGroup, 'Remove').onclick();
     assert.equal(p.rucksack, null);
     assert.ok(p.inventory.includes(pack));

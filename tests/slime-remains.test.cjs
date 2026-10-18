@@ -41,6 +41,9 @@ function harness(state = 'unconscious', kind = 'green') {
         BODY_ELEMENT_TYPES: [], renderBodyLootGroup() { c.lootRendered = true; },
         formatInventoryItemLabel: (item, count) => item.name + (count > 1 ? ' x' + count : '')
     };
+    // This harness checks slime routing; discovery costs/rolls have their own
+    // engine tests. Supply the shared action registry used by the body menu.
+    c.getLootSearchActions = () => [{ label: 'Search carefully (1 stamina, 1 turn)', reason: '', run() {} }];
     c.window.appendUnconsciousBodyActions = () => { throw new ReferenceError('getAction is not defined'); };
     c.window.describeUnconsciousBodyExamine = () => { throw new Error('A slime must not use a humanoid examine hook'); };
     vm.createContext(c);
@@ -75,7 +78,7 @@ test('clicking and examining unconscious or dead slime never invokes humanoid bo
         assert.ok(buttons().some(button => button.textContent === 'Collect some slime'));
         assert.doesNotMatch(c.narration, /torso|blood|arms?|legs?|head|skin|flesh|bones?/i);
         assert.doesNotMatch(elements.npcDetailBehaviorEl.textContent, /torso|blood|arms?|legs?|head|skin|flesh|bones?/i);
-        assert.ok(buttons().some(button => button.textContent === 'Search'));
+        assert.ok(buttons().some(button => /^Search(?: carefully \(1 stamina, 1 turn\))?$/.test(button.textContent)));
         assert.ok(buttons().some(button => button.textContent === 'Carry'));
         assert.ok(buttons().some(button => button.textContent === 'Drag'));
         assert.ok(!buttons().some(button => /Bind \(hands/.test(button.textContent)));

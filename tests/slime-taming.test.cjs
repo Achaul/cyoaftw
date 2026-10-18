@@ -47,6 +47,7 @@ function harness() {
         settleSlimeDigestion: () => []
     };
     vm.createContext(c);
+    if (source.includes('function isLootItemVisible(')) vm.runInContext(extract('function isLootItemVisible(', 'function takeLootUnitsFromList('), c);
     for (const [start, end] of [
         ['function cloneLootTemplate(', 'function pickLootQuality('],
         ['function ensurePlayerEquipmentState(', 'function isPotionItem('],
@@ -75,6 +76,40 @@ function harness() {
 async function main() {
     const tests = [];
     const test = (name, fn) => tests.push([name, fn]);
+    test('Nectar syrup from the loot catalogue enables drop feeding and preserves the remaining stack', () => {
+        const { c, slime, menu } = harness();
+        const template = source.match(/\{ id: "nectar-syrup",[^\n]+/);
+        assert.ok(template, 'Use the real inventory syrup template');
+        const syrup = c.cloneLootTemplate(vm.runInContext('(' + template[0].trim().replace(/,$/, '') + ')', c));
+        syrup.quantity = 3;
+        c.G.player.inventory.push(syrup);
+        c.openGiveMenu(slime);
+        const action = menu.children.find(b => b.textContent === 'Give nectar by drops');
+        assert.equal(action.disabled, false);
+        action.onclick();
+        menu.children.find(b => b.textContent === 'Give 2 drops').onclick();
+        assert.equal(slime._slimeBond.totalDrops, 2);
+        assert.equal(c.G.story.turnCounter, 1);
+        assert.equal(slime.inventory.length, 0);
+        assert.equal(c.getNectarEntries().reduce((n, e) => n + c.getNectarDrops(e.item) * e.totalQuantity, 0), 58);
+        const partial = c.getNectarEntries().find(e => c.getNectarDrops(e.item) === 18);
+        assert.equal(partial.item.name, 'Nectar syrup');
+        c.feedNectarToSlime(slime, partial.key, 18);
+        assert.equal(c.getNectarEntries().reduce((n, e) => n + c.getNectarDrops(e.item) * e.totalQuantity, 0), 40);
+        assert.equal(c.G.player.inventory.filter(it => it.stackKey === 'empty-vial').length, 0, 'Syrup has no glass vial to return');
+    });
+    test('nectar matching accepts saved syrup identities without including cakes, glaze or flowers', () => {
+        const { c, nectar } = harness();
+        for (const item of [{ id: 'nectar-syrup' }, { id: 'nectar-syrup-123' }, { stackKey: 'nectar-syrup' }, { name: 'Nectar syrup' }, { liquidContent: 'nectar-syrup' }]) {
+            assert.equal(c.isNectarItem(item), true);
+        }
+        for (const item of [null, { id: 'nectar-cake', name: 'Moonbloom nectar cake' }, { id: 'nectar-glaze', name: 'Nectar glaze' }, { id: 'moonbloom', name: 'Moonbloom flower' }]) {
+            assert.equal(c.isNectarItem(item), false);
+        }
+        nectar();
+        c.G.player.inventory.push(c.cloneLootTemplate({ id: 'nectar-syrup', name: 'Nectar syrup', value: 5, type: ['misc', 'supply'] }));
+        assert.equal(c.getNectarEntries().length, 2, 'Different nectar products must not merge their values or container rules');
+    });
     test('Give something exposes drop feeding before the 40-item limit and clicks through to a partial dose', () => {
         const { c, slime, menu, nectar } = harness();
         for (let i = 0; i < 50; i++) c.G.player.inventory.push(c.cloneLootTemplate({ name: 'Apple ' + i, type: ['misc'] }));

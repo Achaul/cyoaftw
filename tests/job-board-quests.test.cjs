@@ -25,7 +25,11 @@ function harness() {
         isQuestReady: () => false,
         createCombatButton: (label, action, options) => ({ label, action, options }),
         appendCombatGroup: (el, label, buttons) => c.groups.push({ label, buttons }),
-        document: { getElementById: () => ({ innerHTML: '' }) },
+        document: { getElementById: () => ({ innerHTML: '' }), createElement: () => ({ textContent: '', appendChild() {} }) },
+        roomHasActiveHostile: () => false,
+        createJobBoardWindow: () => ({ contents: { appendChild() {} }, actions: { appendChild() {} } }),
+        jobChoiceButton(_menu, _parent, label, run, reason) { return { label, run, reason }; },
+        jobPostingButton(_menu, _parent, label, description, run) { return { label, description, run }; },
         setNarration: text => { c.narration = text; },
         addChatMessage() {}, saveGameState: () => { c.saves++; },
         resetNpcPanel() {}, renderRoom() {},
@@ -38,7 +42,7 @@ function harness() {
     const questsStart = core.indexOf('const QUEST_CULL_SPECIES =');
     const questsEnd = core.indexOf('\nfunction countQuestTrophies(', questsStart);
     vm.runInContext(core.slice(questsStart, questsEnd), c);
-    for (const name of ['normalizeSpeciesName', 'ensureQuestState', 'renderJobBoard']) {
+    for (const name of ['normalizeSpeciesName', 'ensureQuestState', 'getJobBoardWindowBlockReason', 'renderJobBoard']) {
         vm.runInContext(extractFunction(name), c);
     }
     return c;
