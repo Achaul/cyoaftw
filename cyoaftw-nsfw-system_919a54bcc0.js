@@ -1,5 +1,5 @@
 // === cyoaftw-nsfw-system.js === - 2026-10-17-017              
-// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply
+// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply, intimacy portrait toggle, DeepSeek prompt optimization
 window.__NSFW_SYSTEM_VERSION = "2026-10-17-017";
 console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
 try {
@@ -5573,6 +5573,47 @@ avoidNote,
     return surfaceMap[surfaceType] || surfaceMap.skin || "breasts";
   }
 
+  // DeepSeek prompt optimization: Apply occlusion and visibility rules for better image generation
+  // Rules: 1) Describe WHICH body part covers what, 2) Specify what IS/NOT visible,
+  //        3) Anatomy/pose first, 4) Negatives early, 5) DeepSeek style tags
+  function optimizeForDeepSeek(prompt, part, surfaceType, gender, species) {
+    // Don't modify if already has DeepSeek-specific formatting
+    if (prompt.includes("occlusion") || prompt.includes("OCCLUSION") || prompt.includes("visible:")) {
+      return prompt;
+    }
+    
+    // Rule 4: Ensure negatives are early in the prompt
+    // Move common negatives to the front if not already there
+    const earlyNegatives = ["no faces", "no face", "no heads", "no head", "no hands", "no hand", 
+                           "face not visible", "no environment", "black background"];
+    
+    // Rule 5: Add DeepSeek style tags at the end if not present
+    const hasStyleTags = prompt.includes("8k") || prompt.includes("volumetric fur") || 
+                         prompt.includes("anisotropic lighting");
+    const deepseekSuffix = "Photorealistic, 8k, highly detailed, volumetric fur, anisotropic lighting";
+    
+    // For furry species, ensure fur-related tags are present
+    if (surfaceType === "fur" && !prompt.includes("volumetric fur")) {
+      // Insert before the style suffix or at the end
+      const styleIndex = prompt.lastIndexOf(", Photorealistic");
+      if (styleIndex >= 0) {
+        prompt = prompt.substring(0, styleIndex) + ", " + deepseekSuffix + prompt.substring(styleIndex);
+      } else {
+        prompt = prompt + ", " + deepseekSuffix;
+      }
+    } else if (!hasStyleTags) {
+      // Add standard DeepSeek suffix
+      const styleIndex = prompt.lastIndexOf(", fantasy realism");
+      if (styleIndex >= 0) {
+        prompt = prompt.substring(0, styleIndex) + ", " + deepseekSuffix + prompt.substring(styleIndex);
+      } else {
+        prompt = prompt + ", " + deepseekSuffix;
+      }
+    }
+    
+    return prompt;
+  }
+
   window.getNsfwIntimacyPartTerms = function(npc, partKey, withSceneContext, fluidFocus) {
     if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
     const part = String(partKey || "").toLowerCase();
@@ -5833,8 +5874,12 @@ avoidNote,
           .filter(Boolean).join(", ")
       : [arousalTerms, def.detail, actState].concat(fluidBits, sceneCtx ? [sceneCtx] : [])
           .filter(Boolean).join(", ");
+    
+    // Apply DeepSeek-specific prompt optimizations
+    const optimizedText = optimizeForDeepSeek(text, part, surfaceType, gender, npc.species);
+    
     return {
-      text: text,
+      text: optimizedText,
       negatives: def.negatives,
       framing: def.framing +
         (fluidFocus ? "The surface is visibly wet and coated in thick glistening fluids. " : "") +

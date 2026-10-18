@@ -718,4 +718,214 @@ test('compact empty inventory has one empty message, including when storage pref
     assert.equal(c.getInventoryDisplayPreferences().sort, 'value');
 });
 
+function sourceHarness() {
+    const h = harness();
+    const { c, elements } = h;
+    Object.assign(c, {
+        isRoomItemTakeable: item => !item.fixed && item.takeable !== false,
+        isWashableRoomObject: () => false, clearItemModalContents() {}, buildItemEffectLines: () => [],
+        resetNpcPanel() {}, closeItemModal() {},
+        updateInventoryContextPanels() {},
+        renderNarrationWithRoomObservations(room, message) { c.lastMessage = message; },
+        getEffectiveItemCharisma: item => item && item.charisma || 0,
+        getItemArmorValue: item => item && !item.armorBroken ? item.armor || 0 : 0,
+        getWeaponProficiencyHitBonus: (entity, type) => entity.skills && entity.skills[type] || 0,
+        getWeaponTypeFromName: name => /axe/i.test(name) ? 'axe' : /staff/i.test(name) ? 'staff' : 'sword',
+        ensureContainerContents: fixture => fixture.contents,
+        barCellarTheftAfterTake(fixture, items) { c.thefts = (c.thefts || 0) + 1; c.stolen = items; return 'The theft is noticed.'; },
+        containerAfterChange(fixture, message) { c.fixtureMessage = message; },
+        getItemModalContentsEl: () => elements.contents,
+        addItemModalRow(parent, label, description, buttons) {
+            const row = element(); row.textContent = label;
+            buttons.forEach(button => row.appendChild(c.createEquipmentActionButton(button.label, button.onClick)));
+            parent.appendChild(row);
+        },
+        createCombatButton: (label, onClick, options) => c.createEquipmentActionButton(label, onClick, options),
+        appendCombatGroup(parent, label, buttons) { buttons.forEach(button => parent.appendChild(button)); }
+    });
+    elements.contents = element();
+    vm.runInContext(extract('function getWeaponExamineProfile(', 'function toRomanNumeral('), c);
+    vm.runInContext(extract('function getItemExamineStats(', 'function buildEquipmentExamineLines('), c);
+    vm.runInContext(extract('function equipContainerItem(', 'function takeContainerCoins('), c);
+    vm.runInContext(extract('function openItemModal(', 'document.addEventListener("keydown"'), c);
+    vm.runInContext(extract('function openCompanionGearMenu(', '// ── OPENING BARKS'), c);
+    vm.runInContext(extract('function chooseNPCAction(', '// ── COMPANION EQUIPMENT'), c);
+    vm.runInContext(extract('function refreshInventoryUi(', '// ── EXAMINING EQUIPMENT'), c);
+    return h;
+}
+
+function fillStorage(c, p) {
+    c.restowPlayerPack(p);
+    c.getPlayerStoragePlaces(p).forEach(place => {
+        const used = p.inventory.filter(item => item.stowed === place.id).reduce((sum, item) => sum + c.getItemUnitSize(item) * c.getItemQuantity(item), 0);
+        if (place.cap > used) p.inventory.push({ name: 'Filler', unitSize: 1, unitSizeInferred: false, quantity: place.cap - used, stowed: place.id });
+    });
+    c.restowPlayerPack(p);
+}
+
+test('floor Equip bypasses a full pack, preserves identity and drops displaced gear without losing contents', () => {
+    const { c, p, bag, elements } = sourceHarness();
+    const old = { name: 'Pocketed trousers', type: ['clothes', 'lower'], unitSize: 3, unitSizeInferred: false };
+    const child = { name: 'Keepsake', unitSize: 0, stowed: c.getGarmentPlaces(old).storage[0].id };
+    p.equipped.lower = old;
+    p.inventory.push(child);
+    fillStorage(c, p);
+    const armor = c.cloneLootTemplate({ name: 'Steel greaves', type: ['armor', 'lower'], armor: 8 });
+    c.G.activeRoom.items.push(armor);
+    assert.equal(c.packHasRoomFor(armor), false);
+    c.openItemModal(armor);
+    elements.itemModalActions.children.find(button => button.textContent === 'Equip').onclick();
+    assert.equal(p.equipped.lower, armor);
+    assert.equal(armor.stowed, undefined);
+    assert.ok(!c.G.activeRoom.items.includes(armor));
+    assert.ok(c.G.activeRoom.items.includes(old));
+    assert.equal(old.packed[0], child);
+    assert.ok(!p.inventory.includes(child));
+    assert.match(c.lastMessage, /on the floor because your storage is full/);
+});
+
+test('direct equip stows old gear when possible and splits exactly one selected floor unit', () => {
+    const { c, p } = sourceHarness();
+    const old = c.cloneLootTemplate({ name: 'Old sword', type: ['weapon'] });
+    p.equipped.weapon = old;
+    const stack = c.cloneLootTemplate({ name: 'Fine sword', type: ['weapon'], quantity: 3 });
+    const other = c.cloneLootTemplate({ name: 'Fine sword', type: ['weapon'], quantity: 3 });
+    c.G.activeRoom.items.push(stack, other);
+    const message = c.equipPlayerItemFromSource(stack, c.G.activeRoom.items);
+    assert.equal(stack.quantity, 2);
+    assert.equal(other.quantity, 3);
+    assert.equal(p.equipped.weapon.quantity, 1);
+    assert.equal(p.weapon, 'Fine sword');
+    assert.ok(p.inventory.includes(old));
+    assert.match(message, /You stow Old sword/);
+});
+
+test('container Equip works from a floor bag and a carried nested bag without taking into storage', () => {
+    for (const carried of [false, true]) {
+        const { c, p, bag, elements } = sourceHarness();
+        const outer = bag('Satchel'), inner = bag('Pouch');
+        const helmet = c.cloneLootTemplate({ name: 'Helmet', type: ['armor', 'head'], armor: 3 });
+        inner.stowed = c.getGarmentPlaces(outer).storage[0].id;
+        helmet.stowed = c.getGarmentPlaces(inner).storage[0].id;
+        outer.packed = [inner]; inner.packed = [helmet];
+        (carried ? p.inventory : c.G.activeRoom.items).push(outer);
+        c.restowPlayerPack(p);
+        fillStorage(c, p);
+        c.openContainerCard(inner);
+        const button = allElements(elements.contents).find(node => node.textContent === 'Equip');
+        assert.ok(button, 'carried=' + carried + ' contents=' + elements.contents.textContent + ' pack=' + p.inventory.map(item => item.name)); button.onclick();
+        assert.equal(p.equipped.head, helmet);
+        assert.equal(helmet.stowed, undefined);
+        assert.ok(!p.inventory.includes(helmet));
+        assert.ok(!inner.packed.includes(helmet));
+    }
+});
+
+test('opened fixture Equip bypasses storage, records theft and refuses closed or stale containers', () => {
+    const { c, p } = sourceHarness();
+    const helmet = c.cloneLootTemplate({ name: 'Helmet', type: ['armor', 'head'], armor: 3, quantity: 2 });
+    const fixture = { opened: false, contents: { items: [helmet] } };
+    c.G.activeRoom.structural = [fixture];
+    fillStorage(c, p);
+    c.equipContainerItem(fixture, helmet);
+    assert.equal(p.equipped.head, undefined); assert.equal(helmet.quantity, 2); assert.equal(c.thefts, undefined);
+    fixture.opened = true;
+    c.equipContainerItem(fixture, helmet);
+    assert.equal(p.equipped.head.quantity, 1); assert.equal(helmet.quantity, 1); assert.equal(c.thefts, 1);
+    assert.equal(c.stolen[0], p.equipped.head, 'Theft records only the unit actually equipped');
+    assert.match(c.fixtureMessage, /theft is noticed/);
+    c.G.activeRoom.structural = [];
+    c.equipContainerItem(fixture, helmet);
+    assert.equal(helmet.quantity, 1); assert.equal(c.thefts, 1);
+});
+
+test('direct Equip refuses ruined, hidden, fixed and removed items without mutating sources', () => {
+    for (const flags of [{ ruined: true }, { unusable: true }, { hidden: true }, { isHidden: true }, { fixed: true }, { takeable: false }]) {
+        const { c, p } = sourceHarness();
+        const helmet = { name: 'Helmet', type: ['armor', 'head'], ...flags };
+        c.G.activeRoom.items.push(helmet);
+        assert.match(c.equipPlayerItemFromSource(helmet, c.G.activeRoom.items), /no longer available/);
+        assert.equal(c.G.activeRoom.items[0], helmet); assert.equal(p.equipped.head, undefined);
+    }
+    const { c } = sourceHarness();
+    const missing = { name: 'Helmet', type: ['armor', 'head'] };
+    assert.match(c.equipPlayerItemFromSource(missing, c.G.activeRoom.items), /no longer available/);
+});
+
+test('direct pack swap preserves nested contents of both backpacks', () => {
+    const { c, p, bag } = sourceHarness();
+    const old = p.rucksack;
+    const oldChild = { name: 'Herb', stowed: c.getGarmentPlaces(old).storage[0].id };
+    p.inventory.push(oldChild);
+    const next = bag('Large pack', 50, 8);
+    const child = { name: 'Potion', stowed: c.getGarmentPlaces(next).storage[0].id };
+    next.packed = [child];
+    c.G.activeRoom.items.push(next);
+    c.equipPlayerItemFromSource(next, c.G.activeRoom.items);
+    assert.equal(p.rucksack, next);
+    assert.ok(p.inventory.includes(old)); assert.ok(p.inventory.includes(oldChild)); assert.ok(p.inventory.includes(child));
+    assert.equal(child.stowed, c.getGarmentPlaces(next).storage[0].id);
+});
+
+test('Equip best selects each slot across NPC packs and floor, keeps ties, and leaves other belongings alone', () => {
+    const { c, p, bag, trade } = sourceHarness();
+    const oldSword = { name: 'Sword', type: ['weapon'], damage: 4 };
+    const oldHead = { name: 'Old cap', type: ['head'], armor: 1 };
+    const tiedBoots = { name: 'Boots', type: ['feet'], armor: 2 };
+    const npc = { name: 'Mira', _inParty: true, inventory: [], equipped: { weapon: oldSword, head: oldHead, feet: tiedBoots } };
+    const nested = bag('NPC pouch');
+    const helm = { name: 'Helm', type: ['head'], armor: 5, stowed: 'old-place' };
+    nested.packed = [helm]; npc.inventory.push(nested);
+    const sword = { name: 'Fine sword', type: ['weapon'], damage: 10, quantity: 2 };
+    const bad = { name: 'Ruined plate', type: ['upper'], armor: 100, ruined: true };
+    const hidden = { name: 'Hidden gloves', type: ['hands'], armor: 100, hidden: true };
+    const body = { objectType: 'body', packed: [{ name: 'Body helm', type: ['head'], armor: 100 }] };
+    c.G.activeRoom.items.push(sword, bad, hidden, body, { name: 'Other boots', type: ['feet'], armor: 2 });
+    const playerSword = { name: 'Player sword', type: ['weapon'], damage: 100 };
+    p.inventory.push(playerSword);
+    c.openCompanionGearMenu(npc);
+    trade.children.find(button => button.textContent === 'Equip best').onclick();
+    assert.equal(npc.equipped.head, helm); assert.equal(helm.stowed, undefined);
+    assert.equal(npc.equipped.weapon.damage, 10); assert.equal(sword.quantity, 1); assert.equal(npc.weapon, 'Fine sword');
+    assert.equal(npc.equipped.feet, tiedBoots); assert.equal(npc.equipped.upper, undefined); assert.equal(npc.equipped.hands, undefined);
+    assert.ok(npc.inventory.includes(oldSword)); assert.ok(npc.inventory.includes(oldHead)); assert.ok(p.inventory.includes(playerSword));
+    assert.equal(nested.packed.length, 0); assert.ok(c.saves > 0);
+    assert.match(c.equipBestCompanionGear(npc), /already has the best/);
+});
+
+test('Equip best uses companion proficiency, weapon condition, enchantments and current armour condition', () => {
+    const { c } = sourceHarness();
+    const staff = { name: 'Staff', type: ['weapon'], damage: 6 };
+    const axe = { name: 'Axe', type: ['weapon'], damage: 10 };
+    const broken = { name: 'Broken sword', type: ['weapon'], damage: 100, broken: true };
+    const plate = { name: 'Broken helm', type: ['head'], armor: 100, armorBroken: true };
+    const helm = { name: 'Cap', type: ['head'], armor: 2 };
+    const npc = { name: 'Mage', _inParty: true, skills: { staff: 10 }, inventory: [staff, axe, broken, helm], equipped: { head: plate } };
+    c.G.player.skills = { axe: 50 };
+    c.equipBestCompanionGear(npc);
+    assert.equal(npc.equipped.weapon, staff); assert.equal(npc.equipped.head, helm);
+    const enchanted = { name: 'Enchanted staff', type: ['weapon'], damage: 6, enchantDamageBonus: 2 };
+    c.G.activeRoom.items.push(enchanted);
+    c.equipBestCompanionGear(npc);
+    assert.equal(npc.equipped.weapon, enchanted);
+    npc._inParty = false;
+    assert.match(c.equipBestCompanionGear(npc), /Only party members/);
+});
+
+test('NPC action equips best, saves changes, and picks the stronger held relic', () => {
+    const { c } = sourceHarness();
+    const old = { name: 'Lesser relic', type: ['boss-relic'], relicPower: 'physical', relicMaxStacks: 8 };
+    const best = { name: 'Greater relic', type: ['boss-relic'], relicPower: 'physical', relicMaxStacks: 16 };
+    const npc = { name: 'Mira', _inParty: true, equipped: { hand: old }, inventory: [best] };
+    c.G.activeNPC = npc;
+    c.chooseNPCAction('equipbest');
+    assert.equal(npc.equipped.hand, best); assert.ok(npc.inventory.includes(old)); assert.ok(c.saves > 0);
+    assert.match(c.narration, /equips Greater relic/);
+    npc._inParty = false;
+    const weapon = { name: 'Sword', type: ['weapon'], damage: 8 };
+    c.G.activeRoom.items.push(weapon);
+    c.chooseNPCAction('equipbest');
+    assert.ok(c.G.activeRoom.items.includes(weapon)); assert.equal(npc.equipped.weapon, undefined);
+});
+
 console.log('Equipment management checks passed.');
