@@ -2,7 +2,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const corePath = process.argv[2] || path.join(__dirname, '../.equipment-management/cyoaftw-engine-CORE.js');
+const corePath = process.argv[2] || 'C:/Git/CYOADEV/cyoaftw-engine-CORE.js';
+const npcDataPath = process.argv[3] || path.join(__dirname, '..', fs.readdirSync(path.join(__dirname, '..')).find(name => /^cyoaftw-npc-data_[a-f0-9]+\.js$/.test(name)));
 const source = fs.readFileSync(corePath, 'utf8').replace(/\r\n/g, '\n');
 function extract(start, end) {
     const a = source.indexOf(start), b = source.indexOf(end, a);
@@ -42,7 +43,7 @@ function harness() {
         refreshNPCPortraitIfStale() { c.redraws = (c.redraws || 0) + 1; }, renderNPCPortrait() {},
         isSlimeRemains: it => it && it.objectType === 'body' && it.species === 'slime',
         getSlimeRemainsUnits: it => it.slimeUnitsRemaining || 0,
-        getGiftReceiveMode: () => 'engulf', isAcidicSlime: () => false,
+        isEntityIncorporeal: () => false, canConverseWithNPC: () => true, isAcidicSlime: () => false,
         settleSlimeDigestion: () => []
     };
     vm.createContext(c);
@@ -54,6 +55,7 @@ function harness() {
         ['const NECTAR_DROPS_PER_UNIT =', 'function offerNectarToSlime('],
         ['function addSessionFollower(', 'function moveSessionFollowers('],
         ['function formatInventoryItemLabel(', 'function dropItemIntoCurrentRoom('],
+        ['function getGiftReceiveMode(', 'function describeGiftForPrompt('],
         ['function giveItemToNPC(', 'window.giveItemToNPC =']
     ]) vm.runInContext(extract(start, end), c);
     const slime = { id: 's1', name: 'Moss slime', species: 'slime', isHumanoid: false, hp: 10, hpMax: 10, inventory: [], hostility: 80, memory: { favorability: 0 }, anatomy: { body: { color: 'grey' } } };
@@ -73,6 +75,49 @@ function harness() {
 async function main() {
     const tests = [];
     const test = (name, fn) => tests.push([name, fn]);
+    test('Give something exposes drop feeding before the 40-item limit and clicks through to a partial dose', () => {
+        const { c, slime, menu, nectar } = harness();
+        for (let i = 0; i < 50; i++) c.G.player.inventory.push(c.cloneLootTemplate({ name: 'Apple ' + i, type: ['misc'] }));
+        nectar(3);
+        const entries = c.buildPlayerInventoryEntries(c.G.player);
+        assert.ok(entries.findIndex(e => c.isNectarItem(e.item)) >= 40);
+        c.openGiveMenu(slime);
+        const action = menu.children.find(b => b.textContent === 'Give nectar by drops');
+        assert.ok(action, 'A visible nectar action must precede ordinary gifts');
+        assert.equal(menu.children[0], action);
+        assert.equal(slime._slimeBond, undefined, 'Opening the menu must not feed the slime');
+        action.onclick();
+        const twoDrops = menu.children.find(b => b.textContent === 'Give 2 drops');
+        assert.ok(twoDrops, 'One available container type opens its drop controls directly');
+        twoDrops.onclick();
+        assert.equal(slime._slimeBond.totalDrops, 2);
+        assert.equal(c.getNectarEntries().reduce((n, e) => n + c.getNectarDrops(e.item) * e.totalQuantity, 0), 58);
+        assert.equal(slime.inventory.length, 0, 'Feeding must not give away the glass vessel');
+    });
+    test('drop feeding preserves container choice for different fill levels and advertises unavailable nectar', () => {
+        const { c, slime, menu, nectar } = harness();
+        c.openGiveMenu(slime);
+        assert.equal(menu.children[0].textContent, 'Give nectar by drops');
+        assert.equal(menu.children[0].disabled, true);
+        const partial = nectar(); partial.nectarDrops = 7;
+        nectar();
+        c.openGiveMenu(slime);
+        menu.children[0].onclick();
+        assert.match(c.narration, /Choose a container/);
+        assert.ok(!menu.children.some(b => b.textContent === 'Give 2 drops'));
+        menu.children.find(b => /7 drops/.test(b.textContent)).onclick();
+        assert.match(c.narration, /7 drops/);
+        menu.children.find(b => b.textContent === 'Give 2 drops').onclick();
+        assert.equal(c.getNectarEntries().reduce((n, e) => n + c.getNectarDrops(e.item) * e.totalQuantity, 0), 25);
+        assert.ok(c.getNectarEntries().some(e => c.getNectarDrops(e.item) === 5));
+    });
+    test('ordinary NPC gifts retain the ordinary item gift flow', () => {
+        const { c, slime, menu, nectar } = harness();
+        slime.species = 'human'; slime.isHumanoid = true;
+        nectar(); c.openGiveMenu(slime);
+        assert.ok(!menu.children.some(b => b.textContent === 'Give nectar by drops'));
+        assert.ok(menu.children.some(b => /^Give: Vial of moonbloom nectar/.test(b.textContent)));
+    });
     test('one- and two-drop feeding split a stack, preserve liquid, and return one empty per drained vessel', () => {
         const { c, slime, nectar, feed } = harness();
         nectar(3);
@@ -318,7 +363,7 @@ async function main() {
     });
     test('NPC descriptions show live disposition and imitation, and return to the ordinary slime description', () => {
         const { c, slime } = harness();
-        vm.runInContext(fs.readFileSync(path.join(__dirname, '../cyoaftw-npc-data_dbd788b05d.js'), 'utf8'), c);
+        vm.runInContext(fs.readFileSync(npcDataPath, 'utf8'), c);
         slime.hostility = 0; slime.memory.favorability = 30;
         const bond = c.getSlimeBond(slime); bond.reserve = 100;
         assert.match(c.getNPCVisibleBehavior(slime), /buoyant ripples/);

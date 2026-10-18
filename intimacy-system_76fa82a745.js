@@ -13941,7 +13941,6 @@ function getColorSizeContext(player, npc, action) {
     if (isRagingBullActive(player)) {
         lines.push("- The player's penis is unnaturally engorged - flushed and straining, larger than usual (Raging Bull potion in effect). Name that engorged look when it appears.");
     }
-OLD_D_MARKER
     if (size !== "medium" || color) {
         var sizeDesc = size === "large" ? "large and thick" : size === "small" ? "small and slender" : "average-sized";
         var example = size === "large" ? "your thick " : size === "small" ? "your slender " : "your ";
