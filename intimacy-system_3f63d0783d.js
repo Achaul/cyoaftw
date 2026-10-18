@@ -12,7 +12,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-10-08-013";
+window.__INTIMACY_SYSTEM_VERSION = "2026-10-17-001";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
