@@ -8,6 +8,8 @@ const textModeState = {
 const TEXT_COMMAND_LIMIT = 12;
 const TEXT_INPUT_LIMIT = 600;
 const TEXT_COMMANDS = [
+    { id: "notice", notice: true, jobs: true, args: ["action", "target"], aliases: ["notice", "notices", "post", "post notice", "write notice", "take paper", "take pencil", "wanted"], example: 'notices; notices at notice post; post notice "Lost a brass key"; write notice "Meet at the inn"; use pencil; review notice; take paper; take pencil; read wanted notices', description: 'Use notices to read a visible notice board/post (1 turn), or show notices for free availability and supplies. Post notice "your exact words" reviews a signed note; confirm separately by number to spend 1 sheet and 1 turn. Post notice without words opens the shared editor; write notice "..." updates its draft, use pencil selects the reusable tool, and review notice opens confirmation. Take paper/pencil uses the free public tray with pack limits. Add at/from <board> for ambiguity. Jobs opens work postings; read wanted notices uses the local wanted posters where available (free). Options/back/cancel/leave work; answer one menu step per reply and explicitly continue older commands. AI fallback can open the editor but cannot invent or change note text.' },
+    { id: "bench", bench: true, jobs: true, args: ["action", "target"], aliases: ["bench", "workbench", "grindstone", "hone", "anvil"], example: "bench; show bench; grindstone; hone; hone at grindstone; sharpen weapon at grindstone; anvil; inspect weapon at anvil", description: "Use a visible self-service grindstone or ordinary anvil. Bench/show bench lists actions; grindstone or look at grindstone inspects without spending. Hone (or hone at <grindstone>) gives your equipped sound, dull blade its native rough edge for 2 stamina and 1 turn, no coins. Existing edges cannot be stacked; broken blades need a smith. Anvil or inspect weapon at <anvil> freely checks the equipped weapon, including no weapon, broken, dull/blunt, edge duration and visible enchantment. Multiple fixtures ask for a number and retain the original weapon/source. Paid smith services keep sharpen <weapon> (and hone <weapon> while engaged). Interrupted honing keeps spent stamina/time without applying a late edge. No new submenu or confirmation is required." },
     { id: "train", training: true, jobs: true, args: ["action", "target"], aliases: ["train", "training", "lesson", "lessons", "drill", "practice", "forget"], example: "train; show training; train fighter; train alchemy; learn technique second wind; forget second wind; train dummy; drill dummy; cast firebolt at dummy; train dummy with firebolt", description: "Talk to an available specialist, then train for numbered lessons and techniques. Train <class/skill>, learn technique <name>, or forget <name> reviews fees and time before explicit numbered confirmation. Apprenticeships, XP, cooldowns, branch/practice/patron rules and spellbook updates use native rules. Learn <spell> from <book> keeps its reading route. At a visible dummy use train dummy to review practice, drill dummy for one weapon hit, or cast <damaging spell/power> at dummy. Each hit takes 1 turn and normal stamina/mana; practice and class XP caps still apply. Options/back/cancel/leave work. One menu step per reply; explicitly continue older batches after leaving the menu." },
     { id: "commission", jobs: true, commission: true, args: ["action", "target"], aliases: ["commission", "commissions", "smithy commissions", "commission board"], example: "commissions; show commissions; accept commission; return commission; commission status; deliver commission", description: "Read a visible smithy commissions board with commissions, look at commission board, or read commission board. Accept commission takes the exact posting for 1 turn; only one commission at a time. Return commission (also drop/abandon commission) is free and replaces that board\'s posting. Use from/at <board name> if needed. Show commissions or commission status reports visible carried material progress for free. Talk or trade with a blacksmith and deliver commission to review the required materials and reward, then confirm by number. Options/back/cancel work; answer one board step per reply and explicitly continue older queued actions." },
     { id: "tailor", tailoring: true, args: ["action", "target"], aliases: ["tailor", "tailoring", "clothier"], example: "tailor; show tailoring; tailor repair linen shirt; alter coat; reinforce tunic; offer 2 linen; offer 1 blue dye; request \"shorten the sleeves and add blue trim\"; quote; collect tailoring; pockets rucksack", description: "Talk or trade with a clothier. Choose repair, alteration or reinforce and a garment, offer <quantity> <material/dye>, describe the work with request <quoted description>, then quote. At least one material is required; offer 0 <name> keeps it. Review the native quote and explicitly accept by number before any fee/material is taken. One garment is left for the quoted work duration; collect tailoring retrieves it when ready. Alteration success/appeal is appraised at collection. Pockets <bag> reviews +3 slots for 75g and one turn per bag/clothier pair. Options/back/cancel/leave work; one menu step per reply and explicit continue for older queued work." },
@@ -40,7 +42,7 @@ const TEXT_COMMANDS = [
     { id: "target", combat: true, combatOnly: true, args: ["target"], aliases: ["target", "focus"], example: "target second dwarf; show targets", description: "Change your current opponent to another standing foe. This uses the same free target selection as the combat menu." },
     { id: "inventory", inventory: true, info: true, args: ["scope"], aliases: ["inventory", "inv", "i", "items"], example: "inventory; show inventory; show floor", description: "List carried items and their quantities and locations. Use equipment for worn gear, or show floor for visible loose items." },
     { id: "equipment", inventory: true, info: true, aliases: ["equipment", "gear", "equipped"], example: "equipment; show equipment", description: "List your equipped items and their slots. Costs no turn." },
-    { id: "examine", inventory: true, combat: true, args: ["item", "scope"], aliases: ["examine", "inspect", "x"], example: "examine sword; examine second potion; examine floor sword; examine stock sword", description: "Inspect carried, equipped, or visible loose items, including their actual effects and equipment comparison. Use examine stock <item> for a trader's goods. Ambiguous names ask for a number. Costs no turn." },
+    { id: "examine", inventory: true, combat: true, args: ["item", "scope"], aliases: ["examine", "inspect", "x"], example: "look at elf; examine elegant female; examine npc second elf; examine sword; examine floor sword; examine stock sword", description: "Look at a visible NPC, fixture, or item. NPC inspection uses the normal public appearance description without starting a conversation. Use examine npc <description> to specify a creature, examine fixture <name> for a fixture, carried/floor/equipped for an item, or examine stock <item> for trade goods. Ambiguous NPCs ask for a number. Costs no turn." },
     { id: "equip", inventory: true, combat: true, args: ["item"], aliases: ["equip", "wear", "wield", "put on"], example: "equip sword; wear leather boots; equip floor sword", description: "Equip carried or visible loose gear using the normal slot and storage rules. Replaced gear is stowed or set down if storage is full. Free, as in the equipment controls." },
     { id: "unequip", inventory: true, combat: true, args: ["item"], aliases: ["unequip", "remove", "take off"], example: "unequip sword; remove boots; take off rucksack", description: "Remove worn gear and carry it, using the normal storage rules. Free, as in the equipment controls." },
     { id: "drop", inventory: true, combat: true, args: ["item", "amount"], aliases: ["drop", "put down"], example: "drop sword; drop 2 potions; drop all greenwort", description: "Set down carried or worn items. Default: one item. Specify a number or all before the name for a carried stack. Dropping a container keeps its contents inside. Coins use the existing coin controls." },
@@ -48,7 +50,7 @@ const TEXT_COMMANDS = [
     { id: "eat", inventory: true, combat: true, args: ["item"], aliases: ["eat", "consume", "chew"], example: "eat greenwort; eat ration", description: "Eat one carried healing herb or edible supply. Herbs cost a normal combat turn during a fight; ordinary supplies are blocked in combat." },
     { id: "take", inventory: true, room: true, args: ["item", "source", "amount"], aliases: ["take", "get", "pick up"], example: "take sword; take 2 potions from chest; take coins from body; take all from chest", description: "Pick up loose items, or take items from an opened/searched loot source. With a source, default quantity is one; all takes its visible contents and coins. An active container supplies the source when omitted. Existing capacity and party loot rules apply." },
     { id: "open", lootAction: true, args: ["source"], aliases: ["open"], example: "open chest; open rucksack", description: "Open a visible container and list its contents. Fixed containers use their normal opening turn, locks and danger checks. Carried containers are free to inspect." },
-    { id: "search", lootAction: true, args: ["source", "approach"], aliases: ["search", "rummage"], example: "search room; search room tight; search body; search chest carefully", description: "Search room (or bare search) uses the normal hidden-fixture search. Search <body/container> discovers its direct hidden contents. Careful/default: Willpower, 1 stamina; tight: Flexibility, 2; force: Prowess, 3. Each attempt takes 1 turn. Opening a closed fixed container adds its normal turn. Contents is the free list; searches do not take items." },
+    { id: "search", lootAction: true, args: ["source", "approach"], aliases: ["search", "rummage"], example: "search room; search room tight; search body; search chest; search rucksack", description: "Search room (or bare search) automatically uses your strongest affordable attribute to discover concealed room fixtures. Search <body/container> uses the same automatic selection for direct hidden contents. Ties prefer the cheaper search. Willpower costs 1 stamina; Flexibility 2; Prowess 3. Explicit careful/tight/force searches remain available. Each attempt takes 1 turn. Opening a closed fixed container adds its normal turn. Contents is the free list; searches do not take items." },
     { id: "contents", lootAction: true, args: ["source"], aliases: ["contents"], example: "contents; contents chest; show contents", description: "List the selected container or inspected body's visible contents and coins without taking anything. Open closed containers or use open body first. Hidden belongings require a separate successful search." },
     { id: "loot", lootAction: true, args: ["source"], aliases: ["loot"], example: "loot body; loot second chest", description: "Open/view the named source and take its visible contents and coins through the normal loot rules. Hidden belongings require a separate search. Capacity refusal, party decisions or a threat pause the queue. Loot is not automatically all kept by you." },
     { id: "store", lootAction: true, args: ["item", "source", "amount"], aliases: ["store", "put", "stow"], example: "put 2 potions in chest; store sword in rucksack; store all herbs in chest", description: "Move carried items into an opened fixed container or an accessible carry container. Default quantity is one, maximum 100 per command. Existing space and nested-container rules apply. Worn items must be removed first." },
@@ -130,15 +132,21 @@ function parseTextCommand(input) {
     if (match) return { verb: "help", args: { topic: match[1] || "" } };
     match = /^show(?:\s+(?:me\s+)?(.+))?$/i.exec(raw);
     if (match) return { verb: "show", args: { topic: match[1] || "" } };
-    match = /^choose\s+(\d+)$/i.exec(raw);
+    match = /^(?:choose\s+)?(\d+)$/i.exec(raw);
     if (match) return { verb: "choose", args: { number: match[1] } };
     if (/^(?:"[\s\S]*"|“[\s\S]*”|'[\s\S]*')$/.test(raw)) return { verb: "say", args: { text: textCommandUnquote(raw) } };
     match = /^(?:say|reply|respond)\s+([\s\S]+)$/i.exec(original);
     if (match) return { verb: "say", args: { text: textCommandUnquote(match[1]) } };
+    match = /^(?:look\s+at|examine|inspect|x)\s+(?:npc|creature|person)\s+(.+)$/i.exec(raw);
+    if (match) return { verb: "examine", args: { item: textCommandUnquote(match[1]), scope: "npc" } };
+    const notice = typeof parseTextNoticeCommand === "function" ? parseTextNoticeCommand(original) : null;
+    if (notice) return notice;
     const tailoring = typeof parseTextTailorCommand === "function" ? parseTextTailorCommand(raw) : null;
     if (tailoring) return tailoring;
     const enchanting = typeof parseTextEnchanterCommand === "function" ? parseTextEnchanterCommand(raw) : null;
     if (enchanting) return enchanting;
+    const workbench = typeof parseTextWorkbenchCommand === "function" ? parseTextWorkbenchCommand(raw) : null;
+    if (workbench) return workbench;
     const training = typeof parseTextTrainingCommand === "function" ? parseTextTrainingCommand(raw) : null;
     if (training) return training;
     const commission = typeof parseTextCommissionCommand === "function" ? parseTextCommissionCommand(raw) : null;
@@ -213,7 +221,7 @@ function validateTextAIPlan(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables)$/.test(def.id); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables)$/.test(def.id) && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -296,9 +304,31 @@ function resolveTextNPCTarget(selector, candidates, extraWords) {
     return { matches: matches };
 }
 
+// Resolve public creature descriptions before falling through to item/fixture
+// inspection. Explicit item locations keep their existing selection rules.
+function textModeInspectNPC(action) {
+    const args = action.args || {};
+    if (action.itemRef || action.fixtureRef || args.scope && args.scope !== "npc") return null;
+    if (!args.scope && /^(?:carried|inventory|equipped|worn|floor|ground)\b/i.test(args.item || "")) return null;
+    const matches = action.targetRef ? textModeVisibleNPCs().filter(function (npc) { return npc === action.targetRef; }) : resolveTextNPCTarget(args.item).matches;
+    if (!String(args.item || "").trim() && !action.targetRef) return null;
+    if (!matches.length) return args.scope === "npc" || action.targetRef ? textModeResult("blocked", "No visible NPC matches that description. Type who is here.") : null;
+    if (!args.scope && !action.targetRef && (resolveTextInventoryItems(args.item, "examine").length || textLootMatch(args.item, textExplorationFixtures(), function (entry) { return entry.label; }).length)) {
+        return textModeResult("blocked", "That description matches a creature and an item or fixture. Use examine npc <description>, examine fixture <name>, or examine carried/floor <item>.");
+    }
+    if (matches.length > 1) return textModeAsk(action, "target", matches, "Who do you want to look at?");
+    const npc = matches[0], name = textModeNPCLabel(npc);
+    const description = buildNPCLookDescription(npc) || "You see " + name + ".";
+    setNarration(description);
+    publishTextModeOutput("inspection", description, { npc: { name: name, description: description } }, false);
+    return { status: "completed" };
+}
+
 function textModeHelp(topic, show) {
     let key = textCommandNormalize(topic).replace(/^(?:to|use)\s+/, "");
     if (/^(available\s+)?(verbs|actions|commands)$/.test(key)) key = "";
+    if (show && typeof textNoticeShow === "function") { const notice = textNoticeShow(key); if (notice) return notice; }
+    if (show && typeof textWorkbenchShow === "function") { const bench = textWorkbenchShow(key); if (bench) return bench; }
     if (show && typeof textTrainingShow === "function") { const training = textTrainingShow(key); if (training) return training; }
     if (show && typeof textCommissionShow === "function") { const commission = textCommissionShow(key); if (commission) return commission; }
     if (show && typeof textTailorShow === "function") { const tailor = textTailorShow(key); if (tailor) return tailor; }
@@ -325,6 +355,8 @@ function textModeHelp(topic, show) {
     const ids = ["help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
         if (ids.indexOf(def.id) < 0 && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !/^(back|cancel)$/.test(def.id)) return false;
+        if (def.notice && !textNoticeAvailable()) return false;
+        if (def.bench && (!workbenchFixtures().length || textModeRoomBlock())) return false;
         if (def.training && !textTrainingAvailable()) return false;
         if (def.commission && !textCommissionAvailable()) return false;
         if (def.tailoring && tailorServiceBlock(G.activeNPC)) return false;
@@ -415,6 +447,8 @@ async function executeTextCommand(action) {
     if (interrupted) return textModeResult("interrupted", interrupted);
     const combatBlock = textCombatActionBlock(action);
     if (combatBlock) return textModeResult("blocked", combatBlock);
+    if (def.notice) return executeTextNoticeCommand(action);
+    if (def.bench) return executeTextWorkbenchCommand(action);
     if (def.training) return executeTextTrainingCommand(action);
     if (def.commission) return executeTextCommissionCommand(action);
     if (def.tailoring) return executeTextTailorCommand(action);
@@ -426,6 +460,7 @@ async function executeTextCommand(action) {
     if (def.party) return executeTextPartyCommand(action);
     if (def.jobs) return executeTextJobsCommand(action);
     if (def.exploration || (action.verb === "search" && /^(?:the\s+)?(?:room|around|surroundings)$/i.test(args.source || ""))) return executeTextExplorationCommand(action);
+    if (action.verb === "examine") { const inspection = textModeInspectNPC(action); if (inspection) return inspection; }
     if (action.verb === "examine" && typeof textExplorationInspect === "function") { const exploration = textExplorationInspect(action); if (exploration) return exploration; }
     if (def.lootAction || (action.verb === "take" && textLootTakeHasSource(action))) return executeTextLootCommand(action);
     if (def.room) {
@@ -604,10 +639,10 @@ async function submitTextModeCommand(raw) {
         if (!textModeState.queue.length) { textModeResult("completed", "There are no pending commands."); return; }
         return runTextCommandQueue();
     }
-    if (textModeState.pending && (/^\d+$/.test(input) || (textModeState.pending.kind === "direction" && textCommandDirection(input)))) {
+    if (textModeState.pending && (single && single.verb === "choose" || (textModeState.pending.kind === "direction" && textCommandDirection(input)))) {
         const pending = textModeState.pending;
         if (!textModeSameScene(pending.scene)) { stopTextCommands(false); textModeResult("blocked", "The scene changed. Please repeat your command."); return; }
-        const pick = /^\d+$/.test(input) ? pending.options[Number(input) - 1] : textCommandDirection(input);
+        const pick = single && single.verb === "choose" ? pending.options[Number(single.args.number) - 1] : textCommandDirection(input);
         if (!pick || pending.options.indexOf(pick) < 0) { textModeResult("needs_input", "Choose one of the listed numbers, or stop."); return; }
         if (pending.kind === "target") pending.action.targetRef = pick;
         else if (pending.kind === "ability") pending.action.abilityId = pick.id;
@@ -953,7 +988,7 @@ function textModeTrackCombatNarration(session) {
 function textModePublishCombat(rows) {
     if (!textModeState.enabled) return;
     const lines = rows.filter(function (row) { return !row.debug; }).map(function (row) { return row.text; });
-    if (lines.length) publishTextModeOutput("combat", lines.join("\n"), { source: "engine", lines: lines }, false);
+    if (lines.length) publishTextModeOutput("combat", lines.join("\n"), { source: "engine", lines: lines });
 }
 
 // Inventory adapter: resolve public item names, then call the existing rules.
@@ -1211,9 +1246,8 @@ function textTradeList(side) {
     const npc = G.activeNPC, reason = textTradeBlock(npc);
     if (reason) return textModeResult("blocked", reason);
     const groups = textTradeGroups(npc, side);
-    const cycle = typeof merchantGoodsSummary === "function" ? merchantGoodsSummary(npc) : "";
     const items = groups.map(function (entry, index) { return { number: index + 1, name: getItemName(entry.item), quantity: entry.infinite ? null : entry.count, infinite: entry.infinite, unitPrice: entry.price, blockedReason: entry.block }; });
-    return textModeResult("completed", (side === "buy" ? "Stock from " : "Goods you can offer to ") + textModeNPCLabel(npc) + ":\n" + (groups.length ? groups.map(function (entry, index) { return (index + 1) + ". " + entry.label; }).join("\n") : "None.") + "\nYour coins: " + getCoinValue(G.player) + "g. Trader's coins: " + getCoinValue(npc) + "g.\n" + (side === "buy" ? "Use buy [amount] <name>, examine stock <name>, or show sell." : "Use sell [amount] <name>. Remove worn gear first and empty containers before selling.") + (cycle ? "\n" + cycle : "") + " Type leave to step away.", { trade: { merchant: textModeNPCLabel(npc), side: side, playerCoins: getCoinValue(G.player), merchantCoins: getCoinValue(npc), items: items } });
+    return textModeResult("completed", (side === "buy" ? "Stock from " : "Goods you can offer to ") + textModeNPCLabel(npc) + ":\n" + (groups.length ? groups.map(function (entry, index) { return (index + 1) + ". " + entry.label; }).join("\n") : "None.") + "\nYour coins: " + getCoinValue(G.player) + "g. Trader's coins: " + getCoinValue(npc) + "g.\n" + (side === "buy" ? "Use buy [amount] <name>, examine stock <name>, or show sell." : "Use sell [amount] <name>. Remove worn gear first and empty containers before selling.") + " Type leave to step away.", { trade: { merchant: textModeNPCLabel(npc), side: side, playerCoins: getCoinValue(G.player), merchantCoins: getCoinValue(npc), items: items } });
 }
 
 function textTradeMatchGroups(selector, groups) {
@@ -1327,7 +1361,7 @@ function textLootRelation(value, allowed) {
 function parseTextLootCommand(raw) {
     let search = /^(?:search|rummage)(?:\s+([\s\S]+))?$/i.exec(raw);
     if (search) {
-        let source = search[1] || "", approach = "careful";
+        let source = search[1] || "", approach = "auto";
         const prefix = /^(carefully|careful|tight|forcefully|force)\s+(.+)$/i.exec(source);
         const suffix = /^(.+)\s+(carefully|careful|tight|forcefully|force)$/i.exec(source);
         if (prefix || suffix) {
@@ -1525,11 +1559,11 @@ async function executeTextLootCommand(action) {
     if (reason) return textModeResult("blocked", reason);
     textLootSelect(entry);
     if (action.verb === "search") {
-        const approach = args.approach || "careful";
-        if (!SEARCH_APPROACHES.some(function (value) { return value.key === approach; })) return textModeResult("blocked", "Choose a search approach: careful, tight, or force.");
+        const approach = args.approach || "auto";
+        if (approach !== "auto" && !SEARCH_APPROACHES.some(function (value) { return value.key === approach; })) return textModeResult("blocked", "Choose a search approach: careful, tight, or force.");
         // Check resources before opening so an unaffordable search cannot
         // unexpectedly spend its separate opening turn.
-        const option = SEARCH_APPROACHES.find(function (value) { return value.key === approach; });
+        const option = getLootSearchApproach(approach);
         ensureEntityStamina(G.player);
         if (isEntityExhausted(G.player) || G.player.stamina < option.staminaCost) return textModeResult("blocked", "You need " + option.staminaCost + " stamina for that search. Rest first.");
         if (entry.kind === "fixture" && !entry.source.opened) {
@@ -1540,7 +1574,7 @@ async function executeTextLootCommand(action) {
         let result;
         textLootRun(entry, function () { result = searchLootContents(entry.source, entry.kind, approach); });
         if (!result || result.status !== "completed") return textModeResult(result ? result.status : "blocked", result ? result.message : "That search could not finish.");
-        publishTextModeOutput("search", result.message, { search: { source: getEntityName(entry.source), kind: entry.kind, approach: result.approach, staminaCost: result.staminaCost, turns: result.turns, found: result.found } }, false);
+        // The shared search action publishes the semantic result once.
         const afterSearch = textLootAfter(entry, scene);
         return afterSearch ? textModeResult("interrupted", afterSearch) : textLootList(entry);
     }
@@ -1657,7 +1691,7 @@ function parseTextExplorationCommand(raw) {
     // Learned combat actions such as Disarm keep their established shorthand.
     if (textModeInCombat() && textCombatActions().some(function (action) { return textCombatActionMatches(action, raw); })) return null;
     let match = /^(?:search|rummage)(?:\s+(careful|carefully|tight|force|forcefully))?$/i.exec(raw);
-    if (match) return { verb: "search", args: { source: "room", approach: /^tight$/i.test(match[1]) ? "tight" : /^force/i.test(match[1]) ? "force" : "careful" } };
+    if (match) return { verb: "search", args: { source: "room", approach: !match[1] ? "auto" : /^tight$/i.test(match[1]) ? "tight" : /^force/i.test(match[1]) ? "force" : "careful" } };
     match = /^(?:drink|sip)\s+from\s+(.+)$/i.exec(raw);
     if (match) return { verb: "interact", args: { fixture: textCommandUnquote(match[1]), action: "drink" } };
     match = /^fill\s+(.+)$/i.exec(raw);
@@ -1702,6 +1736,9 @@ function textExplorationBlock() {
 function textFixtureActions(fixture) {
     const room = G.activeRoom, actions = [];
     const add = function (id, reason, run, note) { actions.push({ id: id, label: id + " " + getEntityName(fixture), reason: reason || "", run: run, note: note || "" }); };
+    if (fixture.id === "grindstone") add("hone", workbenchBlock("hone", fixture), function () { return selfHoneAtGrindstone(fixture); }, FORGE_SELF_HONE_STAMINA + " stamina, 1 turn, no coins");
+    if (fixture.id === "anvil") add("anvil", workbenchBlock("inspect", fixture), function () { return inspectWeaponAtAnvil(fixture); }, "equipped weapon inspection, free");
+    if (noticeIsBoard(fixture)) add("post", getNoticeBoardAccessBlockReason(fixture, room), function () { return openNoticePostEditor(fixture); }, "review a signed notice; posting costs 1 sheet and 1 turn");
     if (isForageFixture(fixture)) add("gather", getForageBlockReason(fixture, room), function () { gatherForageFixture(fixture); }, FORAGE_STAMINA_COST + " stamina, 1 turn");
     if (FIXTURE_ORE_SOURCES[fixture.id]) add("scavenge", getScavengeBlockReason(fixture, room), function () { scavengeFixture(fixture); }, PROSPECT_STAMINA_COST + " stamina, 1 turn");
     if (MINING_ENABLED && MINING_SOURCES[fixture.id]) add("mine", getMiningBlockReason(fixture, room), function () { mineFixture(fixture); }, MINING_STAMINA_COST + " stamina, 1 turn; needs a pickaxe");
@@ -1736,6 +1773,8 @@ function textExplorationList() {
 }
 
 function textFixtureCommand(action, entry) {
+    if (action.id === "post") return "post notice at " + entry.label;
+    if (action.id === "anvil") return "inspect weapon at " + entry.label;
     return action.id === "drink" ? "drink from " + entry.label : action.id === "fill" ? "fill <empty bottle> from " + entry.label : action.id + " " + entry.label;
 }
 
@@ -1746,6 +1785,7 @@ function textFixtureDescribe(entry) {
     if (isContainerFixture(fixture)) lines.push("open " + entry.label + "; search " + entry.label + "; contents " + entry.label);
     if (isTrainingDummyFixture(fixture)) lines.push("train " + entry.label + "; drill " + entry.label + "; cast <damaging spell> at " + entry.label);
     if (fixture.id === "commission-board") lines.push("commissions — read, accept or return a smithy commission; show commissions for progress");
+    if (noticeIsBoard(fixture)) lines.push("notices at " + entry.label + "; take paper from " + entry.label + "; take pencil from " + entry.label + "; jobs — work postings and bounties");
     if (fixture.id === "job-board") lines.push("jobs — view job postings and bounties");
     if (isAlchemyTableFixture(fixture)) lines.push("alchemy — recipes, preparation and experiments; show ingredients; show bowl");
     return textModeResult("completed", entry.label + "\n" + description + (lines.length ? "\nActions:\n" + lines.join("\n") : "\nNo typed fixture action is available here yet."), { fixture: { name: entry.label, description: description, actions: actions.map(function (action) { return { verb: action.id, command: textFixtureCommand(action, entry), blockedReason: action.reason, note: action.note || "" }; }) } });
@@ -1799,14 +1839,14 @@ async function executeTextExplorationCommand(action) {
     if (action.verb === "search" || action.verb === "case" || action.verb === "sneak") {
         let reason;
         if (action.verb === "search") {
-            const approach = SEARCH_APPROACHES.find(function (entry) { return entry.key === (args.approach || "careful"); });
+            const approach = getLootSearchApproach(args.approach);
             if (!approach) return textModeResult("blocked", "Choose careful, tight, or force for the room search.");
-            reason = getSearchBlockReason(G.activeRoom);
+            reason = getSearchBlockReason(G.activeRoom, args.approach);
             ensureEntityStamina(G.player);
             if (!reason && G.player.stamina < approach.staminaCost) reason = "You need " + approach.staminaCost + " stamina for that search.";
             if (!reason) {
-                const result = performRoomSearch(approach.key);
-                if (result && result.status === "interrupted") return textModeResult("interrupted", result.message);
+                const result = performRoomSearch(args.approach || "auto");
+                if (result && result.status !== "completed") return textModeResult(result.status, result.message);
             }
         } else {
             const id = action.verb === "case" ? "casePlace" : "sneak";
@@ -1828,7 +1868,9 @@ async function executeTextExplorationCommand(action) {
     if (isTrainingDummyFixture(fixture) && verb === "examine") return trainingDummyMenu(fixture);
     if (fixture.id === "commission-board" && /^(examine|read)$/.test(verb)) return openForgeCommissionBoard(fixture);
     if (fixture.id === "job-board" && /^(examine|read)$/.test(verb)) { openJobBoard(G.activeRoom); return { status: "needs_input" }; }
+    if (noticeIsBoard(fixture) && /^(read|post)$/.test(verb)) return executeTextNoticeCommand({ verb: "notice", args: { action: verb }, fixtureRef: entry });
     if (verb === "examine") return textFixtureDescribe(entry);
+    if (/^(hone|anvil)$/.test(verb) && /^(grindstone|anvil)$/.test(fixture.id)) return executeTextWorkbenchCommand({ verb: "bench", args: { action: verb }, fixtureRef: entry });
     const choices = textFixtureActions(fixture).filter(function (value) { return value.id === verb; });
     if (!choices.length) return textModeResult("blocked", "That action is not available on this fixture. Use interact with " + entry.label + " for its actions.");
     if (choices.length > 1 && !action.fixtureRoute) return textModeAsk(action, "fixtureRoute", choices, "Which route?");
@@ -1964,6 +2006,7 @@ async function runSharedChoice(menu, choice) {
     if (choice.meta.target && (!isVisibleEntity(choice.meta.target) || getLootMembersInRoom(G.activeRoom).indexOf(choice.meta.target) < 0)) return sharedChoiceResult("blocked", "That companion is no longer available. Type options to refresh the choices.");
     clearSharedChoiceMenu(menu); // consume before running: no double allocation
     const result = await choice.run();
+    if (result && result.status === "needs_input" && /^notice-/.test(menu.kind)) return result;
     if (result && result.status && result.status !== "completed") return sharedChoiceResult(result.status, result.message || "The choice could not finish. Pending commands are paused.");
     if (result && result.accepted === false) return sharedChoiceResult("blocked", "The gift was refused; you keep it. Pending commands are paused.");
     return { status: "completed" };
@@ -2054,6 +2097,7 @@ function textSharedOptions() {
     const owned = menu && menu.ownsView();
     if (menu && menu.valid()) return showSharedChoiceMenu(menu);
     if (menu) clearSharedChoiceMenu(menu);
+    if (menu && owned && /^notice-/.test(menu.kind)) { closeItemModal(); returnToRoomView(); return textModeResult("blocked", "The notice changed. Start the notice command again; nothing was posted."); }
     if (menu && owned && /^training-/.test(menu.kind)) {
         if (menu.fixture && !trainingSceneBlock(null, menu.fixture)) return trainingDummyMenu(menu.fixture);
         if (menu.npc && !trainingSceneBlock(menu.npc, null)) return trainingMenu(menu.npc, menu.kind === "training-forget");
@@ -2091,6 +2135,7 @@ function textSharedChoiceCanHandle(input, action) {
     if (menu && /^goods-/.test(menu.kind) && action && action.verb === "leave") return true;
     if (action && action.verb === "options") return !!menu || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot();
     if (!menu) return false;
+    if (/^notice-/.test(menu.kind) && (action && /^(notice|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^training-/.test(menu.kind) && (action && /^(train|leave)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (menu.kind === "commission-board" && (action && action.verb === "commission" || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^tailor-/.test(menu.kind) && action && /^(tailor|leave)$/.test(action.verb)) return true;
@@ -2118,6 +2163,8 @@ async function textRunSharedChoice(menu, choice) {
 
 async function textSharedChoiceInput(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && /^notice-/.test(menu.kind) && (!menu.ownsView() || menu.scene.modal !== G.activeItemModal || menu.scene.room !== G.activeRoom || menu.scene.player !== G.player)) { clearSharedChoiceMenu(menu); return !!(action && /^(back|cancel|leave)$/.test(action.verb)); }
+    if (menu && /^notice-/.test(menu.kind) && (action && /^(notice|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textNoticeMenuInput(menu, action, input); return true; }
     if (menu && /^training-/.test(menu.kind) && (action && /^(train|leave)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textTrainingMenuInput(menu, action, input); return true; }
     if (menu && menu.kind === "commission-board" && (action && action.verb === "commission" || (splitTextCommands(input || "").parts || []).length > 1)) { await textCommissionMenuInput(menu, action, input); return true; }
     if (menu && /^tailor-/.test(menu.kind) && action && /^(tailor|leave)$/.test(action.verb)) { await textTailorMenuInput(menu, action, input); return true; }
@@ -2462,7 +2509,7 @@ function performClothierDismantle(quote) {
 }
 
 function textGoodsShow(topic) {
-    if (/^(market|supply|deliveries)$/.test(topic)) return textModeResult("completed", G.activeNPC && merchantGoodsEligible(G.activeNPC) ? merchantGoodsSummary(G.activeNPC) : "Trade with a vendor to review their supply cycle. Ordinary stock changes with game days; junk becomes coin, useful goods sell, and suppliers replenish specialty stock.");
+    if (/^(market|supply|deliveries)$/.test(topic)) return textModeResult("completed", "Ask a shopkeeper where their goods come from, or whether they expect another delivery.");
     if (!/^(dismantle|dismantling|salvage clothing)$/.test(topic)) return null;
     if (!textGoodsAvailable()) return textModeResult("blocked", dismantleServiceBlock(G.activeNPC));
     const items = G.player.inventory.filter(function (item) { return !dismantleItemBlock(G.activeNPC, item); });
@@ -4113,12 +4160,339 @@ async function textTrainingMenuInput(menu, action, input) {
     } finally { textModeState.capture = null; textModeState.busy = false; renderTextModeStatus(); focusTextModeInput(); }
 }
 
+// Self-service fixtures use the same native handlers as their normal cards.
+function workbenchFixtures(kind) {
+    return typeof getVisibleRoomFixtures === "function" ? textExplorationFixtures().filter(function (entry) { return /^(grindstone|anvil)$/.test(entry.fixture.id) && (!kind || entry.fixture.id === (kind === "hone" ? "grindstone" : "anvil")); }) : [];
+}
+function workbenchBlock(kind, fixture, afterWork) {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot work at the bench right now.";
+    if (!fixture || !workbenchFixtures(kind).some(function (entry) { return entry.fixture === fixture; })) return "That workbench is no longer visible here.";
+    if (isPlayerJailed() || G.combatEncounter || roomHasActiveHostile(room) || isRoomCollapsed(room) || hasPendingPartyLoot()) return "Finish the current danger or loot decision first.";
+    if (G.activeNPC || G.activeObject || G.activeItemModal && G.activeItemModal !== fixture) return "Finish the current interaction before using the workbench.";
+    const weapon = p.equipped && p.equipped.weapon;
+    if (weapon && !isLootItemVisible(weapon)) return "Your equipped weapon is not available for this action.";
+    return kind === "hone" && !afterWork ? getSelfHoneBlockReason(room) : "";
+}
+function workbenchSpec(kind, fixture) {
+    const weapon = G.player && G.player.equipped && G.player.equipped.weapon;
+    const reason = workbenchBlock(kind, fixture);
+    return { action: kind, fixture: fixture ? getEntityName(fixture) : "", weapon: !reason && weapon ? getItemName(weapon) : "", fee: 0, staminaCost: kind === "hone" ? FORGE_SELF_HONE_STAMINA : 0, turns: kind === "hone" ? 1 : 0, blockedReason: reason };
+}
+function captureWorkbenchState(fixture, working, card) {
+    if (fixture && typeof ensureDurability === "function") ensureDurability(fixture, "fixture");
+    const p = G.player, room = G.activeRoom, npc = G.activeNPC, mode = G.activeNPCMode, object = G.activeObject, modal = G.activeItemModal;
+    const source = room.structural, equipment = p.equipped, weapon = equipment && equipment.weapon;
+    const stamp = function (value) { return JSON.stringify(value, working ? function (key, val) { return key === "grime" ? undefined : val; } : undefined); };
+    // Card rendering lazily caches prose; it does not change the workbench action.
+    const fixtureState = function () { return JSON.stringify(fixture, function (key, value) { return key === "examineText" || working && key === "grime" ? undefined : value; }); };
+    const weaponStamp = stamp(weapon), fixtureStamp = fixtureState(), turn = getCurrentStoryTurn();
+    return function () {
+        return G.player === p && G.activeRoom === room && G.activeNPC === npc && G.activeNPCMode === mode && G.activeObject === object && (card ? !G.activeItemModal || G.activeItemModal === fixture : G.activeItemModal === modal) && room.structural === source && p.equipped === equipment && (p.equipped && p.equipped.weapon) === weapon && stamp(weapon) === weaponStamp && (!fixture || fixtureState() === fixtureStamp) && (working || getCurrentStoryTurn() === turn);
+    };
+}
+function workbenchCardAction(kind, fixture) {
+    const spec = workbenchSpec(kind, fixture), valid = captureWorkbenchState(fixture, false, true);
+    let consumed = false;
+    return { reason: spec.blockedReason, run: function (button) {
+        if (consumed || !valid() || button && (G.activeItemModal !== fixture || !button.isConnected || !document.getElementById("itemModalActions").contains(button))) return sharedChoiceResult("blocked", "The weapon or workbench changed. Inspect the fixture again.");
+        consumed = true;
+        if (button) closeItemModal();
+        return kind === "hone" ? selfHoneAtGrindstone(fixture) : inspectWeaponAtAnvil(fixture);
+    } };
+}
+function parseTextWorkbenchCommand(raw) {
+    if (textModeInCombat()) return null;
+    let match = /^(?:bench|workbench)(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "bench", args: { action: "view", target: match[1] || "" } };
+    match = /^(?:hone|sharpen)(?:\s+(?:my|your|equipped|the))?(?:\s+(?:weapon|blade))?\s+(?:at|on|with|using)\s+(?:the\s+)?(.+grindstone.*|grindstone)$/i.exec(raw);
+    if (match) return { verb: "bench", args: { action: "hone", target: match[1] } };
+    match = /^hone(?:\s+(.+))?$/i.exec(raw);
+    if (match && (!G.activeNPC || /\bgrindstones?\b/i.test(match[1] || ""))) return { verb: "bench", args: { action: "hone", target: (match[1] || "").replace(/^(?:my|your|equipped|the)\s+/i, "").replace(/^(?:weapon|blade)$/i, "") } };
+    match = /^(?:inspect|examine|check|assess)\s+(?:(?:my|your|equipped|the)\s+)?(?:weapon|blade)\s+(?:at|on)\s+(?:the\s+)?(.+anvil.*|anvil)$/i.exec(raw);
+    if (match) return { verb: "bench", args: { action: "inspect", target: match[1] } };
+    match = /^anvil(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "bench", args: { action: "inspect", target: match[1] || "" } };
+    if (/^grindstone$/i.test(raw)) return { verb: "bench", args: { action: "view", target: "grindstone" } };
+    return null;
+}
+function textWorkbenchShow(topic) {
+    if (!/^(bench|workbench|grindstone|anvil|hone)$/.test(topic)) return null;
+    const entries = workbenchFixtures(topic === "grindstone" || topic === "hone" ? "hone" : topic === "anvil" ? "inspect" : null);
+    const rows = entries.map(function (entry) { return workbenchSpec(entry.fixture.id === "grindstone" ? "hone" : "inspect", entry.fixture); });
+    return textModeResult("completed", "Self-service workbenches:\n" + (rows.length ? rows.map(function (row) { return row.fixture + ": " + (row.action === "hone" ? "hone — " + row.staminaCost + " stamina, 1 turn, no coins" : "anvil — inspect your equipped weapon, free") + (row.blockedReason ? " — unavailable: " + row.blockedReason : ""); }).join("\n") : "No matching visible fixture here.") + "\nUse hone at <grindstone>, anvil, or inspect weapon at <anvil>. Hone uses the equipped blade and cannot stack an existing edge. Paid smith sharpening still uses sharpen <weapon> while talking or trading with a smith.", { workbench: { stage: "availability", actions: rows } });
+}
+async function executeTextWorkbenchCommand(action) {
+    const args = action.args || {}, kind = /^(inspect|anvil|assess)$/.test(args.action) ? "inspect" : /^(hone|sharpen)$/.test(args.action) ? "hone" : /^(view|show)$/.test(args.action || "view") ? "view" : "";
+    if (!kind) return textModeResult("blocked", "Use bench, hone at grindstone, or anvil. Type how bench for examples.");
+    if (kind === "view" && !args.target) return textWorkbenchShow("bench");
+    if (action.benchGuard && !action.benchGuard()) return textModeResult("blocked", "The weapon or scene changed while choosing a workbench. Repeat the command.");
+    const all = workbenchFixtures(kind === "view" ? null : kind);
+    const matches = action.fixtureRef ? all.filter(function (entry) { return entry.fixture === action.fixtureRef.fixture && entry.room === action.fixtureRef.room && entry.list === action.fixtureRef.list; }) : args.target ? textLootMatch(args.target, all, function (entry) { return entry.label; }) : all;
+    if (!matches.length) return textModeResult("blocked", "No matching visible workbench is here. Type show bench for available actions.");
+    if (matches.length > 1) { action.benchGuard = captureWorkbenchState(null, false, false); return textModeAsk(action, "fixture", matches, "Which workbench?"); }
+    const entry = matches[0], fixture = entry.fixture;
+    if (kind === "view") return textFixtureDescribe(entry);
+    const spec = workbenchSpec(kind, fixture);
+    if (spec.blockedReason) return textModeResult("blocked", spec.blockedReason);
+    return kind === "hone" ? selfHoneAtGrindstone(fixture) : inspectWeaponAtAnvil(fixture);
+}
+
+// Public notice commands share the native board, writing and reading actions.
+function noticeIsBoard(fixture) { return !!fixture && /^(notice-board|notice-post)$/.test(fixture.id); }
+function noticeFixtures() {
+    if (!G.activeRoom || typeof getVisibleRoomFixtures !== "function") return [];
+    return textExplorationFixtures().filter(function (entry) { return noticeIsBoard(entry.fixture); });
+}
+function noticeSceneBlock(fixture, room) {
+    const player = G.player;
+    if (!player || !room || room !== G.activeRoom || !noticeIsBoard(fixture) || !Array.isArray(room.structural) || room.structural.indexOf(fixture) < 0 || getVisibleRoomFixtures(room).indexOf(fixture) < 0) return "That board is no longer visible here.";
+    if (player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing) return "You cannot use notices while incapacitated.";
+    if (isPlayerJailed()) return "You cannot use that board while jailed.";
+    if (G.activeNPCMode === "combat" || roomHasActiveHostile(room)) return "Too dangerous right now.";
+    if (isRoomCollapsed(room)) return "That board is buried under rubble.";
+    if (hasPendingPartyLoot()) return "Resolve the party's loot decision first.";
+    if (G.activeNPC || G.activeObject || G.activeItemModal && G.activeItemModal !== fixture) return "Finish the current interaction before using the board.";
+    if (isFixtureBurning(fixture) || fixture.burntOut || fixture.durability && fixture.durability.hp <= 0) return "That board is burning or destroyed.";
+    return "";
+}
+function noticeOperationGuard(fixture) {
+    const player = G.player, room = G.activeRoom, list = room.structural;
+    const npc = G.activeNPC, mode = G.activeNPCMode, object = G.activeObject, modal = G.activeItemModal;
+    return function () { return G.player === player && G.activeRoom === room && room.structural === list && G.activeNPC === npc && G.activeNPCMode === mode && G.activeObject === object && G.activeItemModal === modal && !noticeSceneBlock(fixture, room); };
+}
+function noticeStateGuard(fixture) {
+    const scene = noticeOperationGuard(fixture), room = G.activeRoom;
+    const turn = getCurrentStoryTurn(), day = getGameDay(), tier = getPortalTier();
+    const tray = ensureNoticeWritingSupplies(room), contents = tray && tray.contents, items = contents && contents.items;
+    const notes = fixture.postedNotes, noteRefs = Array.isArray(notes) ? notes.slice() : [], noteStamp = JSON.stringify(notes);
+    const burning = tray && isFixtureBurning(tray);
+    const trayStamp = JSON.stringify(tray && [tray.burntOut, tray.durability, tray.noticeRestockDay]);
+    const stamp = function (item) { return JSON.stringify([choiceItemStamp(item), item.noticeWritingSupply, item.durability]); };
+    const members = items ? items.slice() : [], stamps = members.map(stamp);
+    const carried = (G.player.inventory || []).filter(function (item) { return item.noticeWritingSupply; }), carriedStamps = carried.map(stamp), author = G.player.name;
+    const inventory = choiceEntitySnapshot(G.player);
+    return function () {
+        return scene() && inventory() && G.player.name === author && carried.every(function (item, index) { return stamp(item) === carriedStamps[index]; }) && getCurrentStoryTurn() === turn && getGameDay() === day && getPortalTier() === tier &&
+            fixture.postedNotes === notes && JSON.stringify(notes) === noteStamp && noteRefs.every(function (note, index) { return notes[index] === note; }) &&
+            (!tray || room.structural.indexOf(tray) >= 0 && getVisibleRoomFixtures(room).indexOf(tray) >= 0 && tray.contents === contents && contents.items === items && JSON.stringify([tray.burntOut, tray.durability, tray.noticeRestockDay]) === trayStamp && isFixtureBurning(tray) === burning &&
+                items.length === members.length && members.every(function (item, index) { return items[index] === item && stamp(item) === stamps[index]; }));
+    };
+}
+function noticePublicSupplies(room) {
+    const tray = ensureNoticeWritingSupplies(room), visible = tray && getVisibleRoomFixtures(room).indexOf(tray) >= 0 && !isFixtureBurning(tray);
+    const shared = visible ? tray.contents.items : [], carried = G.player.inventory || [];
+    return ["paper", "pencil"].map(function (kind) {
+        const count = function (items) { return items.filter(function (item) { return isLootItemVisible(item) && isNoticeWritingSupply(item, kind); }).reduce(function (sum, item) { return sum + getItemQuantity(item); }, 0); };
+        return { kind: kind, here: count(shared), carried: count(carried) };
+    });
+}
+function noticePencilAvailable(draft) {
+    if (!isLootItemVisible(draft.pencil) || !isNoticeWritingSupply(draft.pencil, "pencil")) return false;
+    const tray = ensureNoticeWritingSupplies(draft.room);
+    return (draft.player.inventory || []).indexOf(draft.pencil) >= 0 || tray && getVisibleRoomFixtures(draft.room).indexOf(tray) >= 0 && !isFixtureBurning(tray) && tray.contents.items.indexOf(draft.pencil) >= 0;
+}
+function noticeDraftBlock(draft) {
+    return getNoticePostBlockReason(draft.fixture, draft.room) || (!noticePencilAvailable(draft) ? "Use a charcoal pencil first." : "") ||
+        (!draft.text.trim() ? 'Use write notice "your exact words" first.' : "") || (draft.text.length > NOTICE_NOTE_MAX_LENGTH ? "Keep your note to " + NOTICE_NOTE_MAX_LENGTH + " characters." : "");
+}
+function createNoticeWindow(fixture, title, description) {
+    if (!textModeState.enabled) {
+        const card = createJobBoardWindow(G.activeRoom, title, description);
+        if (card) { G.activeItemModal = fixture; card.actions.style.display = "grid"; card.actions.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))"; card.actions.style.gap = "8px"; }
+        return card;
+    }
+    closeItemModal();
+    const root = document.getElementById("chatOptionsEl");
+    if (!root) return null;
+    root.innerHTML = "";
+    const view = document.createElement("div"); view.hidden = true; root.appendChild(view);
+    const contents = document.createElement("div"), actions = document.createElement("div");
+    view.appendChild(contents); view.appendChild(actions);
+    return { root: root, contents: contents, actions: actions };
+}
+function beginNoticeMenu(kind, draft, card, title, refresh) {
+    const menu = beginSharedChoiceMenu(kind, null, title, refresh), valid = menu.valid, guard = noticeStateGuard(draft.fixture);
+    menu.draft = draft;
+    menu.valid = function () { return valid() && guard(); };
+    menu.preserveView = !card.root;
+    return menu;
+}
+function noticeMenuButton(menu, card, label, run, action, reason) {
+    const button = jobChoiceButton(menu, card.actions, label, run, reason || "", { action: action });
+    button.style.minWidth = "0"; button.style.width = "100%"; button.style.whiteSpace = "normal"; button.style.padding = "8px";
+    return button;
+}
+function leaveNoticeMenu(fixture) {
+    closeItemModal();
+    if (textModeState.enabled) { returnToRoomView(); return textFixtureDescribe(textExplorationFixtures().find(function (entry) { return entry.fixture === fixture; }) || { fixture: fixture, label: getEntityName(fixture) }); }
+    if (!noticeSceneBlock(fixture, G.activeRoom)) openFixtureCard(fixture);
+    return { status: "completed" };
+}
+function openNoticePostEditor(fixture, previous) {
+    const block = getNoticeBoardAccessBlockReason(fixture, G.activeRoom);
+    if (block) return sharedChoiceResult("blocked", block);
+    ensureNoticeWritingSupplies(G.activeRoom);
+    const draft = previous || { fixture: fixture, room: G.activeRoom, player: G.player, text: "", pencil: null };
+    if (draft.fixture !== fixture || draft.room !== G.activeRoom || draft.player !== G.player) return sharedChoiceResult("blocked", "That notice draft belongs to another scene.");
+    const supplies = noticePublicSupplies(draft.room);
+    const description = "Signed " + (G.player.name || "A traveller") + ". Posting uses 1 sheet and 1 turn; the pencil is reusable. " +
+        supplies.map(function (row) { return row.kind + ": " + row.here + " here, " + row.carried + " carried"; }).join("; ") + ".\n" +
+        (draft.text ? "Draft:\n" + draft.text : 'Write notice "your exact words", then review it.');
+    const card = createNoticeWindow(fixture, "Post a notice", description);
+    if (!card) return sharedChoiceResult("blocked", "The notice controls are unavailable.");
+    const menu = beginNoticeMenu("notice-compose", draft, card, "Post a notice\n" + description, function () { return openNoticePostEditor(fixture, draft); });
+    let input = null, reviewButton, reviewChoice;
+    const update = function () {
+        if (input) draft.text = input.value;
+        const reason = noticeDraftBlock(draft);
+        reviewButton.disabled = reviewChoice.disabled = !!reason; reviewButton.title = reviewChoice.reason = reason;
+    };
+    if (!textModeState.enabled) {
+        const label = document.createElement("label"); label.textContent = "Your notice";
+        input = document.createElement("textarea"); input.value = draft.text; input.maxLength = NOTICE_NOTE_MAX_LENGTH; input.rows = 5;
+        input.style.width = "100%"; input.style.boxSizing = "border-box"; input.setAttribute("aria-label", "Your notice"); input.oninput = update;
+        label.appendChild(input); card.contents.appendChild(label);
+    }
+    ["paper", "pencil"].forEach(function (kind) {
+        const count = supplies.find(function (row) { return row.kind === kind; }).here;
+        noticeMenuButton(menu, card, kind === "paper" ? "Take one sheet of paper" : "Take charcoal pencil", function () {
+            const result = takeNoticeWritingSupply(fixture, kind);
+            if (result.error) return sharedChoiceResult("blocked", result.error);
+            setNarration(kind === "paper" ? "You take one sheet of paper." : "You take the charcoal pencil.");
+            return openNoticePostEditor(fixture, draft);
+        }, "take-" + kind, count ? "" : "No visible " + kind + " is left in the tray.");
+    });
+    noticeMenuButton(menu, card, noticePencilAvailable(draft) ? "Using charcoal pencil" : "Use charcoal pencil", function () {
+        const source = getNoticeWritingMaterial(draft.room, "pencil"); draft.pencil = source && source.item;
+        return openNoticePostEditor(fixture, draft);
+    }, "pencil", getNoticeWritingMaterial(draft.room, "pencil") ? "" : "No charcoal pencil is available.");
+    reviewButton = noticeMenuButton(menu, card, "Review notice", function () { return confirmNoticeDraft(draft); }, "review");
+    reviewChoice = menu.options[menu.options.length - 1]; update();
+    noticeMenuButton(menu, card, "Back", function () { return leaveNoticeMenu(fixture); }, "back");
+    publishSharedChoiceMenu(menu, card.root || document.getElementById("itemModal"));
+    publishTextModeOutput("notice", description, { notice: { stage: "draft", board: getEntityName(fixture), text: draft.text, supplies: supplies, turns: 1, paper: 1 } }, false);
+    if (input) input.focus();
+    return { status: "needs_input" };
+}
+function confirmNoticeDraft(draft) {
+    const block = noticeDraftBlock(draft);
+    if (block) return sharedChoiceResult("blocked", block);
+    const title = "Post this notice, signed " + (G.player.name || "A traveller") + "?\n" + draft.text + "\nCosts 1 sheet of paper and 1 turn; the pencil is reusable.";
+    const card = createNoticeWindow(draft.fixture, "Review notice", title);
+    if (!card) return sharedChoiceResult("blocked", "The notice controls are unavailable.");
+    const menu = beginNoticeMenu("notice-confirm", draft, card, title, function () { return openNoticePostEditor(draft.fixture, draft); });
+    const text = draft.text, pencil = draft.pencil, valid = menu.valid;
+    menu.valid = function () { return valid() && draft.text === text && draft.pencil === pencil && !noticeDraftBlock(draft); };
+    noticeMenuButton(menu, card, "Confirm — post notice", function () {
+        const result = postNoticeNote(draft.fixture, text);
+        if (result.error) return sharedChoiceResult("blocked", result.error);
+        if (result.status === "interrupted") return result;
+        closeItemModal();
+        setNarration("You pin your note to the " + getEntityName(draft.fixture) + ".");
+        if (!textModeState.enabled) openFixtureCard(draft.fixture);
+        return { status: "completed" };
+    }, "confirm");
+    noticeMenuButton(menu, card, "Back — edit without spending", function () { return openNoticePostEditor(draft.fixture, draft); }, "back");
+    publishSharedChoiceMenu(menu, card.root || document.getElementById("itemModal"));
+    publishTextModeOutput("notice", title, { notice: { stage: "quote", board: getEntityName(draft.fixture), author: String(G.player.name || "A traveller"), text: text, turns: 1, paper: 1 } }, false);
+    return { status: "needs_input" };
+}
+function parseTextNoticeCommand(raw) {
+    raw = String(raw || "").trim().replace(/[.!?]+$/, "");
+    let match = /^(?:post|write|pin)(?:\s+(?:a|the))?\s+(?:notice|note)(?:\s+([\s\S]+))?$/i.exec(raw.trim());
+    if (match) {
+        const tail = (match[1] || "").trim();
+        const quoted = /^(["'])([\s\S]*)\1(?:\s+(?:at|on|to)\s+(.+))?$/.exec(tail);
+        if (quoted) return { verb: "notice", args: { action: "post", target: textCommandUnquote(quoted[3] || "") }, noticeText: quoted[2] };
+        const target = /^(?:at|on|to)\s+(.+)$/i.exec(tail);
+        return { verb: "notice", args: { action: tail && !target ? "invalid-text" : "post", target: target ? textCommandUnquote(target[1]) : "" } };
+    }
+    if (/^(?:read\s+)?wanted(?:\s+notices)?$/i.test(raw)) return { verb: "notice", args: { action: "wanted" } };
+    match = /^(?:read\s+)?(?:notices?|posted notes)(?:\s+(?:at|on|from)\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "notice", args: { action: "read", target: textCommandUnquote(match[1] || "") } };
+    match = /^(?:take|get)\s+(?:one\s+|a\s+|the\s+)?(?:sheet\s+of\s+|blank\s+)?(paper|(?:charcoal\s+)?pencil)(?:\s+from\s+(.+))?$/i.exec(raw);
+    if (match && noticeFixtures().length && (!match[2] || textLootMatch(textCommandUnquote(match[2]), noticeFixtures(), function (entry) { return entry.label; }).length)) return { verb: "notice", args: { action: /pencil/i.test(match[1]) ? "take-pencil" : "take-paper", target: textCommandUnquote(match[2] || "") } };
+    if (/^use\s+(?:the\s+)?(?:charcoal\s+)?pencil$/i.test(raw)) return { verb: "notice", args: { action: "pencil" } };
+    if (/^(?:review|review notice|review draft)$/i.test(raw)) return { verb: "notice", args: { action: "review" } };
+    return null;
+}
+function textNoticeAvailable() {
+    const boards = noticeFixtures(), wanted = INTERACT_MENU_ACTIONS.find(function (entry) { return entry.id === "readnotices"; });
+    if (!boards.length && !wanted) return false;
+    if (!G.player || !G.activeRoom || G.activeNPC || G.activeObject || textModeInCombat() || isPlayerJailed() || roomHasActiveHostile(G.activeRoom) || isRoomCollapsed(G.activeRoom) || hasPendingPartyLoot()) return false;
+    return boards.some(function (entry) { return !noticeSceneBlock(entry.fixture, G.activeRoom); }) || !!(wanted && wanted.visible(G.activeRoom) && !wanted.disabledReason(G.activeRoom));
+}
+function textNoticeShow(topic) {
+    if (!/^(?:notices?|posted notes|notice supplies|writing supplies|paper|pencil|post notice)$/.test(topic)) return null;
+    const entries = noticeFixtures(), block = textExplorationBlock();
+    const rows = entries.map(function (entry) { return { name: entry.label, blockedReason: noticeSceneBlock(entry.fixture, G.activeRoom) }; });
+    const supplies = !block && rows.some(function (row) { return !row.blockedReason; }) ? noticePublicSupplies(G.activeRoom) : [];
+    return textModeResult("completed", "Public notices:\n" + (rows.length ? rows.map(function (row) { return row.name + (row.blockedReason ? " — unavailable: " + row.blockedReason : " — notices; post notice; take paper; take pencil"); }).join("\n") : "No visible notice board here.") +
+        (supplies.length ? "\n" + supplies.map(function (row) { return row.kind + ": " + row.here + " here, " + row.carried + " carried"; }).join("\n") : "") +
+        '\nNotices reads the board (1 turn). Post notice "your exact words" reviews a signed note before numbered confirmation (1 sheet, 1 turn). Use at/from <board> when needed. Jobs opens work postings; read wanted notices reads local wanted posters where available.', { notice: { stage: "availability", boards: rows, supplies: supplies } });
+}
+async function textNoticeMenuInput(menu, action, input) {
+    if ((splitTextCommands(input || "").parts || []).length !== 1) return textModeResult("needs_input", "Answer one notice step per reply. Confirm posting separately by number.");
+    if (action && /^(cancel|leave)$/.test(action.verb)) {
+        if (action.verb === "cancel") stopTextCommands(false);
+        clearSharedChoiceMenu(menu); closeItemModal(); returnToRoomView();
+        return textModeResult("completed", "Notice closed; no paper or time spent on the draft." + (textModeState.queue.length ? " Type continue to resume remaining commands." : ""));
+    }
+    if (!menu.valid()) return textModeResult("blocked", "The board, supplies or draft changed. Cancel and start the notice again.");
+    if (!action || action.verb !== "notice") return textModeResult("needs_input", 'Use write notice "your exact words", use pencil, review notice, a number, back or cancel.');
+    const kind = action.args.action || "read";
+    if (action.args.target) return textModeResult("blocked", "Finish or cancel this notice before choosing another board.");
+    if (menu.kind === "notice-compose" && kind === "post" && typeof action.noticeText === "string") {
+        const draft = menu.draft;
+        if (action.noticeText.length > NOTICE_NOTE_MAX_LENGTH || !action.noticeText.trim()) return textModeResult("blocked", "Write 1–" + NOTICE_NOTE_MAX_LENGTH + " characters.");
+        clearSharedChoiceMenu(menu); draft.text = action.noticeText.trim(); return openNoticePostEditor(draft.fixture, draft);
+    }
+    const option = menu.options.find(function (choice) { return choice.meta.action === kind; });
+    if (!option) return textModeResult("needs_input", "Use a numbered choice from options. Confirm posting separately by number.");
+    return textRunSharedChoice(menu, option);
+}
+async function executeTextNoticeCommand(action) {
+    const args = action.args || {}, kind = args.action || "read";
+    if (kind === "wanted") {
+        const descriptor = INTERACT_MENU_ACTIONS.find(function (entry) { return entry.id === "readnotices"; });
+        const reason = textExplorationBlock() || (isPlayerJailed() ? "You cannot read those notices while jailed." : "") ||
+            (!descriptor || !descriptor.visible(G.activeRoom) ? "No current wanted notices are posted here." : descriptor.disabledReason(G.activeRoom));
+        if (reason) return textModeResult("blocked", reason);
+        descriptor.run(G.activeRoom); return { status: "completed" };
+    }
+    if (!/^(read|post|take-paper|take-pencil)$/.test(kind)) return textModeResult("blocked", kind === "invalid-text" ? 'Quote your exact words: post notice "your message".' : "Use notices, post notice, take paper or take pencil.");
+    const entries = noticeFixtures(), matches = action.fixtureRef ? entries.filter(function (entry) { return entry.fixture === action.fixtureRef.fixture && entry.list === action.fixtureRef.list && entry.room === action.fixtureRef.room; }) : textLootMatch(args.target || "", entries, function (entry) { return entry.label; });
+    if (action.noticeGuard && !action.noticeGuard()) return textModeResult("blocked", "The board, player or supplies changed. Repeat the notice command.");
+    if (!matches.length) return textModeResult("blocked", "No matching visible notice board here.");
+    if (matches.length > 1) {
+        const guards = matches.map(function (entry) { return noticeStateGuard(entry.fixture); });
+        action.noticeGuard = function () { return guards.every(function (guard) { return guard(); }); };
+        return textModeAsk(action, "fixture", matches, "Which notice board?");
+    }
+    const entry = matches[0], fixture = entry.fixture, block = getNoticeBoardAccessBlockReason(fixture, G.activeRoom);
+    if (block) return textModeResult("blocked", block);
+    if (kind === "read") {
+        const result = await textExplorationRun(entry, function () { return readFixture(fixture); });
+        return result && result.status ? result : { status: "completed" };
+    }
+    if (kind === "post") {
+        const source = getNoticeWritingMaterial(G.activeRoom, "pencil");
+        const draft = { fixture: fixture, room: G.activeRoom, player: G.player, text: typeof action.noticeText === "string" ? action.noticeText.trim() : "", pencil: source && source.item };
+        return typeof action.noticeText === "string" ? confirmNoticeDraft(draft) : openNoticePostEditor(fixture, draft);
+    }
+    const result = takeNoticeWritingSupply(fixture, kind === "take-paper" ? "paper" : "pencil");
+    return textModeResult(result.error ? "blocked" : "completed", result.error || "You take " + getItemName(result.item) + ".");
+}
+
 // END TEXT COMMANDS
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-18-019
-// Latest: Shared trainer lessons, technique learning/forgetting and guarded dummy text practice.
+// Core Engine Version: 2026-10-19-004
+// Latest: Shared notice drafting/confirmation, free writing supplies and public board commands.
+// Previous: Shared grindstone honing and anvil inspection text commands with original weapon/source guards.
+// Previous: Shared trainer lessons, technique learning/forgetting and guarded dummy text practice.
 // Previous: Shared smithy commission-board menus, text commands and guarded posting acceptance/return.
 // Previous: Saved opt-in Show text mode (beta) preference for compass and combat entry controls.
 // Previous: Shared clothier text drafts, guarded quotes/jobs/appraisals and pocket confirmations.
@@ -4145,7 +4519,7 @@ async function textTrainingMenuInput(menu, action, input) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-19-001";
+window.__ENGINE_CORE_VERSION = "2026-10-19-004";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -21851,6 +22225,10 @@ function buildConversationBatchInstruction(npc, options, room) {
         if (option.responsiveDesire) entry.responsive_desire = true;
         // Established facts (a real story event, etc.) the reply should be about.
         if (option.contextNote) entry.fact = String(option.contextNote).replace(/\s+/g, " ").trim();
+        else if (!option.action) {
+            const supply = merchantSupplyReplyForQuestion(npc, playerText);
+            if (supply) entry.fact = "Your own business knowledge, to answer this question in your own voice: " + supply + " Do not describe game mechanics or invent a guaranteed shipment.";
+        }
         if (option.judgeTone) entry.judge_tone = true;
         // Topic questions: name the subject so the reply is about it.
         if (String(option.id || "") === "ask-about-topic" || String(option.id || "") === "press-topic") {
@@ -22870,6 +23248,8 @@ function buildTopicFallbackReply(npc, choice, room) {
     };
     const note = typeof choice.contextNote === "string" ? choice.contextNote : "";
     const role = String(npc.role || "").toLowerCase();
+    const supplyReply = !choice.action && !note ? merchantSupplyReplyForQuestion(npc, choice.typedText || choice.promptText || choice.text) : "";
+    if (supplyReply) return say(supplyReply);
 
     if (id === "ask-name") {
         const nm = typeof getNPCSelfName === "function" ? getNPCSelfName(npc) : (npc.givenName || npc.name || "");
@@ -24090,7 +24470,7 @@ function guideAct(npc, text) {
         appendNarrationBreak(el);
         appendNarrationText(el, text);
     }
-    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", text, { source: "engine" }, false);
+    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", text, { source: "engine" });
 }
 
 function guideSay(npc, text) {
@@ -26449,7 +26829,7 @@ function openContainerCard(container, message) {
 }
 
 function searchOwnContainer(container) {
-    return searchLootContents(container, "carry", "careful");
+    return searchLootContents(container, "carry");
 }
 
 // Sets the rucksack down in the room (what is in it goes with it).
@@ -40225,18 +40605,42 @@ function tickGoodsCycle() {
     });
 }
 
+// Supply knowledge belongs to the owner, and only enters a reply when asked.
+// Reading it never refreshes stock, changes a quote, or exposes hidden goods.
 function merchantGoodsSummary(npc) {
-    if (!merchantGoodsEligible(npc)) return "";
-    const s = npc.goodsCycle && npc.goodsCycle.summary;
-    const parts = [];
-    if (s) {
-        if (s.sold) parts.push("Customers bought " + s.sold + " goods");
-        if (s.junk) parts.push("cleared " + s.junk + " junk for coin");
-        if (s.dismantled) parts.push("recovered tailoring materials");
-        if (s.delivered) parts.push("received " + s.delivered + " goods from suppliers");
-    }
-    return (parts.length ? "Recent business: " + parts.join("; ") + ". " : "") + "Ordinary stock turns over with game days; small supplier deliveries arrive every two days. Recent purchases stay for at least a day. Special goods and cellar deliveries keep their own rules.";
+    if (!npc || npc.isGuide || npc.isHumanoid === false || !(isMerchantRole(npc.role) || /^(Enchanter|Archivist)$/.test(npc.role))) return "";
+    const sources = {
+        Clothier: "I buy cloth, leather and clothing from suppliers and people with pieces to sell. Worn garments can sometimes be carefully unpicked for usable material.",
+        Blacksmith: "I buy ore, tools and smithing supplies, and take in secondhand goods I can sell on.",
+        Healer: "I buy herbs and remedies from suppliers, and keep the things people come to me for.",
+        Arcanist: "I buy ink, chalk and parchment from suppliers, with the occasional specialist piece when I can afford it.",
+        Enchanter: "I buy the supplies for my trade and sometimes take in an unusual piece worth offering to a customer.",
+        Archivist: "I buy ink, parchment and other supplies for my work. Anything more unusual depends on what comes my way.",
+        Reliquarian: "I buy candles, incense and devotional goods from suppliers, and sometimes take in a more unusual piece.",
+        Bartender: "Drink comes through the house's own supplies. When the bar runs low, more has to be brought out before I can pour it.",
+        Innkeeper: "Food and household goods come from suppliers. Drink is kept with the house's supplies and brought out as needed.",
+        Cook: "I buy food and kitchen supplies as they are needed, and sell what I have to spare.",
+        "Wandering Merchant": "I buy goods along the road and from people with something to sell. What I carry depends on what I can find and afford."
+    };
+    return sources[npc.role] || "I buy from suppliers and people with goods to sell.";
 }
+
+function merchantSupplyReplyForQuestion(npc, text) {
+    const question = String(text || "").trim();
+    if (/^\(action:/i.test(question)) return "";
+    if (!/\b(?:stock|restock(?:ing|ed)?|suppl(?:y|ies|ier|iers)|deliver(?:y|ies)|goods|wares|junk|scrap)\b/i.test(question)) return "";
+    if (!/[?]/.test(question) && !/\b(?:ask|tell|how|when|where|what|why|do|does|can|could|will|would|about)\b/i.test(question)) return "";
+    const source = merchantGoodsSummary(npc);
+    if (!source) return "";
+    if (/\b(?:junk|scrap)\b/i.test(question)) return "Cheap odds and ends go in bulk for a few coins. There is no sense letting them fill the shelves.";
+    if (/\b(?:when|restock(?:ing|ed)?|deliver(?:y|ies)|soon|often)\b/i.test(question)) {
+        if (/^(Bartender|Innkeeper)$/.test(npc.role)) return "Drink has to be brought out from the house's supplies when the bar runs low. Other goods depend on the suppliers and what the house can afford.";
+        return "Suppliers usually call every couple of days while I am open. I buy what is running low when I have the coin, but I cannot promise a particular item.";
+    }
+    if (/\b(?:where|source|from)\b/i.test(question)) return source;
+    return "Customers buy what they need, and I bring in replacements when supplies and coin allow. Sometimes something different comes in. I usually keep recent purchases a little while before moving them on.";
+}
+
 // END BASIC GOODS CYCLE
 
 
@@ -41160,25 +41564,27 @@ function getSelfHoneBlockReason(room) {
     return "";
 }
 
-function selfHoneAtGrindstone() {
-    const room = G.activeRoom;
-    const player = G.player;
-    if (!room || !player) return;
-    const block = getSelfHoneBlockReason(room);
-    if (block) { setNarration(block); return; }
-
-    const weapon = player.equipped.weapon;
-    const lines = [];
+function selfHoneAtGrindstone(fixture) {
+    if (!fixture) { const entries = workbenchFixtures("hone"); fixture = entries.length === 1 ? entries[0].fixture : null; }
+    const spec = workbenchSpec("hone", fixture);
+    if (spec.blockedReason) return sharedChoiceResult("blocked", spec.blockedReason);
+    const room = G.activeRoom, player = G.player, weapon = player.equipped.weapon;
+    const valid = captureWorkbenchState(fixture, true, false), lines = [];
     spendEntityStamina(player, FORGE_SELF_HONE_STAMINA, lines, { isPlayer: true });
     advanceStoryTurn(1);
+    if (!valid() || workbenchBlock("hone", fixture, true)) return { status: "interrupted", message: "Honing was interrupted. Spent stamina and time remain; no edge was applied. Pending commands are paused." };
     applyEdgeToWeapon(weapon, FORGE_SELF_HONE_EDGE);
     renderStats();
-    renderNarrationWithRoomObservations(room,
-        [`You work your ${getItemName(weapon)} against the grindstone until it takes a rough edge (${describeTreatment(FORGE_SELF_HONE_EDGE)}).`].concat(lines).join(" "));
+    renderNarrationWithRoomObservations(room, [`You work your ${getItemName(weapon)} against the grindstone until it takes a rough edge (${describeTreatment(FORGE_SELF_HONE_EDGE)}).`].concat(lines).join(" "));
+    publishTextModeOutput("workbench", "Honing finished.", { workbench: Object.assign({ stage: "result", edge: { source: weapon.edgeSource, hits: weapon.edgeHits, damage: weapon.edgeBonus, hit: weapon.edgeHitBonus } }, spec) }, false);
     saveGameState();
+    return { status: "completed" };
 }
 
-function inspectWeaponAtAnvil() {
+function inspectWeaponAtAnvil(fixture) {
+    if (!fixture) { const entries = workbenchFixtures("inspect"); fixture = entries.length === 1 ? entries[0].fixture : null; }
+    const spec = workbenchSpec("inspect", fixture);
+    if (spec.blockedReason) return sharedChoiceResult("blocked", spec.blockedReason);
     const room = G.activeRoom;
     const weapon = G.player && G.player.equipped && G.player.equipped.weapon;
     if (!room) return;
@@ -41195,6 +41601,8 @@ function inspectWeaponAtAnvil() {
         text = bits.join(" ");
     }
     renderNarrationWithRoomObservations(room, text);
+    publishTextModeOutput("workbench", text, { workbench: Object.assign({ stage: "inspection", condition: !weapon ? "none" : isBrokenWeapon(weapon) ? "broken" : weapon.edgeHits > 0 ? "honed" : isBladedWeapon(weapon) ? "dull" : "blunt", edge: weapon && weapon.edgeHits > 0 ? { source: weapon.edgeSource || "honed", hits: weapon.edgeHits } : null, enchanted: !!(weapon && weapon.enchantTier) }, spec) }, false);
+    return { status: "completed" };
 }
 
 // ── FORGE EXTRAS: weapon naming, scrap trade-in, smithy commissions ──
@@ -41901,7 +42309,6 @@ function renderTradeOptions(npc) {
 
     appendShopNameHeading(npc, el);
     const stock = ensureNPCTradeStock(npc);
-    if (typeof merchantGoodsSummary === "function") clothierText(el, merchantGoodsSummary(npc));
     const playerInventory = (Array.isArray(G.player.inventory) ? G.player.inventory : [])
         .filter(item => isLootItemVisible(item) && !isItemEquippedByEntity(G.player, item));
 
@@ -42987,11 +43394,12 @@ function clearNarration() {
 }
 
 function setNarration(text) {
-    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", text, { source: "engine" }, false);
     syncCombatLayout();
     const el = document.getElementById("narrationEl");
     const extra = takeTurnNotes();
-    if (el) el.textContent = (text || "") + (extra ? ((text ? " " : "") + extra) : "");
+    const narration = (text || "") + (extra ? ((text ? " " : "") + extra) : "");
+    if (el) el.textContent = narration;
+    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", narration, { source: "engine" });
 }
 
 // Same as setNarration, but the NPC's name is rendered as the clickable
@@ -43017,6 +43425,7 @@ function setNarrationWithNPC(before, npc, fallbackName, after) {
     }
     const tail = (after || "") + (extra ? ((after ? " " : "") + extra) : "");
     appendNarrationText(el, tail);
+    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", el.textContent, { source: "engine" });
 }
 
 // -- COMBAT NARRATION RENDERING ------------------------------------------
@@ -43529,7 +43938,7 @@ function renderRoomObservations(parent, room, layout) {
     }
 }
 
-function renderNarrationWithRoomObservations(room, leadText, layout) {
+function renderNarrationWithRoomObservations(room, leadText, layout, deferOutput) {
     const el = document.getElementById("narrationEl");
     if (!el) return;
 
@@ -43537,7 +43946,7 @@ function renderNarrationWithRoomObservations(room, leadText, layout) {
     const turnNotes = takeTurnNotes();
     appendNarrationText(el, ensureSentence(leadText) + (turnNotes ? " " + turnNotes : ""));
     renderRoomObservations(el, room, layout);
-    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", el.textContent, { source: "engine" }, false);
+    if (!deferOutput && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", el.textContent, { source: "engine" });
 }
 
 function renderRoomNarration(room, mode, direction) {
@@ -43851,7 +44260,7 @@ function addNarratorMessage(text, options = {}) {
 }
 
 function addChatMessage(side, speaker, text, options = {}) {
-    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput(String(speaker || "").toLowerCase() === "narrator" ? "narration" : "dialogue", text, { speaker: speaker, side: side, source: "engine" }, false);
+    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput(String(speaker || "").toLowerCase() === "narrator" ? "narration" : "dialogue", text, { speaker: speaker, side: side, source: "engine" });
     if (String(speaker || "").trim().toLowerCase() === "narrator") {
         addNarratorMessage(text, options);
         return;
@@ -49120,6 +49529,7 @@ function hasNoticesToRead(room) {
 }
 
 function readWantedNotices(room) {
+    if (!room || room !== G.activeRoom || !G.player || isPlayerJailed() || textExplorationBlock() || !canReadNoticesHere(room)) return sharedChoiceResult("blocked", "Those wanted notices are not available here.");
     const lines = [];
     getActiveWantedNPCs(room.zone).slice(0, 4).forEach(function (e) {
         lines.push(`WANTED: ${e.npc.name || "a thief"}, for ${describeWantedCrime(e.rec)}. Reward ${e.rec.reward} coins.`);
@@ -49131,6 +49541,7 @@ function readWantedNotices(room) {
     if (typeof getPostedTales === "function") {
         getPostedTales(room.zone, bounty >= BOUNTY_WANTED).forEach(function (d) { lines.push(describePostedTale(d)); });
     }
+    publishTextModeOutput("notice", lines.join("\n"), { notice: { stage: "wanted", lines: lines.slice(), turns: 0 } }, false);
     setNarration(lines.length
         ? "A scatter of posted notices. " + lines.join(" ")
         : "The notice board holds only old, curling paper.");
@@ -52283,7 +52694,7 @@ const INTERACT_MENU_ACTIONS = [
     },
     {
         id: "search",
-        label: "Search",
+        get label() { return "Search (" + getLootSearchApproach().staminaCost + " stamina, 1 turn)"; },
         group: "observe",
         // Always offered: the player can't know whether a room hides anything,
         // so gating visibility on concealed fixtures leaked that (and meant
@@ -52291,8 +52702,8 @@ const INTERACT_MENU_ACTIONS = [
         // turns up nothing; once everything is found it greys out.
         visible: function (room) { return !!room; },
         disabledReason: function (room) { return getSearchBlockReason(room); },
-        title: "Search the room for hidden things (costs stamina).",
-        run: function () { openSearchMenu(); }
+        title: "Search using your strongest affordable attribute.",
+        run: function (room) { if (room && room !== G.activeRoom) return; return openSearchMenu(); }
     },
     {
         id: "pray",
@@ -55993,38 +56404,26 @@ function joinFixtureNames(fixtures) {
     return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
 }
 
-function getSearchBlockReason(room) {
+function getSearchBlockReason(room, approachKey) {
     if (!room || !G.player) return "Nothing to search.";
+    const player = G.player, approach = getLootSearchApproach(approachKey);
+    if (!approach) return "Choose a search approach: careful, tight, or force.";
+    if (player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing) return "You cannot search while incapacitated.";
+    if (G.activeNPC || G.activeObject || G.activeItemModal) return "Finish the current interaction before searching the room.";
+    if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Resolve the party's loot decision before searching.";
     if (isRoomCollapsed(room)) return "Everything here is buried under rubble.";
-    if (roomHasActiveHostile(room)) return "Too dangerous to search with a threat nearby.";
-    if (isEntityExhausted(G.player)) return "You're too exhausted to search. Rest to recover.";
+    if (G.activeNPCMode === "combat" || roomHasActiveHostile(room)) return "Too dangerous to search with a threat nearby.";
+    ensureEntityStamina(player);
+    if (isEntityExhausted(player) || player.stamina < approach.staminaCost) return "You need " + approach.staminaCost + " stamina for that search. Rest first.";
     if (!getConcealedRoomFixtures(room).length) return "";
     if (!roomHasUnrevealedFixtures(room)) return "There's nothing more to find here.";
     return "";
 }
 
-// Sub-menu of search approaches (Search, left interact column).
+// Compatibility entry point: Search now executes directly, without a submenu.
+// Sub-menu of search approaches was removed; existing callers keep this entry point.
 function openSearchMenu() {
-    const room = G.activeRoom;
-    if (!room || !G.player || G.activeNPC || G.activeObject) return;
-
-    clearChatLog();
-    setExitGridVisible(false);
-
-    const el = document.getElementById("chatOptionsEl");
-    if (!el) return;
-    el.innerHTML = "";
-
-    const blockReason = getSearchBlockReason(room);
-    const buttons = SEARCH_APPROACHES.map(approach => {
-        const label = `${approach.label} (${SEARCH_STAT_LABELS[approach.stat]}, -${approach.staminaCost} stamina)`;
-        const btn = createCombatButton(label, () => performRoomSearch(approach.key), { disabled: !!blockReason });
-        btn.title = blockReason || `Roll ${SEARCH_STAT_LABELS[approach.stat]} to find things hidden in this room.`;
-        return btn;
-    });
-    appendCombatGroup(el, "Search", buttons);
-    appendCombatGroup(el, "", [createCombatButton("Back", () => openInteractMenu())]);
-    setNarration(blockReason || "How do you want to search?");
+    return performRoomSearch("auto");
 }
 
 // ── GLANCE (peek into the next room) ──────────────────────────────
@@ -56276,32 +56675,35 @@ function examineCurrentRoom() {
 
     resetNpcPanel();
     renderStats();
-    renderNarrationWithRoomObservations(room, lead, "look");
+    renderNarrationWithRoomObservations(room, lead, "look", true);
     const narrationEl = document.getElementById("narrationEl");
     appendRoomStructureObservation(narrationEl, room);
     if (narrationEl && trailFindings.length) {
         appendObservationSeparator(narrationEl, false);
         appendNarrationText(narrationEl, trailFindings.join(" "));
     }
+    if (narrationEl && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", narrationEl.textContent, { source: "engine" });
     saveGameState();
 }
 
 function performRoomSearch(approachKey) {
     const room = G.activeRoom;
     const player = G.player;
-    const approach = SEARCH_APPROACHES.find(entry => entry.key === approachKey);
+    const automatic = !approachKey || approachKey === "auto";
+    const approach = getLootSearchApproach(approachKey);
     if (!room || !player || !approach) return;
 
-    const blockReason = getSearchBlockReason(room);
+    const blockReason = getSearchBlockReason(room, approachKey);
     if (blockReason) {
         setNarration(blockReason);
-        return;
+        return { status: "blocked", message: blockReason };
     }
 
     ensureRoomFixtureState(room);
     room.examined = true; // rummaging through a room shows its ordinary contents too
     const lines = [];
     const searchNPC = G.activeNPC, searchMode = G.activeNPCMode;
+    const searchObject = G.activeObject, searchModal = G.activeItemModal, searchStructure = room.structural;
     const searchTargets = getConcealedRoomFixtures(room).map(function (fixture) { return { fixture: fixture, stat: fixture.revealStat, dc: fixture.revealDC }; });
 
     // Searching costs stamina like a combat action and a story turn like
@@ -56310,14 +56712,14 @@ function performRoomSearch(approachKey) {
     advanceStoryTurn(1);
     if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
 
-    if (G.player !== player || G.activeRoom !== room || G.activeNPC !== searchNPC || G.activeNPCMode !== searchMode || player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing || roomHasActiveHostile(room) || isRoomCollapsed(room)) {
+    if (G.player !== player || G.activeRoom !== room || G.activeNPC !== searchNPC || G.activeNPCMode !== searchMode || G.activeObject !== searchObject || G.activeItemModal !== searchModal || room.structural !== searchStructure || (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) || player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing || roomHasActiveHostile(room) || isRoomCollapsed(room)) {
         const message = "Your room search was interrupted. Its stamina and turn costs are spent; nothing new was revealed.";
         setNarration(message); renderStats(); saveGameState();
         if (G.player === player && G.activeRoom === room && roomHasActiveHostile(room) && typeof triggerRoomAmbush === "function") triggerRoomAmbush(room);
         return { status: "interrupted", message: message };
     }
     const candidates = getConcealedRoomFixtures(room)
-        .filter(fixture => fixture.revealed !== true && fixture.revealStat === approach.stat && searchTargets.some(function (target) { return target.fixture === fixture && target.stat === fixture.revealStat && target.dc === fixture.revealDC; }));
+        .filter(fixture => fixture.revealed !== true && (automatic || fixture.revealStat === approach.stat) && searchTargets.some(function (target) { return target.fixture === fixture && target.stat === fixture.revealStat && target.dc === fixture.revealDC; }));
 
     // An empty search is not a failed stat check. Only roll when this
     // approach can reveal something, using the actual target difficulties.
@@ -56357,6 +56759,9 @@ function performRoomSearch(approachKey) {
         leadText = "You search, but turn up nothing new.";
     }
 
+    if (automatic) leadText = "You search using " + SEARCH_STAT_LABELS[approach.stat] + ". " + leadText;
+    const result = { status: "completed", message: leadText, approach: approach.key, stat: approach.stat, automatic: automatic, staminaCost: approach.staminaCost, turns: 1, found: found.map(function (fixture) { return { name: getEntityName(fixture), quantity: 1 }; }) };
+    publishTextModeOutput("search", leadText, { search: { source: room.displayName || room.name || "room", kind: "room", approach: result.approach, stat: result.stat, automatic: result.automatic, staminaCost: result.staminaCost, turns: result.turns, found: result.found } }, false);
     resetNpcPanel();
     renderStats();
     renderNarrationWithRoomObservations(room, [leadText].concat(lines).join(" "));
@@ -56365,6 +56770,7 @@ function performRoomSearch(approachKey) {
         if (typeof triggerRoomAmbush === "function") triggerRoomAmbush(room);
     }
     saveGameState();
+    return result;
 }
 
 // ── CONTAINERS ───────────────────────────────────────────────────
@@ -57783,7 +58189,7 @@ function refreshNoticeWritingSupplies(fixture) {
 }
 
 function ensureNoticeWritingSupplies(room) {
-    if (!room || !Array.isArray(room.structural) || !room.structural.some(isNoticeFixture)) return null;
+    if (!room || !Array.isArray(room.structural) || !room.structural.some(function (fixture) { return isNoticeFixture(fixture) && (typeof isFixtureVisible === "function" ? isFixtureVisible(fixture, room) : !fixture.concealed || fixture.revealed); })) return null;
     let tray = room.structural.find(isNoticeWritingSuppliesFixture);
     if (!tray) {
         tray = {
@@ -57799,10 +58205,10 @@ function ensureNoticeWritingSupplies(room) {
 
 function getNoticeWritingMaterial(room, kind) {
     const tray = ensureNoticeWritingSupplies(room);
-    const shared = tray && !isFixtureBurning(tray) ? tray.contents.items : [];
+    const shared = tray && getVisibleRoomFixtures(room).indexOf(tray) >= 0 && !isFixtureBurning(tray) ? tray.contents.items : [];
     const carried = G.player && Array.isArray(G.player.inventory) ? G.player.inventory : [];
-    const items = shared.some(function (item) { return isNoticeWritingSupply(item, kind); }) ? shared : carried;
-    const item = items.find(function (item) { return isNoticeWritingSupply(item, kind); });
+    const items = shared.some(function (item) { return isLootItemVisible(item) && isNoticeWritingSupply(item, kind); }) ? shared : carried;
+    const item = items.find(function (item) { return isLootItemVisible(item) && isNoticeWritingSupply(item, kind); });
     return item ? { item: item, items: items } : null;
 }
 
@@ -57829,19 +58235,18 @@ function getNoticeBoardNotes(fixture) {
 }
 
 function getNoticeBoardAccessBlockReason(fixture, room) {
-    if (!G.player || !room || !isNoticeFixture(fixture) || !Array.isArray(room.structural) || room.structural.indexOf(fixture) < 0) return "That board is no longer here.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
-    return "";
+    return noticeSceneBlock(fixture, room);
 }
 
 function takeNoticeWritingSupply(fixture, kind) {
+    if (!/^(paper|pencil)$/.test(kind)) return { error: "Choose paper or pencil." };
     const room = G.activeRoom;
     const block = getNoticeBoardAccessBlockReason(fixture, room);
     if (block) return { error: block };
     const tray = ensureNoticeWritingSupplies(room);
-    if (isFixtureBurning(tray)) return { error: "The supplies are burning." };
+    if (!tray || getVisibleRoomFixtures(room).indexOf(tray) < 0 || isFixtureBurning(tray)) return { error: "The supplies are burning." };
     const items = tray.contents.items;
-    const item = items.find(function (item) { return isNoticeWritingSupply(item, kind); });
+    const item = items.find(function (item) { return isLootItemVisible(item) && isNoticeWritingSupply(item, kind); });
     if (!item) return { error: kind === "paper" ? "There is no paper left to take." : "There is no charcoal pencil left to take." };
     const quantity = getItemQuantity(item);
     const taken = quantity > 1 ? cloneLootTemplate(item, { quantity: 1 }) : item;
@@ -57852,6 +58257,7 @@ function takeNoticeWritingSupply(fixture, kind) {
     renderStats();
     if (typeof updateInventoryContextPanels === "function") updateInventoryContextPanels();
     saveGameState();
+    publishTextModeOutput("notice", "You take " + getItemName(taken) + ".", { notice: { stage: "supply", board: getEntityName(fixture), kind: kind, name: getItemName(taken), quantity: 1, turns: 0 } }, false);
     return { item: taken };
 }
 
@@ -57870,6 +58276,7 @@ function postNoticeNote(fixture, rawText) {
     const text = String(rawText || "").replace(/\r\n?/g, "\n").trim();
     if (!text) return { error: "Write a note first." };
     if (text.length > NOTICE_NOTE_MAX_LENGTH) return { error: "Keep your note to " + NOTICE_NOTE_MAX_LENGTH + " characters." };
+    const current = noticeOperationGuard(fixture);
     const notes = getNoticeBoardNotes(fixture);
     if (notes.some(function (note) { return note.author === String(G.player.name || "A traveller") && note.text === text; })) return { error: "You already have that note on this board." };
     if (!consumeNoticePaper(room)) return { error: "You no longer have a sheet of paper." };
@@ -57883,129 +58290,15 @@ function postNoticeNote(fixture, rawText) {
     fixture.readDone = false;
     advanceStoryTurn(1);
     if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
+    if (!current()) { saveGameState(); return { note: note, status: "interrupted", message: "Your notice was posted and its paper/turn spent, but the situation changed. Later commands are paused." }; }
+    publishTextModeOutput("notice", "You post a signed notice.", { notice: { stage: "result", board: getEntityName(fixture), author: note.author, text: note.text, paper: 1, turns: 1 } }, false);
     renderStats();
     if (typeof updateInventoryContextPanels === "function") updateInventoryContextPanels();
     saveGameState();
     return { note: note };
 }
 
-function openNoticePostEditor(fixture) {
-    const room = G.activeRoom;
-    const block = getNoticeBoardAccessBlockReason(fixture, room);
-    if (block) { setNarration(block); return; }
-    openFixtureCard(fixture);
-    const desc = document.getElementById("itemModalDesc");
-    const title = document.getElementById("itemModalTitle");
-    const stats = document.getElementById("itemModalStats");
-    const actions = document.getElementById("itemModalActions");
-    if (!desc || !actions) return;
-    if (title) title.textContent = "Post a notice";
-    if (stats) { stats.textContent = ""; stats.style.display = "none"; }
-    desc.textContent = "";
-    const supplies = document.createElement("div");
-    supplies.style.marginBottom = "12px";
-    desc.appendChild(supplies);
-    const label = document.createElement("label");
-    label.textContent = "Your notice (up to " + NOTICE_NOTE_MAX_LENGTH + " characters), signed " + (G.player.name || "A traveller") + ".";
-    const input = document.createElement("textarea");
-    input.maxLength = NOTICE_NOTE_MAX_LENGTH;
-    input.rows = 5;
-    input.style.width = "100%";
-    input.style.boxSizing = "border-box";
-    input.style.display = "block";
-    input.setAttribute("aria-label", "Your notice");
-    label.appendChild(input);
-    desc.appendChild(label);
-    const hint = document.createElement("div");
-    hint.textContent = "Writing uses one sheet. The pencil is reusable. Free supplies are replenished each morning.";
-    hint.style.fontSize = "0.9em";
-    desc.appendChild(hint);
-    const status = document.createElement("div");
-    status.setAttribute("role", "status");
-    desc.appendChild(status);
-    let selectedPencil = null;
-    actions.innerHTML = "";
-    const write = document.createElement("button");
-    write.type = "button";
-    write.className = "primary";
-    write.textContent = "Write";
 
-    function hasPencil(item) {
-        if (!isNoticeWritingSupply(item, "pencil")) return false;
-        const tray = ensureNoticeWritingSupplies(room);
-        const inventory = G.player && Array.isArray(G.player.inventory) ? G.player.inventory : [];
-        return inventory.indexOf(item) >= 0 || (!isFixtureBurning(tray) && tray.contents.items.indexOf(item) >= 0);
-    }
-    function updateWrite() {
-        if (!hasPencil(selectedPencil)) selectedPencil = null;
-        const reason = getNoticePostBlockReason(fixture, G.activeRoom) || (!selectedPencil ? "Choose Use beside the charcoal pencil." : "") || (!input.value.trim() ? "Write a note first." : "");
-        write.disabled = !!reason;
-        write.title = reason;
-    }
-    function renderSupplies() {
-        supplies.textContent = "";
-        const tray = ensureNoticeWritingSupplies(room);
-        const shared = !isFixtureBurning(tray) ? tray.contents.items : [];
-        const inventory = G.player && Array.isArray(G.player.inventory) ? G.player.inventory : [];
-        ["paper", "pencil"].forEach(function (kind) {
-            const count = function (items) { return items.filter(function (item) { return isNoticeWritingSupply(item, kind); }).reduce(function (sum, item) { return sum + getItemQuantity(item); }, 0); };
-            const here = count(shared);
-            const carried = count(inventory);
-            const row = document.createElement("div");
-            row.style.marginBottom = "8px";
-            const text = document.createElement("span");
-            text.textContent = (kind === "paper" ? "Paper: " : "Charcoal pencil: ") + here + " here, " + carried + " in your pack. ";
-            row.appendChild(text);
-            const take = document.createElement("button");
-            take.type = "button";
-            take.textContent = "Take";
-            take.setAttribute("aria-label", kind === "paper" ? "Take one sheet of paper" : "Take the charcoal pencil");
-            take.disabled = here <= 0;
-            styleBoardWindowButton(take);
-            take.onclick = function () {
-                const result = takeNoticeWritingSupply(fixture, kind);
-                status.textContent = result.error || (kind === "paper" ? "You take one sheet of paper." : "You take the charcoal pencil.");
-                renderSupplies();
-            };
-            row.appendChild(take);
-            if (kind === "pencil") {
-                const use = document.createElement("button");
-                use.type = "button";
-                use.textContent = hasPencil(selectedPencil) ? "Using" : "Use";
-                use.disabled = here + carried <= 0 || hasPencil(selectedPencil);
-                styleBoardWindowButton(use);
-                use.setAttribute("aria-label", "Use the charcoal pencil");
-                use.onclick = function () {
-                    const source = getNoticeWritingMaterial(room, "pencil");
-                    selectedPencil = source ? source.item : null;
-                    status.textContent = selectedPencil ? "You are using the charcoal pencil." : "No charcoal pencil is available.";
-                    renderSupplies();
-                    input.focus();
-                };
-                row.appendChild(use);
-            }
-            supplies.appendChild(row);
-        });
-        updateWrite();
-    }
-    input.oninput = updateWrite;
-    write.onclick = function () {
-        updateWrite();
-        if (write.disabled) { status.textContent = write.title; return; }
-        const result = postNoticeNote(fixture, input.value);
-        if (result.error) { status.textContent = result.error; renderSupplies(); return; }
-        setNarration("You pin your note to the " + getEntityName(fixture) + ".");
-        openFixtureCard(fixture);
-    };
-    actions.appendChild(write);
-    const back = document.createElement("button");
-    back.type = "button";
-    back.textContent = "Back";
-    back.onclick = function () { openFixtureCard(fixture); };
-    actions.appendChild(back);
-    renderSupplies();
-    input.focus();
-}
 
 // Only people who physically enter this room learn these notes. The text is
 // remembered as a signed claim on a board, never as a verified world fact.
@@ -58189,7 +58482,7 @@ function presentReadText(room, text, title) {
 
 function readFixture(fixture) {
     try {
-        readFixtureInner(fixture);
+        return readFixtureInner(fixture);
     } catch (err) {
         console.error("[Engine] Read failed", err);
         setNarration("You try to read it, but cannot make anything of it right now.");
@@ -58201,9 +58494,10 @@ function readFixtureInner(fixture) {
     const player = G.player;
     const rule = fixture && FIXTURE_READ_RULES[fixture.id];
     if (!room || !player || !rule) return;
-    const block = getReadBlockReason(fixture, room);
+    const block = noticeIsBoard(fixture) ? getNoticeBoardAccessBlockReason(fixture, room) : getReadBlockReason(fixture, room);
     if (block) { setNarration(block); return; }
 
+    const noticeGuard = noticeIsBoard(fixture) ? noticeOperationGuard(fixture) : null;
     const name = getEntityName(fixture);
     // Reading can be repeated (each read costs a story turn); only the first
     // success trains Willpower so it can't be farmed.
@@ -58211,6 +58505,7 @@ function readFixtureInner(fixture) {
     advanceStoryTurn(1);
     if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
 
+    if (noticeGuard && !noticeGuard()) return sharedChoiceResult("interrupted", "Reading spent a turn, but the situation changed before you could read the board. Later commands are paused.");
     const lines = [];
     if (rule.kind === "rumor") {
         const used = Array.isArray(G.story && G.story.readRumors) ? G.story.readRumors : [];
@@ -58270,6 +58565,7 @@ function readFixtureInner(fixture) {
 
     renderStats();
     presentReadText(room, lines.join("\n\n"), name);
+    if (noticeGuard) publishTextModeOutput("notice", lines.join("\n\n"), { notice: { stage: "reading", board: name, turns: 1, notes: getNoticeBoardNotes(fixture).map(function (note) { return { author: note.author || "Someone", text: note.text }; }) } }, false);
     saveGameState();
 }
 
@@ -63364,6 +63660,7 @@ function openFixtureCard(fixture, cardOptions) {
             };
         }
         actionsEl.appendChild(btn);
+        return btn;
     }
 
     const movementOptions = getFixtureMovementOptions(fixture, room);
@@ -63535,7 +63832,8 @@ function openFixtureCard(fixture, cardOptions) {
     }
 
     if (fixture.id === "grindstone") {
-        addAction("Hone your weapon", () => selfHoneAtGrindstone(), { primary: true, disabledReason: getSelfHoneBlockReason(room) });
+        const action = workbenchCardAction("hone", fixture);
+        const button = addAction("Hone your weapon (" + FORGE_SELF_HONE_STAMINA + " stamina, 1 turn)", function () { return action.run(button); }, { primary: true, keepOpen: true, disabledReason: action.reason });
     }
     if (FIXTURE_ORE_SOURCES[fixture.id] || (MINING_ENABLED && MINING_SOURCES[fixture.id])) {
         if (FIXTURE_ORE_SOURCES[fixture.id]) {
@@ -63579,7 +63877,8 @@ function openFixtureCard(fixture, cardOptions) {
         }
     }
     if (fixture.id === "anvil") {
-        addAction("Inspect your weapon", () => inspectWeaponAtAnvil(), { primary: true });
+        const action = workbenchCardAction("inspect", fixture);
+        const button = addAction("Inspect your weapon (free)", function () { return action.run(button); }, { primary: true, keepOpen: true, disabledReason: action.reason });
     }
 
     if (isForageFixture(fixture)) {
@@ -64438,9 +64737,21 @@ function getLootSearchLocation(source, kind) {
     return (room.items || []).indexOf(source) >= 0 ? "floor" : null;
 }
 
+// Select from public player attributes only, never from concealed contents.
+// An affordable weaker approach keeps Search usable when stamina is low.
+function getLootSearchApproach(approachKey) {
+    if (approachKey && approachKey !== "auto") return SEARCH_APPROACHES.find(function (entry) { return entry.key === approachKey; });
+    if (!G.player) return SEARCH_APPROACHES[0];
+    ensureEntityStamina(G.player);
+    const affordable = SEARCH_APPROACHES.filter(function (entry) { return G.player.stamina >= entry.staminaCost; });
+    return affordable.reduce(function (best, entry) {
+        return getEntityStatValue(G.player, entry.stat) > getEntityStatValue(G.player, best.stat) ? entry : best;
+    }, affordable[0] || SEARCH_APPROACHES[0]);
+}
+
 function getLootSearchBlockReason(source, kind, approachKey, options) {
     const player = G.player, room = G.activeRoom;
-    const approach = SEARCH_APPROACHES.find(function (entry) { return entry.key === (approachKey || "careful"); });
+    const approach = getLootSearchApproach(approachKey);
     if (!approach) return "Choose a search approach: careful, tight, or force.";
     const location = getLootSearchLocation(source, kind);
     if (!location) return "That body or container is no longer available to search.";
@@ -64481,7 +64792,9 @@ function getLootItemDiscoveryRule(item) {
 }
 
 function performLootContentsSearch(source, kind, approachKey) {
-    const key = approachKey || "careful";
+    const automatic = !approachKey || approachKey === "auto";
+    const selected = getLootSearchApproach(approachKey);
+    const key = selected ? selected.key : approachKey;
     const block = getLootSearchBlockReason(source, kind, key);
     if (block) return { status: "blocked", message: block, found: [] };
     const player = G.player, room = G.activeRoom, npc = G.activeNPC, mode = G.activeNPCMode;
@@ -64494,7 +64807,7 @@ function performLootContentsSearch(source, kind, approachKey) {
     const equipped = kind === "body" ? source.equipped : null;
     const candidates = getLootSearchMembers(source, kind).filter(function (item, index, all) { return item && all.indexOf(item) === index; }).map(function (item) {
         return { item: item, rule: getLootItemDiscoveryRule(item) };
-    }).filter(function (entry) { return entry.rule && entry.rule.stat === approach.stat; });
+    }).filter(function (entry) { return entry.rule && (automatic || entry.rule.stat === approach.stat); });
     const lines = [];
     spendEntityStamina(player, approach.staminaCost, lines, { isPlayer: true });
     advanceStoryTurn(1);
@@ -64535,14 +64848,15 @@ function performLootContentsSearch(source, kind, approachKey) {
         if (gain && gain.leveledUp) lines.push("Your " + SEARCH_STAT_LABELS[approach.stat].toLowerCase() + " improves.");
         rememberStoryEvent("exploration", (player.name || "The player") + " discovered " + found.map(getItemName).join(", ") + " while searching " + getEntityName(source) + ".", 2);
     }
-    const message = "You search " + getEntityName(source) + " (" + approach.label.toLowerCase() + "). " + (found.length ? "You uncover " + found.map(function (item) { return withIndefiniteArticle(getItemName(item)); }).join(", ") + "." : "You find nothing more.") + (lines.length ? " " + lines.join(" ") : "");
+    const message = "You search " + getEntityName(source) + " (" + (automatic ? "using " + SEARCH_STAT_LABELS[approach.stat] : approach.label.toLowerCase()) + "). " + (found.length ? "You uncover " + found.map(function (item) { return withIndefiniteArticle(getItemName(item)); }).join(", ") + "." : "You find nothing more.") + (lines.length ? " " + lines.join(" ") : "");
     renderStats(); saveGameState();
-    return { status: "completed", message: message, found: found.map(function (item) { return { name: getItemName(item), quantity: getItemQuantity(item) }; }), approach: key, staminaCost: approach.staminaCost, turns: 1 };
+    return { status: "completed", message: message, found: found.map(function (item) { return { name: getItemName(item), quantity: getItemQuantity(item) }; }), approach: key, stat: approach.stat, automatic: automatic, staminaCost: approach.staminaCost, turns: 1 };
 }
 
 function searchLootContents(source, kind, approachKey) {
     const result = performLootContentsSearch(source, kind, approachKey);
     setNarration(result.message);
+    if (result.status === "completed") publishTextModeOutput("search", result.message, { search: { source: getEntityName(source), kind: kind, approach: result.approach, stat: result.stat, automatic: result.automatic, staminaCost: result.staminaCost, turns: result.turns, found: result.found } }, false);
     if (result.status !== "interrupted" && getLootSearchLocation(source, kind)) {
         if (kind === "body") renderRoomObjectActionMenu(source);
         else if (kind === "fixture") openFixtureCard(source, { message: result.message });
@@ -64552,13 +64866,16 @@ function searchLootContents(source, kind, approachKey) {
 }
 
 function searchBodyObject(item, approachKey) {
-    return searchLootContents(item, "body", approachKey || "careful");
+    return searchLootContents(item, "body", approachKey);
 }
 
 function getLootSearchActions(source, kind) {
-    return SEARCH_APPROACHES.map(function (approach) {
-        return { key: approach.key, label: approach.label + " (" + approach.staminaCost + " stamina, 1 turn)", reason: getLootSearchBlockReason(source, kind, approach.key, { presenting: true }), run: function () { return searchLootContents(source, kind, approach.key); } };
-    });
+    const approach = getLootSearchApproach("auto"), player = G.player, room = G.activeRoom;
+    const location = getLootSearchLocation(source, kind);
+    return [{ key: "auto", label: "Search (" + approach.staminaCost + " stamina, 1 turn)", reason: getLootSearchBlockReason(source, kind, "auto", { presenting: true }), run: function () {
+        if (player !== G.player || room !== G.activeRoom || location !== getLootSearchLocation(source, kind) || (kind === "body" ? G.activeObject !== source : G.activeItemModal !== source)) return { status: "blocked", message: "That search is no longer available. Open the container or body again.", found: [] };
+        return searchLootContents(source, kind, "auto");
+    } }];
 }
 
 function revealBodyLoot(item) {
