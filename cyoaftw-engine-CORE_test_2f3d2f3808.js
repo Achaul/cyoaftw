@@ -3,11 +3,23 @@
 const textModeState = {
     enabled: false, busy: false, parsing: false, epoch: 0, queue: [], pending: null,
     paused: false, capture: null, dialogue: null, lootContext: null, lootTask: null, lootPartyView: null,
-    history: [], historyIndex: 0, draft: "", events: [], sessionPlayer: null, choices: null, combatTurnSpent: false
+    history: [], historyIndex: 0, draft: "", events: [], systemEntry: null, storyPlayer: null, helpActive: false, sessionPlayer: null, choices: null, combatTurnSpent: false
 };
 const TEXT_COMMAND_LIMIT = 12;
 const TEXT_INPUT_LIMIT = 600;
 const TEXT_COMMANDS = [
+    {id:"phrases",info:true,args:["action","phrase"],aliases:["phrases","learned phrases"],example:'phrases; forget phrase "please survey the room"; clear phrases',description:"List successfully learned AI phrases, remove an exact phrase or clear the local dictionary. Learning stores action templates after complete success; targets and costs are checked fresh. These controls are free."},
+    { id:"casting", casting:true, args:["action","target"], aliases:["powers","divine gifts","enchantments","cast enchant","ask for enchantment"], example:"powers; power mending touch; cast mending touch on <ally>; cast enchant; enchant recipient yourself; enchant item sword; enchant element fire; ask for enchantment; cast fleet foot; show casting; how casting", description:"Use shared native powers/heal targets, player and companion gear casts and learned travel spells. Final gear element choices spend native costs and 1 turn. Power costs/uses and healing stay native; travel spells keep zero-turn behavior. Answer one step per reply; explicitly continue older batches." },
+    { id:"synergy", synergy:true, args:["action","target"], aliases:["synergies","combine skills","notebook"], example:"synergy; combine skills; first skill firebolt; second skill trained strike; add catalyst greenwort; picture \"a burning arc\"; experiment; notebook; memorise synergy <name>; forget synergy <name>; name synergy <old> as \"new\"; use synergy <name>", description:"Use native synergy experiments, catalyst choices, notebook, naming and memory rules. Review attempts and memorisation, then confirm separately. Show synergy and how synergy are free. Answer one step at a time; explicitly continue older batches." },
+    { id: "travel", travel: true, args: ["action", "target"], aliases: ["directions", "guide questions", "rent room", "follow guide", "keep following"], example: "directions to <place>; lead me to <place>; guide questions; ask guide how to earn money; rent room; follow guide; keep following; stop walking; show lodging", description: "Use shared native directions, guide questions and rental menus. Directions cost 1 turn; guiding agreement costs 1 turn. Follow guide takes one native movement step; keep following waits for the native paced walk. Rent room reviews the weekly price and requires separate numbered confirmation. Guide answers and menu browsing are free. Options/choose/back/cancel/leave work; answer one step per reply and explicitly continue older batches." },
+    { id: "nectar", primary: "feed nectar", nectar: true, args: ["item", "amount", "target"], aliases: ["nectar", "feed nectar", "offer nectar"], example: "feed nectar to slime; feed 5 drops of nectar syrup to second slime; give 3 drops of nectar to slime; show nectar", description: "Offer nectar to a visible living slime. Select a container and a whole drop count from that ONE container; the native dose transaction keeps leftovers and returns its ordinary empty container where applicable. Each offering costs 1 turn. Options/choose/back/cancel/leave work; one menu step per reply and explicit continue for older queued actions. Show nectar/show gifts lists public availability. Ordinary gifts keep give <item> to <npc>." },
+    { id: "merchant", merchant: true, args: ["action", "target"], aliases: ["merchant services", "trade extras", "ask about", "sell junk", "restock"], example: "ask about stock sword; ask about carried sword; sell junk; restock; show trade extras", description: "While trading, ask about <item> uses the native free merchant opinion and existing trait discovery. Sell junk reviews visible unworn native junk before a separate numbered confirmation; native per-unit prices, refusals and partial sales apply. Restock asks an eligible barkeeper for missing drinks through the native cellar/backroom route. Other merchants use their supply cycle. Show trade extras lists availability; how ask about, how sell junk and how restock give examples. Options/choose/back/cancel/leave work; finish one menu step per reply and continue older commands explicitly." },
+    { id: "shrine", shrine: true, jobs: true, args: ["action", "target"], aliases: ["shrine", "dedicate", "rededicate", "dedication"], example: "shrine; show shrine; pray at shrine; dedicate shrine to <known deity>; pray to <known deity>; how dedicate; newcomer blessing; favor willpower; defile shrine; renew mana; quiet devotion", description: "Use the current room shrine. Shrine opens native prayer/dedication choices; show shrine freely reports public dedication, known choices, costs and restrictions. Pray at shrine uses its current deity. Dedicate shrine to <known deity> (or pray to <known deity> while at a shrine) includes prayer, at the native 2 stamina / 2 turns and 50-turn same-place cooldown. First permanent patron pledges and changed dedication require a separate numbered review confirmation. Unknown shrine gods stay unnamed until native prayer discovers them. Your existing patron cannot be changed by rededication. Options/choose/back/cancel/leave work; answer one step per reply and explicitly continue older queued commands after a decision. Fixture prayers retain pray at <altar>. Newcomer blessing, favor <stat/gift>, defile shrine, renew mana and quiet devotion share native rules and menus. Show shrine lists their costs/restrictions. Defiling and HP-cost renewal require a separate numbered review. Favor waits for its native answer and rejects stale replies." },
+    { id: "structure", structure: true, info: true, jobs: true, args: ["action", "target"], aliases: ["structure", "structural magic", "walls", "doors", "rubble"], example: "show structure; unlock north door; pick north door; force north door; smash north door; push through north door; lock north door; knock on north door; hammer east wall; dig south rubble; pray for rescue; cast frost shard at north door", description: "Inspect public directional doors, exit walls and rubble without spending a turn. Cast <learned damaging spell> at <direction> door/wall/rubble uses native eligibility, mana and one turn. Watch <direction> door waits one turn for an existing fire. Wall damage may collapse the exit or whole room; fire can clear rubble into a crawl even in a collapsed room. Native magic choices accept options/choose/back/cancel/leave and pause older queues for explicit continue. Physical commands include unlock north door, pick north door, force north door, smash frozen north door, push through burning north door, lock north door with key/lockpick, knock on north door, hammer east wall, dig south rubble and pray for rescue when trapped. Show structure lists current costs/restrictions. Use how dig for physical examples. Each command makes one native attempt; failed attempts and movement pause later commands." },
+    ...["burn", "dip", "pour"].map(function (verb) { return { id: verb, material: true, jobs: true, args: ["item", "fixture"], aliases: verb === "burn" ? ["burn", "burning"] : verb === "dip" ? ["dip", "dunk", "dipping"] : ["pour", "pour out", "empty", "pouring"], example: verb === "burn" ? "burn note at hearth; burn; show burn" : verb === "dip" ? "dip dagger in cauldron; dip; show dip" : "pour out waterskin; pour healing potion; show pour", description: verb === "burn" ? "Burn one visible carried eligible item at a visible warmth source. Review irreversible destruction and confirm separately by number; it costs one turn. Spellbooks are excluded. Options/back/cancel/leave work. Explicitly continue older queued commands after a decision." : verb === "dip" ? "Dip a single carried item or wielded weapon in an explicitly named cauldron for one turn. Hidden brew effects are discovered only through the native action. Dunk is an alias. Dip <item> in bowl, or unqualified dip <item> beside an alchemy table, retains the crafting route. Options/back/cancel/leave work." : "Pour one carried liquid or potion onto the floor for one turn, retaining its normal empty container. Potions soak away; water, oil, spirits and alcohol use native floor-liquid rules. Empty is an alias; this cannot transfer into another container. Pour out mixture/bowl retains the crafting confirmation. Show pour lists public items." }; }),
+    { id: "cast", environmental: true, jobs: true, args: ["ability", "target"], aliases: ["cast", "environment", "environmental magic"], example: "cast firebolt at chest; cast frost shard at chest; cast douse at burning shelf; cast frost shard at water; cast firebolt at carried note; cast frost shard at north door; cast frost shard at east wall; cast firebolt at south rubble", description: "Outside combat, cast a learned damaging spell at an explicitly named visible chest, flammable fixture, floor liquid, loose/carried/equipped item, or directional door/wall/rubble. Structural targets use the native door, wall and rubble handlers; wall collapse and fire-cleared crawls remain possible. Native mana, one-turn casts (plus any normal chest-opening turn), elemental effects, contents loss, spreading fire and witness reactions apply. Show environment lists available spells/targets and restrictions. Specify fixture/item and carried/equipped/floor if needed. Multiple targets ask for a number and retain original references. Combat cast/use and cast <spell> at dummy retain their own routes." },
+    { id: "watch", environmental: true, jobs: true, args: ["fixture"], aliases: ["watch", "watch fire"], example: "watch chest; watch fire at shelf; watch chest burn; watch north door", description: "Let a burning chest or fixture burn for one native story turn. Fire may spread or destroy its contents, and a burnt-through chest can open with normal loss rolls. Show fires lists visible actions, including burning directional doors. Ambiguity asks for a number; changed targets are rejected." },
+    { id: "tip", environmental: true, jobs: true, args: ["fixture"], aliases: ["tip", "tip over", "overturn"], example: "tip oil barrel; tip over water barrel", description: "Tip a visible supported barrel/cask through its native one-turn action. Its liquid joins the room floor, with normal volume, elemental/fire behavior and witness reactions. Native cellar-stock restrictions apply. Show tip lists actions; ambiguity asks for a number." },
     { id: "notice", notice: true, jobs: true, args: ["action", "target"], aliases: ["notice", "notices", "post", "post notice", "write notice", "take paper", "take pencil", "wanted"], example: 'notices; notices at notice post; post notice "Lost a brass key"; write notice "Meet at the inn"; use pencil; review notice; take paper; take pencil; read wanted notices', description: 'Use notices to read a visible notice board/post (1 turn), or show notices for free availability and supplies. Post notice "your exact words" reviews a signed note; confirm separately by number to spend 1 sheet and 1 turn. Post notice without words opens the shared editor; write notice "..." updates its draft, use pencil selects the reusable tool, and review notice opens confirmation. Take paper/pencil uses the free public tray with pack limits. Add at/from <board> for ambiguity. Jobs opens work postings; read wanted notices uses the local wanted posters where available (free). Options/back/cancel/leave work; answer one menu step per reply and explicitly continue older commands. AI fallback can open the editor but cannot invent or change note text.' },
     { id: "bench", bench: true, jobs: true, args: ["action", "target"], aliases: ["bench", "workbench", "grindstone", "hone", "anvil"], example: "bench; show bench; grindstone; hone; hone at grindstone; sharpen weapon at grindstone; anvil; inspect weapon at anvil", description: "Use a visible self-service grindstone or ordinary anvil. Bench/show bench lists actions; grindstone or look at grindstone inspects without spending. Hone (or hone at <grindstone>) gives your equipped sound, dull blade its native rough edge for 2 stamina and 1 turn, no coins. Existing edges cannot be stacked; broken blades need a smith. Anvil or inspect weapon at <anvil> freely checks the equipped weapon, including no weapon, broken, dull/blunt, edge duration and visible enchantment. Multiple fixtures ask for a number and retain the original weapon/source. Paid smith services keep sharpen <weapon> (and hone <weapon> while engaged). Interrupted honing keeps spent stamina/time without applying a late edge. No new submenu or confirmation is required." },
     { id: "train", training: true, jobs: true, args: ["action", "target"], aliases: ["train", "training", "lesson", "lessons", "drill", "practice", "forget"], example: "train; show training; train fighter; train alchemy; learn technique second wind; forget second wind; train dummy; drill dummy; cast firebolt at dummy; train dummy with firebolt", description: "Talk to an available specialist, then train for numbered lessons and techniques. Train <class/skill>, learn technique <name>, or forget <name> reviews fees and time before explicit numbered confirmation. Apprenticeships, XP, cooldowns, branch/practice/patron rules and spellbook updates use native rules. Learn <spell> from <book> keeps its reading route. At a visible dummy use train dummy to review practice, drill dummy for one weapon hit, or cast <damaging spell/power> at dummy. Each hit takes 1 turn and normal stamina/mana; practice and class XP caps still apply. Options/back/cancel/leave work. One menu step per reply; explicitly continue older batches after leaving the menu." },
@@ -128,6 +140,7 @@ function parseTextCommand(input) {
     const original = String(input || "").trim();
     const raw = original.replace(/[.!?]+$/, "").trim();
     const key = textCommandNormalize(raw);
+    const phrase = parseTextPhraseCommand(raw); if (phrase) return phrase;
     let match = /^(?:how(?:\s+(?:do|can)\s+i)?|help)(?:\s+(?:to\s+)?(.+))?$/i.exec(raw);
     if (match) return { verb: "help", args: { topic: match[1] || "" } };
     match = /^show(?:\s+(?:me\s+)?(.+))?$/i.exec(raw);
@@ -139,6 +152,18 @@ function parseTextCommand(input) {
     if (match) return { verb: "say", args: { text: textCommandUnquote(match[1]) } };
     match = /^(?:look\s+at|examine|inspect|x)\s+(?:npc|creature|person)\s+(.+)$/i.exec(raw);
     if (match) return { verb: "examine", args: { item: textCommandUnquote(match[1]), scope: "npc" } };
+    const casting = parseTextCastingCommand(raw); if (casting) return casting;
+    const synergy = parseTextSynergyCommand(raw); if (synergy) return synergy;
+    const shrineService = typeof parseTextShrineService === "function" ? parseTextShrineService(raw) : null;
+    if (shrineService) return shrineService;
+    const tool = typeof parseTextStructuralTool === "function" ? parseTextStructuralTool(raw) : null;
+    if (tool) return tool;
+    const shrine = typeof parseTextShrineCommand === "function" ? parseTextShrineCommand(raw) : null;
+    if (shrine) return shrine;
+    const structure = typeof parseTextStructuralCommand === "function" ? parseTextStructuralCommand(raw) : null;
+    if (structure) return structure;
+    const material = typeof parseTextMaterialCommand === "function" ? parseTextMaterialCommand(raw) : null;
+    if (material) return material;
     const notice = typeof parseTextNoticeCommand === "function" ? parseTextNoticeCommand(original) : null;
     if (notice) return notice;
     const tailoring = typeof parseTextTailorCommand === "function" ? parseTextTailorCommand(raw) : null;
@@ -149,6 +174,8 @@ function parseTextCommand(input) {
     if (workbench) return workbench;
     const training = typeof parseTextTrainingCommand === "function" ? parseTextTrainingCommand(raw) : null;
     if (training) return training;
+    const environment = typeof parseTextEnvironmentCommand === "function" ? parseTextEnvironmentCommand(raw) : null;
+    if (environment) return environment;
     const commission = typeof parseTextCommissionCommand === "function" ? parseTextCommissionCommand(raw) : null;
     if (commission) return commission;
     const forging = typeof parseTextForgeCommand === "function" ? parseTextForgeCommand(raw) : null;
@@ -159,6 +186,8 @@ function parseTextCommand(input) {
     if (reading) return reading;
     const goods = typeof parseTextGoodsCommand === "function" ? parseTextGoodsCommand(raw) : null;
     if (goods) return goods;
+    const travel = parseTextTravelCommand(raw); if (travel) return travel;
+    const nectar = parseTextNectarCommand(raw); if (nectar) return nectar;
     const party = typeof parseTextPartyCommand === "function" ? parseTextPartyCommand(raw) : null;
     if (party) return party;
     const jobs = typeof parseTextJobsCommand === "function" ? parseTextJobsCommand(raw) : null;
@@ -167,6 +196,8 @@ function parseTextCommand(input) {
     if (exploration) return exploration;
     const loot = parseTextLootCommand(raw);
     if (loot) return loot;
+    const merchant = parseTextMerchantCommand(raw);
+    if (merchant) return merchant;
     const trade = parseTextTradeCommand(raw);
     if (trade) return trade;
     const inventory = parseTextInventoryCommand(raw);
@@ -193,20 +224,21 @@ function parseTextCommandBatch(input) {
     if (split.parts.length > TEXT_COMMAND_LIMIT) return { error: "Use at most " + TEXT_COMMAND_LIMIT + " actions at once." };
     const actions = split.parts.map(parseTextCommand);
     if (actions.some(function (action) { return !action; })) return { unresolved: true };
-    if (actions.length > 1 && actions.some(function (action) { return /^(help|show|stop|continue)$/.test(action.verb); })) return { error: "Send show, how, stop, or continue on its own." };
+    if (actions.length > 1 && actions.some(function (action) { return /^(help|show|stop|continue|phrases)$/.test(action.verb); })) return { error: "Send help, stop, continue or phrase controls on their own." };
     return { actions: actions };
 }
 
 function validateTextAIPlan(value) {
     if (!value || !Array.isArray(value.actions) || !value.actions.length || value.actions.length > TEXT_COMMAND_LIMIT) return null;
     const fields = Object.create(null);
-    TEXT_COMMANDS.forEach(function (def) { if (!/^(stop|continue)$/.test(def.id)) fields[def.id] = def.args || []; });
+    TEXT_COMMANDS.forEach(function (def) { if (!/^(stop|continue|phrases)$/.test(def.id)) fields[def.id] = def.args || []; });
     const actions = [];
     for (let i = 0; i < value.actions.length; i++) {
         const action = value.actions[i];
         if (!action || !Object.prototype.hasOwnProperty.call(fields, action.verb) || !action.args || typeof action.args !== "object" || Array.isArray(action.args)) return null;
         if (Object.keys(action).some(function (key) { return key !== "verb" && key !== "args"; })) return null;
         if (Object.keys(action.args).some(function (key) { return fields[action.verb].indexOf(key) < 0 || typeof action.args[key] !== "string" || action.args[key].length > TEXT_INPUT_LIMIT; })) return null;
+        if (action.verb === "synergy" && /^(picture|name|confirm|replace)$/.test(action.args.action || "")) return null;
         if (action.verb === "say" && !String(action.args.text || "").trim()) return null;
         if (action.verb === "choose" && !/^[1-9]\d*$/.test(action.args.number || "")) return null;
         if (action.verb === "attack" && ((action.args.style && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.styles, action.args.style)) || (action.args.bodyPart && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.parts, action.args.bodyPart)))) return null;
@@ -221,7 +253,7 @@ function validateTextAIPlan(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables)$/.test(def.id) && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases)$/.test(def.id) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -254,21 +286,87 @@ async function interpretTextCommands(input) {
 
 // Semantic output events are independent of the on-screen renderer. A future
 // speech presentation can consume these without reading labels or HTML.
+function textModeHelpWords(text) {
+    return String(text || "").split(/("(?:[^"\\]|\\.)*")/g).map(function (part, i) {
+        return i % 2 ? part : part.replace(/\bhow(?:\s+(?:do|can)\s+i)?(?:\s+to)?\b/gi, "help").replace(/\bshow\b/gi, "help");
+    }).join("");
+}
+function textModeDisplayWords(text) {
+    return textModeState.helpActive ? textModeHelpWords(text) : String(text || "")
+        .replace(/\b(Type|Use|Try|Ask)\s+(?:show|how)(?:\s+to)?\b/gi, "$1 help")
+        .replace(/\b(?:show, how|show or how|show for actions or how for examples)\b/gi, "help")
+        .replace(/\bor how\b/gi, "or help");
+}
+function textModeStoryOutput(event, text) {
+    const log = document.getElementById("chatLogEl");
+    if (!log || !text || event.renderedInChat) return;
+    const line = document.createElement("div");
+    line.className = "text-story-line text-story-" + event.kind;
+    line.textContent = event.kind === "dialogue" && event.speaker ? event.speaker + ": " + text : text;
+    log.appendChild(line);
+    if (event.kind === "combat") textModeState.combatStoryEntry = line;
+    while (log.children.length > 100) log.removeChild(log.firstChild);
+    log.scrollTop = log.scrollHeight;
+}
+function textModeSystemOutput(event, text) {
+    const log = document.getElementById("textModeLogEl");
+    if (!log) return;
+    let line = textModeState.systemEntry;
+    if (event.kind === "command" || !line || line.parentNode !== log) {
+        line = document.createElement("div");
+        line.className = "text-mode-line text-mode-" + event.kind;
+        if (log.insertBefore) log.insertBefore(line, log.firstChild); else log.appendChild(line);
+        textModeState.systemEntry = line;
+    }
+    if (event.kind === "command") line.dataset.command = event.text;
+    line.textContent = String(text || "").replace(/\s+/g, " ").trim();
+    line.title = (line.dataset.command || "") + (event.kind === "command" ? "" : "\n" + text);
+    while (log.children.length > 40) log.removeChild(log.lastChild || log.firstChild);
+    log.scrollTop = 0;
+}
 function publishTextModeOutput(kind, text, details, display) {
     const event = Object.assign({ kind: kind, text: String(text || ""), source: "text-mode" }, details || {});
     if (!event.text) return;
+    event.systemOnly = !!event.systemOnly || kind === "feedback" && /^(?:Text mode ready\.|Choice resolved\.|Pending commands|The new command replaces|There are no pending commands|An action is still finishing)/.test(event.text);
+    textPhraseObserve(event);
+    textModeImmersiveOutput(event);
+    event.presentation = display === false ? "supplement" : kind === "command" || event.systemOnly ? "system" : kind === "choices" ? "decision" : "story";
     textModeState.events.push(event);
     if (textModeState.events.length > 100) textModeState.events.shift();
     if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") window.dispatchEvent(new CustomEvent("cyoa:output", { detail: event }));
     if (display === false || !textModeState.enabled) return;
-    const log = document.getElementById("textModeLogEl");
-    if (!log) return;
-    const line = document.createElement("div");
-    line.className = "text-mode-line text-mode-" + kind;
-    line.textContent = kind === "dialogue" && event.speaker ? event.speaker + ": " + event.text : event.text;
-    log.appendChild(line);
-    while (log.children.length > 40) log.removeChild(log.firstChild);
-    log.scrollTop = log.scrollHeight;
+    const visible = textModeDisplayWords(event.text);
+    if (/^(command|feedback|choices)$/.test(kind)) textModeSystemOutput(event, textModeState.helpActive ? "Help is shown in the chat log." : visible);
+    if (kind === "command") return;
+    let story = event.narration || visible;
+    if (kind === "choices" && !event.narration) {
+        story = visible.split("\n").filter(function (line) { return !/^(?:Type|Use|Answer|Choose a number)\b/i.test(line.trim()); }).join("\n");
+    }
+    if (!event.systemOnly) textModeStoryOutput(event, story);
+}
+
+function textModeAttachCombatSkip(session) {
+    const line = textModeState.enabled && textModeState.combatStoryEntry;
+    if (!line || !line.setAttribute) return;
+    line.classList.add("text-combat-skippable");
+    line.setAttribute("role", "button"); line.setAttribute("tabindex", "0");
+    line.setAttribute("aria-label", "Finish current combat narration");
+    line.title = "Click or press Enter to finish the current narration.";
+    const finish = function () { if (activeCombatNarration === session && !session.done) skipActiveCombatNarration(); };
+    line.onclick = finish;
+    line.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); finish(); } };
+    const complete = session.textCommandDone;
+    session.textCommandDone = function () {
+        line.classList.remove("text-combat-skippable"); line.removeAttribute("role"); line.removeAttribute("tabindex"); line.removeAttribute("aria-label");
+        line.title = ""; line.onclick = line.onkeydown = null;
+        if (complete) complete();
+    };
+}
+
+
+function textModeHelp(topic, show) {
+    const previous = textModeState.helpActive; textModeState.helpActive = true;
+    try { return textModeHelpContent(topic, show); } finally { textModeState.helpActive = previous; }
 }
 
 function textModeResult(status, text, details) {
@@ -324,9 +422,22 @@ function textModeInspectNPC(action) {
     return { status: "completed" };
 }
 
-function textModeHelp(topic, show) {
+function textModeHelpContent(topic, show) {
     let key = textCommandNormalize(topic).replace(/^(?:to|use)\s+/, "");
+    if (/^(phrases|learned phrases)$/.test(key)) return executeTextPhraseCommand({args:{action:"list"}});
     if (/^(available\s+)?(verbs|actions|commands)$/.test(key)) key = "";
+    if (textModeInCombat() && /^(cast|magic)$/.test(key)) return textCombatShow("spells");
+    const castingHelp = castingTextHelp(key, show); if (castingHelp) return castingHelp;
+    const synergyHelp = synergyTextHelp(key, show); if (synergyHelp) return synergyHelp;
+    const travelHelp = travelTextHelp(key, show); if (travelHelp) return travelHelp;
+    const nectarHelp = nectarTextHelp(key, show); if (nectarHelp) return nectarHelp;
+    const merchantHelp = merchantExtraHelp(key, show); if (merchantHelp) return merchantHelp;
+    if (typeof textShrineServiceHelp === "function") { const service = textShrineServiceHelp(key, show); if (service) return service; }
+    if (typeof textStructuralToolHelp === "function") { const tool = textStructuralToolHelp(key, show); if (tool) return tool; }
+    if (show && typeof textShrineShow === "function") { const shrine = textShrineShow(key); if (shrine) return shrine; }
+    if (show && typeof textStructuralShow === "function") { const structure = textStructuralShow(key); if (structure) return structure; }
+    if (show && typeof textMaterialShow === "function") { const material = textMaterialShow(key); if (material) return material; }
+    if (show && typeof textEnvironmentShow === "function") { const environment = textEnvironmentShow(key); if (environment) return environment; }
     if (show && typeof textNoticeShow === "function") { const notice = textNoticeShow(key); if (notice) return notice; }
     if (show && typeof textWorkbenchShow === "function") { const bench = textWorkbenchShow(key); if (bench) return bench; }
     if (show && typeof textTrainingShow === "function") { const training = textTrainingShow(key); if (training) return training; }
@@ -351,10 +462,20 @@ function textModeHelp(topic, show) {
     let entry = parsed && parsed.verb !== "help" ? textCommandDefinition(parsed.verb) : null;
     if (!entry && key) entry = TEXT_COMMANDS.find(function (def) { return def.aliases.some(function (alias) { return key === alias || key.indexOf(alias + " ") === 0; }); });
     if (entry) return textModeResult("completed", entry.description + "\nExamples: " + entry.example);
-    if (key) return textModeResult("completed", "I don't have help for that yet. Type how to see the supported commands.");
+    if (key && !show) return textModeHelpContent(topic, true);
+    if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
     const ids = ["help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
-        if (ids.indexOf(def.id) < 0 && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !/^(back|cancel)$/.test(def.id)) return false;
+        if (ids.indexOf(def.id) < 0 && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !/^(back|cancel)$/.test(def.id)) return false;
+        if (def.casting && !castingAvailable()) return false;
+        if (def.synergy && !synergyTextAvailable()) return false;
+        if (def.travel && !G.guiding && (!G.activeNPC || travelNPCBlock(G.activeNPC, "directions"))) return false;
+        if (def.nectar && !nectarTextAvailable()) return false;
+        if (def.merchant && merchantExtraBlock(G.activeNPC)) return false;
+        if (def.shrine && !shrineAvailable()) return false;
+        if (def.structure && !structuralEntries().length) return false;
+        if (def.material && !materialAvailable(def.id)) return false;
+        if (def.environmental && !environmentAvailable(def.id)) return false;
         if (def.notice && !textNoticeAvailable()) return false;
         if (def.bench && (!workbenchFixtures().length || textModeRoomBlock())) return false;
         if (def.training && !textTrainingAvailable()) return false;
@@ -388,7 +509,7 @@ function textModeHelp(topic, show) {
         }
         return true;
     });
-    const lines = entries.map(function (def) { return (def.primary || def.id) + ": " + def.example; });
+    const lines = entries.filter(function (def) { return def.id !== "show"; }).map(function (def) { return (def.primary || def.id) + ": " + def.example; });
     return textModeResult("completed", "Commands you can use:\n" + lines.join("\n") + '\nAsk how talk for examples. Combine actions with then, commas, or semicolons. Quote speech: say "Hello, how are you?".');
 }
 
@@ -429,16 +550,30 @@ function textModeInterruptReason() {
 
 function textModeAsk(action, kind, options, message) {
     textModeState.pending = { action: action, kind: kind, options: options, scene: textModeScene() };
-    return textModeResult("needs_input", message + "\n" + options.map(function (value, index) {
-        return (index + 1) + ". " + (kind === "target" ? textModeNPCLabel(value) : /^(ability|abilityTarget|item|tradeItem|lootSource|lootItem|fixture|fixtureFill|fixtureRoute|fixtureConfirm)$/.test(kind) ? value.label : value);
-    }).join("\n") + "\nType a number, or stop to cancel.", /^(item|tradeItem|lootSource|lootItem|fixture|fixtureFill|fixtureRoute|fixtureConfirm)$/.test(kind) ? { choices: options.map(function (entry, index) { return { number: index + 1, label: entry.label, response: String(index + 1) }; }) } : undefined);
+    const choices = options.map(function (value, index) {
+        const label = kind === "target" ? textModeNPCLabel(value) : value && value.label || String(value);
+        return { number: index + 1, label: label, response: String(index + 1) };
+    });
+    const details = { choices: choices };
+    if (kind === "direction") {
+        const names = { N:"North", NE:"Northeast", E:"East", SE:"Southeast", S:"South", SW:"Southwest", W:"West", NW:"Northwest", U:"Up", D:"Down" };
+        const exits = options.map(function (dir) { return names[dir] || dir; }).join(", ");
+        details.narration = action.verb === "glance"
+            ? "You glance around the room, but need to focus on a direction with an exit, like " + exits + "."
+            : "Which way will you go? The exits lead " + exits + ".";
+    }
+    return textModeResult("needs_input", message + "\n" + choices.map(function (choice) {
+        return choice.number + ". " + choice.label;
+    }).join("\n") + "\nType a number, or stop to cancel.", details);
 }
+
 
 async function executeTextCommand(action) {
     const args = action.args || {};
     const def = textCommandDefinition(action.verb);
     if (!def) return textModeResult("blocked", "That command is not supported. Type how for examples.");
     if (/^(help|show)$/.test(action.verb)) return textModeHelp(args.topic, action.verb === "show");
+    if (action.verb === "phrases") return executeTextPhraseCommand(action);
     if (action.verb === "status") {
         const p = G.player;
         return textModeResult("completed", "Health: " + p.hp + "/" + p.hpMax + ". Stamina: " + p.stamina + "/" + p.staminaMax + (typeof p.mana === "number" ? ". Mana: " + p.mana + "/" + p.manaMax : "") + ". Coins: " + getCoinValue(p) + ".");
@@ -447,6 +582,18 @@ async function executeTextCommand(action) {
     if (interrupted) return textModeResult("interrupted", interrupted);
     const combatBlock = textCombatActionBlock(action);
     if (combatBlock) return textModeResult("blocked", combatBlock);
+    const physicalIntent = structuralLegacyIntent(action);
+    if (physicalIntent) return executeTextStructuralTool(physicalIntent);
+    if (def.casting) return executeTextCastingCommand(action);
+    if (def.synergy) return executeTextSynergyCommand(action);
+    if (def.travel) return executeTextTravelCommand(action);
+    if (def.nectar) return executeTextNectarCommand(action);
+    if (def.merchant) return executeTextMerchantCommand(action);
+    if (def.shrine) return executeTextShrineCommand(action);
+    if (def.structure && args.action) return executeTextStructuralTool(action);
+    if (def.structure) return textStructuralShow("structure" + (args.target ? " " + args.target : ""));
+    if (def.material) return executeTextMaterialCommand(action);
+    if (def.environmental) return executeTextEnvironmentCommand(action);
     if (def.notice) return executeTextNoticeCommand(action);
     if (def.bench) return executeTextWorkbenchCommand(action);
     if (def.training) return executeTextTrainingCommand(action);
@@ -484,7 +631,7 @@ async function executeTextCommand(action) {
             return textModeAsk(action, "direction", dirs, "Which direction?");
         }
         if (!room.exits || !room.exits[dir]) return textModeResult("blocked", "There is no exit " + dir + " here.");
-        if (isExitLocked(room, dir)) return textModeResult("blocked", "The way " + dir + " is locked. Return to the room controls to deal with the door.");
+        if (isExitLocked(room, dir)) return textModeResult("blocked", "The way " + dir + " is locked. Use show doors, unlock, pick or force <direction> door.");
         if (isExitCollapsed(room, dir)) return textModeResult("blocked", "The way " + dir + " is blocked by rubble.");
         if (action.verb === "glance") {
             const entry = INTERACT_MENU_ACTIONS.find(function (value) { return value.id === "glance"; });
@@ -608,6 +755,7 @@ async function runTextCommandQueue() {
         textModeState.paused = true;
         textModeResult("blocked", "That action could not finish. Pending commands are paused; type stop to cancel them.");
     } finally {
+        textPhraseComplete(epoch);
         textModeState.capture = null;
         textModeDialogueBusy(false);
         textModeState.busy = false;
@@ -617,6 +765,8 @@ async function runTextCommandQueue() {
 }
 
 function stopTextCommands(announce) {
+    if (typeof travelStopOwnedWalk === "function") travelStopOwnedWalk();
+    textModeState.learning = null;
     textModeState.epoch++;
     textModeState.queue = [];
     textModeState.pending = null;
@@ -629,11 +779,14 @@ function stopTextCommands(announce) {
 async function submitTextModeCommand(raw) {
     const input = String(raw || "").trim();
     if (!input || !textModeState.enabled) return;
+    publishTextModeOutput("command", "> " + input);
     const single = parseTextCommand(input);
     if (single && (single.verb === "stop" || single.verb === "cancel" && (textModeState.busy || textModeState.parsing))) { stopTextCommands(true); return; }
-    if (single && /^(help|show)$/.test(single.verb)) { textModeHelp(single.args.topic, single.verb === "show"); return; }
+    if (single && /^(help|show)$/.test(single.verb)) { textModeHelp(single.args.topic, single.verb === "show" || /^help(?:\s|$)/i.test(input)); return; }
+    if (single && single.verb === "travel" && /^(pause|stop)$/.test(single.args.action) && (textModeState.busy || textModeState.parsing)) { await executeTextTravelCommand(single); textModeState.paused = true; return; }
     if (textModeState.busy || textModeState.parsing) { textModeResult("blocked", "An action is still finishing. You can type show, how, or stop while you wait."); return; }
     if (typeof textSharedChoiceCanHandle === "function" && textSharedChoiceCanHandle(input, single) && await textSharedChoiceInput(input, single)) return;
+    if (single && single.verb === "phrases") { executeTextPhraseCommand(single); return; }
     if (single && single.verb === "continue") {
         if (textModeState.pending) { textModeResult("needs_input", "Answer the numbered question first, or type stop."); return; }
         if (!textModeState.queue.length) { textModeResult("completed", "There are no pending commands."); return; }
@@ -651,6 +804,9 @@ async function submitTextModeCommand(raw) {
         else if (pending.kind === "tradeItem") pending.action.tradeRef = pick;
         else if (pending.kind === "lootSource") pending.action.sourceRef = pick;
         else if (pending.kind === "lootItem") pending.action.lootItemRef = pick;
+        else if (pending.kind === "materialFixture") pending.action.materialFixture = pick;
+        else if (pending.kind === "materialItem") pending.action.materialItem = pick;
+        else if (pending.kind === "environment") pending.action.environmentRef = pick;
         else if (pending.kind === "fixture") pending.action.fixtureRef = pick;
         else if (pending.kind === "fixtureFill") pending.action.fillRef = pick;
         else if (pending.kind === "fixtureRoute") pending.action.fixtureRoute = pick;
@@ -669,18 +825,22 @@ async function submitTextModeCommand(raw) {
     const scene = textModeScene();
     const epoch = textModeState.epoch;
     let actions = local.actions;
-    publishTextModeOutput("command", "> " + input);
-    if (local.unresolved) {
+    const phraseContext = textPhraseContext();
+    let learnedFromAI = false;
+    const learned = local.unresolved ? textPhraseLookup(input) : null;
+    if (learned) actions = learned;
+    if (local.unresolved && !learned) {
         if (!aiAvailable()) { textModeResult("blocked", 'That wording is not recognized locally, and AI command help is unavailable. Check Use AI in Preferences and the AI connection, or type how for supported commands.'); return; }
         textModeState.parsing = true;
         renderTextModeStatus("Interpreting your command...");
-        try { actions = await interpretTextCommands(input); }
+        try { actions = await interpretTextCommands(input); learnedFromAI = !!actions; }
         finally { textModeState.parsing = false; renderTextModeStatus(); }
         if (!textModeState.enabled || epoch !== textModeState.epoch) return;
         if (!textModeSameScene(scene)) { textModeResult("blocked", "The scene changed while interpreting. Please repeat your command."); return; }
     }
     if (!actions) { textModeResult("blocked", 'I could not understand that. Try how, or say "..." when speaking to an NPC.'); return; }
     // A batch is interpreted in full before any action is allowed to run.
+    if (learnedFromAI) textPhrasePrepare(input, actions, phraseContext);
     textModeState.queue = actions;
     return runTextCommandQueue();
 }
@@ -719,9 +879,16 @@ function setTextMode(enabled) {
     textModeState.enabled = !!enabled;
     if (enabled) {
         initializeTextMode();
+        if (textModeState.storyPlayer !== G.player) {
+            const story = document.getElementById("chatLogEl"); if (story) story.innerHTML = "";
+            const system = document.getElementById("textModeLogEl"); if (system) system.innerHTML = "";
+            textModeState.events = []; textModeState.systemEntry = null; textModeState.storyPlayer = G.player;
+        }
         textModeState.sessionPlayer = G.player;
         syncTextModeView();
-        if (!textModeState.events.length) textModeResult("completed", 'Text mode ready. Type show for actions or how for examples. Use say "..." for dialogue.');
+        const current = document.getElementById("narrationEl");
+        if (!textModeState.events.length && current && current.textContent.trim()) publishTextModeOutput("narration", current.textContent, { source: "engine", snapshot: true });
+        if (!textModeState.events.length) textModeResult("completed", 'Text mode ready. Type help for assistance. Use say "..." for dialogue.');
         focusTextModeInput();
     } else {
         textModeState.lootContext = null;
@@ -738,19 +905,25 @@ function initializeTextMode() {
     const form = document.getElementById("textModeFormEl");
     if (!input || !form || form.dataset.textModeWired) return;
     form.dataset.textModeWired = "true";
+    const details = document.getElementById("textModeSystemEl");
+    if (details) {
+        try { details.open = localStorage.getItem("cyoaTextSystemOpen") !== "false"; } catch (_) {}
+        details.addEventListener("toggle", function () { try { localStorage.setItem("cyoaTextSystemOpen", String(details.open)); } catch (_) {} });
+    }
     form.addEventListener("submit", function (event) {
         event.preventDefault();
         const raw = input.value.trim();
         if (!raw || event.isComposing) return;
         // Keep a command in the box when the engine cannot accept it yet.
         const parsed = parseTextCommand(raw);
-        if ((textModeState.busy || textModeState.parsing) && !(parsed && /^(help|show|stop|cancel)$/.test(parsed.verb))) { submitTextModeCommand(raw); return; }
+        if ((textModeState.busy || textModeState.parsing) && !(parsed && (/^(help|show|stop|cancel)$/.test(parsed.verb) || parsed.verb === "travel" && /^(pause|stop)$/.test(parsed.args.action)))) { submitTextModeCommand(raw); return; }
         input.value = "";
         textModeState.history.push(raw);
         if (textModeState.history.length > 50) textModeState.history.shift();
         textModeState.historyIndex = textModeState.history.length;
         textModeState.draft = "";
         submitTextModeCommand(raw);
+        focusTextModeInput();
     });
     input.addEventListener("keydown", function (event) {
         event.stopPropagation();
@@ -772,6 +945,10 @@ function initializeTextMode() {
             event.stopImmediatePropagation();
         }
     }, true);
+    if (typeof window.addEventListener === "function") window.addEventListener("resize", function () {
+        if (!textModeState.enabled || document.activeElement !== input) return;
+        requestAnimationFrame(function () { const log = document.getElementById("chatLogEl"); if (log) log.scrollTop = log.scrollHeight; });
+    });
     syncTextModeView();
 }
 
@@ -988,6 +1165,7 @@ function textModeTrackCombatNarration(session) {
 
 function textModePublishCombat(rows) {
     if (!textModeState.enabled) return;
+    textModeState.combatStoryEntry = null;
     const lines = rows.filter(function (row) { return !row.debug; }).map(function (row) { return row.text; });
     if (lines.length) publishTextModeOutput("combat", lines.join("\n"), { source: "engine", lines: lines });
 }
@@ -1353,7 +1531,7 @@ function textLootRelation(value, allowed) {
         const ch = text.charAt(i);
         if (quote) { if (ch === quote && text.charAt(i - 1) !== "\\") quote = ""; continue; }
         if (ch === '"' || (ch === "'" && (!i || /\s/.test(text.charAt(i - 1))))) { quote = ch; continue; }
-        const match = /^\s+(from|into|in)\s+/i.exec(text.slice(i));
+        const match = /^\s+(from|into|in|at|on)\s+/i.exec(text.slice(i));
         if (match && allowed.indexOf(match[1].toLowerCase()) >= 0) return { item: text.slice(0, i).trim(), source: textCommandUnquote(text.slice(i + match[0].length)) };
     }
     return null;
@@ -1765,6 +1943,8 @@ function textFixtureActions(fixture) {
         const reason = getFixtureMovementBlockReason() || (isExitLocked(room, route.direction) ? "That route is locked." : isExitCollapsed(room, route.direction) ? "That route is blocked by rubble." : "");
         actions.push({ id: "enter", key: route.direction, label: route.label, route: route, reason: reason, run: function () { moveThroughFixture(fixture, room, route); } });
     });
+    if (typeof environmentFixtureActions === "function") actions.push.apply(actions, environmentFixtureActions(fixture));
+    if (typeof materialFixtureActions === "function") actions.push.apply(actions, materialFixtureActions(fixture));
     return actions;
 }
 
@@ -1774,6 +1954,8 @@ function textExplorationList() {
 }
 
 function textFixtureCommand(action, entry) {
+    if (action.material) return action.id + (action.id === "dip" ? " in " : " at ") + JSON.stringify(entry.label);
+    if (action.environment) return action.environment.command;
     if (action.id === "post") return "post notice at " + entry.label;
     if (action.id === "anvil") return "inspect weapon at " + entry.label;
     return action.id === "drink" ? "drink from " + entry.label : action.id === "fill" ? "fill <empty bottle> from " + entry.label : action.id + " " + entry.label;
@@ -1870,6 +2052,8 @@ async function executeTextExplorationCommand(action) {
     if (fixture.id === "commission-board" && /^(examine|read)$/.test(verb)) return openForgeCommissionBoard(fixture);
     if (fixture.id === "job-board" && /^(examine|read)$/.test(verb)) { openJobBoard(G.activeRoom); return { status: "needs_input" }; }
     if (noticeIsBoard(fixture) && /^(read|post)$/.test(verb)) return executeTextNoticeCommand({ verb: "notice", args: { action: verb }, fixtureRef: entry });
+    if (/^(burn|dip)$/.test(verb)) return executeTextMaterialCommand({ verb: verb, args: {}, materialFixture: entry });
+    if (/^(cast|watch|tip)$/.test(verb)) return executeTextEnvironmentCommand({ verb: verb, args: verb === "cast" ? { target: entry.label } : { fixture: entry.label }, environmentRef: environmentEntries().find(function (value) { return value.target === fixture; }) });
     if (verb === "examine") return textFixtureDescribe(entry);
     if (/^(hone|anvil)$/.test(verb) && /^(grindstone|anvil)$/.test(fixture.id)) return executeTextWorkbenchCommand({ verb: "bench", args: { action: verb }, fixtureRef: entry });
     const choices = textFixtureActions(fixture).filter(function (value) { return value.id === verb; });
@@ -1946,7 +2130,7 @@ function beginSharedChoiceMenu(kind, npc, title, refresh) {
         valid: function () {
             if (!menu.ownsView()) return false;
             if (G.player !== player || G.activeRoom !== room || G.activeNPC !== activeNPC || G.activeNPCMode !== mode || !player || player.hp <= 0 || player.dead || player.unconscious || player._dying || player._collapsing || G.activeItemModal !== modal || G.activeObject !== object) return false;
-            if (G.activeNPCMode === "combat" || roomHasActiveHostile(room) || isRoomCollapsed(room)) return false;
+            if (G.activeNPCMode === "combat" || roomHasActiveHostile(room) && !/^nectar-/.test(kind) || isRoomCollapsed(room) && kind !== "structure-magic") return false;
             if (!playerState() || !npcState() || (npc && ((room.creatures || []).indexOf(npc) < 0 || !isVisibleEntity(npc) || npc.dead || npc.hp <= 0 || npc.unconscious))) return false;
             if (partyMembers.length !== (G.partyMembers || []).length || partyMembers.some(function (member) { return (G.partyMembers || []).indexOf(member) < 0; }) || followers.length !== (G.sessionFollowers || []).length || followers.some(function (member) { return (G.sessionFollowers || []).indexOf(member) < 0; })) return false;
             if (/^loot/.test(kind)) {
@@ -2007,7 +2191,7 @@ async function runSharedChoice(menu, choice) {
     if (choice.meta.target && (!isVisibleEntity(choice.meta.target) || getLootMembersInRoom(G.activeRoom).indexOf(choice.meta.target) < 0)) return sharedChoiceResult("blocked", "That companion is no longer available. Type options to refresh the choices.");
     clearSharedChoiceMenu(menu); // consume before running: no double allocation
     const result = await choice.run();
-    if (result && result.status === "needs_input" && /^notice-/.test(menu.kind)) return result;
+    if (result && result.status === "needs_input" && (/^(notice|material|shrine)-/.test(menu.kind) || menu.kind === "structure-magic" || menu.kind === "gift" || /^(nectar|travel|synergy|casting)-/.test(menu.kind))) return result;
     if (result && result.status && result.status !== "completed") return sharedChoiceResult(result.status, result.message || "The choice could not finish. Pending commands are paused.");
     if (result && result.accepted === false) return sharedChoiceResult("blocked", "The gift was refused; you keep it. Pending commands are paused.");
     return { status: "completed" };
@@ -2098,6 +2282,9 @@ function textSharedOptions() {
     const owned = menu && menu.ownsView();
     if (menu && menu.valid()) return showSharedChoiceMenu(menu);
     if (menu) clearSharedChoiceMenu(menu);
+    if (menu && owned && /^shrine-/.test(menu.kind)) { returnToRoomView(); return textModeResult("blocked", "That shrine choice changed. Use shrine to inspect it again; no new prayer costs were spent."); }
+    if (menu && owned && menu.kind === "structure-magic") { returnToRoomView(); return textModeResult("blocked", "That structural choice changed. Inspect the exit again."); }
+    if (menu && owned && /^material-/.test(menu.kind)) { closeItemModal(); returnToRoomView(); return textModeResult("blocked", "The item menu changed. Repeat the command; no new action was taken."); }
     if (menu && owned && /^notice-/.test(menu.kind)) { closeItemModal(); returnToRoomView(); return textModeResult("blocked", "The notice changed. Start the notice command again; nothing was posted."); }
     if (menu && owned && /^training-/.test(menu.kind)) {
         if (menu.fixture && !trainingSceneBlock(null, menu.fixture)) return trainingDummyMenu(menu.fixture);
@@ -2105,6 +2292,11 @@ function textSharedOptions() {
     }
     if (menu && owned && menu.kind === "commission-board" && !commissionBoardBlock(menu.commissionBoard)) return openForgeCommissionBoard(menu.commissionBoard);
     if (menu && owned && /^tailor-/.test(menu.kind) && !tailorServiceBlock(menu.npc)) { return tailorMenu(menu.npc, "services"); }
+    if (menu && owned && /^casting-/.test(menu.kind) && !castingBlock(menu.caster, menu.scene.mode === "combat")) return menu.refresh();
+    if (menu && owned && /^synergy-/.test(menu.kind) && !synergyActionBlock(menu.room, menu.synergyKind !== "self")) return menu.refresh();
+    if (menu && owned && /^travel-/.test(menu.kind) && !travelNPCBlock(menu.npc, menu.kind.replace("travel-", ""))) { return menu.refresh(); }
+    if (menu && owned && /^nectar-/.test(menu.kind) && !nectarActionBlock(menu.npc)) { return openSlimeNectarMenu(menu.npc, menu.nectarEntry && menu.nectarEntry.key); }
+    if (menu && owned && /^trade-extra-/.test(menu.kind) && !merchantExtraBlock(menu.npc)) { menu.refresh(); return { status: "needs_input" }; }
     if (menu && owned && /^enchanter-/.test(menu.kind) && !enchanterServiceBlock(menu.npc)) { return enchanterMenu(menu.npc, "services"); }
     if (menu && owned && /^forge-/.test(menu.kind) && !forgeServiceBlock(menu.npc)) { return forgeMenu(menu.npc, "services"); }
     if (menu && owned && /^craft-/.test(menu.kind) && !craftSceneBlock()) { menu.refresh(); return sharedChoiceState.menu ? { status: "needs_input" } : textModeResult("blocked", "Repeat the crafting command."); }
@@ -2136,6 +2328,14 @@ function textSharedChoiceCanHandle(input, action) {
     if (menu && /^goods-/.test(menu.kind) && action && action.verb === "leave") return true;
     if (action && action.verb === "options") return !!menu || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot();
     if (!menu) return false;
+    if (/^casting-/.test(menu.kind) && (action && /^(casting|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
+    if (/^synergy-/.test(menu.kind) && (action && /^(synergy|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
+    if (/^travel-/.test(menu.kind) && (action && /^(travel|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
+    if ((/^nectar-/.test(menu.kind) || menu.kind === "gift") && (action && action.verb === "nectar" || /^nectar-/.test(menu.kind) && (action && /^(leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1))) return true;
+    if (/^trade-extra-/.test(menu.kind) && (action && /^(merchant|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
+    if (/^shrine-/.test(menu.kind) && (action && /^(shrine|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
+    if (menu.kind === "structure-magic" && (action && /^(structure|cast|watch|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
+    if (/^material-/.test(menu.kind) && (action && /^(burn|dip|pour|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^notice-/.test(menu.kind) && (action && /^(notice|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^training-/.test(menu.kind) && (action && /^(train|leave)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (menu.kind === "commission-board" && (action && action.verb === "commission" || (splitTextCommands(input || "").parts || []).length > 1)) return true;
@@ -2164,6 +2364,17 @@ async function textRunSharedChoice(menu, choice) {
 
 async function textSharedChoiceInput(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && /^casting-/.test(menu.kind) && (action && /^(casting|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textCastingMenuInput(menu, action, input); return true; }
+    if (menu && /^synergy-/.test(menu.kind) && (action && /^(synergy|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textSynergyMenuInput(menu, action, input); return true; }
+    if (menu && /^travel-/.test(menu.kind) && (action && /^(travel|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textTravelMenuInput(menu, action, input); return true; }
+    if (menu && (/^nectar-/.test(menu.kind) || menu.kind === "gift") && (action && action.verb === "nectar" || /^nectar-/.test(menu.kind) && (action && /^(leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1))) { await textNectarMenuInput(menu, action, input); return true; }
+    if (menu && /^trade-extra-/.test(menu.kind) && (action && /^(merchant|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await merchantExtraMenuInput(menu, action, input); return true; }
+    if (menu && /^shrine-/.test(menu.kind) && (!menu.ownsView() || menu.scene.player !== G.player || menu.scene.room !== G.activeRoom || menu.scene.npc !== G.activeNPC || menu.scene.mode !== G.activeNPCMode || menu.scene.modal !== G.activeItemModal || menu.scene.object !== G.activeObject)) { clearSharedChoiceMenu(menu); return !!(action && /^(back|cancel|leave)$/.test(action.verb)); }
+    if (menu && /^shrine-/.test(menu.kind) && (action && /^(shrine|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textShrineMenuInput(menu, action, input); return true; }
+    if (menu && menu.kind === "structure-magic" && (!menu.ownsView() || menu.scene.player !== G.player || menu.scene.room !== G.activeRoom || menu.scene.npc !== G.activeNPC || menu.scene.mode !== G.activeNPCMode || menu.scene.modal !== G.activeItemModal || menu.scene.object !== G.activeObject)) { clearSharedChoiceMenu(menu); return !!(action && /^(back|cancel|leave)$/.test(action.verb)); }
+    if (menu && menu.kind === "structure-magic" && (action && /^(structure|cast|watch|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textStructuralMenuInput(menu, action, input); return true; }
+    if (menu && /^material-/.test(menu.kind) && (!menu.ownsView() || menu.scene.modal !== G.activeItemModal || menu.scene.room !== G.activeRoom || menu.scene.player !== G.player || menu.scene.npc !== G.activeNPC || menu.scene.mode !== G.activeNPCMode || menu.scene.object !== G.activeObject)) { clearSharedChoiceMenu(menu); return !!(action && /^(back|cancel|leave)$/.test(action.verb)); }
+    if (menu && /^material-/.test(menu.kind) && (action && /^(burn|dip|pour|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textMaterialMenuInput(menu, action, input); return true; }
     if (menu && /^notice-/.test(menu.kind) && (!menu.ownsView() || menu.scene.modal !== G.activeItemModal || menu.scene.room !== G.activeRoom || menu.scene.player !== G.player)) { clearSharedChoiceMenu(menu); return !!(action && /^(back|cancel|leave)$/.test(action.verb)); }
     if (menu && /^notice-/.test(menu.kind) && (action && /^(notice|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textNoticeMenuInput(menu, action, input); return true; }
     if (menu && /^training-/.test(menu.kind) && (action && /^(train|leave)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textTrainingMenuInput(menu, action, input); return true; }
@@ -4486,12 +4697,2410 @@ async function executeTextNoticeCommand(action) {
     return textModeResult(result.error ? "blocked" : "completed", result.error || "You take " + getItemName(result.item) + ".");
 }
 
+// Environmental input adapters. Consequences remain in the native handlers.
+let environmentExecution = null;
+function environmentSceneBlock(target) {
+    const p = G.player, r = G.activeRoom;
+    if (!p || !r || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot act while incapacitated.";
+    if (G.activeNPC || G.activeObject || G.activeNPCMode) return "Finish the current interaction before working with the environment.";
+    if (G.activeItemModal && G.activeItemModal !== target) return "Close the current item window first.";
+    if (isPlayerJailed()) return "You cannot do that while jailed.";
+    if (isRoomCollapsed(r)) return "Everything here is buried under rubble.";
+    if (roomHasActiveHostile(r)) return "Too dangerous right now.";
+    if (hasPendingPartyLoot()) return "Resolve the party's loot decision first.";
+    return "";
+}
+function environmentEntries() {
+    if (!G.player || !G.activeRoom || typeof getVisibleRoomFixtures !== "function" || typeof isFlammableFixture !== "function") return [];
+    const room = G.activeRoom;
+    const fixtures = textExplorationFixtures().map(function (entry) {
+        const f = entry.fixture;
+        let kind = "fixture";
+        if (f.liquidType && room.liquids && room.liquids[f.liquidType]) kind = "liquid";
+        else if (isContainerFixture(f) && !f.opened && ensureChestLock(f, room) && isChestLocked(f)) kind = "chest";
+        return { kind: kind, target: f, fixture: f, room: room, list: room.structural, name: entry.label, label: entry.label + " — " + kind };
+    });
+    const items = typeof isFlammableRoomItem === "function" ? textInventoryCandidates().filter(function (entry) { return isFlammableRoomItem(entry.item); }).map(function (entry) {
+        return { kind: "item", target: entry.item, item: entry.item, itemRef: entry, room: room, list: entry.list, name: textInventoryItemName(entry.item), label: entry.label };
+    }) : [];
+    return fixtures.concat(items, structuralEntries());
+}
+function environmentSpells() {
+    if (typeof playerIsSpellcaster !== "function" || !G.player || !playerIsSpellcaster(G.player) || !playerUsesMana(G.player)) return [];
+    return getCastableSpellIds(G.player).filter(function (id) { return WIZARD_SPELLS[id] && WIZARD_SPELLS[id].damageDie; }).map(function (id) {
+        const spell = WIZARD_SPELLS[id], cost = getEffectiveSpellManaCost(G.player, spell);
+        return { id: id, spell: spell, name: spell.name, cost: cost, label: spell.name + " — " + cost + " mana" };
+    });
+}
+function environmentSpellMatches(value) {
+    const key = textCommandNormalize(value);
+    return environmentSpells().filter(function (entry) { return textCommandNormalize(entry.id) === key || textCommandNormalize(entry.name) === key; });
+}
+function environmentSpec(verb, entry, ability) {
+    if (entry.structural) return structuralSpec(verb, entry, ability);
+    const target = entry.target, room = entry.room, spell = ability && ability.spell, cost = ability ? ability.cost : 0;
+    let reason = environmentSceneBlock(target);
+    if (!reason && verb === "cast") {
+        if (!ability || WIZARD_SPELLS[ability.id] !== spell || !environmentSpells().some(function (row) { return row.id === ability.id && row.spell === spell && row.cost === cost; })) reason = "You have not learned that damaging spell, or its spellbook is not available.";
+        else if (entry.kind === "chest") reason = getChestSpellBlockReason(room, cost, spell, target);
+        else if (entry.kind === "liquid") reason = getLiquidSpellBlockReason(room, cost, spell, target.liquidType);
+        else if (entry.kind === "item") reason = getRoomItemSpellBlockReason(room, cost, spell);
+        else if (isFlammableFixture(target, room) || isFixtureBurning(target)) reason = getFixtureSpellBlockReason(room, cost, spell, target);
+        else reason = "That fixture has no supported spell action.";
+    } else if (!reason && verb === "watch") {
+        if (!(entry.kind === "chest" ? isChestBurning(target) && isChestLocked(target) : entry.kind === "fixture" && isFixtureBurning(target))) reason = "There is no chest or fixture fire to watch.";
+    } else if (!reason && verb === "tip") {
+        if (entry.kind === "item" || !getFixtureLiquid(room, target)) reason = "That fixture has no liquid to tip out.";
+    } else if (!reason && !/^(cast|watch|tip)$/.test(verb)) reason = "That environmental action is unsupported.";
+    return { verb: verb, entry: entry, ability: ability, manaCost: cost, turns: 1, reason: reason || "" };
+}
+function environmentPublicSpec(spec) {
+    if (spec.tool) return structuralToolPublic(spec);
+    const targetName = spec.entry.kind === "item" ? spec.entry.itemRef.location + " " + spec.entry.name : spec.entry.name;
+    const selector = /[,;\n]|\b(?:and|then)\b/i.test(targetName) ? JSON.stringify(targetName) : targetName;
+    const command = spec.verb === "cast" ? "cast " + (spec.ability ? spec.ability.name : "<spell>") + " at " + selector : spec.verb + " " + selector;
+    return { command: command, location: spec.entry.kind === "item" ? spec.entry.itemRef.location : "room", action: spec.verb, target: spec.entry.name, kind: spec.entry.kind, spell: spec.ability ? spec.ability.name : null, manaCost: spec.manaCost, turns: spec.turns, openingMayTakeTurn: spec.entry.kind === "chest", blockedReason: spec.reason };
+}
+function environmentFresh(entry) {
+    if (entry.structural) return structuralFresh(entry);
+    return environmentEntries().find(function (now) { return now.target === entry.target && now.kind === entry.kind && now.room === entry.room && now.list === entry.list && (!entry.itemRef || now.itemRef.location === entry.itemRef.location && now.itemRef.slot === entry.itemRef.slot && now.itemRef.key === entry.itemRef.key); });
+}
+function environmentTargetStamp(target) {
+    return JSON.stringify([choiceItemStamp(target), target.durability, target.opened, target.chestLock, target.chestHp, target.chestHpMax, target.chestBurn, target.chestBrittleUntil, target.fire, target.burntOut, target.liquid, target.liquidType]);
+}
+function environmentSelectionGuard(spec, native) {
+    if (spec.entry.structural) return structuralSelectionGuard(spec);
+    if (native && typeof ensureDurability === "function") ensureDurability(spec.entry.target, spec.entry.kind === "item" ? "item" : "fixture");
+    if (native && spec.entry.kind !== "item") getFixtureLiquid(spec.entry.room, spec.entry.target);
+    const player = G.player, room = G.activeRoom, npc = G.activeNPC, mode = G.activeNPCMode, object = G.activeObject, modal = G.activeItemModal;
+    const target = spec.entry.target, turn = getCurrentStoryTurn(), stamp = environmentTargetStamp(target), inventory = choiceEntitySnapshot(player);
+    const contents = target.contents, contentsItems = contents && contents.items, contentsState = choiceArraySnapshot(contentsItems), packed = target.packed, packedState = choiceArraySnapshot(packed);
+    const liquidMap = room.liquids, liquid = liquidMap && liquidMap[target.liquidType], liquidStamp = JSON.stringify(liquid);
+    return function () {
+        return G.player === player && G.activeRoom === room && G.activeNPC === npc && G.activeNPCMode === mode && G.activeObject === object && (G.activeItemModal === modal || native && G.activeItemModal === target) &&
+            getCurrentStoryTurn() === turn && !!environmentFresh(spec.entry) && inventory() && environmentTargetStamp(target) === stamp &&
+            target.contents === contents && contentsState(contents && contents.items) && target.packed === packed && packedState(target.packed) &&
+            room.liquids === liquidMap && (!liquid || liquidMap[target.liquidType] === liquid && JSON.stringify(liquid) === liquidStamp);
+    };
+}
+function environmentActionCheckpoint() {
+    const ctx = environmentExecution;
+    if (!ctx) return;
+    const room = ctx.room, target = ctx.spec.entry.target, list = room.structural, floor = room.items;
+    const inventory = ctx.player.inventory, equipped = ctx.player.equipped, rucksack = ctx.player.rucksack;
+    const member = ctx.spec.entry.kind === "item" ? getBurnTargetLocation(target) : list.indexOf(target) >= 0;
+    const itemStamp = ctx.spec.entry.kind === "item" ? environmentTargetStamp(target) : null;
+    const contents = target.contents, contentList = contents && contents.items, contentsState = choiceArraySnapshot(contentList);
+    const packed = target.packed, packedState = choiceArraySnapshot(packed);
+    ctx.afterTurn = function () {
+        return ctx.sameScene() && room.structural === list && room.items === floor && ctx.player.inventory === inventory && ctx.player.equipped === equipped && ctx.player.rucksack === rucksack &&
+            (ctx.spec.entry.kind === "liquid" || ctx.spec.entry.kind === "item" ? ctx.spec.entry.kind === "liquid" || getBurnTargetLocation(target) === member && environmentTargetStamp(target) === itemStamp : !member || list.indexOf(target) >= 0 && isFixtureVisible(target, room) && !target.hidden && !target.isHidden && target.visible !== false) &&
+            target.contents === contents && contentsState(contents && contents.items) && target.packed === packed && packedState(target.packed);
+    };
+}
+function environmentActionCurrent() {
+    const ctx = environmentExecution;
+    return !ctx || (!ctx.afterTurn || ctx.afterTurn()) && ctx.player.hp > 0 && !ctx.player.dead && !ctx.player.unconscious && !ctx.player._dying && !ctx.player._collapsing;
+}
+function environmentActionInterrupted() {
+    const ctx = environmentExecution;
+    if (ctx && ctx.interrupted) return { status: "interrupted" };
+    if (ctx) {
+        ctx.interrupted = true;
+        const result = environmentPublicSpec(ctx.spec); result.turns = getCurrentStoryTurn() - ctx.startTurn; delete result.blockedReason;
+        publishTextModeOutput("environment", "The environmental action was interrupted; spent costs and applied effects are kept.", { environment: Object.assign({ stage: "interrupted" }, result) }, false);
+    }
+    saveGameState();
+    return sharedChoiceResult("interrupted", "The situation changed during that action. Spent mana/time and effects already applied are preserved; later commands are paused.");
+}
+function environmentCaptureCard(fixture, options) {
+    const ctx = environmentExecution;
+    if (!ctx || !textModeState.enabled) return false;
+    if (options && options.message) ctx.cardMessages.push(options.message);
+    return true;
+}
+function runEnvironmentAction(spec) {
+    if (spec.entry.structural) return runStructuralAction(spec);
+    const entry = environmentFresh(spec.entry);
+    if (!entry) return sharedChoiceResult("blocked", "That target or its source changed. Repeat the command.");
+    spec = environmentSpec(spec.verb, entry, spec.ability);
+    if (spec.reason) return sharedChoiceResult("blocked", spec.reason);
+    const previous = environmentExecution, player = G.player, room = G.activeRoom, npc = G.activeNPC, mode = G.activeNPCMode, modal = G.activeItemModal, object = G.activeObject;
+    const turn = getCurrentStoryTurn(), beforeEvents = textModeState.events.slice();
+    const ctx = { spec: spec, startTurn: turn, player: player, room: room, cardMessages: [], interrupted: false, sameScene: function () { return G.player === player && G.activeRoom === room && G.activeNPC === npc && G.activeNPCMode === mode && G.activeObject === object && G.activeItemModal === modal; } };
+    environmentExecution = ctx;
+    let result;
+    try {
+        const target = entry.target;
+        if (spec.verb === "cast") {
+            if (entry.kind === "chest") result = castSpellAtChest(target, spec.ability.id);
+            else if (entry.kind === "liquid") result = castSpellAtLiquid(room, spec.ability.id, target.liquidType);
+            else if (entry.kind === "item") result = castSpellAtRoomItem(target, spec.ability.id);
+            else result = castSpellAtFixture(target, spec.ability.id);
+        } else if (spec.verb === "watch") result = entry.kind === "chest" ? watchChestBurn(target) : watchFixtureFire(target);
+        else result = tipOverFixture(target);
+    } finally { environmentExecution = previous; }
+    if (ctx.interrupted || result && result.status === "interrupted") return { status: "interrupted" };
+    const spent = getCurrentStoryTurn() - turn;
+    if (spent < spec.turns) return sharedChoiceResult("blocked", "That action did not finish as expected. Completed effects are kept; later commands are paused.");
+    const publicSpec = environmentPublicSpec(spec); publicSpec.turns = spent; delete publicSpec.blockedReason;
+    publishTextModeOutput("environment", spec.verb + ": " + entry.name, { environment: Object.assign({ stage: "result" }, publicSpec) }, false);
+    if (textModeState.enabled && G.activeRoom === room && G.player === player) {
+        const emitted = textModeState.events.filter(function (event) { return beforeEvents.indexOf(event) < 0; });
+        ctx.cardMessages.filter(function (message, index, all) { return all.indexOf(message) === index && !emitted.some(function (event) { return event.text === message; }); }).forEach(function (message) { textModeResult("completed", message); });
+        if (entry.kind === "chest" && entry.target.opened) {
+            const source = textLootSources().find(function (source) { return source.source === entry.target; });
+            if (source) textLootList(source, true);
+        }
+    }
+    if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== mode || roomHasActiveHostile(room) || hasPendingPartyLoot() || player.hp <= 0 || player.dead || player.unconscious) return sharedChoiceResult("interrupted", "The action finished, but the situation changed. Later commands are paused.");
+    return { status: "completed" };
+}
+async function textRunEnvironmentAction(spec) {
+    const scene = textModeScene();
+    textModeState.busy = true; textModeState.paused = true; textModeState.capture = [];
+    closeItemModal();
+    try {
+        const result = runEnvironmentAction(spec);
+        for (let index = 0; index < textModeState.capture.length; index++) await textModeState.capture[index];
+        if (!textModeSameScene(scene)) return sharedChoiceResult("interrupted", "The situation changed while the action finished. Later commands are paused.");
+        if (result.status === "completed" && textModeState.queue.length) textModeResult("completed", "Type continue to resume the remaining commands.");
+        return result;
+    } finally { textModeState.capture = null; textModeState.busy = false; renderTextModeStatus(); focusTextModeInput(); }
+}
+
+function environmentCardCallback(verb, target, spellId) {
+    const entry = environmentEntries().find(function (entry) { return entry.target === target; });
+    const ability = spellId ? environmentSpells().find(function (ability) { return ability.id === spellId; }) : null;
+    const spec = entry && environmentSpec(verb, entry, ability), guard = spec && environmentSelectionGuard(spec, true);
+    let consumed = false;
+    return function (event) {
+        const button = event && event.currentTarget;
+        const modal = button && button.closest("#itemModal"), modalValid = !modal || modal.classList.contains("active") && G.activeItemModal === target;
+        if (consumed || !guard || !guard() || !button || !button.isConnected || button.disabled || !modalValid || !button.getClientRects().length) return sharedChoiceResult("blocked", "That environmental control changed or closed. Inspect the target again.");
+        if (textModeState.enabled && (textModeState.busy || textModeState.parsing)) return sharedChoiceResult("blocked", "Wait for the current action to finish.");
+        consumed = true;
+        return textModeState.enabled ? textRunEnvironmentAction(spec) : runEnvironmentAction(spec);
+    };
+}
+function environmentFixtureActions(fixture) {
+    const entry = environmentEntries().find(function (entry) { return entry.target === fixture; });
+    if (!entry) return [];
+    const specs = [];
+    if (/^(chest|liquid)$/.test(entry.kind) || isFlammableFixture(fixture, entry.room) || isFixtureBurning(fixture)) environmentSpells().forEach(function (ability) {
+        const effect = CHEST_SPELL_EFFECTS[ability.spell.element] || "none";
+        if (entry.kind === "fixture" && !/^(burn|douse)$/.test(effect)) return;
+        specs.push(environmentSpec("cast", entry, ability));
+    });
+    if (entry.kind === "chest" && isChestBurning(fixture) || entry.kind === "fixture" && isFixtureBurning(fixture)) specs.push(environmentSpec("watch", entry));
+    if (getFixtureLiquid(entry.room, fixture)) specs.push(environmentSpec("tip", entry));
+    return specs.map(function (spec) { return { id: spec.verb, label: spec.verb + " " + entry.name, reason: spec.reason, environment: environmentPublicSpec(spec), ability: spec.ability && spec.ability.name, note: (spec.manaCost ? spec.manaCost + " mana, " : "") + "1 turn" + (entry.kind === "chest" ? "; opening adds its normal turn" : ""), run: function () { return runEnvironmentAction(spec); } }; });
+}
+function environmentAvailable(verb) {
+    if (!G.player || !G.activeRoom || typeof isFlammableFixture !== "function") return false;
+    const entries = environmentEntries(), spells = verb === "cast" ? environmentSpells() : [null];
+    return entries.some(function (entry) { return spells.some(function (ability) { return !environmentSpec(verb, entry, ability).reason; }); });
+}
+function textEnvironmentShow(topic) {
+    if (textModeInCombat()) return null;
+    const match = /^(environment|environmental magic|magic|cast|fires?|watch|tip)(?:\s+(.+))?$/.exec(topic);
+    if (!match) return null;
+    const rows = [], entries = environmentEntries(), selector = match[2] || "";
+    const filtered = selector ? environmentMatchTargets(selector, entries) : entries;
+    filtered.forEach(function (entry) {
+        if (entry.structural) { structuralSpecs(entry).forEach(function (spec) { rows.push(environmentPublicSpec(spec)); }); }
+        else if (entry.kind === "item") {
+            environmentSpells().filter(function (ability) { return ability.spell.element === "fire"; }).forEach(function (ability) { rows.push(environmentPublicSpec(environmentSpec("cast", entry, ability))); });
+        } else environmentFixtureActions(entry.target).forEach(function (action) { rows.push(Object.assign({ note: action.note }, action.environment)); });
+    });
+    const burningTargets = filtered.filter(function (entry) { return entry.structural ? entry.kind === "door" && isDoorBurning(entry.room, entry.dir) : entry.kind === "chest" ? isChestBurning(entry.target) : entry.kind === "liquid" ? isRoomLiquidBurning(entry.room) : entry.kind === "fixture" && isFixtureBurning(entry.target); }).map(function (entry) { return entry.name; });
+    const fireOnly = /^(fires?|watch)$/.test(match[1]), tipOnly = match[1] === "tip", castOnly = /^(magic|environmental magic|cast)$/.test(match[1]);
+    const visibleRows = rows.filter(function (row) { return tipOnly ? row.action === "tip" : castOnly ? row.action === "cast" : !fireOnly || burningTargets.indexOf(row.target) >= 0 && (row.action === "watch" || row.action === "cast" && row.blockedReason === "" && /douse|water/i.test(row.spell)); });
+    return textModeResult("completed", "Environmental actions:\n" + (visibleRows.length ? visibleRows.map(function (row) { return row.command + " — " + (row.note || row.manaCost + " mana, 1 turn") + (row.blockedReason ? " — unavailable: " + row.blockedReason : ""); }).join("\n") : "No matching supported action here.") +
+        "\nUse cast <learned spell> at <target>, watch <burning chest/fixture>, or tip <barrel>. Fire can spread, destroy contents and alarm witnesses. Frost, water, shock and wind follow the target's native rules. Name item/fixture and carried/equipped/floor explicitly if needed.", { environment: { stage: "availability", actions: visibleRows } });
+}
+function environmentMatchTargets(selector, entries) {
+    const query = String(selector || "").trim(), fixtureOnly = /^(?:fixture|chest)\s+/i.test(query), itemOnly = /^item\s+/i.test(query);
+    const name = query.replace(/^(?:fixture|item)\s+/i, "");
+    const fixtures = itemOnly ? [] : textLootMatch(name, entries.filter(function (entry) { return entry.kind !== "item" && !entry.structural; }), function (entry) { return entry.name; });
+    const items = fixtureOnly ? [] : resolveTextInventoryItems(name.replace(/^item\s+/i, ""), "examine");
+    return fixtures.concat(itemOnly || fixtureOnly ? [] : structuralMatches(query, entries), entries.filter(function (entry) { return entry.kind === "item" && items.some(function (item) { return item.item === entry.target && item.location === entry.itemRef.location && item.slot === entry.itemRef.slot; }); }));
+}
+function parseTextEnvironmentCommand(raw) {
+    if (textModeInCombat()) return null;
+    if (/^watch(?:\s+(?:the\s+)?(?:fire|flames)|\s+(?:it\s+)?burn)$/i.test(raw)) return { verb: "watch", args: {} };
+    let match = /^cast(?:\s+([\s\S]+))?$/i.exec(raw);
+    if (match) {
+        const relation = textLootRelation(match[1] || "", ["at", "on"]);
+        return { verb: "cast", args: { ability: relation ? relation.item : textCommandUnquote(match[1] || ""), target: relation ? relation.source : "" } };
+    }
+    match = /^(?:watch|watch\s+(?:the\s+)?(?:fire|flames)(?:\s+(?:at|on))?)(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "watch", args: { fixture: (match[1] || "").replace(/^(?:the\s+)?(?:fire|flames)\s+(?:at|on)\s+/i, "").replace(/\s+(?:to\s+)?burn$/i, "") } };
+    match = /^(?:tip(?:\s+over)?|overturn)\s+(.+?)(?:\s+over)?$/i.exec(raw);
+    if (match) return { verb: "tip", args: { fixture: textCommandUnquote(match[1]) } };
+    if (/^tip$/i.test(raw)) return { verb: "tip", args: {} };
+    return null;
+}
+function executeTextEnvironmentCommand(action) {
+    const args = action.args || {}, verb = action.verb;
+    if (!/^(cast|watch|tip)$/.test(verb)) return textModeResult("blocked", "Use cast, watch or tip.");
+    if (verb === "cast" && !args.ability) return textEnvironmentShow("cast");
+    if (verb === "cast" && !args.target && !action.environmentRef) return textModeResult("blocked", "Name a target: cast <spell> at <chest, fixture, liquid or item>.");
+    const entries = environmentEntries();
+    let matches = action.environmentRef ? entries.filter(function (entry) { return entry.target === action.environmentRef.target && entry.kind === action.environmentRef.kind && entry.list === action.environmentRef.list && (!entry.structural || entry.dir === action.environmentRef.dir && entry.destination === action.environmentRef.destination); }) : args.target || args.fixture ? environmentMatchTargets(args.target || args.fixture, entries) : entries.filter(function (entry) { return !environmentSpec(verb, entry, null).reason; });
+    if (action.environmentGuard && !action.environmentGuard()) return textModeResult("blocked", "The target, spell or source changed while choosing. Repeat the command.");
+    if (!matches.length) return textModeResult("blocked", "No matching visible environmental target. Use show environment; NPC combat and dummy practice keep their own commands.");
+    let ability = null;
+    if (verb === "cast") {
+        const spells = action.environmentAbility ? environmentSpells().filter(function (entry) { return entry.id === action.environmentAbility.id && entry.spell === action.environmentAbility.spell; }) : environmentSpellMatches(args.ability);
+        if (spells.length !== 1) return textModeResult("blocked", "Name one learned damaging spell shown by show environment.");
+        ability = spells[0];
+    }
+    const specs = matches.map(function (entry) { return environmentSpec(verb, entry, ability); });
+    if (matches.length > 1) {
+        const guards = specs.map(function (spec) { return environmentSelectionGuard(spec, false); });
+        action.environmentGuard = function () { return guards.every(function (guard) { return guard(); }); };
+        return textModeAsk(action, "environment", matches, "Which environmental target?");
+    }
+    return runEnvironmentAction(specs[0]);
+}
+
+
+// Shared material actions: interpretation and menus only; native handlers own effects.
+let materialExecution = null;
+function materialFixtures(verb) {
+    return textExplorationFixtures().filter(function (entry) {
+        return verb === "burn" ? isWarmthFixture(entry.fixture) : isCauldronFixture(entry.fixture) && !isAlchemyTableFixture(entry.fixture);
+    });
+}
+function materialItems(verb) {
+    const entries = verb === "burn" ? getBurnableEntries() : verb === "dip" ? getDippableEntries() :
+        buildPlayerInventoryEntries(G.player).filter(function (entry) { return getItemLiquid(entry.item) || isPotionItem(entry.item); });
+    return entries.filter(function (entry) { return isLootItemVisible(entry.item); }).map(function (entry) {
+        return Object.assign({}, entry, { label: getItemName(entry.item) + (entry.wielded ? " — wielded" : " ×" + entry.totalQuantity + " — carried") });
+    });
+}
+function materialBlock(verb, fixture) {
+    const reason = environmentSceneBlock(fixture) || (G.combatEncounter ? "Finish the current encounter first." : "");
+    if (reason) return reason;
+    if (fixture && !materialFixtures(verb).some(function (entry) { return entry.fixture === fixture; })) return "That source moved, disappeared or became hidden.";
+    if (fixture && (fixture.burntOut || fixture.durability && fixture.durability.hp <= 0)) return "That source is destroyed.";
+    return "";
+}
+function materialItemStamp(item) {
+    return JSON.stringify([choiceItemStamp(item), item && item.id, item && item._uid, item && item.stackKey, item && item.container,
+        item && item.durability, item && item.grime, item && item.poison, item && item.poisonHits, item && item.statusKey]);
+}
+function materialGuard(fixture, entry, timed) {
+    const player = G.player, room = G.activeRoom, inventory = player.inventory, equipped = player.equipped, rucksack = player.rucksack;
+    const npc = G.activeNPC, mode = G.activeNPCMode, object = G.activeObject, modal = G.activeItemModal, list = room.structural;
+    const entity = choiceEntitySnapshot(player), turn = getCurrentStoryTurn(), stamp = fixture && JSON.stringify(fixture);
+    const items = (player.inventory || []).concat(Object.values(player.equipped || {}).filter(function (item) { return item && !Array.isArray(item); }));
+    const stamps = items.map(materialItemStamp);
+    const sources = timed && Array.isArray(list) ? list.slice() : [], sourceStamps = sources.map(function (source) { return JSON.stringify(source); });
+    return function () {
+        return G.player === player && G.activeRoom === room && G.activeNPC === npc && G.activeNPCMode === mode && G.activeObject === object &&
+            G.activeItemModal === modal && room.structural === list && player.inventory === inventory && player.equipped === equipped && player.rucksack === rucksack &&
+            !environmentSceneBlock(fixture) && !G.combatEncounter &&
+            (!fixture || list.indexOf(fixture) >= 0 && getVisibleRoomFixtures(room).indexOf(fixture) >= 0 && JSON.stringify(fixture) === stamp) &&
+            entity() && items.every(function (item, index) { return materialItemStamp(item) === stamps[index]; }) &&
+            (!entry || items.indexOf(entry.item) >= 0) &&
+            (!timed || getCurrentStoryTurn() === turn && list.length === sources.length && sources.every(function (source, index) { return list[index] === source && JSON.stringify(source) === sourceStamps[index]; }));
+    };
+}
+function materialCheckpoint() {
+    if (materialExecution) materialExecution.afterTurn = materialGuard(materialExecution.fixture, null, false);
+}
+function materialCurrent() {
+    return !materialExecution || !materialExecution.afterTurn || materialExecution.afterTurn();
+}
+function materialInterrupted() {
+    if (materialExecution) materialExecution.interrupted = true;
+    saveGameState();
+    return { status: "interrupted" };
+}
+function materialCaptureCard(fixture, options) {
+    if (!materialExecution || materialExecution.fixture !== fixture) return false;
+    if (options && options.message) materialExecution.message = options.message;
+    return true;
+}
+function materialPublic(verb, fixture, entry, stage, turns) {
+    return { action: verb, stage: stage, item: getItemName(entry.item), quantity: 1,
+        source: fixture ? getEntityName(fixture) : "carried inventory", destination: verb === "pour" ? "floor" : fixture && getEntityName(fixture), turns: turns };
+}
+function runMaterialAction(verb, fixture, key) {
+    const entry = materialItems(verb).find(function (entry) { return entry.key === key; });
+    const reason = materialBlock(verb, fixture);
+    if (reason || !entry || verb !== "pour" && !fixture) return sharedChoiceResult("blocked", reason || "That item or source is no longer available.");
+    const previous = materialExecution, player = G.player, room = G.activeRoom, turn = getCurrentStoryTurn();
+    const ctx = { verb: verb, fixture: fixture, entry: entry, message: "", interrupted: false };
+    materialExecution = ctx;
+    let result;
+    try {
+        if (verb === "burn") result = burnItemAtFixture(fixture, key);
+        else if (verb === "dip") result = dipItemInCauldron(fixture, key);
+        else result = isPotionItem(entry.item) ? pourOutPotionEntry(key) : pourOutInventoryItem(entry.item);
+    } finally { materialExecution = previous; }
+    const turns = getCurrentStoryTurn() - turn;
+    const interrupted = ctx.interrupted || result && result.status === "interrupted" || G.player !== player || G.activeRoom !== room ||
+        player.dead || player.hp <= 0 || player.unconscious || roomHasActiveHostile(room) || hasPendingPartyLoot() || G.activeNPC || G.activeNPCMode;
+    if (interrupted) {
+        const message = "The situation changed. Spent time and items already used are kept; later effects and commands are paused.";
+        publishTextModeOutput("material", message, { material: materialPublic(verb, fixture, entry, "interrupted", turns) });
+        return { status: "interrupted" };
+    }
+    if (turns !== 1) return sharedChoiceResult("blocked", "That action did not finish. Later commands are paused.");
+    const text = ctx.message || (typeof result === "string" ? result : "");
+    publishTextModeOutput("material", text, { material: materialPublic(verb, fixture, entry, "result", turns) });
+    renderStats();
+    if (!textModeState.enabled && fixture) openMaterialMenu(verb, fixture, null, text);
+    return { status: "completed", text: text };
+}
+function materialItemMatches(selector, verb) {
+    const entries = materialItems(verb);
+    if (!selector) return entries;
+    const refs = resolveTextInventoryItems(selector, "examine");
+    return entries.filter(function (entry) { return refs.some(function (ref) { return ref.item === entry.item && ref.location === (entry.wielded ? "equipped" : "carried"); }); });
+}
+function materialLeave() {
+    closeItemModal();
+    returnToRoomView();
+    return { status: "completed" };
+}
+function openMaterialMenu(verb, fixture, selected, message) {
+    const reason = materialBlock(verb, fixture);
+    if (reason) return sharedChoiceResult("blocked", reason);
+    const entries = materialItems(verb);
+    const entry = selected && entries.find(function (value) { return value.item === selected.item && value.key === selected.key && value.totalQuantity === selected.totalQuantity; });
+    if (selected && !entry) return sharedChoiceResult("blocked", "That item changed. Repeat the command.");
+    const description = verb === "burn" && entry ? "Burn one " + getItemName(entry.item) + " in " + getEntityName(fixture) + "? It cannot be recovered. Costs 1 turn." :
+        "Choose one item to " + verb + " in " + getEntityName(fixture) + ". Costs 1 turn." + (verb === "dip" ? " Only single items and your wielded weapon can be dipped." : "");
+    const card = createNoticeWindow(fixture, verb === "burn" ? "Burn an item" : "Dip an item", (message ? message + "\n" : "") + description);
+    if (!card) return sharedChoiceResult("blocked", "The item controls are unavailable.");
+    const menu = beginSharedChoiceMenu("material-" + (entry ? "confirm" : verb), null, description, function () { return openMaterialMenu(verb, fixture); });
+    const valid = menu.valid, guard = materialGuard(fixture, entry, true);
+    menu.verb = verb; menu.fixture = fixture; menu.selected = entry; menu.preserveView = !card.root;
+    menu.valid = function () { return valid() && guard() && !materialBlock(verb, fixture); };
+    const button = function (label, run, action, item) {
+        return jobChoiceButton(menu, card.actions, label, run, "", { action: action, item: item && item.item, key: item && item.key });
+    };
+    if (entry) button("Burn it (1 turn)", function () { return runMaterialAction(verb, fixture, entry.key); }, "confirm", entry);
+    else entries.forEach(function (value) {
+        button((verb === "burn" ? "Burn " : "Dip ") + value.label, function () {
+            return verb === "burn" ? openMaterialMenu(verb, fixture, value) : runMaterialAction(verb, fixture, value.key);
+        }, "select", value);
+    });
+    button(entry ? "Not yet" : "Back", function () { return entry ? openMaterialMenu(verb, fixture) : materialLeave(); }, "back");
+    button("Leave", materialLeave, "leave");
+    publishSharedChoiceMenu(menu, card.root || card.actions);
+    return { status: "needs_input" };
+}
+async function textMaterialMenuInput(menu, action, input) {
+    if ((splitTextCommands(input || "").parts || []).length !== 1) return textModeResult("needs_input", "Answer one item step per reply; confirm burning separately by number.");
+    if (action && /^(leave|cancel)$/.test(action.verb)) {
+        if (action.verb === "cancel") stopTextCommands(false);
+        const owned = menu.ownsView() && menu.scene.room === G.activeRoom && menu.scene.player === G.player && menu.scene.modal === G.activeItemModal;
+        clearSharedChoiceMenu(menu); return owned ? materialLeave() : { status: "completed" };
+    }
+    if (!menu.valid()) return textModeResult("blocked", "That item, source or scene changed. Repeat the command after cancelling this menu.");
+    if (menu.selected) return textModeResult("needs_input", "Review the item and use choose <number> to confirm burning, or back/cancel.");
+    if (!action || action.verb !== menu.verb) return textModeResult("needs_input", "Use a number from options, or back/cancel.");
+    if (action.args.fixture && !textLootMatch(action.args.fixture, materialFixtures(menu.verb), function (entry) { return entry.label; }).some(function (entry) { return entry.fixture === menu.fixture; })) return textModeResult("blocked", "Finish this source's menu first.");
+    const matches = materialItemMatches(action.args.item || "", menu.verb);
+    const choices = menu.options.filter(function (choice) { return choice.meta.action === "select" && matches.some(function (entry) { return entry.item === choice.meta.item && entry.key === choice.meta.key; }); });
+    return choices.length === 1 ? textRunSharedChoice(menu, choices[0]) : textModeResult("needs_input", "Choose the exact item by number from options.");
+}
+function parseTextMaterialCommand(raw) {
+    let match = /^(burn|dip|dunk|pour(?:\s+out)?|empty)(?:\s+(.+))?$/i.exec(raw);
+    if (!match) return null;
+    const verb = /^(pour|empty)/i.test(match[1]) ? "pour" : /^d/.test(match[1].toLowerCase()) ? "dip" : "burn";
+    const rest = match[2] || "", sourceOnly = /^(?:at|in|into)\s+(.+)$/i.exec(rest), relation = sourceOnly && verb !== "pour" ? { item: "", source: textCommandUnquote(sourceOnly[1]) } : textLootRelation(rest, verb === "burn" ? ["at", "in"] : verb === "dip" ? ["in", "into"] : ["on", "in", "into"]);
+    if (verb === "pour" && /^(?:the\s+)?(?:mixture|bowl|brew)$/i.test(rest)) return null;
+    if (verb === "dip" && (!relation && typeof findAlchemyTableFixture === "function" && craftTable() ||
+        relation && /^(?:the\s+)?(?:mixture|bowl|brew|alchemy table)$/i.test(relation.source))) {
+        return { verb: "craft", args: { action: "dip", target: relation ? relation.item : textCommandUnquote(rest) } };
+    }
+    return { verb: verb, args: { item: relation ? textCommandUnquote(relation.item) : textCommandUnquote(rest), fixture: relation ? textCommandUnquote(relation.source) : "" } };
+}
+function materialAvailable(verb) {
+    return !!(G.player && G.activeRoom && typeof getItemLiquid === "function" && !materialBlock(verb, null) &&
+        materialItems(verb).length && (verb === "pour" || materialFixtures(verb).length));
+}
+function textMaterialShow(topic) {
+    const match = /^(burn|burning|burnable items|dip|dipping|dippable items|pour|pouring|liquids)$/.exec(topic);
+    if (!match) return null;
+    const verb = /^burn/.test(topic) ? "burn" : /^di/.test(topic) ? "dip" : "pour";
+    const block = G.player && G.activeRoom ? materialBlock(verb, null) : "Start an adventure first.";
+    const sources = G.activeRoom && verb !== "pour" ? materialFixtures(verb).map(function (entry) { return { name: entry.label, blockedReason: materialBlock(verb, entry.fixture) }; }) : [];
+    const items = G.player ? materialItems(verb).map(function (entry) { return { name: getItemName(entry.item), quantity: entry.totalQuantity || 1, location: entry.wielded ? "wielded" : "carried" }; }) : [];
+    return textModeResult("completed", verb + " — 1 turn per item." + (block ? "\nUnavailable: " + block : "") +
+        "\nItems: " + (items.length ? items.map(function (entry) { return entry.name + " ×" + entry.quantity + " (" + entry.location + ")"; }).join("; ") : "none") +
+        (verb === "pour" ? "\nPour <item> empties one carried unit onto the floor and keeps its empty container. Potions soak away; other liquids use the floor's normal rules." :
+        "\nSources: " + (sources.length ? sources.map(function (entry) { return entry.name + (entry.blockedReason ? " — " + entry.blockedReason : ""); }).join("; ") : "none") +
+        (verb === "burn" ? "\nBurn <item> at <source> reviews irreversible destruction before numbered confirmation. Spellbooks cannot be burned this way." :
+        "\nDip <item> in <cauldron> uses the actual brew; its effects remain unknown until discovered. Dip <item> in bowl keeps the alchemy route.")),
+        { material: { stage: "availability", action: verb, blockedReason: block, sources: sources, items: items } });
+}
+function executeTextMaterialCommand(action) {
+    const verb = action.verb, args = action.args || {};
+    if (action.materialGuard && !action.materialGuard()) return textModeResult("blocked", "The item, source or scene changed while choosing. Repeat the command.");
+    let fixture = null;
+    if (verb !== "pour") {
+        const sources = action.materialFixture ? materialFixtures(verb).filter(function (entry) { return entry.fixture === action.materialFixture.fixture && entry.room === action.materialFixture.room && entry.list === action.materialFixture.list; }) :
+            args.fixture ? textLootMatch(args.fixture, materialFixtures(verb), function (entry) { return entry.label; }) : materialFixtures(verb);
+        if (!sources.length) return textModeResult("blocked", "No matching visible source. Type show " + verb + " for available items and sources.");
+        if (sources.length > 1) {
+            action.materialGuard = materialGuard(null, null, true);
+            return textModeAsk(action, "materialFixture", sources, "Which source?");
+        }
+        action.materialFixture = sources[0]; fixture = sources[0].fixture;
+    } else if (args.fixture && !/^(?:the\s+)?(?:floor|ground)$/i.test(args.fixture)) return textModeResult("blocked", "Pouring empties onto the floor. Use pour <item>, or the bowl's crafting commands.");
+    const reason = materialBlock(verb, fixture);
+    if (reason) return textModeResult("blocked", reason);
+    const entries = action.materialItem ? materialItems(verb).filter(function (entry) { return entry.item === action.materialItem.item && entry.key === action.materialItem.key; }) : materialItemMatches(args.item, verb);
+    if (!entries.length) return textModeResult("blocked", "No matching eligible carried item. Type show " + verb + ". Take floor items first; dipping requires a single item or wielded weapon.");
+    if (!args.item && verb !== "pour") return openMaterialMenu(verb, fixture);
+    if (entries.length > 1) {
+        action.materialGuard = materialGuard(fixture, null, true);
+        return textModeAsk(action, "materialItem", entries, "Which item?");
+    }
+    return verb === "burn" ? openMaterialMenu(verb, fixture, entries[0]) : runMaterialAction(verb, fixture, entries[0].key);
+}
+function materialFixtureActions(fixture) {
+    const verbs = [];
+    if (isWarmthFixture(fixture)) verbs.push("burn");
+    if (isCauldronFixture(fixture) && !isAlchemyTableFixture(fixture)) verbs.push("dip");
+    return verbs.map(function (verb) { return { id: verb, label: verb + " an item", reason: materialBlock(verb, fixture) || (!materialItems(verb).length ? "No eligible carried items." : ""), note: "1 turn per item" + (verb === "burn" ? "; numbered confirmation" : ""), material: true }; });
+}
+
+function materialPourCallback(entry) {
+    // Inventory rows initialise durability while building later fire controls.
+    // Settle those defaults before retaining an exact quote for this button.
+    if (typeof ensureDurability === "function") {
+        (G.player.inventory || []).concat(Object.values(G.player.equipped || {})).filter(function (item) { return item && !Array.isArray(item) && isLootItemVisible(item); }).forEach(function (item) { ensureDurability(item, "item"); });
+    }
+    const guard = materialGuard(null, entry, true);
+    return async function (event) {
+        const button = event && event.currentTarget, manager = button && button.closest("#equipmentManager");
+        if (!button || !button.isConnected || button.disabled || !button.getClientRects().length || !manager || !manager.classList.contains("active")) return sharedChoiceResult("blocked", "That inventory control closed. Inspect it again.");
+        if (!guard() || textModeState.enabled && (textModeState.busy || textModeState.parsing)) return sharedChoiceResult("blocked", "That item control changed. Inspect it again.");
+        // Closing the equipment presentation before execution preserves the same action rules.
+        if (textModeState.enabled) {
+            textModeState.busy = true; textModeState.paused = true; textModeState.capture = [];
+            try {
+                closeEquipmentManager();
+                const result = runMaterialAction("pour", null, entry.key);
+                for (let index = 0; index < textModeState.capture.length; index++) await textModeState.capture[index];
+                if (result.status === "completed" && textModeState.queue.length) textModeResult("completed", "Type continue to resume remaining commands.");
+                return result;
+            } finally { textModeState.capture = null; textModeState.busy = false; renderTextModeStatus(); focusTextModeInput(); }
+        }
+        const result = runMaterialAction("pour", null, entry.key);
+        if (result.status === "completed") refreshInventoryUi(result.text);
+        return result;
+    };
+}
+
+
+// Directional structural magic. Native handlers retain every cost and consequence.
+let structureExecution = null;
+function structuralEntries() {
+    if (!G.player || !G.activeRoom || typeof getExitDoor !== "function" || typeof isCollapseZone !== "function") return [];
+    const room = G.activeRoom, out = [];
+    Object.keys(room.exits || {}).forEach(function (dir) {
+        if (!/^(N|NE|E|SE|S|SW|W|NW|U|D)$/.test(dir) || isPortalExit(room, dir)) return;
+        const add = function (kind, target) {
+            if (!target) return;
+            const name = (COLLAPSE_DIR_WORDS[dir] || dir) + " " + kind;
+            out.push({ structural: true, room: room, list: room.exits, target: target, kind: kind, dir: dir, destination: room.exits[dir], name: name, label: name });
+        };
+        if (isExitCollapsed(room, dir)) { add("rubble", getExitCollapse(room, dir)); return; }
+        if (getExitDoor(room, dir) === "door") { const lock = getExitLock(room, dir); if (lock) getDoorFx(room, dir, true); add("door", lock || room.doors); }
+        if (isCollapseZone(room) && !/^(U|D)$/.test(dir)) add("wall", getRoomWall(room, dir));
+    });
+    return out;
+}
+function structuralSelector(raw) {
+    let text = textCommandNormalize(textCommandUnquote(raw || "")).replace(/^(?:structure|structural)\s+/, "");
+    const noun = /\b(doors?|walls?|rubble)\b/.exec(text);
+    if (!noun) return null;
+    const kind = /^door/.test(noun[1]) ? "door" : /^wall/.test(noun[1]) ? "wall" : "rubble";
+    text = text.replace(/\b(?:doors?|walls?|rubble|the|to|at|on|of|fallen|collapsed|blocked)\b/g, " ").trim();
+    const adjectives = { northern: "north", northeastern: "northeast", eastern: "east", southeastern: "southeast", southern: "south", southwestern: "southwest", western: "west", northwestern: "northwest", upper: "up", lower: "down" };
+    text = adjectives[text] || text;
+    const dir = text ? textCommandDirection(text) : "";
+    return text && !dir ? null : { kind: kind, dir: dir };
+}
+function structuralMatches(selector, entries) {
+    const query = structuralSelector(selector);
+    return query ? entries.filter(function (entry) { return entry.structural && entry.kind === query.kind && (!query.dir || query.dir === entry.dir); }) : [];
+}
+function structuralFresh(entry) {
+    return structuralEntries().find(function (now) { return now.kind === entry.kind && now.dir === entry.dir && now.room === entry.room && now.list === entry.list && now.target === entry.target && now.destination === entry.destination; });
+}
+function structuralSceneBlock(entry) {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot act while incapacitated.";
+    if (G.activeNPC || G.activeObject || G.activeItemModal || G.combatEncounter || G.activeNPCMode && G.activeNPCMode !== "door") return "Finish the current interaction first.";
+    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
+    if (isPlayerJailed()) return "These cells are built to hold.";
+    if (hasPendingPartyLoot()) return "Resolve the party's loot decision first.";
+    if (isRoomCollapsed(room) && (!entry || !/^rubble$|^rescue$/.test(entry.kind))) return "The room is collapsed. Work on an actual blocked exit to make a crawl.";
+    return "";
+}
+function structuralSpec(verb, entry, ability) {
+    const spell = ability && ability.spell, cost = ability ? ability.cost : 0, room = entry.room, dir = entry.dir;
+    let reason = structuralSceneBlock(entry);
+    if (!reason && !structuralFresh(entry)) reason = "That exit or structural source changed.";
+    if (!reason && verb === "cast") {
+        if (!ability || WIZARD_SPELLS[ability.id] !== spell || !environmentSpells().some(function (row) { return row.id === ability.id && row.spell === spell && row.cost === cost; })) reason = "You have not learned that damaging spell, or its spellbook is unavailable.";
+        else if (entry.kind === "door") reason = !isExitLocked(room, dir) ? "That door is already unlocked. Watch remaining flames or use the normal passage controls." : getDoorSpellBlockReason(room, dir, cost, spell);
+        else if (entry.kind === "wall") reason = getWallSpellBlockReason(room, dir, cost, spell);
+        else reason = getDigSpellBlockReason(room, dir, cost, spell);
+    } else if (!reason && verb === "watch") {
+        if (entry.kind !== "door" || !isDoorBurning(room, dir)) reason = "There is no door fire to watch.";
+    } else if (!reason) reason = "Use cast for structural magic, or watch for a burning door.";
+    return { verb: verb, entry: entry, ability: ability, manaCost: cost, turns: 1, reason: reason || "" };
+}
+function structuralSourceGuard(entry, timed) {
+    const player = G.player, room = G.activeRoom, mode = G.activeNPCMode, npc = G.activeNPC, object = G.activeObject, modal = G.activeItemModal;
+    const exits = room.exits, doors = room.doors, locks = room.locks, walls = room.walls, collapse = room.collapse, fallen = collapse && collapse.exits;
+    const target = entry.target, fx = entry.kind === "door" && target.fx, stamp = JSON.stringify(target), turn = getCurrentStoryTurn();
+    const inventory = choiceEntitySnapshot(player), rucksack = player.rucksack;
+    const spellRows = environmentSpells(), spellInventory = (player.inventory || []).map(function (item) { return { item: item, stamp: JSON.stringify([item.spells, item.durability, item.ruined, item.unusable]) }; });
+    const map = G.roomMap, other = map && map[entry.destination], back = oppositeDirection(entry.dir), doorKind = getExitDoor(room, entry.dir);
+    const otherExits = other && other.exits, otherDoors = other && other.doors, otherLocks = other && other.locks, otherLock = otherLocks && otherLocks[back];
+    const otherDestination = otherExits && otherExits[back], otherDoor = otherDoors && otherDoors[back], otherFx = otherLock && otherLock.fx, otherStamp = JSON.stringify(otherLock);
+    const otherCollapse = other && other.collapse, otherFallen = otherCollapse && otherCollapse.exits, otherRubble = otherFallen && otherFallen[back];
+    return function () {
+        if (G.player !== player || G.activeRoom !== room || G.activeNPCMode !== mode || G.activeNPC !== npc || G.activeObject !== object || G.activeItemModal !== modal || structuralSceneBlock(entry)) return false;
+        if (G.roomMap !== map || map && map[entry.destination] !== other || getExitDoor(room, entry.dir) !== doorKind || room.exits !== exits || room.exits[entry.dir] !== entry.destination || room.doors !== doors || room.locks !== locks || room.walls !== walls || room.collapse !== collapse || collapse && collapse.exits !== fallen) return false;
+        if (!structuralFresh(entry) || entry.kind === "door" && target.fx !== fx || player.rucksack !== rucksack || !inventory()) return false;
+        if (other && (!G.roomMap || G.roomMap[entry.destination] !== other || other.exits !== otherExits || other.exits[back] !== otherDestination || other.doors !== otherDoors || otherDoors && otherDoors[back] !== otherDoor || other.locks !== otherLocks || otherLocks && otherLocks[back] !== otherLock || otherLock && otherLock.fx !== otherFx || other.collapse !== otherCollapse || otherCollapse && otherCollapse.exits !== otherFallen || otherFallen && otherFallen[back] !== otherRubble)) return false;
+        if (spellInventory.some(function (row) { return JSON.stringify([row.item.spells, row.item.durability, row.item.ruined, row.item.unusable]) !== row.stamp; })) return false;
+        const current = environmentSpells();
+        if (spellRows.length !== current.length || spellRows.some(function (row) { return !current.some(function (now) { return now.id === row.id && now.spell === row.spell && now.cost === row.cost; }); })) return false;
+        return !timed || getCurrentStoryTurn() === turn && JSON.stringify(target) === stamp && JSON.stringify(otherLock) === otherStamp;
+    };
+}
+function structuralSelectionGuard(spec) { return spec.tool ? structuralToolGuard(spec, true) : structuralSourceGuard(spec.entry, true); }
+function structuralCheckpoint() {
+    if (structureExecution && structureExecution.spec.tool) { structuralToolCheckpoint(); return; }
+    if (structureExecution) structureExecution.afterTurn = structuralSourceGuard(structureExecution.spec.entry, false);
+}
+function structuralCurrent() { return !structureExecution || !structureExecution.afterTurn || structureExecution.afterTurn(); }
+function structuralInterrupted() {
+    if (structureExecution) structureExecution.interrupted = true;
+    saveGameState();
+    return { status: "interrupted" };
+}
+function structuralManaPaid(cost) { if (structureExecution) structureExecution.manaSpent += cost; }
+function structuralCaptureFinish(room, dir, lines) {
+    const ctx = structureExecution;
+    if (!ctx || ctx.spec.entry.room !== room || ctx.spec.entry.dir !== dir) return false;
+    ctx.lines.push.apply(ctx.lines, lines || []);
+    if (!textModeState.enabled) return false;
+    renderStats(); saveGameState();
+    return true;
+}
+function runStructuralAction(spec) {
+    if (spec.tool) return runStructuralTool(spec);
+    const entry = structuralFresh(spec.entry);
+    if (!entry) return sharedChoiceResult("blocked", "That structural target changed. Repeat the command.");
+    spec = structuralSpec(spec.verb, entry, spec.ability);
+    if (spec.reason) return sharedChoiceResult("blocked", spec.reason);
+    const previous = structureExecution, player = G.player, room = G.activeRoom, start = getCurrentStoryTurn(), wasCollapsed = isRoomCollapsed(room);
+    const ctx = { spec: spec, lines: [], manaSpent: 0, interrupted: false };
+    structureExecution = ctx;
+    try {
+        if (spec.verb === "watch") watchDoorBurn(room, entry.dir);
+        else if (entry.kind === "door") castSpellAtDoor(room, entry.dir, spec.ability.id);
+        else if (entry.kind === "wall") castSpellAtWall(room, entry.dir, spec.ability.id);
+        else burnCollapsedExit(room, entry.dir, spec.ability.id);
+    } finally { structureExecution = previous; }
+    const interrupted = ctx.interrupted || !wasCollapsed && isRoomCollapsed(room) || G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing ||
+        G.activeNPC || G.activeObject || G.activeItemModal || G.combatEncounter || G.activeNPCMode && G.activeNPCMode !== "door" || roomHasActiveHostile(room) || hasPendingPartyLoot() || textModeState.enabled && !!sharedChoiceState.menu;
+    if (textModeState.enabled && G.player === player && G.activeRoom === room && G.activeNPCMode === "door" && !G.activeNPC && !G.activeObject && !G.activeItemModal && !G.combatEncounter && !hasPendingPartyLoot() && !sharedChoiceState.menu && !roomHasActiveHostile(room)) returnToRoomView();
+    if (textModeState.enabled && G.player === player && G.activeRoom === room && !G.activeNPC && !G.activeObject && !G.activeItemModal && !G.combatEncounter && !hasPendingPartyLoot() && !sharedChoiceState.menu && !roomHasActiveHostile(room) && typeof renderExits === "function") renderExits(room.exits);
+    const result = Object.assign(environmentPublicSpec(spec), { stage: interrupted ? "interrupted" : "result", direction: entry.dir, turns: getCurrentStoryTurn() - start, manaCost: ctx.manaSpent });
+    delete result.blockedReason; delete result.openingMayTakeTurn;
+    const text = ctx.lines.join(" ") + (interrupted ? " The situation changed. Spent mana/time and effects already applied are preserved; later commands are paused." : "");
+    publishTextModeOutput("structure", text.trim() || "The structural action resolved.", { structure: result });
+    return { status: interrupted ? "interrupted" : "completed" };
+}
+function structuralSpecs(entry) {
+    const out = environmentSpells().map(function (ability) { return structuralSpec("cast", entry, ability); });
+    if (entry.kind === "door" && isDoorBurning(entry.room, entry.dir)) out.push(structuralSpec("watch", entry, null));
+    return out.concat(structuralToolSpecs(entry));
+}
+function textStructuralShow(topic) {
+    const match = /^(structure|structural magic|doors?|walls?|rubble)(?:\s+(.+))?$/.exec(textCommandNormalize(topic));
+    if (!match) return null;
+    let entries = structuralEntries();
+    if (/^(doors?|walls?|rubble)$/.test(match[1])) entries = structuralMatches((match[2] ? match[2] + " " : "") + match[1], entries);
+    else if (match[2]) {
+        const query = structuralSelector(match[2]), dir = textCommandDirection(match[2]);
+        entries = query ? structuralMatches(match[2], entries) : dir ? entries.filter(function (entry) { return entry.dir === dir; }) : [];
+    }
+    const rows = entries.map(function (entry) {
+        const state = entry.kind === "door" ? (isExitLocked(entry.room, entry.dir) ? "locked" : "unlocked") + (isDoorBurning(entry.room, entry.dir) ? ", burning" : "") + (isDoorBrittle(entry.room, entry.dir) ? ", frozen brittle" : "") :
+            entry.kind === "wall" ? getDurabilityLabel(entry.target, "wall") : describeDigProgress(entry.room, entry.dir);
+        return { target: entry.name, kind: entry.kind, direction: entry.dir, state: state, actions: structuralSpecs(entry).map(environmentPublicSpec) };
+    });
+    if (isPlayerTrappedByCollapse(G.activeRoom)) rows.push({ target: "rescue prayer", kind: "rescue", direction: null, state: "trapped", actions: [structuralToolPublic(structuralToolSpec("rescue", structuralToolEntry(G.activeRoom, "", "rescue")))] });
+    return textModeResult("completed", "Structure:\n" + (rows.length ? rows.map(function (row) { return row.target + " — " + row.state + "\n" + row.actions.map(function (action) { return action.command + " — " + (Object.prototype.hasOwnProperty.call(action, "staminaCost") ? action.staminaCost + " stamina, " : action.manaCost + " mana, ") + (action.turns === null ? "normal movement time" : action.turns + " turn" + (action.turns === 1 ? "" : "s")) + (action.warning ? " — " + action.warning : "") + (action.blockedReason ? " — unavailable: " + action.blockedReason : ""); }).join("\n"); }).join("\n") : "No matching supported structural target here.") +
+        "\nUse cast <spell> at <direction> door/wall/rubble, or watch <direction> door. Casting at a wall may collapse the exit or whole room. Use unlock/pick/force/smash/lock/knock <direction> door, push through burning <direction> door, hammer <direction> wall, dig <direction> rubble, or pray for rescue when trapped. Unlocking does not move you.", { structure: { stage: "availability", targets: rows } });
+}
+function parseTextStructuralCommand(raw) {
+    let match = /^(?:structure|walls|doors|rubble)(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "structure", args: { target: /^(walls|doors|rubble)\b/i.test(raw) ? raw : match[1] || "" } };
+    match = /^(?:look\s+at|examine|inspect|x)\s+(.+)$/i.exec(raw);
+    return match && structuralSelector(match[1]) && structuralMatches(match[1], structuralEntries()).length ? { verb: "structure", args: { target: textCommandUnquote(match[1]) } } : null;
+}
+function beginStructuralMenu(room, dir, kind) {
+    const entry = structuralEntries().find(function (entry) { return entry.room === room && entry.dir === dir && entry.kind === kind; });
+    if (!entry) return null;
+    const menu = beginSharedChoiceMenu("structure-magic", null, entry.name + " — actions", null);
+    menu.structureEntry = entry;
+    return menu;
+}
+function structuralMenuButton(menu, label, verb, room, dir, spellId, options, nativeKind) {
+    const native = function () { return verb === "watch" ? watchDoorBurn(room, dir) : (menu ? menu.structureEntry.kind : nativeKind) === "wall" ? castSpellAtWall(room, dir, spellId) : (menu ? menu.structureEntry.kind : nativeKind) === "rubble" ? burnCollapsedExit(room, dir, spellId) : castSpellAtDoor(room, dir, spellId); };
+    if (!menu) return createCombatButton(label, native, options || {});
+    const ability = spellId ? environmentSpells().find(function (row) { return row.id === spellId; }) : null;
+    const spec = structuralSpec(verb, menu.structureEntry, ability);
+    return createSharedChoiceButton(menu, label, function () { return runStructuralAction(spec); }, Object.assign({}, options || {}, { disabled: !!spec.reason, title: spec.reason, textChoice: { action: verb, spell: spellId || "" } }));
+}
+function publishStructuralMenu(menu, root) {
+    if (!menu) return;
+    const valid = menu.valid, guard = structuralSourceGuard(menu.structureEntry, true);
+    menu.valid = function () { return valid() && guard(); };
+    publishSharedChoiceMenu(menu, root);
+}
+function structuralBackButton(menu, label, run) {
+    return menu ? createSharedChoiceButton(menu, label, run, { textChoice: { action: "back" } }) : createCombatButton(label, run);
+}
+async function textStructuralMenuInput(menu, action, input) {
+    if ((splitTextCommands(input || "").parts || []).length !== 1) return textModeResult("needs_input", "Answer one structural menu step per reply.");
+    if (action && /^(leave|cancel)$/.test(action.verb)) {
+        if (action.verb === "cancel") stopTextCommands(false);
+        const owned = menu.ownsView() && menu.scene.room === G.activeRoom && menu.scene.player === G.player && menu.scene.mode === G.activeNPCMode;
+        clearSharedChoiceMenu(menu);
+        if (owned) returnToRoomView();
+        return { status: "completed" };
+    }
+    if (!menu.valid()) return textModeResult("blocked", "That exit, spell or source changed. Use cancel, then inspect it again.");
+    if (!menu.structureEntry) return textModeResult("needs_input", "Choose a direction by number, or leave.");
+    const args = action && action.args || {}, target = args.target || args.fixture;
+    const toolAction = action && action.verb === "structure" && args.action, verb = toolAction ? String(args.action).replace(/-key$|-pick$/, "") : action && action.verb;
+    const method = toolAction && /-(key|pick)$/.exec(args.action);
+    if (!toolAction && !/^(cast|watch)$/.test(verb)) return textModeResult("needs_input", "Choose a listed action by number or exact command, or leave.");
+    const kind = toolAction && STRUCTURAL_TOOL_ACTIONS[verb] ? STRUCTURAL_TOOL_ACTIONS[verb].kind : menu.structureEntry.kind;
+    const entry = structuralToolEntry(menu.structureEntry.room, menu.structureEntry.dir, kind);
+    if (target && (!entry || !structuralMatches(target, [entry]).length)) return textModeResult("blocked", "Finish this exit\u0027s menu before targeting another one.");
+    const abilities = verb === "cast" ? environmentSpellMatches(args.ability || "") : [];
+    let choices = menu.options.filter(function (choice) { return choice.meta.action === verb && (verb !== "cast" || abilities.some(function (ability) { return ability.id === choice.meta.spell; })) && (!method || choice.meta.method === method[1]); });
+    if (verb === "unlock" && !method && choices.length > 1) choices = choices.filter(function (choice) { return !choice.meta.method; });
+    return choices.length === 1 ? textRunSharedChoice(menu, choices[0]) : textModeResult("needs_input", "Use one exact action or a number from options.");
+}
+
+
+// Shrine prayer/dedication: shared choices and intent; native faith mechanics remain native.
+let shrineExecution = null;
+function shrineSceneBlock() {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot pray while incapacitated.";
+    if (typeof isShrineRoom !== "function" || !isShrineRoom(room)) return "There is no room shrine here. Fixture prayers keep pray at <altar>.";
+    if (G.activeNPC || G.activeNPCMode || G.activeObject || G.activeItemModal || G.combatEncounter) return "Finish the current interaction first.";
+    if (roomHasActiveHostile(room)) return "You cannot pray with danger nearby.";
+    if (isRoomCollapsed(room)) return "The shrine is buried under rubble.";
+    if (isPlayerJailed()) return "You cannot reach a shrine while jailed.";
+    if (hasPendingPartyLoot()) return "Resolve the party's loot decision first.";
+    return "";
+}
+function shrinePublicDeity(player, id) {
+    const known = player && Array.isArray(player.knownDeities) && player.knownDeities.indexOf(id) >= 0, deity = known && getDeityArchetype(id);
+    return deity ? deity.name : "the shrine's god";
+}
+function shrineKnownTargets(selector) {
+    const player = G.player;
+    if (!player) return [];
+    ensurePlayerDeityState(player);
+    const rows = player.knownDeities.filter(function (id, index, all) { return all.indexOf(id) === index && !!getDeityArchetype(id); }).map(function (id) { return { id: id, label: getDeityArchetype(id).name }; });
+    return selector ? textLootMatch(selector, rows, function (row) { return row.label; }) : rows;
+}
+function shrineGuard(timed) {
+    const player = G.player, room = G.activeRoom, map = G.roomMap, source = map && map[room.coords], type = room.type;
+    const npc = G.activeNPC, mode = G.activeNPCMode, object = G.activeObject, modal = G.activeItemModal, turn = getCurrentStoryTurn();
+    const deity = getShrineDeityId(room), patron = player.deity, known = player.knownDeities, knownIds = known.slice(), inventory = choiceEntitySnapshot(player), bag = player.rucksack;
+    const prayer = room.lastPrayerTurn, defile = room.lastDefileTurn, faith = JSON.stringify(player.faith), stamina = player.stamina;
+    return function () {
+        return G.player === player && G.activeRoom === room && G.roomMap === map && (!map || map[room.coords] === source) && room.type === type &&
+            G.activeNPC === npc && G.activeNPCMode === mode && G.activeObject === object && G.activeItemModal === modal && !shrineSceneBlock() &&
+            room.shrineDeityId === deity && room.lastPrayerTurn === prayer && room.lastDefileTurn === defile && player.deity === patron &&
+            player.knownDeities === known && known.length === knownIds.length && known.every(function (id, index) { return id === knownIds[index]; }) &&
+            player.rucksack === bag && inventory() && (!timed || getCurrentStoryTurn() === turn && player.stamina === stamina && JSON.stringify(player.faith) === faith);
+    };
+}
+function shrinePrayerCommitted() {
+    if (!shrineExecution) return;
+    shrineExecution.staminaSpent = PRAYER_STAMINA_COST;
+    // Reserve this shrine's normal completion-time cooldown once the native cost is paid.
+    shrineExecution.room.lastPrayerTurn = getCurrentStoryTurn() + PRAYER_TURNS;
+    shrineExecution.afterTurn = shrineGuard(false);
+}
+function shrinePrayerCurrent() { return !shrineExecution || !shrineExecution.afterTurn || shrineExecution.afterTurn(); }
+function shrinePrayerInterrupted() {
+    if (shrineExecution) shrineExecution.interrupted = true;
+    saveGameState();
+    return { status: "interrupted" };
+}
+function shrineRecordDedication(message) { if (shrineExecution) { shrineExecution.commitText = message; shrineExecution.dedicationCommitted = true; } }
+function shrinePrayerNarration(message) {
+    if (shrineExecution) {
+        shrineExecution.message = message;
+        if (textModeState.enabled) return;
+    }
+    setNarration(message);
+}
+function shrineCaptureMenu() { return !!((shrineExecution || shrineServiceExecution) && textModeState.enabled); }
+function runShrinePrayer(target) {
+    const reason = shrineSceneBlock() || getPrayerBlockReason(G.activeRoom, G.activeRoom);
+    if (reason) return sharedChoiceResult("blocked", reason);
+    const player = G.player, room = G.activeRoom, current = getShrineDeityId(room);
+    if (target !== current && !shrineKnownTargets().some(function (entry) { return entry.id === target; })) return sharedChoiceResult("blocked", "You do not know that deity.");
+    const previous = shrineExecution, turn = getCurrentStoryTurn(), patron = player.deity;
+    const ctx = { player: player, room: room, target: target, staminaSpent: 0, message: "", commitText: "", interrupted: false };
+    shrineExecution = ctx;
+    try { prayAtShrine(target === current ? null : target); } finally { shrineExecution = previous; }
+    const interrupted = ctx.interrupted || G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing ||
+        G.activeNPC || G.activeNPCMode || G.activeObject || G.activeItemModal || G.combatEncounter || roomHasActiveHostile(room) || isRoomCollapsed(room) || hasPendingPartyLoot() ||
+        textModeState.enabled && !!sharedChoiceState.menu;
+    if (textModeState.enabled && G.player === player && G.activeRoom === room && !G.activeNPC && !G.activeNPCMode && !G.activeObject && !G.activeItemModal && !G.combatEncounter && !hasPendingPartyLoot() && !sharedChoiceState.menu && !roomHasActiveHostile(room)) returnToRoomView();
+    if (!ctx.staminaSpent && !interrupted) return sharedChoiceResult("blocked", "The prayer did not start. No prayer costs were spent.");
+    const message = interrupted ? ctx.commitText + "The prayer was interrupted. Spent stamina/time, any dedication already applied and the prayer cooldown are preserved; later effects and commands are paused." : ctx.message;
+    publishTextModeOutput("shrine", message || "Your prayer resolved.", { shrine: { stage: interrupted ? "interrupted" : "result", action: current === target ? "pray" : "dedicate",
+        deity: shrinePublicDeity(player, target), patronChosen: !patron && !!player.deity, dedicationChanged: !!ctx.dedicationCommitted,
+        staminaCost: ctx.staminaSpent, turns: getCurrentStoryTurn() - turn, cooldownTurns: PRAYER_COOLDOWN_TURNS } });
+    return { status: interrupted ? "interrupted" : "completed" };
+}
+function beginShrineMenu(kind, title) {
+    const menu = beginSharedChoiceMenu(kind, null, title, null);
+    menu.shrineRoom = G.activeRoom;
+    return menu;
+}
+function publishShrineMenu(menu, root) {
+    shrineServiceWarm();
+    const valid = menu.valid, guard = shrineGuard(true), serviceGuard = shrineServiceGuard(true, menu.favorOption);
+    menu.valid = function () { return valid() && guard() && serviceGuard(); };
+    publishSharedChoiceMenu(menu, root);
+}
+function confirmShrinePrayer(target) {
+    const reason = shrineSceneBlock() || getPrayerBlockReason(G.activeRoom, G.activeRoom);
+    if (reason) return sharedChoiceResult("blocked", reason);
+    const player = G.player, room = G.activeRoom, current = getShrineDeityId(room);
+    if (target !== current && !shrineKnownTargets().some(function (row) { return row.id === target; })) return sharedChoiceResult("blocked", "You do not know that deity.");
+    const root = document.getElementById("chatOptionsEl");
+    if (!root) return sharedChoiceResult("blocked", "The shrine controls are unavailable.");
+    root.innerHTML = "";
+    const title = (target !== current ? "Rededicate this shrine to " : "Pray to ") + shrinePublicDeity(player, target) + " and pray? " +
+        PRAYER_STAMINA_COST + " stamina, " + PRAYER_TURNS + " turns; " + PRAYER_COOLDOWN_TURNS + "-turn cooldown." +
+        (!player.deity ? " This permanently chooses your patron and cannot be undone." : " Your existing patron will stay the same.");
+    const menu = beginShrineMenu("shrine-confirm", title);
+    menu.target = target;
+    const heading = document.createElement("p"); heading.textContent = title; root.appendChild(heading);
+    appendCombatGroup(root, "", [
+        createSharedChoiceButton(menu, "Confirm prayer" + (target !== current ? " and dedication" : ""), function () { return runShrinePrayer(target); }, { textChoice: { action: "confirm" } }),
+        createSharedChoiceButton(menu, "Not yet", function () { renderShrinePrayerMenu(); return { status: "needs_input" }; }, { textChoice: { action: "back" } }),
+        createSharedChoiceButton(menu, "Leave", function () { closeShrinePrayerMenu(); return { status: "completed" }; }, { textChoice: { action: "leave" } })
+    ]);
+    publishShrineMenu(menu, root);
+    return { status: "needs_input" };
+}
+function requestShrinePrayer(target, review) {
+    const reason = shrineSceneBlock();
+    if (reason) return sharedChoiceResult("blocked", reason);
+    ensurePlayerDeityState(G.player);
+    const current = getShrineDeityId(G.activeRoom), chosen = target || current;
+    if (chosen !== current && !shrineKnownTargets().some(function (row) { return row.id === chosen; })) return sharedChoiceResult("blocked", "You do not know that deity.");
+    return review || !G.player.deity || chosen !== current ? confirmShrinePrayer(chosen) : runShrinePrayer(chosen);
+}
+function shrineMenuPrayerButton(menu, label, target, options) {
+    return createSharedChoiceButton(menu, label, function () { return requestShrinePrayer(target); }, Object.assign({}, options || {}, { textChoice: { action: target ? "dedicate" : "pray", deity: target || "" } }));
+}
+function shrineMenuLeaveButton(menu, label) {
+    return createSharedChoiceButton(menu, label, function () { closeShrinePrayerMenu(); return { status: "completed" }; }, { textChoice: { action: "back" } });
+}
+function textShrineShow(topic) {
+    if (!/^(shrine|shrines|dedicat(?:e|ion)|rededicate)$/.test(topic)) return null;
+    const reason = shrineSceneBlock();
+    const here = typeof isShrineRoom === "function" && G.activeRoom && isShrineRoom(G.activeRoom) && G.player;
+    const player = G.player, current = here ? getShrineDeityId(G.activeRoom) : null;
+    const known = here ? shrineKnownTargets().map(function (row) { return row.label; }) : [];
+    const block = reason || (here ? getPrayerBlockReason(G.activeRoom, G.activeRoom) : "");
+    const label = here ? shrinePublicDeity(player, current) : null;
+    const services = Object.keys(SHRINE_SERVICE_ACTIONS).map(function (action) { return shrineServicePublic(shrineServiceSpec(action)); });
+    return textModeResult("completed", "Shrine" + (label ? " — sacred to " + label : "") + (block ? "\nUnavailable: " + block : "") +
+        "\nPrayer costs " + PRAYER_STAMINA_COST + " stamina and " + PRAYER_TURNS + " turns, with a " + PRAYER_COOLDOWN_TURNS + "-turn cooldown." +
+        (here && !player.deity ? " Your first prayer permanently chooses your patron; review it before confirming." : "") +
+        "\nKnown dedication choices: " + (known.join(", ") || "none") + "\nUse shrine for choices, pray at shrine, or dedicate shrine to <known deity>. Rededication includes prayer. Fixture prayers keep pray at <altar>. Other services: newcomer blessing, favor <stat/gift>, defile shrine, renew mana, quiet devotion. Use show shrine services for costs and restrictions.",
+        { shrine: { stage: "availability", dedication: label, knownChoices: known, blockedReason: block, services: services, firstPledge: !!(here && !player.deity), staminaCost: PRAYER_STAMINA_COST, turns: PRAYER_TURNS, cooldownTurns: PRAYER_COOLDOWN_TURNS } });
+}
+function parseTextShrineCommand(raw) {
+    if (/^(?:shrine|shrine prayer|dedication)$/i.test(raw)) return { verb: "shrine", args: { action: "menu" } };
+    let match = /^(?:re)?dedicate(?:\s+(?:the\s+)?shrine)?(?:\s+to\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "shrine", args: { action: "dedicate", target: textCommandUnquote(match[1] || "") } };
+    if (/^pray\s+at\s+(?:the\s+)?shrine$/i.test(raw)) return { verb: "shrine", args: { action: "pray" } };
+    const here = typeof isShrineRoom === "function" && G.activeRoom && isShrineRoom(G.activeRoom);
+    if (here && /^pray$/i.test(raw)) return { verb: "shrine", args: { action: "pray" } };
+    match = /^pray\s+to\s+(.+?)(?:\s+at\s+(?:the\s+)?shrine)?$/i.exec(raw);
+    if (here && match) return { verb: "shrine", args: { action: "dedicate", target: textCommandUnquote(match[1]) } };
+    return here && /^(?:look\s+at|examine|inspect|x)\s+(?:the\s+)?shrine$/i.test(raw) ? { verb: "show", args: { topic: "shrine" } } : null;
+}
+function shrineAvailable() {
+    return !!(G.player && G.activeRoom && typeof isShrineRoom === "function" && isShrineRoom(G.activeRoom) && !shrineSceneBlock());
+}
+function executeTextShrineCommand(action) {
+    const args = action.args || {}, reason = shrineSceneBlock();
+    if (reason) return textModeResult("blocked", reason);
+    const serviceAction = shrineServiceAction(args.action); if (serviceAction) return executeTextShrineService(Object.assign({}, action, { args: Object.assign({}, args, { action: serviceAction }) }));
+    if (!args.action || args.action === "menu") { openShrinePrayerMenu(); return { status: "needs_input" }; }
+    if (args.action === "pray") return requestShrinePrayer(null);
+    if (args.action !== "dedicate") return textModeResult("blocked", "Use shrine, pray at shrine, or dedicate shrine to <known deity>.");
+    const targets = shrineKnownTargets(args.target || "");
+    if (!args.target || targets.length !== 1) { openShrinePrayerMenu(); return textModeResult("needs_input", "Choose one known dedication from options; no prayer costs have been spent."); }
+    return requestShrinePrayer(targets[0].id, true);
+}
+async function textShrineMenuInput(menu, action, input) {
+    if ((splitTextCommands(input || "").parts || []).length !== 1) return textModeResult("needs_input", "Answer one shrine step per reply; confirm a pledge or dedication separately by number.");
+    if (action && /^(leave|cancel)$/.test(action.verb)) {
+        if (action.verb === "cancel") stopTextCommands(false);
+        const owned = menu.ownsView() && menu.scene.player === G.player && menu.scene.room === G.activeRoom && menu.scene.mode === G.activeNPCMode;
+        clearSharedChoiceMenu(menu);
+        if (owned) closeShrinePrayerMenu();
+        return { status: "completed" };
+    }
+    const service = await textShrineServiceMenuInput(menu, action, input);
+    if (service) return service;
+    if (!menu.valid()) return textModeResult("blocked", "The shrine, patron, resources or scene changed. Use cancel, then inspect it again.");
+    if (menu.kind === "shrine-confirm") return textModeResult("needs_input", "Review the prayer and confirm separately with choose <number>, or back/cancel.");
+    const args = action && action.args || {};
+    if (args.action === "menu" || !args.action) return showSharedChoiceMenu(menu);
+    const targets = args.action === "dedicate" ? shrineKnownTargets(args.target || "") : [];
+    const choices = menu.options.filter(function (choice) { return args.action === "pray" ? choice.meta.action === "pray" : targets.some(function (target) { return choice.meta.action === "dedicate" && target.id === choice.meta.deity || choice.meta.action === "pray" && target.id === getShrineDeityId(menu.shrineRoom); }); });
+    return choices.length === 1 ? textRunSharedChoice(menu, choices[0]) : textModeResult("needs_input", "Use a number from options to choose one known dedication.");
+}
+
+
+function textDivineGiftAnnouncement(deity, powers) {
+    const rows = powers.map(function (power) {
+        return { name: power.name, description: DEITY_POWER_UNLOCK_LINES[power.id] || deity.name + " notices your devotion and rewards it.", manaCost: getDeityPowerManaCost(G.player, power), summary: power.summary, use: power.use };
+    });
+    const text = deity.name + (rows.length > 1 ? " grants you new gifts." : " grants you a gift.") + "\n" + rows.map(function (row) {
+        const where = row.use === "body" ? "Use it from a body\u0027s own menu." : row.use === "combat" ? "Use it in a fight." : "Use it from Interact, or in a fight.";
+        return row.description + "\nNew power: " + row.name + " (" + row.manaCost + " mana)\n" + row.summary + " " + where;
+    }).join("\n\n");
+    publishTextModeOutput("divine-gift", text, { divineGift: { deity: deity.name, powers: rows } });
+}
+
+// Physical structural intent and guarded native execution. No game consequences live here.
+const STRUCTURAL_TOOL_ACTIONS = {
+    unlock: { kind: "door", primary: "unlock", aliases: ["open", "unbar"] },
+    pick: { kind: "door", primary: "pick", aliases: ["pick lock on"] },
+    force: { kind: "door", primary: "force", aliases: ["break", "bash"] },
+    smash: { kind: "door", primary: "smash", aliases: ["shatter"] },
+    push: { kind: "door", primary: "push through", aliases: ["pass through"] },
+    lock: { kind: "door", primary: "lock", aliases: [] },
+    knock: { kind: "door", primary: "knock on", aliases: ["knock"] },
+    hammer: { kind: "wall", primary: "hammer", aliases: ["hit", "mine"] },
+    dig: { kind: "rubble", primary: "dig", aliases: ["clear", "dig through"] },
+    rescue: { kind: "rescue", primary: "pray for rescue", aliases: ["rescue", "pray for deliverance"] }
+};
+function structuralToolEntry(room, dir, kind) {
+    if (kind === "rescue") return { structural: true, room: room, target: room, list: room.exits, kind: "rescue", dir: "", destination: "", name: "rescue prayer", label: "rescue prayer" };
+    return structuralEntries().find(function (entry) { return entry.room === room && entry.dir === dir && entry.kind === kind; });
+}
+function structuralToolSpec(verb, entry, method) {
+    const p = G.player, room = entry.room, dir = entry.dir, def = STRUCTURAL_TOOL_ACTIONS[verb];
+    let reason = structuralSceneBlock(entry), cost = 0, turns = 1, chosen = method || "";
+    if (p) ensureEntityStamina(p);
+    const lock = entry.kind === "door" ? getExitLock(room, dir) : null;
+    if (!reason && (!def || def.kind !== entry.kind)) reason = "That action does not apply to this target.";
+    if (!reason && entry.kind !== "rescue" && !structuralFresh(entry)) reason = "That structural source changed.";
+    if (!reason && entry.kind === "rescue" && (G.activeRoom !== room || !isPlayerTrappedByCollapse(room))) reason = "You are not trapped by rubble here.";
+    if (verb === "unlock") {
+        turns = 0; chosen = chosen || (lock && lock.freeOpen ? "inside" : "key");
+        if (!reason && (!lock || !isExitLocked(room, dir))) reason = "That door is already unlocked. Use its direction to travel.";
+        if (!reason && chosen === "key" && !findKeyForLock(lock)) reason = "You have no matching key.";
+        if (!reason && chosen === "key" && lock.keyId === "room-token" && getLockOccupants(room, dir).length) reason = "Someone is already staying in there.";
+    } else if (verb === "pick") {
+        cost = LOCK_PICK_STAMINA_COST;
+        if (!reason && !isExitLocked(room, dir)) reason = "That door is already unlocked.";
+        if (!reason && !findPlayerItemById("lockpick")) reason = "You need a lockpick.";
+    } else if (verb === "force") {
+        cost = FIGHTER_BREAKDOOR_STAMINA;
+        if (!reason) reason = getBreakDoorBlockReason(room, dir);
+    } else if (verb === "smash") {
+        cost = DOOR_SMASH_STAMINA;
+        if (!reason && (!isExitLocked(room, dir) || !isDoorBrittle(room, dir))) reason = "You need a still-locked, frozen brittle door.";
+    } else if (verb === "push") {
+        turns = null;
+        if (!reason && !isDoorBurning(room, dir)) reason = "That door is not burning. Use its direction to travel.";
+    } else if (verb === "lock") {
+        chosen = chosen || (lock && lock.keyId && lock.keyId !== "room-token" && findKeyForLock(lock) ? "key" : "pick");
+        cost = chosen === "pick" ? ROGUE_LOCK_STAMINA_COST : 0;
+        if (!reason && isExitLocked(room, dir)) reason = "That door is already locked.";
+        if (!reason && chosen === "key" && (!lock || lock.keyId === "room-token" || !findKeyForLock(lock))) reason = "You have no matching reusable key.";
+        if (!reason && chosen === "pick" && !findPlayerItemById("lockpick")) reason = "You need a lockpick.";
+        if (!reason && !/^(key|pick)$/.test(chosen)) reason = "Use a key or lockpick.";
+    } else if (verb === "knock") {
+        if (!reason && !isExitLocked(room, dir)) reason = "That door is already open.";
+    } else if (verb === "hammer") {
+        cost = MINING_STAMINA_COST;
+        if (!reason) reason = getWallHammerBlockReason(room, dir);
+    } else if (verb === "dig") {
+        cost = MINING_STAMINA_COST; turns = COLLAPSE_DIG_TURNS;
+        if (!reason) reason = getDigPickBlockReason(room, dir);
+    } else if (verb === "rescue") {
+        cost = PRAYER_STAMINA_COST; turns = PRAYER_TURNS;
+        if (!reason) reason = getRescuePrayerBlockReason(room);
+    }
+    return { tool: true, verb: verb, entry: entry, method: chosen, staminaCost: cost, manaCost: 0, turns: turns, reason: reason || "" };
+}
+function structuralToolPublic(spec) {
+    return { action: spec.verb, command: (STRUCTURAL_TOOL_ACTIONS[spec.verb] || {}).primary + (spec.verb === "rescue" ? "" : " " + spec.entry.name) + (spec.verb === "lock" && spec.method ? " with " + (spec.method === "pick" ? "lockpick" : "key") : ""),
+        target: spec.entry.name, kind: spec.entry.kind, direction: spec.entry.dir || null, location: "room", staminaCost: spec.staminaCost, manaCost: 0, turns: spec.turns,
+        blockedReason: spec.reason, arrivalMayTakeTurn: spec.verb === "rescue", warning: spec.verb === "push" ? "Moves you through the flames; you and companions can be burned. Normal movement checks apply." : spec.verb === "rescue" ? "Your patron may refuse; a successful rescue charges native faith, possibly leaving a debt, and takes the native additional arrival turn." : spec.verb === "hammer" ? "Can collapse the exit or whole room." : "" };
+}
+function structuralToolSpecs(entry) {
+    return Object.keys(STRUCTURAL_TOOL_ACTIONS).filter(function (verb) { return STRUCTURAL_TOOL_ACTIONS[verb].kind === entry.kind; }).map(function (verb) { return structuralToolSpec(verb, entry); });
+}
+function structuralToolGuard(spec, timed) {
+    const entry = spec.entry, p = G.player, room = G.activeRoom, map = G.roomMap, origin = map && map[room.coords];
+    const base = entry.kind === "rescue" ? null : structuralSourceGuard(entry, timed);
+    const mode = G.activeNPCMode, npc = G.activeNPC, object = G.activeObject, modal = G.activeItemModal, type = room.type;
+    const exits = room.exits, exitsStamp = JSON.stringify(exits), collapse = room.collapse, collapseStamp = JSON.stringify(collapse);
+    const bag = p.rucksack, inventory = choiceEntitySnapshot(p), patron = p.deity, rescueTurn = p.lastRescuePrayerTurn;
+    const stamp = function () { return JSON.stringify([p.classSkills, p.classBranches, p.stats, p.physicalProwess, p.flexibility, getFighterRank(p), getRogueRank(p)]); }, training = stamp();
+    const tools = [findPlayerItemById("lockpick"), entry.kind === "door" && findKeyForLock(getExitLock(room, entry.dir)), (p.inventory || []).find(isPickaxeItem)].filter(Boolean).map(function (item) { return { item: item, stamp: JSON.stringify(item) }; });
+    const stamina = p.stamina, hp = p.hp, faith = JSON.stringify(p.faith), turn = getCurrentStoryTurn(), state = entry.kind === "door" && getExitLock(room, entry.dir) && getExitLock(room, entry.dir).state;
+    return function () {
+        return G.player === p && G.activeRoom === room && G.roomMap === map && (!map || map[room.coords] === origin) && room.type === type &&
+            G.activeNPCMode === mode && G.activeNPC === npc && G.activeObject === object && G.activeItemModal === modal && !structuralSceneBlock(entry) &&
+            room.exits === exits && JSON.stringify(exits) === exitsStamp && room.collapse === collapse && (entry.kind !== "rescue" || JSON.stringify(room.collapse) === collapseStamp && isPlayerTrappedByCollapse(room)) &&
+            p.deity === patron && p.lastRescuePrayerTurn === rescueTurn && p.rucksack === bag && inventory() && stamp() === training &&
+            tools.every(function (row) { return (p.inventory || []).indexOf(row.item) >= 0 && JSON.stringify(row.item) === row.stamp; }) &&
+            (!base || base()) && (entry.kind !== "door" || ((getExitLock(room, entry.dir) || {}).state || false) === (state || false)) &&
+            (!timed || p.hp === hp && p.stamina === stamina && JSON.stringify(p.faith) === faith && getCurrentStoryTurn() === turn);
+    };
+}
+function structuralToolCheckpoint() {
+    const ctx = structureExecution;
+    if (!ctx || !ctx.spec.tool) return;
+    if (ctx.spec.verb === "rescue") G.player.lastRescuePrayerTurn = getCurrentStoryTurn() + PRAYER_TURNS;
+    ctx.afterTurn = structuralToolGuard(ctx.spec, false);
+}
+function structuralToolStaminaPaid(cost) { if (structureExecution && structureExecution.spec.tool) structureExecution.staminaSpent += cost; }
+function structuralToolNarration(lines) {
+    if (!structureExecution || !structureExecution.spec.tool) return false;
+    structureExecution.lines.push.apply(structureExecution.lines, lines || []);
+    return textModeState.enabled;
+}
+function structuralToolPassageLines(lines) { if (structureExecution && structureExecution.spec.tool && structureExecution.spec.verb === "push") structureExecution.lines.push.apply(structureExecution.lines, lines || []); }
+function runStructuralTool(spec) {
+    const entry = spec.entry.kind === "rescue" ? spec.entry : structuralFresh(spec.entry);
+    if (!entry) return sharedChoiceResult("blocked", "That structural target changed. Repeat the command.");
+    spec = structuralToolSpec(spec.verb, entry, spec.method);
+    if (spec.reason) return sharedChoiceResult("blocked", spec.reason);
+    const previous = structureExecution, player = G.player, room = G.activeRoom, start = getCurrentStoryTurn(), collapsed = isRoomCollapsed(room);
+    const ctx = { spec: spec, lines: [], manaSpent: 0, staminaSpent: 0, interrupted: false };
+    structureExecution = ctx;
+    try {
+        if (spec.verb === "unlock") { if (spec.method === "inside") openLockFromThisSide(room, entry.dir); else useLockKey(room, entry.dir); }
+        else if (spec.verb === "pick") attemptPickLock(room, entry.dir);
+        else if (spec.verb === "force") attemptBreakDoor(room, entry.dir);
+        else if (spec.verb === "smash") smashBrittleDoor(room, entry.dir);
+        else if (spec.verb === "push") pushThroughBurningDoor(room, entry.dir);
+        else if (spec.verb === "lock") { if (spec.method === "key") lockDoorWithKey(room, entry.dir); else attemptLockDoor(room, entry.dir, true); }
+        else if (spec.verb === "knock") attemptKnock(room, entry.dir);
+        else if (spec.verb === "hammer") hammerRoomWall(room, entry.dir);
+        else if (spec.verb === "dig") digCollapsedExit(room, entry.dir);
+        else if (spec.verb === "rescue") prayForRescue(room);
+    } finally { structureExecution = previous; }
+    const moved = G.player === player && G.activeRoom !== room, expectedMove = moved && !ctx.interrupted && /^(push|rescue)$/.test(spec.verb);
+    const changed = ctx.interrupted || G.player !== player || moved && !expectedMove || player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing;
+    const decision = G.activeNPC || G.activeNPCMode && G.activeNPCMode !== "door" || G.activeObject || G.activeItemModal || G.combatEncounter || hasPendingPartyLoot() || textModeState.enabled && !!sharedChoiceState.menu || roomHasActiveHostile(G.activeRoom);
+    const incomplete = !changed && (spec.verb === "lock" ? !isExitLocked(room, entry.dir) : /^(unlock|pick|force|smash|knock)$/.test(spec.verb) ? isExitLocked(room, entry.dir) : spec.verb === "dig" ? isExitCollapsed(room, entry.dir) : spec.verb === "push" ? !moved : spec.verb === "rescue" ? !moved : false);
+    const pause = changed || expectedMove || decision || incomplete || !collapsed && isRoomCollapsed(room);
+    if (textModeState.enabled && G.player === player && G.activeRoom === room && !decision && !changed) {
+        if (G.activeNPCMode === "door") returnToRoomView();
+        if (typeof renderExits === "function") renderExits(room.exits);
+    }
+    const result = Object.assign(structuralToolPublic(spec), { stage: changed ? "interrupted" : "result", staminaCost: ctx.staminaSpent, turns: getCurrentStoryTurn() - start, moved: !!expectedMove });
+    delete result.blockedReason;
+    const message = ctx.lines.filter(function (line) { return typeof isCombatDebugLine !== "function" || !isCombatDebugLine(line); }).join(" ") || (changed ? "The structural attempt was interrupted before its remaining effects." : spec.verb === "push" ? moved ? "You pass through the burning doorway." : "You did not pass through the doorway." : "The structural attempt resolved.");
+    publishTextModeOutput("structure", message + (pause ? " Later commands are paused; completed effects and spent costs are preserved." : ""), { structure: result });
+    return { status: changed || expectedMove || decision ? "interrupted" : incomplete ? "blocked" : pause ? "interrupted" : "completed" };
+}
+function parseTextStructuralTool(raw) {
+    if (/^(?:rescue|pray for (?:rescue|deliverance))$/i.test(raw)) return { verb: "structure", args: { action: "rescue" } };
+    let match = /^(unlock|open|unbar|pick(?:\s+(?:the\s+)?lock(?:\s+on)?)?|force(?:\s+open)?|break(?:\s+down)?|bash|smash|shatter|push(?:\s+through)?|pass\s+through|lock|knock(?:\s+on)?|hammer|hit|mine|dig(?:\s+through)?|clear)(?:\s+(.+))?$/i.exec(raw);
+    if (!match) return null;
+    const word = match[1].toLowerCase().split(" ")[0], verb = {open:"unlock",unbar:"unlock",break:"force",bash:"force",shatter:"smash",pass:"push",hit:"hammer",mine:"hammer",clear:"dig"}[word] || word;
+    let target = match[2] || "", method = "";
+    const tool = /\s+with\s+(?:a\s+)?(key|lockpick|pick)$/i.exec(target);
+    if (tool) { method = tool[1] === "key" ? "key" : "pick"; target = target.slice(0, tool.index); }
+    const cleaned = target.replace(/\b(?:frozen|brittle|burning|flaming)\s+/gi, "");
+    const query = structuralSelector(cleaned), def = STRUCTURAL_TOOL_ACTIONS[verb];
+    if (!query && textModeInCombat()) return null;
+    if (!def || query && query.kind !== def.kind || !query && (target || !/^(smash|push|lock|knock|hammer|dig)$/.test(verb))) return null;
+    return { verb: "structure", args: { action: verb === "unlock" && method === "pick" ? "pick" : /^(lock|unlock)$/.test(verb) && method ? verb + "-" + method : verb, target: cleaned } };
+}
+function executeTextStructuralTool(action) {
+    const args = action.args || {}, verb = String(args.action || "").replace(/-key$|-pick$/, ""), method = /-(key|pick)$/.exec(args.action || ""), def = STRUCTURAL_TOOL_ACTIONS[verb];
+    if (!def) return textModeResult("blocked", "Use show structure for supported actions.");
+    if (verb === "rescue") return runStructuralTool(structuralToolSpec("rescue", structuralToolEntry(G.activeRoom, "", "rescue")));
+    let entries = structuralEntries().filter(function (entry) { return entry.kind === def.kind; });
+    entries = args.target ? structuralMatches(args.target, entries) : entries;
+    if (action.environmentRef) entries = entries.filter(function (entry) { return entry.room === action.environmentRef.room && entry.list === action.environmentRef.list && entry.dir === action.environmentRef.dir && entry.target === action.environmentRef.target && entry.destination === action.environmentRef.destination; });
+    if (action.environmentGuard && !action.environmentGuard()) return textModeResult("blocked", "That structural choice changed. Repeat the command.");
+    if (!entries.length) return textModeResult("blocked", "No matching " + def.kind + " here. Use show structure.");
+    const specs = entries.map(function (entry) { return structuralToolSpec(verb, entry, method ? method[1] : ""); });
+    if (entries.length > 1) { const guards = specs.map(function (spec) { return structuralToolGuard(spec, true); }); action.environmentGuard = function () { return guards.every(function (guard) { return guard(); }); }; return textModeAsk(action, "environment", entries, "Which structural target?"); }
+    return runStructuralTool(specs[0]);
+}
+function structuralToolMenuButton(menu, label, verb, room, dir, method, options) {
+    const kind = STRUCTURAL_TOOL_ACTIONS[verb].kind, entry = structuralToolEntry(room, dir, kind);
+    if (!entry) return createCombatButton(label, function () { return sharedChoiceResult("blocked", "That structural source changed."); }, { disabled: true });
+    const spec = structuralToolSpec(verb, entry, method), guard = structuralToolGuard(spec, true);
+    const run = function () { return guard() ? runStructuralTool(spec) : sharedChoiceResult("blocked", "That structural choice changed. Repeat the command."); };
+    const opts = Object.assign({}, options || {}, { disabled: !!spec.reason, title: spec.reason || (options || {}).title || "", textChoice: { action: verb, method: method || "", targetKind: kind } });
+    return menu ? createSharedChoiceButton(menu, label, run, opts) : createCombatButton(label, run, opts);
+}
+function textStructuralToolHelp(key, show) {
+    if (/\b(?:chest|container)\b/.test(key)) return null;
+    const match = /^(?:structural tools|physical structure|rescue|pray for rescue|unlock|pick|force|smash|push|lock|knock|hammer|dig)(?:\s+.*)?$/.exec(key);
+    if (!match) return null;
+    if (show) return textStructuralShow("structure");
+    return textModeResult("completed", "Use unlock <direction> door (inside bar or matching key), pick <direction> door, force <direction> door, smash frozen <direction> door, push through burning <direction> door, lock <direction> door [with key/lockpick], knock on <direction> door, hammer <direction> wall, dig <direction> rubble, or pray for rescue while trapped. Each command makes one native attempt. Show structure lists exact current costs and restrictions. Unlocking is free; digging takes " + COLLAPSE_DIG_TURNS + " turns; rescue prayer takes " + PRAYER_TURNS + " plus the normal arrival turn on success. Passage burns you and companions; hammering can cause collapse; rescue can cost faith or leave a debt. Native menus accept options/choose/back/cancel/leave. Decisions and movement pause older commands until continue.");
+}
+
+
+function structuralNavigateButton(menu, label, room, dir, kind) {
+    const entry = structuralToolEntry(room, dir, kind), guard = entry && structuralSourceGuard(entry, true);
+    return createSharedChoiceButton(menu, label, function () {
+        if (!guard || !guard()) return sharedChoiceResult("blocked", "That exit changed. Inspect it again.");
+        if (kind === "door") openLockedDoorMenu(room, dir); else if (kind === "rubble") openCollapsedExitMenu(room, dir); else openWallMenu(room, dir);
+        return { status: "needs_input" };
+    }, { disabled: !entry, textChoice: { action: "navigate" } });
+}
+
+function structuralLegacyIntent(action) {
+    const args = action.args || {}, target = args.source || args.fixture, verbs = { open: "unlock", unlock: "unlock", pick: "pick", force: "force", break: "force", mine: "hammer" };
+    const verb = verbs[action.verb], query = target && structuralSelector(target);
+    return verb && query && query.kind === STRUCTURAL_TOOL_ACTIONS[verb].kind ? { verb: "structure", args: { action: verb, target: target } } : null;
+}
+
+// Additional shrine services: intent/choices/output; native handlers own consequences.
+let shrineServiceExecution = null, activeShrineFavor = null;
+const SHRINE_SERVICE_ACTIONS = {
+    blessing: { primary: "newcomer blessing", aliases: ["newcomer", "ask for newcomer blessing"], label: "Newcomer's blessing" },
+    favor: { primary: "favor", aliases: ["favors", "favour", "favours", "ask for favor"], label: "Favor" },
+    defile: { primary: "defile shrine", aliases: ["desecrate shrine"], label: "Defile the shrine" },
+    renewal: { primary: "renew mana", aliases: ["renew", "renewal", "pray for renewal"], label: "Mana renewal" },
+    devotion: { primary: "quiet devotion", aliases: ["devotion", "practice devotion"], label: "Quiet devotion" }
+};
+function shrineFavorOptions() {
+    const p = G.player;
+    if (!p || !getDeityArchetype(p.deity)) return [];
+    return Object.keys(FAVOR_STAT_DEFS).map(function (key) { return { kind: "stat", statKey: key, def: Object.assign({ id: "stat:" + key }, FAVOR_STAT_DEFS[key]) }; })
+        .concat((DEITY_FAVOR_DEFS[p.deity] || []).map(function (def) { return { kind: "power", def: def }; }));
+}
+function shrineFavorLabel(option) { return option.kind === "stat" ? option.def.label : option.def.name; }
+function shrineFavorIdentity(option) {
+    return !!option && shrineFavorOptions().some(function (row) {
+        return row.kind === option.kind && (row.kind === "stat" ? row.statKey === option.statKey && JSON.stringify(row.def) === JSON.stringify(option.def) : row.def === option.def);
+    });
+}
+function shrineServiceRelease(ctx) {
+    if (activeShrineFavor === ctx) { activeShrineFavor = null; favorRequestPending = false; }
+    if (ctx) ctx.answered = true;
+}
+function shrineServiceAbandonStaleFavor() {
+    const ctx = activeShrineFavor;
+    if (ctx && ctx.replyGuard && !ctx.replyGuard()) { ctx.interrupted = true; shrineServiceRelease(ctx); }
+}
+function shrineServiceSpec(action, option) {
+    shrineServiceAbandonStaleFavor();
+    const p = G.player, room = G.activeRoom;
+    let reason = shrineSceneBlock(), turns = 0, cost = 0, cooldown = 0, hpCost = 0;
+    if (!SHRINE_SERVICE_ACTIONS[action]) reason = "Use show shrine for supported services.";
+    if (!reason) ensurePlayerDeityState(p);
+    if (action === "blessing") {
+        turns = 1;
+        if (!reason && getNewcomerProtectionState(p) !== "none") reason = getNewcomerProtectionState(p) === "used" ? "Your one newcomer's blessing has already been used." : "You already hold a newcomer's blessing.";
+    } else if (action === "defile") {
+        turns = 1; cooldown = DEFILE_COOLDOWN_TURNS;
+        if (!reason) reason = getDefileBlockReason(room, room);
+    } else if (action === "renewal") {
+        turns = 2; cooldown = SHRINE_MANA_COOLDOWN_TURNS;
+        if (!reason && (!playerUsesMana(p) || !getClassPerk(p, "shrineMana", false))) reason = "You have not learned shrine mana renewal.";
+        if (!reason && p.mana >= getPlayerManaCeiling(p)) reason = "Your mana is already full.";
+        const last = p && typeof p.lastShrinePrayerTurn === "number" ? p.lastShrinePrayerTurn : -Infinity;
+        if (!reason && getCurrentStoryTurn() - last < cooldown) reason = "The shrine's blessing has not settled yet (" + (cooldown - (getCurrentStoryTurn() - last)) + " more turns).";
+        const path = p && getFaithPathDef(p); hpCost = path ? path.shrineHpCost || 0 : 0;
+    } else if (action === "devotion") {
+        turns = CLASS_DEVOTION_TURNS; cooldown = SHRINE_MANA_COOLDOWN_TURNS;
+        if (!reason) reason = getDevotionPracticeBlockReason(room);
+    } else if (action === "favor") {
+        turns = PRAYER_TURNS; cost = PRAYER_STAMINA_COST; cooldown = PRAYER_COOLDOWN_TURNS;
+        if (!reason) reason = getFavorRequestBlockReason(room);
+        if (!reason && option) reason = shrineFavorIdentity(option) ? getFavorOptionBlockReason(p, option) : "That favor is no longer offered by your patron.";
+    }
+    return { action: action, option: option || null, label: option ? shrineFavorLabel(option) : (SHRINE_SERVICE_ACTIONS[action] || {}).label, turns: turns, staminaCost: cost, hpCost: hpCost, cooldownTurns: cooldown, blockedReason: reason || "" };
+}
+function shrineServicePublic(spec) {
+    const row = { action: spec.action, label: spec.label, command: (SHRINE_SERVICE_ACTIONS[spec.action] || {}).primary + (spec.option ? " " + shrineFavorLabel(spec.option) : ""),
+        turns: spec.turns, staminaCost: spec.staminaCost, hpCost: spec.hpCost, cooldownTurns: spec.cooldownTurns, blockedReason: spec.blockedReason };
+    if (spec.option) row.normalPowerCost = spec.option.kind === "stat" ? FAVOR_STAT_COST : spec.option.def.cost;
+    if (spec.action === "blessing") row.blessingState = getNewcomerProtectionState(G.player);
+    return row;
+}
+function shrineServiceGuard(timed, option) {
+    shrineServiceWarm();
+    const base = shrineGuard(timed), p = G.player, room = G.activeRoom, type = room.type, map = G.roomMap, origin = map && map[room.coords];
+    const classes = p.classSkills, branches = p.classBranches, protection = p.newcomerProtection;
+    const stamp = function () { return JSON.stringify([p.classSkills, p.classBranches, p.newcomerProtection, p.lastShrinePrayerTurn, p.lastDevotionPracticeTurn,
+        timed ? room.lastFavorTurn : null, timed ? p.hp : null, timed ? p.mana : null, timed ? p.manaMax : null, getClassPerk(p, "shrineMana", false), getFaithPathDef(p),
+        option && [option.kind, option.statKey, option.def, option.kind === "stat" ? hasActiveStatusEffect(p, option.def.effect) : playerHoldsFavor(p, option.def.id),
+            option.def.power && option.def.power.regrow ? getSeveredLimbKeys(p) : null]]); };
+    const initial = stamp();
+    return function () { return base() && G.roomMap === map && (!map || map[room.coords] === origin) && room.type === type &&
+        p.classSkills === classes && p.classBranches === branches && p.newcomerProtection === protection && stamp() === initial && (!option || shrineFavorIdentity(option)); };
+}
+function shrineServiceStart(ctx) {
+    if (!ctx) return;
+    ctx.started = true;
+    ctx.afterTurn = shrineServiceGuard(false, ctx.spec.option);
+    if (ctx.spec.action === "favor") activeShrineFavor = ctx;
+}
+function shrineServiceCurrent(ctx) { return !ctx || !ctx.afterTurn || ctx.afterTurn(); }
+function shrineServiceInterrupted(ctx) {
+    if (ctx) { ctx.interrupted = true; shrineServiceRelease(ctx); }
+    saveGameState();
+    return { status: "interrupted" };
+}
+function shrineServiceBeforeAnswer(ctx) {
+    if (!ctx) return true;
+    if (!shrineServiceCurrent(ctx)) { shrineServiceInterrupted(ctx); return false; }
+    ctx.replyGuard = shrineServiceGuard(true, ctx.spec.option);
+    return true;
+}
+function shrineServiceAnswerCurrent(ctx) { return !ctx || activeShrineFavor === ctx && ctx.replyGuard && ctx.replyGuard(); }
+function shrineServiceCapture(ctx) { return !!(ctx && textModeState.enabled); }
+function shrineServiceNarration(message, context) {
+    const ctx = context || shrineServiceExecution;
+    if (ctx) {
+        const extra = textModeState.enabled && typeof takeTurnNotes === "function" ? takeTurnNotes() : "";
+        const text = (String(message || "") + (extra ? " " + extra : "")).split(/\n/).filter(function (line) { return typeof isCombatDebugLine !== "function" || !isCombatDebugLine(line); }).join("\n");
+        if (ctx.spec.action === "favor" && ctx.started && !ctx.answered) {
+            if (textModeState.enabled) publishTextModeOutput("shrine-service", text, { shrineService: { stage: "pending", action: "favor", label: ctx.spec.label } });
+            else setNarration(message);
+            return;
+        }
+        ctx.message = text;
+        if (textModeState.enabled) return;
+    }
+    setNarration(message);
+}
+function shrineServiceRecord(ctx, details) { if (ctx) Object.assign(ctx.details, details); }
+async function runShrineService(action, option) {
+    const spec = shrineServiceSpec(action, option);
+    if (spec.blockedReason) return sharedChoiceResult("blocked", spec.blockedReason);
+    const player = G.player, room = G.activeRoom, start = getCurrentStoryTurn(), previous = shrineServiceExecution;
+    const ctx = { spec: spec, player: player, room: room, started: false, interrupted: false, message: "", details: {}, staminaSpent: 0, answered: false };
+    shrineServiceExecution = ctx;
+    let work;
+    try {
+        if (action === "blessing") work = requestNewcomerBlessing();
+        else if (action === "defile") work = defileShrine();
+        else if (action === "renewal") work = prayAtShrineForMana();
+        else if (action === "devotion") work = practiceDevotionAtShrine();
+        else work = requestFavor(option);
+    } finally { shrineServiceExecution = previous; }
+    try { await work; } finally { if (activeShrineFavor === ctx) shrineServiceRelease(ctx); }
+    const interrupted = ctx.interrupted || G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing ||
+        G.activeNPC || G.activeNPCMode || G.activeObject || G.activeItemModal || G.combatEncounter || roomHasActiveHostile(G.activeRoom) || isRoomCollapsed(G.activeRoom) || hasPendingPartyLoot() || textModeState.enabled && !!sharedChoiceState.menu;
+    if (!ctx.started && !interrupted) return sharedChoiceResult("blocked", "That service did not start. No service costs were spent.");
+    if (textModeState.enabled && !interrupted && !sharedChoiceState.menu) returnToRoomView();
+    const result = Object.assign(shrineServicePublic(spec), ctx.details, { stage: interrupted ? "interrupted" : "result", turns: getCurrentStoryTurn() - start, staminaCost: ctx.staminaSpent });
+    delete result.blockedReason;
+    if (action === "blessing") result.blessingState = getNewcomerProtectionState(player);
+    let message = interrupted ? "The shrine action was interrupted. Spent time and stamina, and any blessing already granted, are preserved. Later effects and commands are paused." : ctx.message || "The shrine service resolved.";
+    if (!interrupted && ctx.details.faithChange) message += " Your standing with your patron " + (ctx.details.faithChange > 0 ? "rises by " : "falls by ") + Math.abs(ctx.details.faithChange) + " (now " + ctx.details.faithScore + ").";
+    publishTextModeOutput("shrine-service", message, { shrineService: result });
+    return { status: interrupted ? "interrupted" : "completed" };
+}
+function reviewShrineService(action) {
+    const spec = shrineServiceSpec(action);
+    if (spec.blockedReason) return sharedChoiceResult("blocked", spec.blockedReason);
+    const root = document.getElementById("chatOptionsEl");
+    if (!root) return sharedChoiceResult("blocked", "The shrine controls are unavailable.");
+    root.innerHTML = "";
+    const title = action === "defile" ? "Defile this shrine? It takes 1 turn, harms its deity's power and may change your faith or hurt you. This cannot be undone." :
+        "Renew your mana? It takes 2 turns. Your current faith path can cost up to " + spec.hpCost + " HP.";
+    const menu = beginShrineMenu("shrine-service-confirm", title); menu.serviceAction = action;
+    const heading = document.createElement("p"); heading.textContent = title; root.appendChild(heading);
+    appendCombatGroup(root, "", [
+        createSharedChoiceButton(menu, "Confirm " + (action === "defile" ? "defiling" : "renewal"), function () { return runShrineService(action); }, { textChoice: { action: "confirm" } }),
+        createSharedChoiceButton(menu, "Not yet", function () { renderShrinePrayerMenu(); return { status: "needs_input" }; }, { textChoice: { action: "back" } }),
+        shrineMenuLeaveButton(menu, "Leave")
+    ]);
+    publishShrineMenu(menu, root);
+    return { status: "needs_input" };
+}
+function requestShrineService(action, option) {
+    const spec = shrineServiceSpec(action, option);
+    if (spec.blockedReason) return sharedChoiceResult("blocked", spec.blockedReason);
+    return action === "defile" || action === "renewal" && spec.hpCost > 0 ? reviewShrineService(action) : runShrineService(action, option);
+}
+function shrineServiceButton(menu, label, action, option, options) {
+    const spec = shrineServiceSpec(action, option), guard = shrineServiceGuard(true, option);
+    const run = function () {
+        if (!guard()) return sharedChoiceResult("blocked", "That shrine service, resource or source changed. Inspect the shrine again.");
+        if (action === "favor" && !option) { renderFavorMenu(); return { status: "needs_input" }; }
+        return requestShrineService(action, option);
+    };
+    return createSharedChoiceButton(menu, label, run, Object.assign({}, options || {}, { disabled: !!spec.blockedReason, title: spec.blockedReason || (options || {}).title || "",
+        textChoice: { action: "service", service: action, favor: option ? option.def.id : "" } }));
+}
+function executeTextShrineService(action) {
+    const args = action.args || {}, name = args.action;
+    const reason = shrineSceneBlock();
+    if (reason) return textModeResult("blocked", reason);
+    if (name === "favors" || name === "favor" && !args.target) { renderFavorMenu(); return { status: "needs_input" }; }
+    if (name !== "favor") return requestShrineService(name);
+    const options = textLootMatch(args.target, shrineFavorOptions(), shrineFavorLabel);
+    if (options.length !== 1) { renderFavorMenu(); return textModeResult("needs_input", "Choose one current patron favor from options. No prayer costs have been spent."); }
+    return requestShrineService("favor", options[0]);
+}
+function parseTextShrineService(raw) {
+    if (/^(?:newcomer(?:'s)? blessing|newcomer|ask for (?:a )?newcomer(?:'s)? blessing)$/i.test(raw)) return { verb: "shrine", args: { action: "blessing" } };
+    if (/^(?:defile|desecrate)(?: the)? shrine$/i.test(raw)) return { verb: "shrine", args: { action: "defile" } };
+    if (/^(?:renew(?: my)? mana|renew|renewal|mana renewal|pray for renewal)$/i.test(raw)) return { verb: "shrine", args: { action: "renewal" } };
+    if (/^(?:quiet devotion|devotion|practice devotion|kneel in quiet devotion)$/i.test(raw)) return { verb: "shrine", args: { action: "devotion" } };
+    const match = /^(?:favou?rs?|ask for (?:a )?favou?r)(?:\s+(.+))?$/i.exec(raw);
+    return match ? { verb: "shrine", args: { action: "favor", target: textCommandUnquote(match[1] || "") } } : null;
+}
+function textShrineServiceHelp(key, show) {
+    if (!/^(?:shrine services|newcomer(?:s|'s)?(?: blessing)?|blessing|favou?rs?|defile|desecrate|renew(?:al| mana)?|mana renewal|quiet devotion|devotion)(?:\s+.*)?$/.test(key)) return null;
+    if (show) return textShrineServicesShow();
+    return textModeResult("completed", "At a room shrine: newcomer blessing asks for one return from death without a patron pledge (1 turn, once per character). Favor lists your patron's blessings and gifts; favor willpower or favor <gift name> asks using native 2 stamina/2 turns and a 50-turn favor cooldown. Your patron decides the answer and amount. Defile shrine reviews before a separate numbered confirmation (1 turn; faith/power loss and possible injury). Renew mana / pray for renewal uses your learned shrine-mana perk and native path effects (2 turns, 15-turn cooldown); HP-cost paths require confirmation. Quiet devotion practises untrained cleric basics (2 turns, 15-turn cooldown). Show shrine lists current costs/restrictions. Options/choose/back/cancel/leave work; answer one menu step per reply and explicitly continue older queued commands.");
+}
+function textShrineServicesShow() {
+    const specs = Object.keys(SHRINE_SERVICE_ACTIONS).map(function (action) { return shrineServiceSpec(action); });
+    const rows = specs.map(shrineServicePublic);
+    const favors = shrineFavorOptions().map(function (option) { return shrineServicePublic(shrineServiceSpec("favor", option)); });
+    return textModeResult("completed", "Shrine services:\n" + rows.concat(favors).map(function (row) { return row.command + " — " + row.staminaCost + " stamina, " + row.turns + " turns" +
+        (row.hpCost ? ", path cost up to " + row.hpCost + " HP" : "") + (row.normalPowerCost ? ", about " + row.normalPowerCost + " patron power (answer/amount varies)" : "") +
+        (row.blockedReason ? " — unavailable: " + row.blockedReason : ""); }).join("\n"), { shrineServices: { stage: "availability", actions: rows, favors: favors } });
+}
+async function textShrineServiceMenuInput(menu, action, input) {
+    if ((splitTextCommands(input || "").parts || []).length !== 1) return textModeResult("needs_input", "Answer one shrine step per reply.");
+    if (/^(leave|cancel)$/.test(action && action.verb || "")) return null;
+    if (!menu.valid()) return textModeResult("blocked", "The shrine service or scene changed. Use cancel, then inspect it again.");
+    if (menu.kind === "shrine-service-confirm") return textModeResult("needs_input", "Confirm separately by number, or use back/cancel.");
+    const args = action && action.args || {}, service = shrineServiceAction(args.action);
+    if (!SHRINE_SERVICE_ACTIONS[service]) return null;
+    if (service === "favor" && args.target && menu.kind === "shrine-prayer") {
+        const nav = menu.options.find(function (choice) { return choice.meta.action === "service" && choice.meta.service === "favor" && !choice.meta.favor; });
+        if (!nav) return textModeResult("blocked", "You have no patron favor menu here.");
+        await runSharedChoice(menu, nav);
+        menu = sharedChoiceState.menu;
+        if (!menu || menu.kind !== "shrine-favor") return textModeResult("blocked", "The favor menu could not open.");
+    }
+    const matches = service === "favor" && args.target ? textLootMatch(args.target, shrineFavorOptions(), shrineFavorLabel) : [];
+    const choices = menu.options.filter(function (choice) { return choice.meta.action === "service" && choice.meta.service === service &&
+        (!args.target || matches.some(function (option) { return option.def.id === choice.meta.favor; })); });
+    return choices.length === 1 ? textRunSharedChoice(menu, choices[0]) : textModeResult("needs_input", "Choose one service or favor by number from options.");
+}
+
+
+function shrineServiceWarm() {
+    const player = G.player;
+    if (!player) return;
+    ensurePlayerDeityState(player); ensurePlayerFaithState(player); ensureClassSkillState(player); ensureEntityStamina(player);
+    getClassPerk(player, "shrineMana", false); getFaithPathDef(player);
+}
+
+function shrineServiceAction(raw) {
+    const key = textCommandNormalize(raw || "");
+    return Object.keys(SHRINE_SERVICE_ACTIONS).find(function (name) { const def = SHRINE_SERVICE_ACTIONS[name]; return name === key || def.primary === key || def.aliases.indexOf(key) >= 0; }) || "";
+}
+
+// Merchant extras adapt native questions, junk sweeps and barkeeper restocking.
+let merchantTradeView = null;
+const activeMerchantQuestions = new WeakMap();
+const MERCHANT_EXTRA_ACTIONS = {
+    ask: { primary: "ask about", aliases: ["ask about item", "ask merchant about"], label: "Ask about an item" },
+    junk: { primary: "sell junk", aliases: ["sell all junk"], label: "Sell junk" },
+    restock: { primary: "restock", aliases: ["request restock", "fetch more drinks"], label: "Request more drinks" }
+};
+function parseTextMerchantCommand(raw) {
+    if (/^(?:sell (?:all )?junk)$/i.test(raw)) return { verb: "merchant", args: { action: "junk" } };
+    if (/^(?:restock|request (?:a )?restock|fetch more drinks|ask (?:them )?to (?:restock|fetch more (?:drink|drinks)(?: from the cellar)?))$/i.test(raw)) return { verb: "merchant", args: { action: "restock" } };
+    const match = /^(?:ask(?: the merchant)? about|ask merchant about)(?:\s+(.+))?$/i.exec(raw);
+    return match ? { verb: "merchant", args: { action: "ask", target: textCommandUnquote(match[1] || "") } } : null;
+}
+function merchantExtraBlock(npc, conversational) {
+    if (conversational && G.activeNPC === npc && /^(talk|respond|menu)$/.test(G.activeNPCMode)) {
+        if (!npc || !G.player || !G.activeRoom || !canConverseWithNPC(npc) || textModeVisibleNPCs().indexOf(npc) < 0 || isNPCOffDuty(npc, G.activeRoom) || (npc.hostility || 0) >= 60) return "That barkeeper is unavailable.";
+    } else {
+        const reason = textTradeBlock(npc);
+        if (reason) return reason;
+    }
+    if (!G.player || G.player.hp <= 0 || G.player.dead || G.player.unconscious || G.player._dying || G.player._collapsing) return "You cannot trade while incapacitated.";
+    if (G.activeObject || G.activeItemModal || G.combatEncounter || roomHasActiveHostile(G.activeRoom) || isRoomCollapsed(G.activeRoom) || hasPendingPartyLoot()) return "Finish the current danger or decision before trading.";
+    return "";
+}
+function merchantViewCurrent(view) {
+    return merchantTradeView === view && (!view || !view.element || document.getElementById("chatOptionsEl") === view.element && view.children.length === view.element.children.length && view.children.every(function (node, index) { return view.element.children[index] === node; }));
+}
+function merchantGuard(npc, options) {
+    const opts = options || {}, player = G.player, room = G.activeRoom, mode = G.activeNPCMode, map = G.roomMap, origin = map && room && map[room.coords];
+    const view = merchantTradeView, root = opts.ownView && document.getElementById("chatOptionsEl"), children = root && Array.from(root.children);
+    const playerState = choiceEntitySnapshot(player), npcState = choiceEntitySnapshot(npc), turn = getCurrentStoryTurn();
+    const stamp = function () { return JSON.stringify([player.inventory, player.equipped, npc.inventory, npc.equipped, getCoinValue(player), getCoinValue(npc), player.classSkills, player.statusEffects, player.techniques, npc.role, npc.temperament, npc.hostility, npc.memory && npc.memory.favorability, npc._barRestockAt, room.coords, room.buildingId, room.zone, (player.inventory || []).map(function (item) { return getTradeSellPrice(npc, item); }), (npc.inventory || []).map(function (item) { return getTradeBuyPrice(npc, item); })]); };
+    const value = stamp();
+    const scene = function () { return G.player === player && G.activeRoom === room && G.activeNPC === npc && G.activeNPCMode === mode && G.roomMap === map && (!map || map[room.coords] === origin) &&
+        !merchantExtraBlock(npc, opts.conversational) && (!opts.view || merchantViewCurrent(view)) && (!root || children.length === root.children.length && children.every(function (node,index) { return root.children[index] === node; })); };
+    const valid = function () { return scene() && playerState() && npcState() && getCurrentStoryTurn() === turn && stamp() === value; };
+    valid.scene = scene;
+    return valid;
+}
+function merchantJunkItems(npc) {
+    return (G.player.inventory || []).filter(function (item) { return textInventoryVisible(item) && !isItemEquippedByEntity(G.player,item) && isVendorJunkItem(item); });
+}
+function merchantJunkPublic(npc) {
+    return merchantJunkItems(npc).map(function (item) { return { name:getItemName(item), quantity:getItemQuantity(item), unitPrice:getTradeSellPrice(npc,item) }; });
+}
+function merchantExtraHelp(key, show) {
+    if (!/^(?:merchant services|trade extras|ask about(?: .*)?|sell (?:all )?junk|restock|request restock|fetch more drinks)$/.test(key)) return null;
+    if (!show) return textModeResult("completed", "While trading: ask about <item> (ask about stock sword or ask about carried sword) asks the merchant's opinion and reveals any existing secret trait through the native action; it is free. Sell junk reviews visible unworn native junk and estimated prices, then needs a separate numbered confirmation. The native sweep can stop early if the merchant refuses or runs out of coins. Restock asks an eligible barkeeper for missing drinks; with a cellar they leave on their normal trip, otherwise fetching stock takes 2 turns. Other merchants use their normal supply cycle. Show trade extras lists availability. Options/choose/back/cancel/leave work; answer one menu step per reply and continue older commands explicitly.");
+    const npc=G.activeNPC, reason=merchantExtraBlock(npc), junk=reason?[]:merchantJunkPublic(npc);
+    const rows=Object.keys(MERCHANT_EXTRA_ACTIONS).map(function(action) { return { action:action, command:MERCHANT_EXTRA_ACTIONS[action].primary, blockedReason:reason || (action==="junk"&&!junk.length?"You have no visible unworn junk.":action==="restock"&&!needsBarRestock(npc)?"Only an available barkeeper missing drinks can fetch stock now.":""), turns:action==="restock"?null:0 }; });
+    return textModeResult("completed","Merchant extras:\n"+rows.map(function(row){return row.command+(row.blockedReason?" — unavailable: "+row.blockedReason:"");}).join("\n"),{merchantExtra:{stage:"availability",actions:rows,junk:junk}});
+}
+function merchantExtraMenu(npc, kind, title) {
+    const root=document.getElementById("chatOptionsEl");
+    if (!root) return null;
+    root.innerHTML="";
+    const menu=beginSharedChoiceMenu(kind,npc,title,function(){if(kind==="trade-extra-item")openMerchantQuestionMenu(npc);else reviewMerchantJunk(npc);});
+    const guard=merchantGuard(npc), valid=menu.valid;
+    menu.valid=function(){return valid()&&guard();};
+    const heading=document.createElement("p");heading.textContent=title;root.appendChild(heading);
+    menu.root=root;return menu;
+}
+function merchantExtraBack(menu) {
+    return createSharedChoiceButton(menu,"Back to trading",function(){renderTradeOptions(menu.npc);return {status:"completed"};},{textChoice:{action:"back"}});
+}
+function reviewMerchantJunk(npc) {
+    const reason=merchantExtraBlock(npc);if(reason)return sharedChoiceResult("blocked",reason);
+    const items=merchantJunkPublic(npc);
+    if(!items.length)return sharedChoiceResult("blocked","You have no visible unworn junk to sell.");
+    const quantity=items.reduce(function(n,item){return n+item.quantity;},0),total=items.reduce(function(n,item){return n+item.quantity*item.unitPrice;},0);
+    const menu=merchantExtraMenu(npc,"trade-extra-confirm","Sell this junk? "+items.map(function(item){return item.name+" ×"+item.quantity;}).join(", ")+". About "+total+"g for "+quantity+" units; the merchant may stop early. No story turns.");
+    if(!menu)return sharedChoiceResult("blocked","Trade controls are unavailable.");
+    const approval={npc:npc,used:false,valid:merchantGuard(npc)};
+    const button=createSharedChoiceButton(menu,"Confirm junk sale",function(){return sellJunkItems(npc,approval);},{textChoice:{action:"confirm"}});
+    menu.root.appendChild(button);menu.root.appendChild(merchantExtraBack(menu));publishSharedChoiceMenu(menu,menu.root);
+    publishTextModeOutput("merchant-extra","Review your junk sale.",{merchantExtra:{stage:"quote",action:"junk",merchant:textModeNPCLabel(npc),items:items,quantity:quantity,estimatedTotal:total,turns:0}},false);
+    return {status:"needs_input"};
+}
+function merchantQuestionEntries(npc, target) {
+    let query=String(target||""),sides=["buy","sell"];
+    const scope=/^(stock|shop|wares|carried|inventory|my)\s+(.+)$/i.exec(query);
+    if(scope){sides=[/^(stock|shop|wares)$/i.test(scope[1])?"buy":"sell"];query=scope[2];}
+    const entries=sides.reduce(function(all,side){return all.concat(textTradeGroups(npc,side).map(function(entry){entry.label=(side==="buy"?"Stock: ":"Carried: ")+entry.label;return entry;}));},[]);
+    return query?textTradeMatchGroups(query,entries):entries;
+}
+function openMerchantQuestionMenu(npc, entries) {
+    const reason=merchantExtraBlock(npc);if(reason)return sharedChoiceResult("blocked",reason);
+    const rows=entries||merchantQuestionEntries(npc,"");
+    if(!rows.length)return sharedChoiceResult("blocked","No visible tradable items match. Use show stock or show sell.");
+    const menu=merchantExtraMenu(npc,"trade-extra-item","Ask about which item? No coins or story turns.");
+    if(!menu)return sharedChoiceResult("blocked","Trade controls are unavailable.");
+    rows.forEach(function(entry){menu.root.appendChild(createSharedChoiceButton(menu,entry.label,function(){return askAboutTradeItem(npc,entry.item);},{textChoice:{action:"ask",item:entry.item,side:entry.side}}));});
+    menu.root.appendChild(merchantExtraBack(menu));publishSharedChoiceMenu(menu,menu.root);return {status:"needs_input"};
+}
+async function executeTextMerchantCommand(action) {
+    const npc=G.activeNPC,reason=merchantExtraBlock(npc);if(reason)return textModeResult("blocked",reason);
+    const args=action.args||{},verb=args.action;
+    if(verb==="junk"||verb==="sell junk"||verb==="sell all junk")return reviewMerchantJunk(npc);
+    if(verb==="restock"||verb==="request restock")return requestMerchantRestock(npc);
+    if(verb==="ask"||verb==="ask about"){
+        const rows=merchantQuestionEntries(npc,args.target);
+        if(!rows.length)return textModeResult("blocked","No visible tradable items match. Use show stock or show sell.");
+        if(!args.target||rows.length>1)return openMerchantQuestionMenu(npc,rows);
+        return askAboutTradeItem(npc,rows[0].item);
+    }
+    return textModeResult("blocked","Use ask about <item>, sell junk or restock.");
+}
+async function merchantExtraMenuInput(menu,action,input) {
+    if((splitTextCommands(input||"").parts||[]).length!==1)return textModeResult("needs_input","Answer one merchant step per reply.");
+    if(action&&/^(leave|cancel)$/.test(action.verb)){
+        const owned=menu.ownsView()&&menu.scene.player===G.player&&menu.scene.room===G.activeRoom&&menu.scene.npc===G.activeNPC&&menu.scene.mode===G.activeNPCMode;
+        clearSharedChoiceMenu(menu);if(action.verb==="cancel")stopTextCommands(false);
+        if(owned){if(action.verb==="leave")disengageFromNPC("You step away from trading.");else renderTradeOptions(menu.npc);}
+        return {status:"completed"};
+    }
+    return textModeResult("needs_input","Choose one numbered merchant option, or use back/cancel. Repeating an intent cannot confirm a sale.");
+}
+async function runMerchantButton(guard,run) {
+    if(!guard()||sharedChoiceState.menu)return sharedChoiceResult("blocked","That trade control changed. Open trading again.");
+    if(textModeState.busy||textModeState.parsing)return sharedChoiceResult("blocked","An action is still finishing.");
+    const enabled=textModeState.enabled;
+    if(enabled){textModeState.busy=true;textModeState.capture=[];}
+    try{
+        const result=await run();
+        if(enabled&&result&&result.status!=="completed")textModeState.paused=true;
+        if(enabled)for(let i=0;i<textModeState.capture.length;i++)await textModeState.capture[i];
+        return result;
+    }finally{if(enabled){textModeState.busy=false;textModeState.capture=null;renderTextModeStatus();focusTextModeInput();}}
+}
+function merchantQuestionStart(npc,item) {
+    const reason=merchantExtraBlock(npc);
+    if(reason)return {error:sharedChoiceResult("blocked",reason)};
+    if(sharedChoiceState.menu)return {error:sharedChoiceResult("blocked","Finish the current trade choice first.")};
+    const entry=merchantQuestionEntries(npc,"").find(function(row){return row.items.indexOf(item)>=0;});
+    if(!entry)return {error:sharedChoiceResult("blocked","That visible trade item is no longer available.")};
+    const old=activeMerchantQuestions.get(npc);
+    if(old&&old.valid())return {error:sharedChoiceResult("blocked","The merchant is still answering your item question.")};
+    return {entry:entry};
+}
+function merchantQuestionWait(npc,item,entry,discoveredTrait) {
+    const guard=merchantGuard(npc,{ownView:true});
+    const request={valid:function(){return activeMerchantQuestions.get(npc)===request&&guard()&&merchantQuestionEntries(npc,"").some(function(row){return row.side===entry.side&&row.list===entry.list&&row.items.indexOf(item)>=0;});},entry:entry,discoveredTrait:discoveredTrait,publicItem:getItemName(item),publicTrait:discoveredTrait?{label:discoveredTrait.label,summary:discoveredTrait.summary}:null};
+    activeMerchantQuestions.set(npc,request);return request;
+}
+function merchantQuestionOutput(npc,item,request,reply,message) {
+    if(activeMerchantQuestions.get(npc)===request)activeMerchantQuestions.delete(npc);
+    const trait=item.hiddenTraitRevealed&&item.hiddenTrait?{label:item.hiddenTrait.label,summary:item.hiddenTrait.summary}:null;
+    publishTextModeOutput("merchant-extra",message,{merchantExtra:{stage:"result",action:"ask",merchant:textModeNPCLabel(npc),item:getItemName(item),location:request.entry.side==="buy"?"stock":"carried",reply:reply,revealed:!!request.discoveredTrait,trait:trait,turns:0}},false);
+}
+function merchantQuestionInterrupted(npc,request) {
+    if(activeMerchantQuestions.get(npc)===request)activeMerchantQuestions.delete(npc);
+    const message="The trader or item changed before the reply. "+(request.publicTrait?request.publicItem+" remains revealed as "+request.publicTrait.label+": "+request.publicTrait.summary+". ":"")+"Later commands are paused.";
+    publishTextModeOutput("merchant-extra",message,{merchantExtra:{stage:"interrupted",action:"ask",item:request.publicItem,revealed:!!request.discoveredTrait,trait:request.publicTrait,turns:0}});
+    return {status:"interrupted"};
+}
+function merchantRestockOutput(npc,result,start) {
+    const message=result.interrupted?"The restock request was interrupted. Already fetched stock and spent time are preserved; later commands are paused.":result.left?"The barkeeper heads to the cellar for more drinks. Wait for their return before trading again.":result.line+" "+result.narration;
+    publishTextModeOutput("merchant-extra",message,{merchantExtra:{stage:result.interrupted?"interrupted":"result",action:"restock",merchant:textModeNPCLabel(npc),left:!!result.left,turns:getCurrentStoryTurn()-start,returnInTurns:result.left&&npc._cellarTrip?Math.max(0,npc._cellarTrip.returnAt-getCurrentStoryTurn()):null}},!!result.interrupted);
+}
+async function requestMerchantRestock(npc) {
+    const reason=merchantExtraBlock(npc);if(reason)return sharedChoiceResult("blocked",reason);
+    if(!needsBarRestock(npc))return sharedChoiceResult("blocked","Only an available barkeeper missing drinks can fetch stock now. Other merchants use their normal supply cycle.");
+    const result=startBarRestock(npc);
+    if(!result)return sharedChoiceResult("blocked","The restock request is no longer available.");
+    if(result.completion)await result.completion;
+    if(result.interrupted)return {status:"interrupted"};
+    if(!result.left){showTradeMessage(npc.name+" "+result.line+" "+result.narration,true);renderTradeOptions(npc);}
+    return {status:result.left?"interrupted":"completed"};
+}
+
+// Nectar feeding shares the native one-container dose transaction.
+const NECTAR_TEXT_ACTION = { primary: "feed nectar", aliases: ["offer nectar", "nectar", "give drops"], turns: 1 };
+function nectarTextAvailable() {
+    return typeof isActiveSlime === "function" && typeof getNectarEntries === "function" &&
+        !!G.player && !!G.activeRoom && textModeVisibleNPCs().some(isActiveSlime);
+}
+function parseTextNectarCommand(raw) {
+    let body = "";
+    const command = /^(feed|offer)\s+(.+)$/i.exec(raw), given = /^give\s+([^\s]+\s+drops?(?:\s+of)?\s+.+)$/i.exec(raw);
+    if (/^nectar$/i.test(raw)) return { verb: "nectar", args: {} };
+    if (command) body = command[2]; else if (given) body = given[1]; else return null;
+    const relation = textPartyRelation(body);
+    if (relation && relation.relation !== "to") return null;
+    body = relation ? relation.item : body;
+    const count = /^([^\s]+)\s+drops?(?:\s+of)?(?:\s+(.+))?$/i.exec(body);
+    const item = textCommandUnquote(count ? count[2] || "nectar" : body);
+    if (!/\bnectar\b/i.test(item)) return null;
+    return { verb: "nectar", args: { amount: count ? count[1] : "", item: item, target: relation ? relation.target : "" } };
+}
+function nectarActionBlock(npc) {
+    const p=G.player,r=G.activeRoom;
+    if(!p||!r||p.dead||p.hp<=0||p.unconscious||p._dying||p._collapsing)return "You cannot offer nectar while incapacitated.";
+    if(!isActiveSlime(npc)||!isVisibleEntity(npc)||(r.creatures||[]).indexOf(npc)<0)return "That living slime is no longer visible here.";
+    if(G.activeNPC!==npc||!/^(menu|give|nectar|talk|respond)$/.test(G.activeNPCMode))return "Finish the current interaction before offering nectar.";
+    if(G.combatEncounter||getActiveEncounter()||G.activeNPCMode==="combat")return "Finish the fight before offering nectar.";
+    if(G.activeObject||G.activeItemModal||hasPendingPartyLoot()||isRoomCollapsed(r))return "Finish the current decision or danger before offering nectar.";
+    return "";
+}
+function nectarEntryLabel(entry) {
+    return getItemName(entry.item)+" ×"+entry.totalQuantity+" — "+getNectarDrops(entry.item)+" drops per container";
+}
+function nectarPublicEntries() {
+    return getNectarEntries().map(function(entry,index){return {number:index+1,name:getItemName(entry.item),quantity:entry.totalQuantity,dropsPerContainer:getNectarDrops(entry.item)};});
+}
+function nectarTextHelp(key,show) {
+    if(show&&/^(gifts|gift|giving)$/.test(key))return nectarGiftAvailability();
+    if(!/^(?:nectar|feed(?: nectar)?|offer nectar|give (?:nectar|drops)|nectar dosing)(?:\s+.*)?$/.test(key))return null;
+    if(show)return nectarGiftAvailability();
+    return textModeResult("completed","Feed nectar to <slime> opens the shared container/drop menu. Feed 5 drops of nectar syrup to second slime (also offer 5 drops of nectar or give 5 drops of nectar to slime) feeds that many drops from ONE visible container, not the whole stack. Specify the nectar product or choose a numbered container when ambiguous; then choose a preset or type feed 3 drops of nectar. Native feeding costs 1 turn, keeps leftovers and returns the native empty container where applicable. Give nectar to slime also opens this menu. Options/choose/back/cancel/leave work; one menu step per reply and explicit continue for older commands. Show nectar or show gifts reports public availability. Other gifts still use give <item> to <npc>.");
+}
+function nectarGiftAvailability() {
+    const targets=textModeVisibleNPCs().map(function(npc){const mode=typeof getGiftReceiveMode==="function"?getGiftReceiveMode(npc):"none";return {name:textModeNPCLabel(npc),mode:mode,nectar:typeof isActiveSlime==="function"&&isActiveSlime(npc)};});
+    const containers=typeof getNectarEntries==="function"?nectarPublicEntries():[];
+    const reason=G.activeNPC&&typeof isActiveSlime==="function"&&isActiveSlime(G.activeNPC)?nectarActionBlock(G.activeNPC):"Select a living slime with feed nectar to <slime>.";
+    return textModeResult("completed","Gift recipients:\n"+(targets.length?targets.map(function(row){return row.name+" — "+(row.nectar?"nectar drops or objects":row.mode==="food"?"food only":row.mode==="hands"?"ordinary gifts":"cannot hold a gift");}).join("\n"):"None visible.")+"\nNectar: "+(containers.length?containers.map(function(row){return row.name+" ×"+row.quantity+" ("+row.dropsPerContainer+" drops per container)";}).join("; "):"No visible nectar.")+"\nFeed nectar uses 1 turn. "+(reason||"Use feed <number> drops of nectar, or feed nectar for choices."),{nectar:{stage:"availability",command:NECTAR_TEXT_ACTION.primary,turns:1,targets:targets,containers:containers,blockedReason:reason}});
+}
+function nectarGuard(npc) {
+    getSlimeBond(npc);
+    const p=G.player,r=G.activeRoom,map=G.roomMap,origin=map&&map[r.coords],turn=getCurrentStoryTurn(),clock=getStatusClock();
+    const pState=choiceEntitySnapshot(p),nState=choiceEntitySnapshot(npc),bond=npc._slimeBond;
+    const stamp=function(){return JSON.stringify([p.inventory,p.equipped,p.hp,p.stamina,p.classSkills,npc._slimeBond,npc.hostility,npc.memory&&npc.memory.favorability,npc.bound,npc._inParty,npc._nectarConsumed]);};
+    const initial=stamp();
+    return function(){return !nectarActionBlock(npc)&&G.player===p&&G.activeRoom===r&&G.roomMap===map&&(!map||map[r.coords]===origin)&&getCurrentStoryTurn()===turn&&getStatusClock()===clock&&pState()&&nState()&&npc._slimeBond===bond&&stamp()===initial;};
+}
+function beginNectarChoiceMenu(npc,entry,stackKey) {
+    getSlimeBond(npc);
+    const kind=entry?"nectar-dose":"nectar-container";
+    const menu=beginSharedChoiceMenu(kind,npc,entry?"How much nectar? One turn per offering.":"Choose a nectar container",function(){return openSlimeNectarMenu(npc,stackKey);});
+    const guard=nectarGuard(npc),valid=menu.valid;menu.valid=function(){return valid()&&guard();};menu.nectarEntry=entry;
+    return menu;
+}
+function nectarChoiceButton(menu,label,run,options) {
+    return menu?createSharedChoiceButton(menu,label,run,options):createCombatButton(label,run,options);
+}
+function publishNectarMenu(menu,root) {
+    publishSharedChoiceMenu(menu,root);
+    publishTextModeOutput("nectar","Nectar offering choices.",{nectar:{stage:"menu",target:textModeNPCLabel(menu.npc),containers:nectarPublicEntries(),selected:menu.nectarEntry?getItemName(menu.nectarEntry.item):null,remainingDrops:menu.nectarEntry?getNectarDrops(menu.nectarEntry.item):null,turns:1}},false);
+    return {status:"needs_input"};
+}
+function captureNectarDose(npc,stackKey) {
+    const reason=nectarActionBlock(npc);if(reason)return {error:sharedChoiceResult("blocked",reason)};
+    const entry=getNectarEntries().find(function(row){return row.key===stackKey;});
+    if(!entry)return {error:sharedChoiceResult("blocked","That visible nectar container changed. Choose it again.")};
+    return {player:G.player,room:G.activeRoom,npc:npc,item:getItemName(entry.item),start:getCurrentStoryTurn(),following:!!(npc._slimeBond&&npc._slimeBond.following)};
+}
+function nectarCompletionGuard(ctx) {
+    const map=G.roomMap,origin=map&&map[ctx.room.coords],mode=G.activeNPCMode,root=document.getElementById("chatOptionsEl"),children=root&&Array.from(root.children);
+    return function(){return G.player===ctx.player&&G.activeRoom===ctx.room&&G.activeNPC===ctx.npc&&G.activeNPCMode===mode&&G.roomMap===map&&(!map||map[ctx.room.coords]===origin)&&!nectarActionBlock(ctx.npc)&&!sharedChoiceState.menu&&(!root||children.length===root.children.length&&children.every(function(node,index){return root.children[index]===node;}));};
+}
+function nectarResult(ctx,dose,drops,interrupted) {
+    const data={stage:interrupted?"interrupted":"result",target:textModeNPCLabel(ctx.npc),item:ctx.item,drops:drops,remainingDrops:dose.left,emptyContainerReturned:!!dose.kept,emptyContainerText:dose.kept||"",turns:getCurrentStoryTurn()-ctx.start};
+    if(!interrupted){data.following=!!(ctx.npc._slimeBond&&ctx.npc._slimeBond.following);data.behavior=getSlimeVisibleState(ctx.npc);}
+    const text=interrupted?"The offering was interrupted after feeding. The spent nectar, turn and any bond effects remain; later commands are paused.":"You offer "+drops+" drops of "+ctx.item+". "+dose.left+" drops remain in that container."+(dose.kept?" "+dose.kept:"");
+    publishTextModeOutput("nectar",text,{nectar:data},!!interrupted);
+    return {status:interrupted?"interrupted":"completed",nectar:data};
+}
+async function executeTextNectarCommand(action) {
+    const args=action.args||{},slimes=typeof isActiveSlime==="function"?textModeVisibleNPCs().filter(isActiveSlime):[];
+    const matches=action.targetRef?slimes.filter(function(n){return n===action.targetRef;}):args.target?resolveTextNPCTarget(args.target,slimes).matches:G.activeNPC?slimes.filter(function(n){return n===G.activeNPC;}):slimes;
+    if(!matches.length)return textModeResult("blocked","No visible living slime matches. Use who is here.");
+    if(matches.length>1)return textModeAsk(action,"target",matches,"Which slime should receive the nectar?");
+    const npc=matches[0];action.targetRef=npc;
+    if(G.activeNPC&&G.activeNPC!==npc)return textModeResult("blocked","Type leave before switching to another recipient.");
+    if(!G.activeNPC)selectNPC(npc);
+    const reason=nectarActionBlock(npc);if(reason)return textModeResult("blocked",reason);
+    const entries=getNectarEntries(),query=textCommandNormalize(args.item||"nectar"),rows=/^(nectar|nectar container)$/.test(query)?entries:textLootMatch(query,entries,function(e){return getItemName(e.item);});
+    if(!rows.length)return textModeResult("blocked","No matching visible nectar remains. Use show nectar.");
+    if(args.amount){
+        const drops=Number(args.amount);if(!Number.isSafeInteger(drops)||drops<1)return textModeResult("blocked","Choose a positive whole number of drops from one container.");
+        if(rows.length===1)return feedNectarToSlime(npc,rows[0].key,drops);
+    }
+    const result=openSlimeNectarMenu(npc,rows.length===1?rows[0].key:undefined);
+    return result||{status:"needs_input"};
+}
+async function textNectarMenuInput(menu,action,input) {
+    if((splitTextCommands(input||"").parts||[]).length!==1)return textModeResult("needs_input","Answer one nectar step per reply.");
+    if(action&&/^(leave|cancel)$/.test(action.verb)){
+        const owned=menu.ownsView()&&menu.scene.player===G.player&&menu.scene.room===G.activeRoom&&menu.scene.npc===G.activeNPC&&menu.scene.mode===G.activeNPCMode;
+        clearSharedChoiceMenu(menu);if(action.verb==="cancel")stopTextCommands(false);
+        if(owned){if(action.verb==="leave")disengageFromNPC("You step away from the slime.");else{G.activeNPCMode="menu";renderNPCActionMenu(menu.npc);}}
+        return {status:"completed"};
+    }
+    if(!menu.valid())return textModeResult("blocked","That slime, nectar or scene changed. Use options to refresh, or cancel.");
+    if(action&&action.verb==="nectar"){
+        const args=action.args||{};
+        if(args.target&&resolveTextNPCTarget(args.target,[menu.npc]).matches.length!==1)return textModeResult("needs_input","Finish this offering before switching recipients.");
+        if(menu.kind==="gift"){
+            const choice=menu.options.find(function(c){return c.meta.action==="nectar";});if(!choice)return textModeResult("blocked","No nectar offering is available.");
+            await runSharedChoice(menu,choice);menu=sharedChoiceState.menu;if(!menu)return {status:"blocked"};
+        }
+        if(menu.kind==="nectar-dose"&&args.amount){
+            if(args.item&&!/^(nectar|nectar container)$/.test(textCommandNormalize(args.item))&&!textLootMatch(args.item,[menu.nectarEntry],function(e){return getItemName(e.item);}).length)return textModeResult("needs_input","Choose a different container with back, or name this nectar.");
+            const drops=Number(args.amount);
+            if(!Number.isSafeInteger(drops)||drops<1||drops>getNectarDrops(menu.nectarEntry.item))return textModeResult("needs_input","Choose a whole number of drops available in this ONE container.");
+            const preset=menu.options.find(function(c){return c.meta.action==="dose"&&c.meta.drops===drops;});
+            const custom=menu.options.find(function(c){return c.meta.action==="custom-dose";});
+            if(!preset)menu.nectarAmount.value=String(drops);
+            return textRunSharedChoice(menu,preset||custom);
+        }
+        if(menu.kind==="nectar-container"&&args.item){
+            const choices=menu.options.filter(function(c){return c.meta.action==="container";});
+            const matches=textLootMatch(args.item,choices,function(c){return getItemName(c.meta.entry.item);});
+            if(matches.length===1)return textRunSharedChoice(menu,matches[0]);
+        }
+    }
+    return textModeResult("needs_input","Choose a numbered nectar option or type feed <number> drops of nectar after choosing a container.");
+}
+
+// Social travel and lodging adapt native callbacks, routes and leases.
+let travelWalkTask = null;
+const TRAVEL_TEXT_ACTIONS = {
+ directions:{primary:"directions",aliases:["ask directions","get directions"]},
+ lead:{primary:"lead me to",aliases:["show me the way to","take me to"]},
+ questions:{primary:"guide questions",aliases:["ask guide","guide question"]},
+ follow:{primary:"follow guide",aliases:["follow"]},
+ keep:{primary:"keep following",aliases:[]},
+ pause:{primary:"stop walking",aliases:["pause walking"]},
+ stop:{primary:"stop following",aliases:[]},
+ rent:{primary:"rent room",aliases:["rent a room","renew room","renew rent"]}
+};
+function parseTextTravelCommand(raw) {
+ let m=/^(?:directions|ask (?:for )?directions|get directions)(?:\s+(?:to|for)\s+(.+))?$/i.exec(raw);
+ if(m)return {verb:"travel",args:{action:"directions",target:textCommandUnquote(m[1]||"")}};
+ m=/^(?:lead me to|show me the way to|take me to)\s+(.+)$/i.exec(raw);
+ if(m)return {verb:"travel",args:{action:"lead",target:textCommandUnquote(m[1])}};
+ if(/^(?:guide questions|guide question|ask guide)$/i.test(raw))return {verb:"travel",args:{action:"questions"}};
+ m=/^(?:ask (?:the )?guide(?: about)?|guide question)\s+(.+)$/i.exec(raw);
+ if(m)return {verb:"travel",args:{action:"questions",target:textCommandUnquote(m[1])}};
+ for(const action of ["follow","keep","pause","stop","rent"]){const def=TRAVEL_TEXT_ACTIONS[action];if([def.primary].concat(def.aliases).some(function(name){return textCommandNormalize(raw)===name;}))return {verb:"travel",args:{action:action}};}
+ if(/^(?:rent (?:a )?room (?:for (?:a |one )?)?(?:week|weekly)|renew (?:my )?room)$/i.test(raw))return {verb:"travel",args:{action:"rent"}};
+ return null;
+}
+function travelNPCBlock(npc,kind) {
+ const p=G.player,r=G.activeRoom;
+ if(!p||!r||p.hp<=0||p.dead||p.unconscious||p._dying||p._collapsing)return "You cannot do that while incapacitated.";
+ if(!npc||G.activeNPC!==npc||textModeVisibleNPCs().indexOf(npc)<0||!canConverseWithNPC(npc))return "Talk to an available person first.";
+ if(!/^(menu|talk|respond|trade)$/.test(G.activeNPCMode)||G.combatEncounter||G.activeObject||G.activeItemModal||hasPendingPartyLoot()||roomHasActiveHostile(r)||isRoomCollapsed(r))return "Finish the current danger or decision first.";
+ if(kind==="questions"&&(!npc.guide||!npc.guide.active))return "Your active guide answers these questions.";
+ if(kind==="rent"){
+  if(!/innkeeper/i.test(npc.role||"")||!r.buildingId||!/\bInn\b/i.test(r.buildingType||r.type||"")||npc.buildingId&&npc.buildingId!==r.buildingId)return "Ask an innkeeper at their inn about a room.";
+  if((npc.hostility||0)>=80||(npc.memory&&npc.memory.favorability||0)<=-70||typeof isNPCOffDuty==="function"&&isNPCOffDuty(npc,r))return "That innkeeper is not available to rent a room.";
+ }
+ return "";
+}
+function travelDirections(npc) {
+ const here=G.activeRoom;
+ return getGuideDestinations(npc,null).map(function(dest){const route=getRouteForDestination(here,dest);return Object.assign({},dest,{route:route,dist:route?route.length:9999});}).sort(function(a,b){return a.dist-b.dist;}).slice(0,DIRECTIONS_MENU_MAX);
+}
+function travelRouteGuard(npc,dest) {
+ const map=G.roomMap,here=G.activeRoom,origin=map&&map[here.coords],room=dest.room||map[dest.key],route=getRouteForDestination(here,dest);
+ const refs=(route||[]).map(function(step){return map[step.key];}),stamp=JSON.stringify([dest.name,dest.buildingId,dest.kind,route,room&&[room.coords,room.buildingId,room.buildingName,room.name,room.displayName]]);
+ return function(){const target=G.roomMap&&G.roomMap[dest.key],now=getRouteForDestination(here,dest);return G.roomMap===map&&map[here.coords]===origin&&target===room&&(now||[]).every(function(step,index){return map[step.key]===refs[index];})&&JSON.stringify([dest.name,dest.buildingId,dest.kind,now,target&&[target.coords,target.buildingId,target.buildingName,target.name,target.displayName]])===stamp;};
+}
+function travelLodgingGuard() {
+ const p=G.player,r=G.activeRoom,map=G.roomMap,lodging=p.lodging,reuse=p.lodgingRoom,leased=lodging&&map[lodging.roomCoords]||getReusableLodgingRoom(r.buildingId);
+ const spot=!lodging&&!leased?findLodgingRoomSpot(r.buildingId):null;
+ const doors=leased?getLodgingRoomDoors(leased).map(function(d){const room=map[leased.exits[d.dir]],back=oppositeDirection(d.dir);return {key:leased.exits[d.dir],room:room,back:back,lock:room&&room.locks&&room.locks[back]};}):[];
+ const stamp=function(){return JSON.stringify([p.lodging,p.lodgingRoom,leased&&[leased.coords,leased.buildingId,leased.leasedBy,leased.exits,leased.locks],spot&&[spot.hall.coords,spot.hall.exits,spot.hall.locks,spot.dir,spot.coords],map[spot&&spot.coords],doors.map(function(d){return d.room&&[d.room.coords,d.room.exits,d.room.locks];})]);},value=stamp();
+ return function(){const next=!p.lodging&&!leased?findLodgingRoomSpot(r.buildingId):null;return p.lodging===lodging&&p.lodgingRoom===reuse&&doors.every(function(d){return map[d.key]===d.room&&(!d.room||d.room.locks&&d.room.locks[d.back]===d.lock);})&&(!leased||map[leased.coords]===leased)&&(!spot||next&&next.hall===spot.hall&&next.coords===spot.coords&&next.dir===spot.dir)&&stamp()===value;};
+}
+function travelGuard(npc,kind,dest,timed) {
+ const p=G.player,r=G.activeRoom,map=G.roomMap,origin=map&&map[r.coords],mode=G.activeNPCMode,turn=getCurrentStoryTurn();
+ const pState=choiceEntitySnapshot(p),nState=choiceEntitySnapshot(npc),lease=kind==="rent"?travelLodgingGuard():null;
+ const routes=dest?[travelRouteGuard(npc,dest)]:kind==="directions"?travelDirections(npc).map(function(d){return travelRouteGuard(npc,d);}):[];
+ const offered=kind==="directions"?JSON.stringify(travelDirections(npc).map(function(d){return [d.key,d.name,d.buildingId];})):"";
+ const stamp=function(){return JSON.stringify([r.coords,r.buildingId,r.buildingType,r.buildingName,npc.role,npc.buildingId,npc.hostility,npc.memory&&npc.memory.favorability,npc.currentState,[npc.guide&&npc.guide.active,npc.guide&&npc.guide.conversationRun],
+  timed?[p.hp,p.stamina,getCoinValue(p),getCoinValue(npc),p.inventory,p.equipped]:null]);},initial=stamp();
+ return function(){return G.player===p&&G.activeRoom===r&&G.activeNPC===npc&&G.activeNPCMode===mode&&G.roomMap===map&&(!map||map[r.coords]===origin)&&!travelNPCBlock(npc,kind)&&
+  pState()&&nState()&&stamp()===initial&&(!timed||turn===getCurrentStoryTurn())&&routes.every(function(valid){return valid();})&&(!lease||lease())&&
+  (!offered||JSON.stringify(travelDirections(npc).map(function(d){return [d.key,d.name,d.buildingId];}))===offered);};
+}
+function beginTravelMenu(npc,kind,title,dest) {
+ if(kind==="rent")getActiveLodging();
+ const menu=beginSharedChoiceMenu("travel-"+kind,npc,title,function(){if(kind==="directions")return showDirectionsMenu(npc);if(kind==="lead")return showLeadOfferMenu(npc,dest);if(kind==="questions")return showGuideQuestionMenu(npc);return showRentRoomMenu(npc);});
+ const valid=menu.valid,guard=travelGuard(npc,kind,dest,true);menu.valid=function(){return valid()&&guard();};return menu;
+}
+function registerTravelButton(menu,button,meta) {
+ const run=button.onclick;
+ return createSharedChoiceButton(menu,button.textContent,function(){return run.call(button);},{disabled:button.disabled,title:button.title||"",className:button.className,textChoice:meta});
+}
+function publishTravelMenu(menu,root,details) {
+ publishSharedChoiceMenu(menu,root);
+ publishTextModeOutput("travel","Travel choices.",{travel:Object.assign({stage:"menu",action:menu.kind.replace("travel-",""),speaker:textModeNPCLabel(menu.npc)},details||{})},false);
+ return {status:"needs_input"};
+}
+function captureTravelAction(npc,kind,dest) {
+ const reason=travelNPCBlock(npc,kind);if(reason)return {error:sharedChoiceResult("blocked",reason)};
+ return {player:G.player,room:G.activeRoom,npc:npc,kind:kind,dest:dest,start:getCurrentStoryTurn(),after:travelGuard(npc,kind,dest,false)};
+}
+function travelActionCurrent(ctx){return !ctx||ctx.after();}
+function travelInterrupted(ctx) {
+ const text="The conversation or route changed. Spent time is preserved; later effects and commands are paused.";
+ publishTextModeOutput("travel",text,{travel:{stage:"interrupted",action:ctx.kind,turns:getCurrentStoryTurn()-ctx.start}});
+ saveGameState();return {status:"interrupted"};
+}
+function travelActionResult(ctx,details) {
+ const data=Object.assign({stage:"result",action:ctx.kind,speaker:textModeNPCLabel(ctx.npc),turns:getCurrentStoryTurn()-ctx.start},details||{});
+ publishTextModeOutput("travel","The "+ctx.kind+" request resolved.",{travel:data},false);return {status:details&&details.refused?"blocked":"completed"};
+}
+function travelQuestionGuard(npc,topicId) {
+ const base=travelGuard(npc,"questions",null,true),root=document.getElementById("chatOptionsEl"),children=root&&Array.from(root.children),topic=window.getGuideTopic(topicId),bs=getPlayerBackstory();
+ const stamp=function(){return JSON.stringify(bs&&[bs.archetype,bs.text,bs.slots]);},value=stamp();
+ return function(){return base()&&window.getGuideTopic(topicId)===topic&&getPlayerBackstory()===bs&&stamp()===value&&!sharedChoiceState.menu&&(!root||children.length===root.children.length&&children.every(function(node,index){return root.children[index]===node;}));};
+}
+function travelGuideAnswerOutput(npc,topic,line,result) {
+ const data={stage:result.status==="completed"?"result":"interrupted",action:"questions",speaker:textModeNPCLabel(npc),question:topic.question,turns:0,spoken:!!result.spoken};
+ if(result.status==="completed")data.answer=line;
+ publishTextModeOutput("travel",result.status==="completed"?"The guide answered: "+topic.question:"The guide's answer was interrupted. Any words already spoken remain; later commands are paused.",{travel:data},result.status!=="completed");
+ return result;
+}
+
+
+function beginTravelWalk(g,run) {
+ if(travelWalkTask)finishTravelWalk(travelWalkTask,"interrupted");
+ let resolve;const promise=new Promise(function(done){resolve=done;});
+ travelWalkTask={g:g,run:run,player:G.player,start:getCurrentStoryTurn(),moves:0,textOwned:textModeState.enabled,promise:promise,resolve:resolve};
+ return promise;
+}
+function finishTravelWalk(task,status) {
+ if(!task||travelWalkTask!==task)return;
+ travelWalkTask=null;
+ const arrived=G.player===task.player&&G.activeRoom&&G.activeRoom.coords===task.g.destKey;
+ const data={stage:arrived?"result":"interrupted",action:"keep",destination:task.g.destName,moves:task.moves,turns:getCurrentStoryTurn()-task.start,arrived:arrived};
+ publishTextModeOutput("travel",arrived?"You have arrived at "+task.g.destName+".":"Walking paused. Completed movement is preserved.",{travel:data},false);
+ task.resolve({status:status||"interrupted"});
+}
+function travelWalkMaybeComplete() {
+ const task=travelWalkTask;
+ if(task&&(G.guiding!==task.g||!task.g.keep||guideWalkSequence!==task.run||G.player!==task.player))Promise.resolve().then(function(){finishTravelWalk(task,"interrupted");});
+}
+function travelStopOwnedWalk(){if(travelWalkTask&&travelWalkTask.textOwned)stopKeepFollowing();}
+function captureTravelStep() {
+ const g=getGuiding();return g?{g:g,room:G.activeRoom,player:G.player,start:getCurrentStoryTurn()}:null;
+}
+function publishTravelStep(ctx,result) {
+ if(!ctx)return;
+ const moved=G.player===ctx.player&&G.activeRoom!==ctx.room;
+ if(travelWalkTask&&travelWalkTask.g===ctx.g&&moved)travelWalkTask.moves++;
+ publishTextModeOutput("travel",result==="arrived"?"You arrive at "+ctx.g.destName+".":moved?"You follow your guide.":"You could not follow the guide.",{travel:{stage:result==="blocked"?"interrupted":"result",action:"follow",destination:ctx.g.destName,moved:moved,arrived:result==="arrived",turns:getCurrentStoryTurn()-ctx.start}},false);
+ travelWalkMaybeComplete();
+}
+function travelTextHelp(key,show) {
+ if(!/^(?:directions|ask directions|lead|lead me|guide questions|guide question|ask guide|follow(?: guide)?|keep following|stop walking|stop following|rent(?: room)?|renew(?: room| rent)|lodging)$/.test(key))return null;
+ if(!show)return textModeResult("completed","Directions opens the current speaker's known destinations; directions to <place> asks for a native route (1 turn). Lead me to <place> asks them to guide you (1 turn on agreement; native refusals are free). Follow guide moves one room; keep following uses the native 3-second walking pace and waits until arrival or interruption. Stop walking pauses; stop following dismisses that route. Stop cancels queued commands and pauses a text-started walk. Guide questions lists your active guide's scripted topics; ask guide <question> waits for the answer (free). Rent room / renew room reviews the innkeeper's native weekly price, then needs a separate numbered payment confirmation. Show directions/guide questions/lodging is free; options/choose/back/cancel/leave work. Answer one menu step per reply and explicitly continue older commands after decisions or travel.");
+ const npc=G.activeNPC,reason=travelNPCBlock(npc,/^(rent|renew|lodging)/.test(key)?"rent":/guide question|ask guide/.test(key)?"questions":"directions");
+ if(/^(rent|renew|lodging)/.test(key)){
+  const lodging=G.player?getActiveLodging():null;
+  return textModeResult("completed","Lodging: "+(lodging?lodging.buildingName+", paid for "+describeLodgingRemaining(lodging)+".":"No current weekly room.")+" Weekly rent: "+LODGING_WEEKLY_RENT+"g. "+(reason||"Use rent room to review before paying."),{travel:{stage:"availability",action:"rent",fee:LODGING_WEEKLY_RENT,weekTurns:getLodgingWeekTurns(),lodging:lodging?{building:lodging.buildingName,remainingTurns:Math.max(0,lodging.paidUntil-getCurrentStoryTurn())}:null,blockedReason:reason}});
+ }
+ if(/guide question|ask guide/.test(key)){
+  const rows=!reason&&typeof window.getGuideSuggestedQuestions==="function"?window.getGuideSuggestedQuestions():[];
+  return textModeResult("completed",reason||"Guide questions:\n"+rows.map(function(q){return q.question;}).join("\n"),{travel:{stage:"availability",action:"questions",questions:rows.map(function(q){return {question:q.question};}),blockedReason:reason}});
+ }
+ const g=typeof getGuiding==="function"?getGuiding():null;
+ const rows=!reason?travelDirections(npc):[];
+ return textModeResult("completed","Directions: "+(reason||rows.map(function(d){return d.name+(d.route?"":" — no clear route");}).join("; "))+(g?"\nFollowing "+textModeNPCLabel(g.npc)+" to "+g.destName+". Use follow guide, keep following, stop walking or stop following.":""),{travel:{stage:"availability",action:"directions",destinations:rows.map(function(d){return {name:d.name,routeAvailable:!!d.route};}),guiding:g?{name:textModeNPCLabel(g.npc),destination:g.destName,walking:!!g.keep}:null,blockedReason:reason}});
+}
+async function executeTextTravelCommand(action) {
+ const args=action.args||{},kind=args.action;
+ if(/^(follow|keep|pause|stop)$/.test(kind)){
+  const g=getGuiding();if(!g)return textModeResult("blocked","Nobody is guiding you now.");
+  if(kind==="pause"){stopKeepFollowing();return textModeResult("interrupted","Walking paused. Use follow guide or keep following when ready.");}
+  if(kind==="stop"){stopFollowingGuide();return textModeResult("interrupted","You stop following the guide.");}
+  if(guideDecisionPending()||guideBlocked())return textModeResult("blocked","Finish the current interaction or decision before following.");
+  if(kind==="keep"){const task=startKeepFollowing();return task&&typeof task.then==="function"?task:{status:"interrupted"};}
+  followGuideStep();return {status:"interrupted"};
+ }
+ const npc=G.activeNPC,reason=travelNPCBlock(npc,kind);if(reason)return textModeResult("blocked",reason);
+ if(kind==="rent")return showRentRoomMenu(npc);
+ if(kind==="questions"){
+  if(!args.target)return showGuideQuestionMenu(npc);
+  const topic=window.getGuideTopic(args.target)||window.matchGuideTopic(args.target);
+  if(!topic)return textModeResult("blocked","No scripted guide topic matches. Use guide questions.");
+  return handleGuideAnswer(npc,topic.id,null,null);
+ }
+ if(kind!=="directions"&&kind!=="lead")return textModeResult("blocked","Use directions, guide questions, rent room or follow guide.");
+ if(!args.target)return showDirectionsMenu(npc);
+ const rows=textLootMatch(args.target,travelDirections(npc),function(d){return d.name;});
+ if(rows.length!==1){showDirectionsMenu(npc);return textModeResult("needs_input","Choose one current destination by number.");}
+ return kind==="lead"?askNPCToLeadYou(npc,rows[0]):handleDirectionsChoice(npc,rows[0]);
+}
+async function textTravelMenuInput(menu,action,input) {
+ if((splitTextCommands(input||"").parts||[]).length!==1)return textModeResult("needs_input","Answer one travel or rental step per reply.");
+ if(action&&/^(leave|cancel)$/.test(action.verb)){
+  const owned=menu.ownsView()&&menu.scene.player===G.player&&menu.scene.room===G.activeRoom&&menu.scene.npc===G.activeNPC&&menu.scene.mode===G.activeNPCMode;
+  clearSharedChoiceMenu(menu);if(action.verb==="cancel")stopTextCommands(false);
+  if(owned){if(action.verb==="leave")disengageFromNPC("You step away.");else renderChatOptions(menu.npc);}
+  return {status:"completed"};
+ }
+ if(!menu.valid())return textModeResult("blocked","That speaker, route or rental quote changed. Use options to refresh or cancel.");
+ const args=action&&action.args||{};
+ if(menu.kind==="travel-rent")return textModeResult("needs_input","Confirm the current rent separately by number, or use back/cancel.");
+ if(action&&action.verb==="travel"){
+  let choices=menu.options.filter(function(c){return c.meta.action===args.action;});
+  if(args.target&&args.action==="questions"){
+   const topic=window.getGuideTopic(args.target)||window.matchGuideTopic(args.target);choices=choices.filter(function(c){return topic&&c.meta.topic===topic.id;});
+  }else if(args.target)choices=textLootMatch(args.target,choices,function(c){return c.meta.dest?c.meta.dest.name:"";});
+  if(choices.length===1)return textRunSharedChoice(menu,choices[0]);
+ }
+ return textModeResult("needs_input","Choose a numbered travel option, or use back/cancel.");
+}
+
+
+// Synergy commands adapt shared native choices; composition and rolls stay native.
+const SYNERGY_TEXT_ACTIONS = {
+ menu:{primary:"synergy",aliases:["synergies"]},combine:{primary:"combine skills",aliases:[]},
+ first:{primary:"first skill",aliases:[]},second:{primary:"second skill",aliases:[]},
+ add:{primary:"add catalyst",aliases:[]},remove:{primary:"remove catalyst",aliases:[]},
+ picture:{primary:"picture",aliases:["visualise","visualize"]},experiment:{primary:"experiment",aliases:["begin experiment"]},
+ notebook:{primary:"notebook",aliases:["synergy notebook"]},memorise:{primary:"memorise synergy",aliases:["memorize synergy"]},
+ forget:{primary:"forget synergy",aliases:[]},name:{primary:"name synergy",aliases:[]},use:{primary:"use synergy",aliases:["self synergies"]}
+};
+function parseTextSynergyCommand(raw) {
+ if(/^(?:synergy|synergies)$/i.test(raw))return {verb:"synergy",args:{action:"menu"}};
+ if(/^(?:combine skills|synergy combine)$/i.test(raw))return {verb:"synergy",args:{action:"combine"}};
+ if(/^(?:notebook|synergy notebook)$/i.test(raw))return {verb:"synergy",args:{action:"notebook"}};
+ if(/^(?:experiment|begin experiment)$/i.test(raw)&&(/^begin /i.test(raw)||G.activeNPCMode==="synergy"))return {verb:"synergy",args:{action:"experiment"}};
+ let m=/^(?:synergy )?(first skill|second skill|add catalyst|remove catalyst)\s+(.+)$/i.exec(raw);
+ if(m)return {verb:"synergy",args:{action:{"first skill":"first","second skill":"second","add catalyst":"add","remove catalyst":"remove"}[m[1].toLowerCase()],target:textCommandUnquote(m[2])}};
+ m=/^(?:picture|visualise|visualize)\s+([\s\S]+)$/i.exec(raw);
+ if(m)return {verb:"synergy",args:{action:"picture",target:textCommandUnquote(m[1])}};
+ m=/^(memorise|memorize)(?: synergy)?(?:\s+(.+))?$/i.exec(raw);
+ if(m)return {verb:"synergy",args:{action:"memorise",target:textCommandUnquote(m[2]||"")}};
+ m=/^(forget synergy|name synergy|use synergy)(?:\s+(.+))?$/i.exec(raw);
+ if(m)return {verb:"synergy",args:{action:m[1].split(" ")[0].toLowerCase(),target:m[2]||""}};
+ if(/^self synergies$/i.test(raw))return {verb:"synergy",args:{action:"use"}};
+ m=/^synergy\s+(.+)$/i.exec(raw);
+ return m?{verb:"synergy",args:{action:"entry",target:textCommandUnquote(m[1])}}:null;
+}
+function synergyTextAvailable() {
+ return !!G.player&&typeof getSynergyStation==="function"&&typeof ensureSynergyState==="function"&&(!!getSynergyStation(G.activeRoom)||ensureSynergyState(G.player).notebook.length>0);
+}
+function synergyActionBlock(room,station) {
+ const p=G.player;
+ if(!p||p.hp<=0||p.dead||p.unconscious||p._dying||p._collapsing)return "You cannot work with techniques while incapacitated.";
+ if(!room||G.activeRoom!==room||G.activeNPC||G.activeObject||G.activeItemModal||G.combatEncounter||G.activeNPCMode&&!/^(synergy)$/.test(G.activeNPCMode)||roomHasActiveHostile(room)||isRoomCollapsed(room)||hasPendingPartyLoot()||isPlayerJailed())return "Finish the current interaction or danger before working with techniques.";
+ if(station&&!getSynergyStation(room))return "Find a training ground, workshop, lab bench or shrine first.";
+ return "";
+}
+function synergyPublicTechnique(t) {
+ const s=ensureSynergyState(G.player);
+ return {name:getSynergyLabel(t),description:describeSynergyTechnique(t),memorised:s.repertoire.indexOf(t.id)>=0,
+  parents:(t.parents||[]).map(function(a){return {name:a.label};}),cost:{stamina:t.cost.stamina,mana:t.cost.mana},
+  cooldown:t.cooldown,unstable:!!t.flaw,refined:!!t.refined,visuals:t.visuals||"",narration:t.narration||"",requirement:t.requirementNote||""};
+}
+function synergyOutput(action,details,text,display) {
+ publishTextModeOutput("synergy",text||"Technique choices updated.",{synergy:Object.assign({stage:"result",action:action},details||{})},display===true);
+}
+function synergyGuard(room,opts) {
+ opts=opts||{};
+ const p=G.player,map=G.roomMap,origin=map&&map[room.coords],mode=G.activeNPCMode,station=getSynergyStation(room);
+ const structural=room.structural,fixtures=(structural||[]).slice(),root=document.getElementById("chatOptionsEl"),children=root&&Array.from(root.children);
+ const state=ensureSynergyState(p),notebook=state.notebook,techs=notebook.slice(),draft=G.synergyDraft;
+ // Resolve native knowledge before snapshotting; these helpers can initialise old saves.
+ getSynergyAtoms(p);getSynergyCatalysts(p);
+ const inventory=choiceEntitySnapshot(p),turn=getCurrentStoryTurn();
+ const definitions=typeof WIZARD_SPELLS!=="undefined"?Object.keys(WIZARD_SPELLS).map(function(k){return [k,WIZARD_SPELLS[k]];}):[];
+ const stamp=function(){return JSON.stringify([room.coords,room.type,room.buildingId,room.collapse,room.structural,
+  getSynergyStation(room),getSynergyAtoms(p),getSynergyCatalysts(p).map(function(c){return [c.name,c.steps,c.element,c.fx,c.item];}),
+  Object.keys(SYNERGY_CLASS_INFO).map(function(k){return getClassSkillRank(p,k);}),p.deity,
+  state.notebook,state.repertoire,state.bonusSlots,
+  draft&&[draft.a,draft.b,draft.items,opts.editing?null:draft.text],
+  opts.resources===false?null:[p.hp,p.stamina,p.mana,getCoinValue(p)]]);},initial=stamp();
+ return function(){return G.player===p&&G.activeRoom===room&&G.activeNPCMode===mode&&G.roomMap===map&&(!map||map[room.coords]===origin)&&
+  !synergyActionBlock(room,!opts.self)&&getSynergyStation(room)===station&&p.synergies===state&&state.notebook===notebook&&
+  techs.length===notebook.length&&techs.every(function(t,i){return notebook[i]===t;})&&G.synergyDraft===draft&&inventory()&&
+  room.structural===structural&&fixtures.length===(room.structural||[]).length&&fixtures.every(function(f,i){return room.structural[i]===f;})&&
+  definitions.every(function(d){return WIZARD_SPELLS[d[0]]===d[1];})&&stamp()===initial&&
+  (opts.resources===false||getCurrentStoryTurn()===turn)&&
+  (opts.view===false||!root||children.length===root.children.length&&children.every(function(child,i){return root.children[i]===child;}));};
+}
+function beginSynergyMenu(room,kind,title,refresh,opts) {
+ const menu=beginSharedChoiceMenu("synergy-"+kind,null,title,refresh);
+ menu.room=room;menu.synergyKind=kind;menu.synergyGuard=synergyGuard(room,Object.assign({view:false},opts||{}));
+ const valid=menu.valid;menu.valid=function(){return valid()&&menu.synergyGuard();};return menu;
+}
+function synergyButton(menu,label,run,meta,opts) {
+ return createSharedChoiceButton(menu,label,run,Object.assign({},opts||{},{textChoice:meta||{}}));
+}
+function publishSynergyMenu(menu,root,details) {
+ publishSharedChoiceMenu(menu,root);
+ synergyOutput(menu.synergyKind,Object.assign({stage:"menu"},details||{}),"Technique choices.",false);
+ return {status:"needs_input"};
+}
+function synergyApproval(room,action,extra) {
+ return Object.assign({room:room,action:action,used:false,valid:synergyGuard(room,{view:false})},extra||{});
+}
+function synergyAccept(approval,room,action) {
+ if(!approval||approval.room!==room||approval.action!==action||approval.used||!approval.valid())return false;
+ approval.used=true;return true;
+}
+function synergyInterrupted(room,draft,action,cost) {
+ if(draft)draft.busy=false;
+ synergyOutput(action,Object.assign({stage:"interrupted"},cost||{}),"The technique work was interrupted. Spent costs are preserved; later commands stay paused.",true);
+ saveGameState();return {status:"interrupted"};
+}
+function synergyTextHelp(key,show) {
+ if(!/^(synergy|synergies|combine skills|first skill|second skill|add catalyst|remove catalyst|picture|visualise|visualize|experiment|begin experiment|notebook|memorise(?: synergy)?|memorize(?: synergy)?|forget synergy|name synergy|use synergy|self synergies)(?:\s+.*)?$/.test(key))return null;
+ if(!show)return textModeResult("completed","At a station: synergy, combine skills, first skill <name>, second skill <name>, add catalyst <item>, remove catalyst <item>, picture \"an image\", then experiment. Review the native 3-stamina, 2-mana-for-mana-users, 3-turn attempt and one unit of each selected catalyst; confirm separately by number. Notebook lists your notes; synergy <name> inspects one; memorise synergy <name> reviews memory rules, forget synergy <name> sets it aside, and name synergy <old name> as \"new name\" names it. Use synergy <name> selects a memorised self technique; targeted combat use retains use <name>. Show synergy/skills/catalysts/notebook through show synergy skills, show synergy catalysts or show notebook. Options/choose/back/cancel/leave work one step per reply; continue older batches explicitly.");
+ const p=G.player,station=getSynergyStation(G.activeRoom),s=p&&ensureSynergyState(p);
+ if(!s)return textModeResult("blocked","There is no player.");
+ const atoms=getSynergyAtoms(p).map(function(a){return {name:a.label,discipline:SYNERGY_CLASS_INFO[a.cls].label};});
+ const catalysts=getSynergyCatalysts(p).map(function(c){return {name:c.name,quantity:getItemQuantity(c.item)};});
+ const notes=s.notebook.map(synergyPublicTechnique),block=synergyActionBlock(G.activeRoom,true);
+ return textModeResult("completed","Synergies — "+(station?station.label:"no experiment station here")+". "+(block||getSynergyExperimentBlock(p)||"Experiment and notebook editing are available.")+
+  "\nSkills: "+(atoms.map(function(a){return a.name;}).join("; ")||"none")+"\nCatalysts: "+(catalysts.map(function(c){return c.name+" ×"+c.quantity;}).join("; ")||"none")+
+  "\nNotebook: "+(notes.map(function(t){return t.name+(t.memorised?" (memorised)":"");}).join("; ")||"empty")+
+  "\nUse synergy to open the station, or how synergy for commands.",{synergy:{stage:"availability",station:station?station.label:null,skills:atoms,catalysts:catalysts,notebook:notes,memorised:s.repertoire.length,slots:getSynergySlots(p),blockedReason:block}});
+}
+function synergyMatch(selector,entries,wordsFor) {
+ const key=textCommandNormalize(textCommandUnquote(selector));
+ const exact=entries.filter(function(entry){return textCommandNormalize(wordsFor(entry))===key;});
+ return exact.length?exact:textLootMatch(textCommandUnquote(selector),entries,wordsFor);
+}
+function synergyChoiceByTarget(menu,kind,target) {
+ const options=menu.options.filter(function(c){return c.meta.action===kind;});
+ return target?synergyMatch(target,options,function(c){return c.meta.name||"";}):options;
+}
+async function runSynergyNamedChoice(menu,kind,target) {
+ const choices=synergyChoiceByTarget(menu,kind,target);
+ if(choices.length!==1)return textModeResult("needs_input","Choose one current technique option by number.");
+ return textModeState.busy ? runSharedChoice(menu,choices[0]) : textRunSharedChoice(menu,choices[0]);
+}
+async function textSynergyMenuInput(menu,action,input) {
+ if((splitTextCommands(input||"").parts||[]).length!==1)return textModeResult("needs_input","Answer one technique step per reply; payment needs separate confirmation.");
+ if(action&&/^(leave|cancel)$/.test(action.verb)){
+  const owned=menu.ownsView()&&menu.scene.player===G.player&&menu.scene.room===G.activeRoom&&menu.scene.mode===G.activeNPCMode;
+  clearSharedChoiceMenu(menu);if(action.verb==="cancel")stopTextCommands(false);
+  if(owned)closeSynergyLab();return {status:"completed"};
+ }
+ if(!menu.valid())return textModeResult("blocked","That station, skill, material or technique changed. Use options to refresh, or cancel.");
+ if(menu.synergyKind==="confirm")return textModeResult("needs_input","Confirm the reviewed attempt separately by number, or use back/cancel.");
+ if(!action||action.verb!=="synergy")return textModeResult("needs_input","Use a numbered technique choice, or how synergy.");
+ return executeTextSynergyCommand(action,true);
+}
+async function executeTextSynergyCommand(action,fromMenu) {
+ const args=action.args||{},kind=args.action||"menu",room=G.activeRoom;
+ const block=synergyActionBlock(room,kind!=="use");if(block)return textModeResult("blocked",block);
+ const existing=sharedChoiceState.menu;
+ if(existing&&!/^synergy-/.test(existing.kind))return textModeResult("blocked","Finish the current choice before opening techniques.");
+ if(existing&&!fromMenu&&!existing.valid())return textModeResult("blocked","That technique choice changed. Use options to refresh or cancel.");
+ if(kind==="menu")return openSynergyLab(room);
+ if(kind==="notebook"){if(G.activeNPCMode!=="synergy")openSynergyLab(room);return renderSynergyNotebook(room);}
+ if(kind==="use"){
+  openSelfSynergyMenu();if(!args.target)return {status:"needs_input"};
+  return runSynergyNamedChoice(sharedChoiceState.menu,"use",args.target);
+ }
+ if(kind==="combine"){
+  if(G.activeNPCMode!=="synergy")openSynergyLab(room);
+  const menu=sharedChoiceState.menu;
+  if(menu&&menu.synergyKind==="lab")return runSynergyNamedChoice(menu,"combine","");
+  return textModeResult("needs_input","Finish or leave the current draft first.");
+ }
+ if(/^(first|second|add|remove|picture|experiment)$/.test(kind)){
+  if(!G.synergyDraft)return textModeResult("blocked","Use combine skills to start a draft first.");
+  const menu=sharedChoiceState.menu;
+  if(!menu||menu.synergyKind!=="draft")return textModeResult("blocked","Return to your draft first, or use options.");
+  if(kind==="picture"){
+   if(!menu.pictureInput)return textModeResult("blocked","Choose both skills before picturing the technique.");
+   menu.pictureInput.value=String(args.target||"").slice(0,SYNERGY_TEXT_MAX);G.synergyDraft.text=menu.pictureInput.value;
+   return renderSynergyDraft(room);
+  }
+  if(kind==="experiment")return runSynergyNamedChoice(menu,"experiment","");
+  if(kind==="first"||kind==="second")return runSynergyNamedChoice(menu,kind,args.target);
+  const choices=synergyChoiceByTarget(menu,"catalyst",args.target).filter(function(c){return kind==="remove"?c.meta.selected:!c.meta.selected;});
+  if(choices.length!==1)return textModeResult("needs_input","Choose one available catalyst by number; at most two different inventory entries can be selected.");
+  return textModeState.busy ? runSharedChoice(menu,choices[0]) : textRunSharedChoice(menu,choices[0]);
+ }
+ if(/^(entry|memorise|forget|name)$/.test(kind)){
+  let target=args.target||"",name=null;
+  if(kind==="name"){
+   const m=/^(.+?)\s+as\s+["']([\s\S]*)["']$/i.exec(target);if(!m)return textModeResult("blocked",'Use name synergy <old name> as "new name".');
+   target=textCommandUnquote(m[1]);name=m[2];
+  }
+  const matches=synergyMatch(target,ensureSynergyState(G.player).notebook,getSynergyLabel);
+  if(matches.length!==1){if(G.activeNPCMode!=="synergy")openSynergyLab(room);renderSynergyNotebook(room);return textModeResult("needs_input","Choose one notebook entry by number.");}
+  if(G.activeNPCMode!=="synergy")openSynergyLab(room);
+  renderSynergyEntry(room,matches[0].id);
+  if(kind==="entry")return {status:"needs_input"};
+  const menu=sharedChoiceState.menu;
+  if(kind==="name"){menu.nameInput.value=name;return runSynergyNamedChoice(menu,"name","");}
+  return runSynergyNamedChoice(menu,kind,"");
+ }
+ return textModeResult("blocked","Use how synergy for the supported technique commands.");
+}
+
+// Noncombat casts share native power, healing, enchantment and companion actions.
+const CASTING_TEXT_ACTIONS = {
+ powers:{primary:"powers",aliases:["divine gifts"]},power:{primary:"power",aliases:["use","cast"]},
+ enchant:{primary:"cast enchant",aliases:["enchantments","cast flicker","cast bless"]},
+ recipient:{primary:"enchant recipient",aliases:[]},item:{primary:"enchant item",aliases:[]},
+ element:{primary:"enchant element",aliases:[]},ask:{primary:"ask for enchantment",aliases:["ask for blessing"]},
+ travel:{primary:"cast",aliases:[]}
+};
+function castingSupportedPower(power) {
+ return !!power&&!power.shapeshift&&!power.shapeshiftRevert&&power.use!=="body"&&(power.use!=="world"||!!power.regrow);
+}
+function castingPowers() {return typeof getUsablePowers==="function"&&G.player?getUsablePowers(G.player).filter(castingSupportedPower):[];}
+function castingTravelSpells() {
+ if(typeof getCastableSpellIds!=="function"||typeof WIZARD_SPELLS==="undefined"||!G.player)return [];
+ return getCastableSpellIds(G.player).map(function(id){return {id:id,spell:WIZARD_SPELLS[id]};}).filter(function(e){return e.spell&&e.spell.travel&&e.spell.selfStatus;});
+}
+function castingMatch(query,rows,name) {
+ const key=textCommandNormalize(textCommandUnquote(query)),exact=rows.filter(function(row){return textCommandNormalize(name(row))===key;});
+ return exact.length?exact:textLootMatch(textCommandUnquote(query),rows,name);
+}
+function parseTextCastingCommand(raw) {
+ if(textModeInCombat())return null;
+ if(/^(powers|divine gifts)$/i.test(raw))return {verb:"casting",args:{action:"powers"}};
+ if(/^enchantments$/i.test(raw))return {verb:"casting",args:{action:"enchant"}};
+ let m=/^ask (?:for )?(?:an? )?(enchantment|blessing)$/i.exec(raw);
+ if(m)return {verb:"casting",args:{action:"ask",target:/bless/i.test(m[1])?"Bless":""}};
+ m=/^(?:enchant|bless) (recipient|item|element)\s+(.+)$/i.exec(raw);
+ if(m)return {verb:"casting",args:{action:m[1].toLowerCase(),target:m[2]}};
+ m=/^cast (enchant(?: weapon| gear)?|flicker(?: edge)?|bless(?: weapon| gear)?)(?:\s+(?:on|at)\s+(.+))?$/i.exec(raw);
+ if(m)return {verb:"casting",args:{action:"enchant",target:m[1].replace(/ (weapon|gear|edge)$/i,"")+(m[2]?" on "+m[2]:"")}};
+ m=/^(?:power|use|cast)\s+(.+)$/i.exec(raw);
+ if(m){
+  const relation=textLootRelation(m[1],["on","at","to"]),name=relation?relation.item:m[1];
+  if(castingMatch(name,castingPowers(),function(p){return p.name;}).length)return {verb:"casting",args:{action:"power",target:m[1]}};
+  if(!relation&&castingMatch(name,castingTravelSpells(),function(e){return e.spell.name;}).length)return {verb:"casting",args:{action:"travel",target:name}};
+  if(/^power /i.test(raw))return {verb:"casting",args:{action:"power",target:m[1]}};
+ }
+ return null;
+}
+function castingAvailable() {
+ return !!G.player&&(castingPowers().length>0||castingTravelSpells().length>0||typeof getEnchantOptions==="function"&&getEnchantOptions(G.player).length>0||G.activeNPC&&typeof getNPCEnchantOptions==="function"&&getNPCEnchantOptions(G.activeNPC).length>0);
+}
+function castingBlock(npc,combat) {
+ const p=G.player,r=G.activeRoom;
+ if(!p||!r||p.hp<=0||p.dead||p.unconscious||p._dying||p._collapsing)return "You cannot cast while incapacitated.";
+ if(G.activeObject||G.activeItemModal||hasPendingPartyLoot()||isRoomCollapsed(r))return "Finish the current decision before casting.";
+ if(combat)return G.activeNPC!==npc||G.activeNPCMode!=="combat"||!npc||npc.hp<=0||npc.dead||npc.unconscious?"That combat target changed.":"";
+ if(G.combatEncounter||G.activeNPCMode==="combat"||roomHasActiveHostile(r))return "Finish the current danger before casting.";
+ if(npc){
+  if(G.activeNPC!==npc||(r.creatures||[]).indexOf(npc)<0||!isVisibleEntity(npc)||!canConverseWithNPC(npc)||!npc._inParty||(G.partyMembers||[]).indexOf(npc)<0)return "Talk to an available party caster here first.";
+  if(!/^(menu|talk|respond)$/.test(G.activeNPCMode))return "Finish the current interaction first.";
+ }else if(G.activeNPC||G.activeNPCMode&&G.activeNPCMode!=="casting")return "Leave the current interaction before casting.";
+ return "";
+}
+function castingPowerBlock(power,npc) {
+ let reason=castingBlock(npc,!!npc&&G.activeNPCMode==="combat");if(reason)return reason;
+ if(!castingSupportedPower(power))return "Use that power's existing specialised controls.";
+ reason=getDeityPowerBlockReason(G.player,power);if(reason)return reason;
+ if(power.use==="body"||power.use==="combat"&&!npc)return "That power requires its normal combat or body target.";
+ if(!power.granted&&G.player.mana<getDeityPowerManaCost(G.player,power))return "Not enough mana for "+power.name+".";
+ if(power.regrow&&!getSeveredLimbKeys(G.player).length)return "You have no lost limb to restore.";
+ if(power.luck&&G.player.luckyRollPending)return "Fortune is already smiling on you.";
+ return "";
+}
+function castingOutput(action,data,text,display) {
+ publishTextModeOutput("casting",text||"Casting choices updated.",{casting:Object.assign({stage:"result",action:action},data||{})},display===true);
+}
+function castingGuard(npc,opts) {
+ opts=opts||{};const p=G.player,r=G.activeRoom,map=G.roomMap,origin=map&&map[r.coords],actor=G.activeNPC,mode=G.activeNPCMode,enc=G.combatEncounter,turn=getCurrentStoryTurn();
+ const party=(G.partyMembers||[]).slice(),followers=(G.sessionFollowers||[]).slice();
+ const entities=[p].concat((r.creatures||[]).filter(function(n){return party.indexOf(n)>=0||followers.indexOf(n)>=0||n===npc;}));
+ const snapshots=entities.map(function(e){return {entity:e,inventory:choiceEntitySnapshot(e)};});
+ const root=document.getElementById("chatOptionsEl"),children=root&&Array.from(root.children);
+ const stamp=function(){return JSON.stringify([castingPowers(),typeof getEnchantOptions==="function"?getEnchantOptions(p):[],npc&&getNPCEnchantOptions(npc),castingTravelSpells(),
+  entities.map(function(e){return [e===p?"self":e.name,opts.resources===false?null:e.hp,e.hpMax,e.dead,e.unconscious,e.isUnconsciousBody,e.hidden,e.isHidden,e.concealed,e.visible,e._inParty,e.classSkills,e.classBranches,e.teachBranches,e.role,e.deity,e.faith,e._castReadyTurn,opts.resources===false?null:e.inventory,opts.resources===false?null:e.equipped,opts.resources===false?null:e.combat&&e.combat.limbs];}),
+  p.deity,p.faith,p.divineBoons,p.grantedPowers,opts.resources===false?null:p.activeBuffs,p.luckyRollPending,p.nextSpellHalfCost,opts.resources===false?null:p.statusEffects,
+  opts.resources===false?null:[p.hp,p.stamina,p.mana,p.manaMax,p.manaReserved,getCoinValue(p)]]);
+ },initial=stamp();
+ return function(){return G.player===p&&G.activeRoom===r&&G.roomMap===map&&(!map||map[r.coords]===origin)&&G.activeNPC===actor&&G.activeNPCMode===mode&&G.combatEncounter===enc&&
+  !castingBlock(npc,opts.combat)&&
+  party.length===(G.partyMembers||[]).length&&party.every(function(n,i){return G.partyMembers[i]===n;})&&
+  followers.length===(G.sessionFollowers||[]).length&&followers.every(function(n,i){return G.sessionFollowers[i]===n;})&&
+  snapshots.every(function(s){return s.inventory()&&(s.entity===p||(r.creatures||[]).indexOf(s.entity)>=0);})&&stamp()===initial&&
+  (opts.resources===false||getCurrentStoryTurn()===turn)&&
+  (opts.view===false||!root||children.length===root.children.length&&children.every(function(n,i){return root.children[i]===n;}));};
+}
+function beginCastingMenu(kind,npc,title,refresh,opts) {
+ if(typeof ensureBuffRegistry==="function")ensureBuffRegistry(G.player);
+ if(typeof getEnchantRecipients==="function"&&typeof getItemBuffUID==="function")getEnchantRecipients(G.player).flatMap(getEnchantItemsForRecipient).forEach(function(t){getItemBuffUID(t.item);});
+ const menu=beginSharedChoiceMenu("casting-"+kind,npc,title,refresh),valid=menu.valid;
+ const guard=castingGuard(npc,Object.assign({view:false},opts||{}));
+ menu.castKind=kind;menu.caster=npc;menu.valid=opts&&opts.combat?function(){return menu.ownsView()&&guard();}:function(){return valid()&&guard();};
+ return menu;
+}
+function castingButton(menu,label,run,meta,opts){return createSharedChoiceButton(menu,label,run,Object.assign({},opts||{},{textChoice:meta||{}}));}
+function publishCastingMenu(menu,el,data) {
+ publishSharedChoiceMenu(menu,el);castingOutput(menu.castKind,Object.assign({stage:"menu"},data||{}),"Casting choices.",false);return {status:"needs_input"};
+}
+function castingPublicBuff(item) {
+ const b=item&&item.buff;
+ return b?{element:b.element,kind:b.kind,turnsRemaining:b.turnsLeft,hitsRemaining:b.hitsLeft}:null;
+}
+function castingPowerCapture(power,npc,healTarget) {
+ const reason=castingPowerBlock(power,npc);if(reason)return {error:sharedChoiceResult("blocked",reason)};
+ const p=G.player;
+ const targets=power.heal?(power.heal.party?[p].concat(getHealableAllies()):[healTarget||p]):power.partyBuff?[p].concat(getHealableAllies()):[];
+ return {player:p,room:G.activeRoom,power:power,start:getCurrentStoryTurn(),mana:p.mana||0,uses:power.usesLeft,limbs:power.regrow?getSeveredLimbKeys(p).slice():[],
+  targets:targets.map(function(e){return {entity:e,name:e===p?"Yourself":textModeNPCLabel(e),hp:e.hp,stamina:e.stamina,bleed:getTotalBleed(e)};})};
+}
+function castingPowerCommitted(ctx) {
+ return {affected:ctx.targets.map(function(t){return t.name;}),regrown:ctx.limbs.filter(function(k){return getSeveredLimbKeys(ctx.player).indexOf(k)<0;}),mana:Math.max(0,ctx.mana-(ctx.player.mana||0)),uses:ctx.power.granted&&!ctx.power.free?1:0,
+  healing:(ctx.power.heal?ctx.targets:[]).map(function(t){return {name:t.name,restoredHP:Math.max(0,t.entity.hp-t.hp),restoredStamina:Math.max(0,(t.entity.stamina||0)-(t.stamina||0)),bleedingStopped:t.bleed>0&&getTotalBleed(t.entity)===0};})};
+}
+function castingPowerResult(ctx,committed,interrupted) {
+ castingOutput("power",{stage:interrupted?"interrupted":"result",power:ctx.power.name,turns:getCurrentStoryTurn()-ctx.start,cost:{mana:committed.mana,uses:committed.uses},healing:committed.healing,affected:committed.affected,regrown:committed.regrown,effect:ctx.power.summary||"",luckyRollReady:!!ctx.player.luckyRollPending},
+  interrupted?"The cast completed its effects, but the scene changed. Spent costs remain; later commands stay paused.":"You call on "+ctx.power.name+".",interrupted);
+ return {status:interrupted?"interrupted":"needs_input"};
+}
+function castingItemCurrent(target,npc) {
+ const rows=npc?getEnchantTargets(G.player):getEnchantRecipients(G.player).flatMap(getEnchantItemsForRecipient);
+ return rows.some(function(t){return t.owner===target.owner&&t.item===target.item&&t.slot===target.slot;});
+}
+function performCastingEnchant(npc,option,target,element) {
+ const reason=castingBlock(npc,false)||(!castingItemCurrent(target,npc)?"That item or recipient changed.":"")||
+  (npc?getNPCCastBlockReason(npc,option,target.item,element):getEnchantTargetBlockReason(G.player,option,target.item,element));
+ if(reason)return sharedChoiceResult("blocked",reason);
+ const p=G.player,room=G.activeRoom,start=getCurrentStoryTurn(),mana=p.mana||0,reserved=getPlayerManaReserved(p),old=target.item.buff;
+ const text=npc?castNPCEnchant(npc,option,target.item,element,target.ownerName):castItemEnchant(option,target.item,element,target.ownerName);
+ if(!target.item.buff||target.item.buff===old)return sharedChoiceResult("blocked",text||"The enchantment did not take hold.");
+ const cost={mana:npc?0:option.cost,availableManaChange:Math.max(0,mana-(p.mana||0)),additionalManaHeld:Math.max(0,getPlayerManaReserved(p)-reserved)};
+ const current=castingGuard(npc,{view:true,resources:false,committed:true});
+ advanceStoryTurn(1);
+ const interrupted=!current();
+ const result={stage:interrupted?"interrupted":"result",spell:option.label,caster:npc?textModeNPCLabel(npc):"Yourself",recipient:target.owner===p?"Yourself":textModeNPCLabel(target.owner),item:getItemName(target.item),element:element,cost:cost,turns:getCurrentStoryTurn()-start,buff:castingPublicBuff(target.item)};
+ if(npc)result.readyInTurns=Math.max(0,(npc._castReadyTurn||0)-getCurrentStoryTurn());
+ castingOutput("enchant",result,interrupted?"The enchantment was applied, but the scene changed. Spent costs are preserved; later commands stay paused.":text,interrupted);
+ saveGameState();if(interrupted)return {status:"interrupted"};
+ renderStats();return npc?openNPCCastMenu(npc,"done",{message:text,option:option}):openEnchantMenu("done",{message:text});
+}
+function castingTravelAction(entry) {
+ const reason=castingBlock(null,false);if(reason)return sharedChoiceResult("blocked",reason);
+ const p=G.player,spell=entry.spell,cost=getSpellCastCost(p,spell);
+ if(getCastableSpellIds(p).indexOf(entry.id)<0||!playerUsesMana(p)||p.mana<cost)return sharedChoiceResult("blocked","You cannot cast "+spell.name+" now.");
+ const before=p.mana,start=getCurrentStoryTurn(),text=castTravelSpell(entry.id);
+ setNarration(text);renderStats();
+ return {status:"completed"};
+}
+function castingTextHelp(key,show) {
+ const named=key.replace(/^(?:cast|power)\s+/,""),knownPower=castingPowers().filter(function(p){return textCommandNormalize(p.name)===named;}),knownTravel=castingTravelSpells().filter(function(e){return textCommandNormalize(e.spell.name)===named;});
+ if(!/^(powers|power|divine gifts|casting|enchantments|cast enchant|cast bless|cast flicker|enchant recipient|enchant item|enchant element|ask for enchantment|ask for blessing|travel spells)(?:\s+.*)?$/.test(key)&&!knownPower.length&&!knownTravel.length)return null;
+ if(!show)return textModeResult("completed","Powers lists public gifts; power <name>, use <power> or cast <power> uses the native action. For an ally heal: cast <power> on <ally>, or choose a present target by number. Cast enchant / cast flicker / cast bless opens gear casting (merchant enchant services remain separate). Then enchant recipient <name or yourself>, enchant item <name>, enchant element <element>, or use numbered choices. The final element spends the native mana/reserve and 1 turn. Talk to a present party caster, then ask for enchantment / ask for blessing; their native cap and cooldown apply with no player mana cost. Learned travel spells use cast <name> with their native zero-turn cost. Show powers/enchantments/travel spells is free. Options/back/cancel/leave and one reply per step work; explicitly continue older batches after choices.");
+ const powers=castingPowers().map(function(p){return {name:p.name,summary:p.summary,cost:getPowerCostLabel(G.player,p),blockedReason:castingPowerBlock(p,null)};});
+ const options=typeof getEnchantOptions==="function"&&G.player?getEnchantOptions(G.player).map(function(o){return {name:o.label,mana:o.cost,manaHeld:Math.max(BUFF_RESERVE_MIN,Math.ceil(G.player.manaMax*o.reserveFraction)),elements:o.elements.slice()};}):[];
+ const spells=castingTravelSpells().map(function(e){return {name:e.spell.name,mana:getSpellCastCost(G.player,e.spell),turns:0};});
+ return textModeResult("completed","Powers:\n"+(powers.map(function(p){return p.name+" — "+p.cost+(p.blockedReason?" — "+p.blockedReason:"");}).join("\n")||"None.")+
+  "\nGear casts: "+(options.map(function(o){return o.name+" ("+o.mana+" mana; "+o.manaHeld+" held)";}).join("; ")||"None.")+
+  "\nTravel spells: "+(spells.map(function(e){return e.name+" ("+e.mana+" mana; 0 turns)";}).join("; ")||"None.")+
+  "\nUse how casting for examples.",{casting:{stage:"availability",powers:powers,enchantments:options,travelSpells:spells}});
+}
+async function castingChoose(menu,kind,target) {
+ const options=menu.options.filter(function(c){return c.meta.action===kind;}),matches=target?castingMatch(target,options,function(c){return c.meta.name||"";}):options;
+ if(matches.length!==1)return textModeResult("needs_input","Choose one current casting option by number.");
+ return textModeState.busy?runSharedChoice(menu,matches[0]):textRunSharedChoice(menu,matches[0]);
+}
+async function executeTextCastingCommand(action,fromMenu) {
+ const args=action.args||{},kind=args.action,menu=sharedChoiceState.menu;
+ const npc=kind==="ask"?G.activeNPC:menu&&menu.caster||null;
+ const reason=castingBlock(npc,false);if(reason)return textModeResult("blocked",reason);
+ if(menu&&!/^casting-/.test(menu.kind))return textModeResult("blocked","Finish the current choice before casting.");
+ if(menu&&!menu.valid())return textModeResult("blocked","That casting choice changed. Use options to refresh or cancel.");
+ if(kind==="powers")return openPowersMenu();
+ if(kind==="power"){
+  if(!String(args.target||"").trim())return openPowersMenu();
+  const rel=textLootRelation(args.target||"",["on","at","to"]),name=rel?rel.item:args.target;
+  const powers=castingMatch(name,castingPowers(),function(p){return p.name;});
+  if(powers.length!==1){openPowersMenu();return textModeResult("needs_input","Choose one available power by number.");}
+  const p=powers[0];
+  if(rel){
+   if(!p.heal||!p.heal.ally||p.heal.party)return textModeResult("blocked","That power does not select an individual healing target.");
+   const rows=[G.player].concat(getHealableAllies()),query=/^(self|me|myself|yourself)$/i.test(rel.source)?"Yourself":rel.source;
+   const targets=castingMatch(query,rows,function(e){return e===G.player?"Yourself":textModeNPCLabel(e);});
+   if(targets.length!==1){openHealTargetPicker(p,null);return textModeResult("needs_input","Choose one current healing target by number; no cast has been made.");}
+  }
+  openPowersMenu();const result=await castingChoose(sharedChoiceState.menu,"power",p.name);
+  if(rel&&sharedChoiceState.menu&&sharedChoiceState.menu.castKind==="heal")return castingChoose(sharedChoiceState.menu,"heal",/^(self|me|myself)$/i.test(rel.source)?"Yourself":rel.source);
+  return result;
+ }
+ if(kind==="travel"){
+  const entries=castingMatch(args.target||"",castingTravelSpells(),function(e){return e.spell.name;});
+  return entries.length===1?castingTravelAction(entries[0]):textModeResult("blocked","Choose a learned travel spell by name.");
+ }
+ if(kind==="enchant"){
+  const rel=textLootRelation(args.target||"",["on","at"]),name=rel?rel.item:args.target;
+  openEnchantMenu();if(!name)return {status:"needs_input"};
+  const result=await castingChoose(sharedChoiceState.menu,"option",name);
+  if(rel&&sharedChoiceState.menu&&sharedChoiceState.menu.castKind==="recipient"){
+   await castingChoose(sharedChoiceState.menu,"recipient","Yourself");
+   return castingChoose(sharedChoiceState.menu,"item",rel.source.replace(/^(?:my|your)\s+/i,""));
+  }
+  return result;
+ }
+ if(kind==="ask"){
+  if(args.target){const options=castingMatch(args.target,getNPCEnchantOptions(npc),function(o){return o.label;});if(options.length!==1)return textModeResult("blocked","That companion does not offer the requested cast.");return openNPCCastMenu(npc,"target",{option:options[0]});}
+  return openNPCCastMenu(npc);
+ }
+ if(/^(recipient|item|element)$/.test(kind)){
+  if(!menu)return textModeResult("blocked","Start with cast enchant or ask for enchantment.");
+  return castingChoose(menu,kind,/^(self|me|myself)$/i.test(args.target||"")?"Yourself":args.target);
+ }
+ return textModeResult("blocked","Use how casting for supported commands.");
+}
+async function textCastingMenuInput(menu,action,input) {
+ if((splitTextCommands(input||"").parts||[]).length!==1)return textModeResult("needs_input","Answer one casting step per reply.");
+ if(action&&/^(leave|cancel)$/.test(action.verb)){
+  const owned=menu.ownsView()&&menu.scene.player===G.player&&menu.scene.room===G.activeRoom&&menu.scene.npc===G.activeNPC&&menu.scene.mode===G.activeNPCMode;
+  clearSharedChoiceMenu(menu);if(action.verb==="cancel")stopTextCommands(false);
+  if(owned){if(menu.caster){if(action.verb==="leave")disengageFromNPC("You step away.");else renderNPCActionMenu(menu.caster);}else returnToRoomView();}
+  return {status:"completed"};
+ }
+ if(!menu.valid())return textModeResult("blocked","That caster, target, item or quote changed. Use options to refresh, or cancel.");
+ return executeTextCastingCommand(action,true);
+}
+
+function castingOptionFresh(option,npc) {
+ const options=npc?getNPCEnchantOptions(npc):getEnchantOptions(G.player),fresh=options.find(function(o){return o.id===option.id;});
+ return fresh&&JSON.stringify(fresh)===JSON.stringify(option)?fresh:null;
+}
+const TEXT_PHRASE_VERSION = 1;
+const TEXT_PHRASE_STORAGE = "cyoaLearnedTextPhrases";
+const textPhraseState = { loaded:false, entries:[], generation:0 };
+function textPhraseKey(input) {
+    return String(input || "").trim().replace(/[.!?]+$/, "").replace(/\s+/g, " ").toLowerCase();
+}
+function textPhraseContext() {
+    let hash = 2166136261;
+    const schema = JSON.stringify(TEXT_COMMANDS.map(function (d) { return [d.id,d.args || []]; }));
+    for (let i=0;i<schema.length;i++) hash = Math.imul(hash ^ schema.charCodeAt(i),16777619);
+    const mode = textModeInCombat() ? "combat" : G.activeNPC ? "conversation:" + String(G.activeNPCMode || "menu") : "room";
+    return TEXT_PHRASE_VERSION + "/" + (hash >>> 0) + "/" + mode + "/" +
+        (typeof isPlayerJailed === "function" && isPlayerJailed() ? "jailed" : "free") + "/" +
+        (typeof roomHasActiveHostile === "function" && roomHasActiveHostile(G.activeRoom) ? "danger" : "quiet") + "/" + (!!G.guiding);
+}
+function textPhrasePlan(input, actions, context) {
+    const plan = validateTextAIPlan({actions:actions});
+    if (!plan || plan.some(function(a) { return /^(say|choose|help|show|stop|continue|back|cancel|phrases)$/.test(a.verb); })) return null;
+    if (plan.some(function(a) { return Object.keys(a.args).length; }) && /\b(?:it|its|this|that|these|those|them|him|her|there|here|again|same)\b/i.test(input)) return null;
+    if (!textPhraseAttackAllowed(input,plan,context)) return null;
+    return plan;
+}
+function textPhraseAttackAllowed(input, plan, context) {
+    if ((context ? context.split("/")[2] === "combat" : textModeInCombat()) || !plan.some(function(a) { return a.verb === "attack"; })) return true;
+    const split = splitTextCommands(input);
+    return !!(split.parts && split.parts.some(function(p) { return /^(?:please\s+)?(?:attack|hit|strike|swing)\b/i.test(p.trim()); }));
+}
+function textPhraseLoad() {
+    if (textPhraseState.loaded) return;
+    textPhraseState.loaded = true;
+    try {
+        const raw = localStorage.getItem(TEXT_PHRASE_STORAGE);
+        if (!raw || raw.length > 250000) return;
+        const saved = JSON.parse(raw);
+        if (!saved || saved.version !== TEXT_PHRASE_VERSION || !Array.isArray(saved.entries)) return;
+        const keys = new Set();
+        saved.entries.slice(-100).forEach(function(e) {
+            if (!e || typeof e.phrase !== "string" || !e.phrase.trim() || e.phrase.length > TEXT_INPUT_LIMIT || typeof e.context !== "string" || e.context.length > 120) return;
+            const actions = textPhrasePlan(e.phrase,e.actions,e.context), key = e.context + "\n" + textPhraseKey(e.phrase);
+            if (!actions || keys.has(key) || JSON.stringify(actions).length > 8000) return;
+            keys.add(key); textPhraseState.entries.push({phrase:e.phrase,key:textPhraseKey(e.phrase),context:e.context,actions:actions});
+        });
+    } catch (_) {}
+}
+function textPhraseSave() {
+    while (textPhraseState.entries.length > 100 || JSON.stringify(textPhraseState.entries).length > 200000) textPhraseState.entries.shift();
+    try { localStorage.setItem(TEXT_PHRASE_STORAGE,JSON.stringify({version:TEXT_PHRASE_VERSION,entries:textPhraseState.entries})); } catch (_) {}
+}
+function textPhraseLookup(input) {
+    textPhraseLoad();
+    const key = textPhraseKey(input),context = textPhraseContext();
+    const entry = textPhraseState.entries.find(function(e) { return e.key === key && e.context === context; });
+    return entry ? textPhrasePlan(input,entry.actions) : null;
+}
+function textPhrasePrepare(input, actions, context) {
+    const plan = textPhrasePlan(input,actions);
+    textModeState.learning = plan ? {phrase:input,key:textPhraseKey(input),context:context,actions:plan,
+        player:G.player,epoch:textModeState.epoch,generation:textPhraseState.generation,failed:false} : null;
+}
+function textPhraseObserve(event) {
+    const learning = textModeState.learning;
+    if (learning && /^(blocked|needs_input|interrupted)$/.test(event.status || "")) learning.failed = true;
+}
+function textPhraseComplete(epoch) {
+    const learning = textModeState.learning; textModeState.learning = null;
+    if (!learning || learning.failed || learning.epoch !== epoch || epoch !== textModeState.epoch ||
+        learning.player !== G.player || learning.generation !== textPhraseState.generation || textModeState.queue.length || textModeState.paused || textModeState.pending) return;
+    textPhraseLoad();
+    textPhraseState.entries = textPhraseState.entries.filter(function(e) { return e.key !== learning.key || e.context !== learning.context; });
+    textPhraseState.entries.push({phrase:learning.phrase,key:learning.key,context:learning.context,actions:learning.actions});
+    textPhraseSave();
+}
+function parseTextPhraseCommand(raw) {
+    if (/^(?:phrases|learned phrases)$/i.test(raw)) return {verb:"phrases",args:{action:"list"}};
+    if (/^(?:clear phrases|clear learned phrases|forget all phrases)$/i.test(raw)) return {verb:"phrases",args:{action:"clear"}};
+    const match = /^forget phrase(?:\s+([\s\S]+))?$/i.exec(raw);
+    return match ? {verb:"phrases",args:{action:"forget",phrase:textCommandUnquote(match[1] || "")}} : null;
+}
+function executeTextPhraseCommand(action) {
+    textPhraseLoad();
+    const args = action.args || {},kind = args.action || "list";
+    if (kind === "forget") {
+        if (!String(args.phrase || "").trim()) return textModeResult("blocked",'Use forget phrase "your exact phrase". No learned wording has been changed.');
+        const key = textPhraseKey(args.phrase),before = textPhraseState.entries.length;
+        textPhraseState.entries = textPhraseState.entries.filter(function(e) { return e.key !== key; });
+        textPhraseState.generation++; textPhraseSave();
+        return textModeResult("completed", before === textPhraseState.entries.length ? "That phrase was not in the learned dictionary." : "That learned phrase has been forgotten.", {phrases:{action:"forget",removed:before-textPhraseState.entries.length}});
+    }
+    if (kind === "clear") {
+        const count = textPhraseState.entries.length; textPhraseState.entries = []; textPhraseState.generation++; textPhraseSave();
+        return textModeResult("completed","The learned phrase dictionary is now empty.",{phrases:{action:"clear",removed:count}});
+    }
+    if (kind !== "list") return textModeResult("blocked","Use phrases, forget phrase \"...\", or clear phrases.");
+    const entries = textPhraseState.entries.map(function(e) {
+        return {phrase:e.phrase,context:e.context.split("/")[2],actions:e.actions.map(function(a) {return {verb:a.verb,args:Object.assign({},a.args)};})};
+    });
+    return textModeResult("completed",(entries.length ? "Learned phrases:\n"+entries.map(function(e) {
+        return e.phrase+" → "+e.actions.map(function(a) {return a.verb+(Object.keys(a.args).length ? " "+Object.values(a.args).join(" ") : "");}).join("; ")+" ["+e.context+"]";
+    }).join("\n") : "No phrases have been learned yet.")+'\nUse forget phrase "..." to remove a mapping, or clear phrases to reset the dictionary.',{phrases:{action:"list",entries:entries,count:entries.length}});
+}
+
+function textModeImmersiveOutput(event) {
+    if (event.narration || textModeState.helpActive || event.systemOnly || event.renderedInChat) return;
+    const text = String(event.text || "");
+    if (event.kind === "choices") {
+        if (event.choices && event.choices.length) {
+            const first = text.split("\n")[0],labels = event.choices.filter(function(c) {return !c.disabled;}).map(function(c) {return c.number+". "+c.label;});
+            const question = /^Who.*\?$/i.test(first) ? "Who did I mean?" : /^(?:Which|What).*\?$/i.test(first) ? first.replace(/\byou\b/g,"I") : "";
+            event.narration = (question ? "I pause to consider. "+question : "I consider my options.")+"\n"+
+                (question ? labels.join("\n") : text.split("\n").filter(function(line) {return !/^(?:Type|Use|Answer)\b/i.test(line.trim());}).join("\n"));
+        } else if (/^(?:Choose|Answer|Type|Use)\b/i.test(text)) {
+            event.narration = "That doesn't settle the choice. What did I mean to do?";
+        }
+        return;
+    }
+    if (event.kind !== "feedback" || !/^(blocked|interrupted)$/.test(event.status || "")) return;
+    if (/wording is not recognized|could not understand|command is not supported|unknown .*command/i.test(text)) {
+        event.narration = "I pause, unsure how to put that into action.";
+        return;
+    }
+    if (/scene changed|adventure changed|scene has changed|changed while interpreting/i.test(text)) {
+        event.narration = "Things have changed. I need to reconsider what to do next.";
+        return;
+    }
+    const lines = text.split(/\n|(?<=[.!?])\s+(?=[A-Z])/).filter(function(line) {
+        return line.trim() && !/^(?:Type|Use|Try|Answer|Check|Return to|Start with)\b/i.test(line.trim());
+    });
+    let thought = lines.map(function(line) { return line.replace(/^You are\b/,"I am").replace(/^You were\b/,"I was").replace(/^You have\b/,"I have").replace(/^You\b/,"I").replace(/^Your\b/,"My"); }).join(" ");
+    if (!thought || /^(?:Choose|Answer|Type|Use)\b/i.test(thought)) thought = "I pause, unsure what to do next.";
+    event.narration = thought;
+}
+
 // END TEXT COMMANDS
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-19-005
-// Latest: Visible text narration/dialogue, public NPC inspection and local numbered replies.
+// Core Engine Version: 2026-10-19-018
+// Latest: Shared power/heal targets, player and companion gear casts, travel spells and guarded native results.
+// Previous: Shared synergy experiment reviews, notebook/naming, memory/replacement and self-technique choices with guarded async completion.
+// Previous: Shared directions, guide questions and paced following, plus guarded weekly rental reviews.
+// Previous: Shared nectar gift choices, native dose results and text coverage audit.
+// Previous: Shared merchant questions, reviewed junk sales and guarded barkeeper restock requests.
+// Previous: Shared shrine services, guarded native favor answers and public service results.
+// Previous: Physical door, wall, rubble and rescue commands share guarded native actions and public results.
+// Previous: Shared shrine prayer/dedication review, hidden-deity-safe help and guarded native completion.
+// Previous: Directional door/wall/rubble magic, guarded native spell choices and semantic structural results.
+// Previous: Shared non-spell burning, cauldron dipping and inventory pouring with guarded choices and public results.
+// Previous: Shared environmental spell/fire actions, exact public targets and sequential completion guards.
+// Previous: Visible text narration/dialogue, public NPC inspection and local numbered replies.
 // Previous: Shared notice drafting/confirmation, free writing supplies and public board commands.
 // Previous: Shared grindstone honing and anvil inspection text commands with original weapon/source guards.
 // Previous: Shared trainer lessons, technique learning/forgetting and guarded dummy text practice.
@@ -4521,7 +7130,7 @@ async function executeTextNoticeCommand(action) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-19-005";
+window.__ENGINE_CORE_VERSION = "2026-10-19-018";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -10956,10 +13565,10 @@ function getChatTypingDurationMs(side, speaker, text, options) {
 
 // Shows `pieces` one after another; calls `done` after the last is on screen.
 // Stops quietly if the player has left the conversation in the meantime.
-function playGuideGreeting(npc, pieces, done, isCurrent) {
+function playGuideGreeting(npc, pieces, done, isCurrent, settled) {
     let index = 0;
     function next() {
-        if ((typeof isCurrent === "function" && !isCurrent()) || G.activeNPC !== npc || G.activeNPCMode !== "talk") return;
+        if ((typeof isCurrent === "function" && !isCurrent()) || G.activeNPC !== npc || G.activeNPCMode !== "talk") { if (typeof settled === "function") settled("interrupted"); return; }
         const text = pieces[index];
         index += 1;
         const opts = { mode: "auto" };
@@ -10969,12 +13578,12 @@ function playGuideGreeting(npc, pieces, done, isCurrent) {
             // the last bubble has finished typing, so the guide visibly stops
             // and the player answers after reading it. Also deferred so the
             // caller finishes its own setup first.
-            if (typeof done === "function") setTimeout(function () { if (typeof isCurrent !== "function" || isCurrent()) done(); }, getChatTypingDurationMs("left", npc.name, text, opts) + GUIDE_REPLY_PAUSE_MS);
+            setTimeout(function () { const valid = typeof isCurrent !== "function" || isCurrent(); if (valid && typeof done === "function") done(); if (typeof settled === "function") settled(valid ? "completed" : "interrupted"); }, getChatTypingDurationMs("left", npc.name, text, opts) + GUIDE_REPLY_PAUSE_MS);
             return;
         }
         setTimeout(next, getChatTypingDurationMs("left", npc.name, text, opts) + GUIDE_GREETING_PAUSE_MS);
     }
-    if (!pieces.length) { if (typeof done === "function") setTimeout(done, 0); return; }
+    if (!pieces.length) { setTimeout(function () { const valid = typeof isCurrent !== "function" || isCurrent(); if (valid && typeof done === "function") done(); if (typeof settled === "function") settled(valid ? "completed" : "interrupted"); }, 0); return; }
     next();
 }
 
@@ -10983,34 +13592,49 @@ let _guideReplySequence = 0;
 // One response per player turn. Scene/run checks discard slow replies after
 // leaving, restarting a conversation, or choosing another response.
 function queueGuideReply(npc, beatId, beat, playerLine, onSpoken) {
-    const room = G.activeRoom;
+    if (queueGuideReply.pending) queueGuideReply.pending.finish("interrupted");
+    const room = G.activeRoom, player = G.player;
     const run = npc.guide.conversationRun || 0;
     const sequence = ++_guideReplySequence;
+    const extra = typeof travelQuestionGuard === "function" && /^topic-/.test(beatId) ? travelQuestionGuard(npc, beatId.slice(6)) : function () { return true; };
     const current = function () {
-        return sequence === _guideReplySequence && G.activeNPC === npc && G.activeNPCMode === "talk" &&
-            G.activeRoom === room && (npc.guide.conversationRun || 0) === run;
+        return sequence === _guideReplySequence && G.player === player && G.activeNPC === npc && G.activeNPCMode === "talk" &&
+            G.activeRoom === room && (npc.guide.conversationRun || 0) === run && extra();
     };
+    let resolve, settled = false, spoken = false, dialogue;
+    const task = new Promise(function (done) { resolve = done; });
+    const pending = { finish: function (status) {
+        if (settled) return; settled = true;
+        if (queueGuideReply.pending === pending) queueGuideReply.pending = null;
+        if (dialogue && typeof textModeState !== "undefined" && textModeState.dialogue === dialogue) textModeDialogueBusy(false);
+        resolve({ status: status, spoken: spoken });
+    } };
+    queueGuideReply.pending = pending;
     npc.guide.lastBeat = beatId;
     if (beat.concern) npc.guide.playerConcern = beat.concern;
     if (typeof setChatOptionsDisabled === "function") setChatOptionsDisabled(true);
-    const phrased = phraseGuideBeat(npc, beatId, beat.lines, playerLine, beat);
+    if (typeof textModeState !== "undefined") dialogue = textModeState.dialogue;
+    const phrased = Promise.resolve().then(function () { return phraseGuideBeat(npc, beatId, beat.lines, playerLine, beat); }).catch(function () { return (beat.lines || []).filter(Boolean); });
     const delay = playerLine ? getChatTypingDurationMs("player", "You", playerLine, { mode: "narration", animate: true }) + GUIDE_TURN_PAUSE_MS : 0;
     setTimeout(function () {
-        phrased.then(function (lines) {
-            if (!current()) return;
+        const deliver = function (lines) {
+            if (!current()) { pending.finish("interrupted"); return; }
             npc.action = beat.action || "is talking with you";
             if (beat.action && typeof setNarration === "function") setNarration(npc.name + " " + beat.action + ".");
             npc.memory.pendingResponse = beat.replies && beat.replies.length ? { needed: true, options: beat.replies } : null;
             if (typeof onSpoken === "function") onSpoken();
             if (typeof rememberNPCConversationLine === "function") rememberNPCConversationLine(npc, "npc", lines.join(" "), "talk");
+            spoken = true;
             playGuideGreeting(npc, lines, function () {
                 if (!current()) return;
                 if (typeof setChatOptionsDisabled === "function") setChatOptionsDisabled(false);
                 renderChatOptions(npc);
                 saveGameState();
-            }, current);
-        });
+            }, current, function (status) { pending.finish(status); });
+        };
+        Promise.resolve(phrased).then(deliver, function () { deliver((beat.lines || []).filter(Boolean)); });
     }, delay);
+    return typeof textModeTrackTask === "function" ? textModeTrackTask(task) : task;
 }
 
 function getGuideTypedCheckinBeat(npc, text) {
@@ -14913,17 +17537,18 @@ function renderLockedDoorMenu(room, dir) {
     const lock = getExitLock(room, dir);
     if (!lock || lock.state !== "locked") { closeLockedDoorMenu(); return; }
 
+    const structureMenu = beginStructuralMenu(room, dir, "door");
     const buttons = [];
     if (lock.freeOpen) {
-        buttons.push(createCombatButton("Open it from this side", () => openLockFromThisSide(room, dir)));
+        buttons.push(structuralToolMenuButton(structureMenu, "Open it from this side", "unlock", room, dir));
     }
     if (lock.keyId) {
         bindPendingWorldKeys(true);
         const key = findKeyForLock(lock);
         const occupied = lock.keyId === "room-token" && getLockOccupants(room, dir).length > 0;
-        buttons.push(createCombatButton(
+        buttons.push(structuralToolMenuButton(structureMenu,
             lock.keyId === "room-token" ? "Use your room token" : (lock.keyId === "room-key" ? "Use your room key" : "Use your key"),
-            () => useLockKey(room, dir),
+            "unlock", room, dir, "key",
             {
                 disabled: !key || occupied,
                 title: !key ? "You have no key for this door." : (occupied ? "Someone is already staying in there." : "")
@@ -14931,30 +17556,29 @@ function renderLockedDoorMenu(room, dir) {
         ));
     }
     const pick = findPlayerItemById("lockpick");
-    buttons.push(createCombatButton(
-        "Pick the lock",
-        () => attemptPickLock(room, dir),
+    buttons.push(structuralToolMenuButton(structureMenu,
+        "Pick the lock", "pick", room, dir, "",
         { disabled: !pick, title: pick ? `Needs a steady hand (DC ${getLockDC(lock)}).` : "You need a lockpick." }
     ));
     if (getFighterRank(G.player) >= FIGHTER_BREAKDOOR_MIN_RANK) {
         const breakBlock = getBreakDoorBlockReason(room, dir);
-        buttons.push(createCombatButton("Break it down", () => attemptBreakDoor(room, dir), {
+        buttons.push(structuralToolMenuButton(structureMenu, "Break it down", "force", room, dir, "", {
             disabled: !!breakBlock,
             title: breakBlock || `Loud, and people will notice (DC ${Math.max(9, getLockDC(lock) + FIGHTER_BREAKDOOR_DC_BONUS - getFighterRank(G.player))}).`
         }));
     }
     if (isDoorBurning(room, dir)) {
-        buttons.push(createCombatButton("Push through the flames (burns you)", () => pushThroughBurningDoor(room, dir), {
+        buttons.push(structuralToolMenuButton(structureMenu, "Push through the flames (burns you)", "push", room, dir, "", {
             disabled: !!getChestBaseBlockReason(room), title: getChestBaseBlockReason(room) || "The door is on fire. You can shove it open, but the flames will burn you."
         }));
     }
     if (isDoorBrittle(room, dir)) {
-        buttons.push(createCombatButton("Smash the frozen door", () => smashBrittleDoor(room, dir), {
+        buttons.push(structuralToolMenuButton(structureMenu, "Smash the frozen door", "smash", room, dir, "", {
             disabled: !!getChestBaseBlockReason(room), title: getChestBaseBlockReason(room) || "Frost has made it brittle. One blow will do."
         }));
     }
     if (isDoorBurning(room, dir)) {
-        buttons.push(createCombatButton("Watch it burn (1 turn)", () => watchDoorBurn(room, dir), { disabled: !!getChestBaseBlockReason(room) }));
+        buttons.push(structuralMenuButton(structureMenu, "Watch it burn (1 turn)", "watch", room, dir, null, { disabled: !!getChestBaseBlockReason(room) }));
     }
     if (playerIsSpellcaster(G.player) && playerUsesMana(G.player)) {
         getCastableSpellIds(G.player).forEach(function (spellId) {
@@ -14964,17 +17588,19 @@ function renderLockedDoorMenu(room, dir) {
             const effect = CHEST_SPELL_EFFECTS[spell.element] || "none";
             const verb = effect === "burn" ? "Burn it: " : (effect === "brittle" ? "Freeze it: " : (effect === "douse" ? "Douse the flames: " : "Cast "));
             const reason = getDoorSpellBlockReason(room, dir, cost, spell);
-            buttons.push(createCombatButton(verb + spell.name + " (" + cost + " mana)", () => castSpellAtDoor(room, dir, spellId), { disabled: !!reason, title: reason }));
+            buttons.push(structuralMenuButton(structureMenu, verb + spell.name + " (" + cost + " mana)", "cast", room, dir, spellId, { disabled: !!reason, title: reason }));
         });
     }
-    buttons.push(createCombatButton("Knock", () => attemptKnock(room, dir)));
+    buttons.push(structuralToolMenuButton(structureMenu, "Knock", "knock", room, dir));
     const doorFx = getDoorFx(room, dir, true);
     const doorCond = doorFx && doorFx.hpMax > 0 ? getDurabilityLabelFromRatio(doorFx.hp / doorFx.hpMax, false) : "";
     appendCombatGroup(el, "The door is locked" + (doorCond ? " (" + doorCond + ")" : ""), buttons);
-    appendCombatGroup(el, "", [createCombatButton("Leave it", () => closeLockedDoorMenu())]);
+    appendCombatGroup(el, "", [structuralBackButton(structureMenu, "Leave it", () => closeLockedDoorMenu())]);
+    publishStructuralMenu(structureMenu, el);
 }
 
 function finishLockAction(room, dir, lines, unlocked) {
+    if (structuralCaptureFinish(room, dir, lines)) return;
     renderStats();
     if (unlocked) {
         resetNpcPanel();
@@ -15017,8 +17643,12 @@ function attemptPickLock(room, dir) {
     if (!player || !lock || lock.state !== "locked" || !pick) return;
 
     const lines = [];
+    const structuralStaminaBefore = player.stamina;
     spendEntityStamina(player, LOCK_PICK_STAMINA_COST, lines, { isPlayer: true });
+    structuralToolStaminaPaid(Math.max(0, structuralStaminaBefore - player.stamina));
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
 
     // Rogues are better at this: an easier lock and fewer onlookers noticing.
     const dc = Math.max(1, getLockDC(lock) - getClassPerk(player, "lockDCReduction", 0) - (playerHasTechnique(player, "silentPicks") ? ROGUE_SILENT_PICKS_BONUS : 0));
@@ -15114,8 +17744,12 @@ function attemptLockDoor(room, dir, anyone) {
     // Anyone with a pick may try from the door menu (Look around); the rogue trick keeps its bonus.
     if (!player || !room || !pick || isExitLocked(room, dir) || (!isRogueLocker && anyone !== true)) return;
     const lines = [];
+    const structuralStaminaBefore = player.stamina;
     spendEntityStamina(player, ROGUE_LOCK_STAMINA_COST, lines, { isPlayer: true });
+    structuralToolStaminaPaid(Math.max(0, structuralStaminaBefore - player.stamina));
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
     const rank = getRogueRank(player);
     const level = getPlayerLockLevel(rank);
     const dc = Math.max(1, getLockDC({ level: level }) - getClassPerk(player, "lockDCReduction", 0) - (isRogueLocker ? 2 : 0));
@@ -15172,7 +17806,7 @@ function getKnockGreetingLine(npc) {
 function engageKnockAnswerer(npc, narrationLines, room, dir) {
     selectNPC(npc);
     if (G.activeNPC !== npc) {
-        renderCombatNarrationLines(narrationLines);
+        if (!structuralToolNarration(narrationLines)) renderCombatNarrationLines(narrationLines);
         return;
     }
     npc.memory = npc.memory || {};
@@ -15211,13 +17845,15 @@ function engageKnockAnswerer(npc, narrationLines, room, dir) {
     G.activeNPCMode = "talk";
     renderChatOptions(npc);
     // startNPCConversation overwrote the narration box; restore the knock.
-    renderCombatNarrationLines(narrationLines);
+    if (!structuralToolNarration(narrationLines)) renderCombatNarrationLines(narrationLines);
 }
 
 function attemptKnock(room, dir) {
     const lock = getExitLock(room, dir);
     if (!lock || lock.state !== "locked") return;
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
     const occupants = getLockOccupants(room, dir).filter(npc => (npc.hostility || 0) < 60);
     const lines = ["You knock."];
     if (!occupants.length) {
@@ -15509,6 +18145,7 @@ function movePlayer(direction) {
     if (doorFirePending) {
         const fireLines = [];
         const downByFire = applyDoorFirePassage(room, dir, fireLines);
+        structuralToolPassageLines(fireLines);
         const fireEl = document.getElementById("narrationEl");
         if (fireEl && !downByFire) {
             appendNarrationBreak(fireEl);
@@ -19596,17 +22233,22 @@ function barCellarTheftAfterTake(fixture, items) {
 // Starts a restock. Returns the line to say. The caller shows it (conversation
 // chat line, or trade message). With a cellar the barkeeper leaves the room
 // right after the current click finishes; without one they restock in place.
-function startBarRestock(npc) {
-    if (!needsBarRestock(npc)) return null;
+function startBarRestock(npc, conversationRefresh) {
+    if (merchantExtraBlock(npc, true) || !needsBarRestock(npc)) return null;
+    let request = merchantGuard(npc, { ownView: true, conversational: true });
+    const conversationGuard = conversationRefresh ? merchantGuard(npc, { conversational: true }) : null, serviceStart = getCurrentStoryTurn();
     const room = G.activeRoom;
     const cellar = findBuildingCellar(room);
     if (!cellar || !room || !room.coords) {
         restockBarStock(npc);
         advanceStoryTurn(2);
+        if (!request.scene()) { const interrupted = { interrupted: true, left: false }; merchantRestockOutput(npc, interrupted, serviceStart); return interrupted; }
         renderStats();
         if (typeof refreshInventoryUi === "function") refreshInventoryUi();
         saveGameState();
-        return { line: rand(BAR_BACKROOM_LINES), narration: (npc.name || "They") + " comes back from the back room with fresh stock.", left: false };
+        const result = { line: rand(BAR_BACKROOM_LINES), narration: (npc.name || "They") + " comes back from the back room with fresh stock.", left: false };
+        merchantRestockOutput(npc, result, serviceStart);
+        return result;
     }
     const now = getCurrentStoryTurn();
     const spoken = rand(BAR_CELLAR_LINES);
@@ -19619,30 +22261,41 @@ function startBarRestock(npc) {
     npc.stationary = true;
     if (!G.story.flags) G.story.flags = {};
     G.story.flags.barTripActive = true;
+    if (conversationGuard) Promise.resolve().then(function () { if (conversationGuard()) request = merchantGuard(npc, { ownView: true, conversational: true }); });
+    const trip = npc._cellarTrip, tripStamp = JSON.stringify(npc._cellarTrip);
+    let finish;
+    const result = { line: spoken, narration: "", left: true, completion: new Promise(function (resolve) { finish = resolve; }) };
     // Leave after the current click handler has finished re-rendering.
     setTimeout(function () {
-        const trip = npc._cellarTrip;
-        if (!trip) return;
+        try {
+        if (npc._cellarTrip !== trip || JSON.stringify(trip) !== tripStamp || G.roomMap[cellar.coords] !== cellar || findBuildingCellar(room) !== cellar || !request()) {
+            if (npc._cellarTrip === trip) { npc.stationary = trip.wasStationary; delete npc._cellarTrip; }
+            result.interrupted = true; merchantRestockOutput(npc, result, serviceStart); finish(); return;
+        }
         const moved = relocateNPCBetweenRooms(npc, room, trip.cellarCoords, { ignoreDrunkStumble: true, ignoreLocks: true });
         if (!moved) {
             npc.stationary = trip.wasStationary;
             delete npc._cellarTrip;
             restockBarStock(npc);
             if (G.activeNPC === npc && typeof renderChatOptions === "function") renderChatOptions(npc);
-            return;
+            result.left = false; result.narration = (npc.name || "They") + " fetches stock from the back room.";
+            merchantRestockOutput(npc, result, serviceStart); saveGameState(); finish(); return;
         }
         const text = spoken + " " + (npc.name || "The barkeep") + " lifts a lantern and heads down the cellar stairs.";
         if (G.activeNPC === npc) disengageFromNPC(text);
         else { setNarration(text); renderRoom(); }
         saveGameState();
+        merchantRestockOutput(npc, result, serviceStart); finish();
+        } catch (error) { result.interrupted = true; if (npc._cellarTrip === trip) { npc.stationary = trip.wasStationary; delete npc._cellarTrip; } console.warn("Restock interrupted:", error); merchantRestockOutput(npc, result, serviceStart); finish(); }
     }, 0);
-    return { line: spoken, narration: "", left: true };
+    if (textModeState.enabled && Array.isArray(textModeState.capture)) textModeState.capture.push(result.completion);
+    return result;
 }
 
 // Conversation action: "Ask them to fetch more from the cellar".
 function askBarkeepRestock(npc) {
-    const result = startBarRestock(npc);
-    if (!result) return false;
+    const result = startBarRestock(npc, true);
+    if (!result || result.interrupted) return false;
     // With a cellar trip the barkeeper's words are shown on leaving.
     if (!result.left) {
         addChatMessage("left", npc.name || "They", result.line, { mode: "auto" });
@@ -24194,31 +26847,33 @@ function showDirectionsMenu(npc) {
     const el = document.getElementById("chatOptionsEl");
     if (!el || !npc) return;
     const here = G.activeRoom;
-    const list = getGuideDestinations(npc, null).map(function (dest) {
-        const route = getRouteForDestination(here, dest);
-        return Object.assign({}, dest, { route: route, dist: route ? route.length : 9999 });
-    }).sort(function (a, b) { return a.dist - b.dist; }).slice(0, DIRECTIONS_MENU_MAX);
+    if (typeof travelNPCBlock === "function") { const reason = travelNPCBlock(npc, "directions"); if (reason) return sharedChoiceResult("blocked", reason); }
+    const list = travelDirections(npc);
 
     el.innerHTML = "";
     G.activeNPCMode = "talk";
+    const menu = beginTravelMenu(npc, "directions", "Ask for directions — 1 turn per answer");
     list.forEach(function (dest) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "chat-option-btn kind-action";
         btn.textContent = "▸ Ask the way to " + dest.name;
-        btn.onclick = function () { handleDirectionsChoice(npc, dest); };
-        el.appendChild(btn);
+        btn.onclick = function () { return handleDirectionsChoice(npc, dest); };
+        el.appendChild(registerTravelButton(menu, btn, { action: "directions", dest: dest }));
     });
     const back = document.createElement("button");
     back.type = "button";
     back.className = "chat-option-btn kind-exit";
     back.textContent = list.length ? "Never mind" : "Nobody here can point you anywhere. Go back";
-    back.onclick = function () { renderChatOptions(npc); };
-    el.appendChild(back);
+    back.onclick = function () { renderChatOptions(npc); return { status: "completed" }; };
+    el.appendChild(registerTravelButton(menu, back, { action: "back" }));
+    return publishTravelMenu(menu, el, { destinations: list.map(function (dest) { return { name: dest.name, routeAvailable: !!dest.route }; }) });
 }
 
 function handleDirectionsChoice(npc, dest) {
     if (!npc || !dest) return;
+    const travelContext = typeof captureTravelAction === "function" ? captureTravelAction(npc, "directions", dest) : null;
+    if (travelContext && travelContext.error) return travelContext.error;
     const route = dest.route !== undefined ? dest.route : getRouteForDestination(G.activeRoom, dest);
     const cap = dest.name.charAt(0).toUpperCase() + dest.name.slice(1);
     const band = typeof getConversationRelationshipBand === "function" ? getConversationRelationshipBand(npc) : "neutral";
@@ -24243,6 +26898,7 @@ function handleDirectionsChoice(npc, dest) {
     addChatMessage("player", "You", playerLine, { mode: "narration", animate: true });
     advanceNPCAffectTime(1);
     advanceStoryTurn(1);
+    if (travelContext && !travelActionCurrent(travelContext)) return travelInterrupted(travelContext);
     addChatMessage("left", npc.name, line, { mode: "auto" });
     if (typeof rememberNPCConversationLine === "function") {
         rememberNPCConversationLine(npc, "player", playerLine, "curious");
@@ -24256,6 +26912,8 @@ function handleDirectionsChoice(npc, dest) {
     if (route && route.length > 0) showLeadOfferMenu(npc, dest);
     else renderChatOptions(npc);
     saveGameState();
+    if (travelContext) travelActionResult(travelContext, { destination: dest.name, routeAvailable: !!route, route: route ? route.map(function (step) { return { direction: DIRECTION_WORDS[step.dir] || step.dir.toLowerCase() }; }) : null });
+    return { status: route && route.length > 0 ? "needs_input" : "completed" };
 }
 
 // ── ROUTES AND GUIDING ("show me the way") ─────────────────────────────────
@@ -24359,25 +27017,30 @@ function getLeadRefusal(npc, dest, route) {
 function showLeadOfferMenu(npc, dest) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) { renderChatOptions(npc); return; }
+    const reason = travelNPCBlock(npc, "lead"); if (reason) return sharedChoiceResult("blocked", reason);
     el.innerHTML = "";
     G.activeNPCMode = "talk";
+    const menu = beginTravelMenu(npc, "lead", "Ask them to lead you — 1 turn on agreement", dest);
     const ask = document.createElement("button");
     ask.type = "button";
     ask.className = "chat-option-btn kind-action";
     ask.textContent = "▸ Ask " + (npc.name || "them") + " to show you the way";
-    ask.onclick = function () { askNPCToLeadYou(npc, dest); };
-    el.appendChild(ask);
+    ask.onclick = function () { return askNPCToLeadYou(npc, dest); };
+    el.appendChild(registerTravelButton(menu, ask, { action: "lead", dest: dest }));
     const back = document.createElement("button");
     back.type = "button";
     back.className = "chat-option-btn kind-exit";
     back.textContent = "Thanks, that's enough";
-    back.onclick = function () { renderChatOptions(npc); };
-    el.appendChild(back);
+    back.onclick = function () { renderChatOptions(npc); return { status: "completed" }; };
+    el.appendChild(registerTravelButton(menu, back, { action: "back" }));
+    return publishTravelMenu(menu, el, { destination: dest.name });
 }
 
 function askNPCToLeadYou(npc, dest) {
     if (!npc || !dest) return;
     const here = G.activeRoom;
+    const travelContext = typeof captureTravelAction === "function" ? captureTravelAction(npc, "lead", dest) : null;
+    if (travelContext && travelContext.error) return travelContext.error;
     const route = getRouteForDestination(here, dest);
     const refusal = getLeadRefusal(npc, dest, route);
     const playerLine = "You ask " + (npc.name || "them") + " to show you the way to " + dest.name + ".";
@@ -24401,15 +27064,18 @@ function askNPCToLeadYou(npc, dest) {
         if (npc.memory) npc.memory.lastSpokenTo = Date.now();
         G.activeNPCMode = "talk";
         renderChatOptions(npc);
-        return;
+        return travelContext ? travelActionResult(travelContext, { destination: dest.name, refused: !!refusal, leading: false }) : { status: "completed" };
     }
     advanceNPCAffectTime(1);
     advanceStoryTurn(1);
+    if (travelContext && !travelActionCurrent(travelContext)) return travelInterrupted(travelContext);
     startGuiding(npc, dest);
     applyNPCImpact(npc, { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "lead-player" });
     if (npc.memory) npc.memory.lastSpokenTo = Date.now();
     disengageFromNPC(npc.name + " sets off toward " + dest.name + ", glancing back to see that you keep up. Use Follow to keep pace.");
     renderInteractSidePanels();
+    if (travelContext) travelActionResult(travelContext, { destination: dest.name, leading: true, refused: false });
+    return { status: "interrupted" };
 }
 
 // Session-only generation: old walking timers cannot resume a stopped/replaced walk.
@@ -24433,6 +27099,7 @@ function endGuiding(g, note) {
     }
     if (note && typeof queueTurnNote === "function") queueTurnNote(note);
     if (typeof renderInteractSidePanels === "function") renderInteractSidePanels();
+    if (typeof travelWalkMaybeComplete === "function") travelWalkMaybeComplete();
 }
 
 // The active guide, or null (and cleaned up) when they are gone, down, or no
@@ -24508,7 +27175,7 @@ function completeGuidedArrival(g, text) {
 }
 
 // One room along the way. Both manual and automatic following share this action.
-function followGuideStep() {
+function performGuidedStep() {
     const g = getGuiding();
     if (!g) return "blocked";
     const room = G.activeRoom;
@@ -24546,21 +27213,32 @@ function followGuideStep() {
     return "moved";
 }
 
+function followGuideStep() {
+    const ctx = typeof captureTravelStep === "function" ? captureTravelStep() : null;
+    const result = performGuidedStep();
+    if (typeof publishTravelStep === "function") publishTravelStep(ctx, result);
+    return result;
+}
+
 function startKeepFollowing() {
     const g = getGuiding();
     if (!g) return;
     const run = ++guideWalkSequence;
+    const task = typeof beginTravelWalk === "function" ? beginTravelWalk(g, run) : null;
     g.keep = true;
     runKeepFollowing(run);
+    return task;
 }
 
 function stopKeepFollowing() {
     guideWalkSequence++;
     if (G.guiding) G.guiding.keep = false;
     if (typeof renderInteractSidePanels === "function") renderInteractSidePanels();
+    if (typeof travelWalkMaybeComplete === "function") travelWalkMaybeComplete();
 }
 
 function runKeepFollowing(run) {
+    try {
     if (run === undefined) run = guideWalkSequence;
     if (run !== guideWalkSequence) return;
     const g = getGuiding();
@@ -24590,6 +27268,7 @@ function runKeepFollowing(run) {
         }
         renderInteractSidePanels();
     }
+    } finally { if (typeof travelWalkMaybeComplete === "function") travelWalkMaybeComplete(); }
 }
 
 function stopFollowingGuide() {
@@ -24628,29 +27307,33 @@ function appendGuideButtons(leftEl, makeHeading) {
 function showGuideQuestionMenu(npc) {
     const el = document.getElementById("chatOptionsEl");
     if (!el || !npc) return;
+    const reason = travelNPCBlock(npc, "questions"); if (reason) return sharedChoiceResult("blocked", reason);
     const list = typeof window.getGuideSuggestedQuestions === "function" ? window.getGuideSuggestedQuestions() : [];
     el.innerHTML = "";
     G.activeNPCMode = "talk";
+    const menu = beginTravelMenu(npc, "questions", "Ask your guide a question — no turns");
     list.forEach(function (q) {
         if (q.id === "next") return;
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "chat-option-btn kind-action";
         btn.textContent = "\u25B8 " + q.question;
-        btn.onclick = function () { handleGuideAnswer(npc, q.id, null, null); };
-        el.appendChild(btn);
+        btn.onclick = function () { return handleGuideAnswer(npc, q.id, null, null); };
+        el.appendChild(registerTravelButton(menu, btn, { action: "questions", topic: q.id }));
     });
     const back = document.createElement("button");
     back.type = "button";
     back.className = "chat-option-btn kind-exit";
     back.textContent = "Never mind";
-    back.onclick = function () { renderChatOptions(npc); };
-    el.appendChild(back);
+    back.onclick = function () { renderChatOptions(npc); return { status: "completed" }; };
+    el.appendChild(registerTravelButton(menu, back, { action: "back" }));
+    return publishTravelMenu(menu, el, { questions: list.filter(function (q) { return q.id !== "next"; }).map(function (q) { return { question: q.question }; }) });
 }
 
 // topicId: a GUIDE_KNOWLEDGE id. typedText: the player's own words, when typed.
 function handleGuideAnswer(npc, topicId, typedText, choice) {
     if (!npc || !npc.guide || typeof window.getGuideTopic !== "function") return false;
+    if (typeof travelNPCBlock === "function") { const reason = travelNPCBlock(npc, "questions"); if (reason) return sharedChoiceResult("blocked", reason); }
     const topic = window.getGuideTopic(topicId);
     if (!topic) return false;
     const bs = getPlayerBackstory();
@@ -24663,7 +27346,7 @@ function handleGuideAnswer(npc, topicId, typedText, choice) {
     if (typeof rememberNPCConversationLine === "function") rememberNPCConversationLine(npc, "player", playerLine, "curious");
     npc.memory.lastSpokenTo = Date.now();
     G.activeNPCMode = "talk";
-    queueGuideReply(npc, "topic-" + topicId, { lines: [line], replies: null, concern: topicId === "rest" ? "hurt" : "ready" }, playerLine, function () {
+    const reply = queueGuideReply(npc, "topic-" + topicId, { lines: [line], replies: null, concern: topicId === "rest" ? "hurt" : "ready" }, playerLine, function () {
         if (typeof recordNPCConversationChoice === "function") {
             recordNPCConversationChoice(npc, { id: "guide-ask-" + topicId, intent: "curious", guideBeat: topicId === "next" ? "plan" : undefined });
         }
@@ -24671,6 +27354,7 @@ function handleGuideAnswer(npc, topicId, typedText, choice) {
             registerNPCToldMemory(npc, "guide-" + topicId, "Answered their question: " + topic.question, { pinned: true, importance: 5, tags: ["guide", topicId] });
         }
     });
+    if (reply && typeof reply.then === "function") { const result = reply.then(function (status) { return typeof travelGuideAnswerOutput === "function" ? travelGuideAnswerOutput(npc, topic, line, status) : status; }); return typeof textModeTrackTask === "function" ? textModeTrackTask(result) : result; }
     return true;
 }
 
@@ -24910,6 +27594,7 @@ function showRentRoomMenu(npc) {
     const el = document.getElementById("chatOptionsEl");
     const room = G.activeRoom;
     if (!el || !npc || !room) return;
+    const reason = travelNPCBlock(npc, "rent"); if (reason) return sharedChoiceResult("blocked", reason);
     const player = G.player;
     const lodging = getActiveLodging();
     const buildingId = room.buildingId;
@@ -24936,6 +27621,8 @@ function showRentRoomMenu(npc) {
 
     el.innerHTML = "";
     G.activeNPCMode = "talk";
+    const menu = beginTravelMenu(npc, "rent", "Weekly room rental — review and confirm payment separately");
+    const approval = { npc: npc, used: false, valid: travelGuard(npc, "rent", null, true) };
     if (canPay) {
         const afford = (player.coins || 0) >= LODGING_WEEKLY_RENT;
         const pay = document.createElement("button");
@@ -24944,18 +27631,23 @@ function showRentRoomMenu(npc) {
         pay.textContent = (renewing ? "Pay for another week (" : "Rent the room (") + LODGING_WEEKLY_RENT + " coins)";
         pay.disabled = !afford;
         if (!afford) pay.title = "You can't afford it.";
-        pay.onclick = function () { rentInnRoom(npc); };
-        el.appendChild(pay);
+        pay.onclick = function () { return rentInnRoom(npc, approval); };
+        el.appendChild(registerTravelButton(menu, pay, { action: "pay" }));
     }
     const back = document.createElement("button");
     back.type = "button";
     back.className = "chat-option-btn kind-exit";
     back.textContent = "Never mind";
-    back.onclick = function () { renderChatOptions(npc); };
-    el.appendChild(back);
+    back.onclick = function () { renderChatOptions(npc); return { status: "completed" }; };
+    el.appendChild(registerTravelButton(menu, back, { action: "back" }));
+    return publishTravelMenu(menu, el, { building: buildingName, fee: LODGING_WEEKLY_RENT, weekTurns: getLodgingWeekTurns(), renewing: renewing, canPay: canPay && (player.coins || 0) >= LODGING_WEEKLY_RENT });
 }
 
-function rentInnRoom(npc) {
+function rentInnRoom(npc, approval) {
+    if (!approval) return showRentRoomMenu(npc);
+    if (approval.used || approval.npc !== npc || !approval.valid()) return sharedChoiceResult("blocked", "That rental quote changed. Review it again.");
+    approval.used = true;
+    const rentStart = getCurrentStoryTurn(), rentBefore = G.player.coins, rentRenewing = !!G.player.lodging;
     const room = G.activeRoom;
     const player = G.player;
     if (!room || !player || !npc) return;
@@ -24977,7 +27669,7 @@ function rentInnRoom(npc) {
             leased = createLodgingRoom(buildingId, buildingName);
             leasedCoords = leased ? leased.coords : null;
         }
-        if (!leased) { showRentRoomMenu(npc); return; }
+        if (!leased) return showRentRoomMenu(npc);
         player.coins -= LODGING_WEEKLY_RENT;
         leased.leasedBy = "player";
         getLodgingRoomDoors(leased).forEach(function (d) { setLodgingDoorKey(leased, d.dir, LODGING_KEY_ID, "locked"); });
@@ -25003,6 +27695,8 @@ function rentInnRoom(npc) {
     G.activeNPCMode = "talk";
     renderChatOptions(npc);
     saveGameState();
+    publishTextModeOutput("travel", "You " + (rentRenewing ? "renew" : "rent") + " a room at " + buildingName + ".", { travel: { stage: "result", action: "rent", building: buildingName, fee: rentBefore - player.coins, turns: getCurrentStoryTurn() - rentStart, weekTurns: getLodgingWeekTurns(), renewed: rentRenewing, keyGiven: !rentRenewing, remainingTurns: player.lodging.paidUntil - getCurrentStoryTurn() } }, false);
+    return { status: "completed" };
 }
 window.showRentRoomMenu = showRentRoomMenu;
 window.rentInnRoom = rentInnRoom;
@@ -25977,12 +28671,15 @@ function useSupplyEntry(stackKey) {
 
 // Tipping a potion out: the liquid soaks away, the bottle stays with you.
 function pourOutPotionEntry(stackKey) {
+    if (!materialExecution) return runMaterialAction("pour", null, stackKey).text || "";
     const entry = buildPlayerInventoryEntries(G.player).find(function (c) { return c.key === stackKey; });
     if (!entry || !isPotionItem(entry.item)) return "";
     const consumed = takeInventoryEntryAmount(G.player, stackKey, 1);
     if (!consumed) return "";
-    advanceStoryTurn(1);
     const kept = giveBackEmptyContainer(consumed);
+    materialCheckpoint();
+    advanceStoryTurn(1);
+    if (!materialCurrent()) return materialInterrupted();
     saveGameState();
     return "You tip out the " + getItemName(consumed).toLowerCase() + " and the liquid soaks into the floor." + (kept ? " " + kept : "");
 }
@@ -26493,7 +29190,9 @@ function castSpellAtRoomItem(item, spellId) {
     const block = getRoomItemSpellBlockReason(room, cost, spell);
     if (block) { setNarration(block); return; }
     spendPlayerMana(player, cost);
+    environmentActionCheckpoint();
     advanceStoryTurn(1);
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
     const name = getItemName(item);
     const lines = [spell.castLine];
     const mine = where !== "floor";
@@ -26509,6 +29208,7 @@ function castSpellAtRoomItem(item, spellId) {
     fixtureFireReactions(room, lines);
     renderStats();
     saveGameState();
+    if (environmentExecution && textModeState.enabled) { if (!mine) { closeItemModal(); renderRoom(); } setNarration(lines.join(" ")); return; }
     if (mine && typeof refreshInventoryUi === "function") { refreshInventoryUi(lines.join(" ")); return; }
     if (typeof closeItemModal === "function") closeItemModal();
     renderRoom();
@@ -26547,7 +29247,7 @@ function addRoomItemSpellButtons(item, buttons) {
         if (!spell || !spell.damageDie || spell.element !== "fire") return;
         const cost = getEffectiveSpellManaCost(G.player, spell);
         const reason = getRoomItemSpellBlockReason(room, cost, spell);
-        buttons.push(createCombatButton("Set it alight: " + spell.name + " (" + cost + " mana)", () => castSpellAtRoomItem(item, spellId), { disabled: !!reason, title: reason || "" }));
+        buttons.push(createCombatButton("Set it alight: " + spell.name + " (" + cost + " mana)", environmentCardCallback("cast", item, spellId), { disabled: !!reason, title: reason || "" }));
     });
 }
 
@@ -27799,7 +30499,8 @@ function buildAskAboutItemFallback(npc, item, discoveredTrait) {
 }
 
 async function askAboutTradeItem(npc, item) {
-    if (!npc || !item) return;
+    const start = merchantQuestionStart(npc, item);
+    if (start.error) return start.error;
 
     let discoveredTrait = null;
     if (item && item.hiddenTrait && !item.hiddenTraitRevealed) {
@@ -27807,6 +30508,11 @@ async function askAboutTradeItem(npc, item) {
         discoveredTrait = item.hiddenTrait;
     }
 
+    if (discoveredTrait) {
+        rememberStoryEvent("lore", G.player.name + " discovered " + getItemName(item) + " is a " + discoveredTrait.label + ".", 5, { tags: ["item-discovery"] });
+        saveGameState();
+    }
+    const request = merchantQuestionWait(npc, item, start.entry, discoveredTrait);
     let reply = null;
     if (aiAvailable()) {
         try {
@@ -27824,16 +30530,19 @@ async function askAboutTradeItem(npc, item) {
         }
     }
 
+    if (!request.valid()) return merchantQuestionInterrupted(npc, request);
     if (!reply) reply = buildAskAboutItemFallback(npc, item, discoveredTrait);
 
     let message = `${npc.name}: "${reply}"`;
     if (discoveredTrait) {
         message += ` You've discovered ${getItemName(item)} is a ${discoveredTrait.label}: ${discoveredTrait.summary}!`;
-        rememberStoryEvent("lore", `${G.player.name} discovered ${getItemName(item)} is a ${discoveredTrait.label}.`, 5, { tags: ["item-discovery"] });
-        saveGameState();
+
     }
 
     showTradeMessage(message, true);
+    merchantQuestionOutput(npc, item, request, reply, message);
+    renderTradeOptions(npc);
+    return { status: "completed" };
 }
 
 function formatInventoryItemLabel(item, quantityOverride = null) {
@@ -31901,6 +34610,7 @@ function refreshSlimePortrait(npc) {
 
 function openSlimeNectarMenu(npc, stackKey) {
     if (!isActiveSlime(npc)) return;
+    if (typeof nectarActionBlock === "function") { const reason = nectarActionBlock(npc); if (reason) return sharedChoiceResult("blocked", reason); }
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
     el.innerHTML = "";
@@ -31910,31 +34620,37 @@ function openSlimeNectarMenu(npc, stackKey) {
     // separate selection step. Different fill levels remain separate choices.
     const singleType = entries.length && entries.every(function (e) { return getInventoryStackKey(e.item) === getInventoryStackKey(entries[0].item); });
     const entry = entries.find(function (e) { return e.key === stackKey; }) || (!stackKey && singleType ? entries[0] : null);
+    const shared = typeof beginNectarChoiceMenu === "function" ? beginNectarChoiceMenu(npc, entry, stackKey) : null;
+    const button = function (label, run, options) { return shared ? nectarChoiceButton(shared, label, run, options) : createCombatButton(label, run, options); };
     const buttons = [];
     if (!entry) {
-        entries.forEach(function (e) { buttons.push(createCombatButton(formatInventoryItemLabel(e.item, e.totalQuantity), function () { openSlimeNectarMenu(npc, e.key); })); });
-        if (!entries.length) buttons.push(createCombatButton("No nectar", function () {}, { disabled: true }));
+        entries.forEach(function (e) { buttons.push(button(formatInventoryItemLabel(e.item, e.totalQuantity), function () { return openSlimeNectarMenu(npc, e.key); }, { textChoice: { action: "container", entry: e } })); });
+        if (!entries.length) buttons.push(button("No nectar", function () {}, { disabled: true }));
     } else {
         const remaining = getNectarDrops(entry.item);
         Array.from(new Set([1, 2, 5, 10, remaining])).filter(function (n) { return n <= remaining; }).sort(function (a, b) { return a - b; }).forEach(function (drops) {
-            buttons.push(createCombatButton("Give " + drops + (drops === 1 ? " drop" : " drops") + (drops === remaining ? " (empty container)" : ""), function () { feedNectarToSlime(npc, entry.key, drops); }));
+            buttons.push(button("Give " + drops + (drops === 1 ? " drop" : " drops") + (drops === remaining ? " (empty container)" : ""), function () { return feedNectarToSlime(npc, entry.key, drops); }, { textChoice: { action: "dose", drops: drops } }));
         });
         const amount = document.createElement("input");
         amount.type = "number"; amount.min = "1"; amount.max = String(remaining); amount.step = "1"; amount.value = "1";
         amount.setAttribute("aria-label", "Drops of nectar to give");
         el.appendChild(amount);
-        buttons.push(createCombatButton("Give chosen drops", function () { feedNectarToSlime(npc, entry.key, Number(amount.value)); }));
+        if (shared) shared.nectarAmount = amount;
+        buttons.push(button("Give chosen drops", function () { return feedNectarToSlime(npc, entry.key, Number(amount.value)); }, { textChoice: { action: "custom-dose" } }));
     }
-    buttons.push(createCombatButton("Back", function () { G.activeNPCMode = "menu"; renderNPCActionMenu(npc); }));
+    buttons.push(button("Back", function () { G.activeNPCMode = "menu"; renderNPCActionMenu(npc); return { status: "completed" }; }, { textChoice: { action: "back" } }));
     appendCombatGroup(el, entry ? "How much nectar?" : "Choose a nectar container", buttons);
     setNarration(entry ? "There are " + getNectarDrops(entry.item) + " drops in this container. How much will you offer?" : "Choose a container of nectar.");
+    return shared ? publishNectarMenu(shared, el) : { status: "needs_input" };
 }
 
 function feedNectarToSlime(npc, stackKey, drops) {
     if (!isActiveSlime(npc) || !G.activeRoom || !(G.activeRoom.creatures || []).includes(npc)) return;
     if (G.activeNPCMode === "combat" || (typeof getActiveEncounter === "function" && getActiveEncounter())) return;
+    const nectarContext = typeof captureNectarDose === "function" ? captureNectarDose(npc, stackKey) : null;
+    if (nectarContext && nectarContext.error) return nectarContext.error;
     const dose = takeNectarDose(stackKey, drops);
-    if (!dose) { setNarration("Choose a whole number of drops available in that container."); return; }
+    if (!dose) { if (nectarContext) openSlimeNectarMenu(npc, stackKey); setNarration("Choose a whole number of drops available in that container."); return { status: "blocked" }; }
     const bond = getSlimeBond(npc);
     bond.totalDrops += drops;
     bond.reserve = Math.min(SLIME_TAMING.reserveMax, bond.reserve + drops * SLIME_TAMING.reservePerDrop);
@@ -31951,13 +34667,16 @@ function feedNectarToSlime(npc, stackKey, drops) {
         " Light blooms through its body in warm pulses. It quivers toward you, gathering itself into eager little swells before settling close to your hand.";
     if (following) text += " When you draw back, it oozes after you and settles close at your side.";
     if (dose.kept) text += " " + dose.kept;
+    const nectarCurrent = nectarContext ? nectarCompletionGuard(nectarContext) : null;
     advanceStoryTurn(1);
+    if (nectarCurrent && !nectarCurrent()) { saveGameState(); return nectarResult(nectarContext, dose, drops, true); }
     G.activeNPCMode = "menu";
     renderNPCActionMenu(npc);
     setNarration(text);
     if (typeof refreshNPCDetailPanel === "function") refreshNPCDetailPanel(npc);
     if (typeof refreshInventoryUi === "function") refreshInventoryUi();
     saveGameState();
+    return nectarContext ? nectarResult(nectarContext, dose, drops, false) : { status: "completed" };
 }
 
 // A follower scavenges at most one visible loose object every few turns,
@@ -32356,7 +35075,8 @@ function openGiveMenu(npc) {
     const sharedButton = function (label, run, opts) { return sharedMenu ? createSharedChoiceButton(sharedMenu, label, run, opts) : createCombatButton(label, run, opts); };
     if (isActiveSlime(npc)) {
         const hasNectar = getNectarEntries().length > 0;
-        appendCombatGroup(el, "Nectar", [sharedButton("Give nectar by drops", function () { openSlimeNectarMenu(npc); }, {
+        appendCombatGroup(el, "Nectar", [sharedButton("Give nectar by drops", function () { return openSlimeNectarMenu(npc); }, {
+            textChoice: { action: "nectar" },
             disabled: !hasNectar,
             title: hasNectar ? "Choose how many drops to feed; keep the container and any nectar left inside." : "You have no nectar to offer."
         })]);
@@ -32471,7 +35191,7 @@ function giveItemToNPC(npc, stackKey) {
         return { status: "blocked", message: "That creature cannot hold a gift." };
     }
     if (mode === "engulf") {
-        if (isNectarItem(item)) { openSlimeNectarMenu(npc, stackKey); return; }
+        if (isNectarItem(item)) return openSlimeNectarMenu(npc, stackKey);
         settleSlimeDigestion(npc);
         if (getSlimeHoldRoom(npc, item) < 0) {
             G.activeNPCMode = "menu";
@@ -33302,23 +36022,29 @@ function hasNewcomerProtection(player) {
 
 // "Ask for a newcomer's blessing" at a shrine. Once per character.
 function requestNewcomerBlessing() {
+    if (!shrineServiceExecution || shrineServiceExecution.spec.action !== "blessing") return requestShrineService("blessing");
+    const serviceContext = shrineServiceExecution;
+    const serviceNarration = function (message) { return shrineServiceNarration(message, serviceContext); };
     const player = G.player;
     const room = G.activeRoom;
     if (!player || !room || !isShrineRoom(room)) return;
     if (getNewcomerProtectionState(player) !== "none") return;
-    if (roomHasActiveHostile(room)) { setNarration("You cannot ask for a blessing with danger nearby."); return; }
+    if (roomHasActiveHostile(room)) { serviceNarration("You cannot ask for a blessing with danger nearby."); return; }
 
     const deityId = getShrineDeityId(room);
     const deity = playerKnowsDeity(deityId) ? getDeityArchetype(deityId) : null;
     player.newcomerProtection = { state: "active", shrineCoords: room.coords, grantedTurn: getCurrentStoryTurn() };
+    shrineServiceRecord(serviceContext, { blessingGranted: true });
     setStoryFlag("newcomer-protection", true);
     addStoryFact(`${player.name} holds a newcomer's blessing, given at a shrine: the next time death comes for them, they will be pulled back to that shrine once.`);
     rememberStoryEvent("faith", `${player.name} was given a newcomer's blessing at the shrine.`, 6, { tags: ["faith", "newcomer-protection"] });
+    shrineServiceStart(serviceContext);
     advanceStoryTurn(1);
+    if (!shrineServiceCurrent(serviceContext)) return shrineServiceInterrupted(serviceContext);
 
     renderStats();
     renderShrinePrayerMenu();
-    setNarration(
+    serviceNarration(
         (deity ? `You kneel and ask ${deity.name} for a newcomer's grace. ` : "You kneel and ask whatever watches over this place for a newcomer's grace. ") +
         "A quiet warmth settles into your chest and stays there. " +
         "Once, and only once, it will pull you back from the edge of death and bring you here. You have pledged nothing. When it is spent, it is gone."
@@ -35356,7 +38082,7 @@ function clearPlayerBleeding(player) {
 // Allies who can take a heal: party members present and on their feet.
 function getHealableAllies() {
     return (G.partyMembers || []).filter(function (m) {
-        return m && m.hp > 0 && !m.unconscious && !m.isUnconsciousBody && m.bodyState !== "corpse" && m.bodyState !== "unconscious";
+        return m && G.activeRoom && (G.activeRoom.creatures || []).indexOf(m) >= 0 && isVisibleEntity(m) && !m.dead && m.hp > 0 && !m.unconscious && !m.isUnconsciousBody && m.bodyState !== "corpse" && m.bodyState !== "unconscious";
     });
 }
 function entityNeedsHealing(e) {
@@ -35402,50 +38128,58 @@ function regrowLimb(player, limbKey, lines) {
     return true;
 }
 function activateDeityPower(power, npc) {
-    if (power.heal && power.heal.ally && getHealableAllies().length) { openHealTargetPicker(power, npc); return; }
-    useDeityPower(power.id, npc, null);
+    if (power.heal && power.heal.ally && getHealableAllies().length) { return openHealTargetPicker(power, npc); }
+    return useDeityPower(power.id, npc, null);
 }
-function openHealTargetPicker(power, npc) {
-    const el = document.getElementById("chatOptionsEl");
-    if (!el) { useDeityPower(power.id, npc, null); return; }
-    el.innerHTML = "";
-    const buttons = getCombatHealTargetActions(power, npc).map(createCombatActionButton);
-    appendCombatGroup(el, power.name + ": who?", buttons);
-    appendCombatGroup(el, "", [createCombatButton("Back", function () {
-        if (npc && G.activeNPCMode === "combat") renderCombatActionMenu(npc); else openPowersMenu();
-    })]);
+function openHealTargetPicker(power,npc) {
+ const combat=!!npc&&G.activeNPCMode==="combat",reason=castingPowerBlock(power,combat?npc:null);
+ if(reason)return sharedChoiceResult("blocked",reason);
+ const el=document.getElementById("chatOptionsEl");if(!el)return {status:"blocked"};
+ if(!combat)G.activeNPCMode="casting";el.innerHTML="";
+ const menu=beginCastingMenu("heal",combat?npc:null,power.name+": who?",function(){return openHealTargetPicker(power,npc);},{combat:combat});
+ appendCombatGroup(el,power.name+": who?",getCombatHealTargetActions(power,npc).map(function(action,index){
+  const entity=index===0?G.player:getHealableAllies()[index-1],name=entity===G.player?"Yourself":textModeNPCLabel(entity);
+  return castingButton(menu,action.label,action.run,{action:"heal",name:name,entity:entity},{disabled:action.disabled,title:action.title});
+ }));
+ appendCombatGroup(el,"",[castingButton(menu,"Back",function(){
+  if(combat){renderCombatActionMenu(npc);return {status:"completed"};}return openPowersMenu();
+ },{action:"back"})]);
+ return publishCastingMenu(menu,el,{power:power.name,targets:[G.player].concat(getHealableAllies()).map(function(e){return {name:e===G.player?"Yourself":textModeNPCLabel(e),hp:e.hp,hpMax:e.hpMax};})});
 }
 
 // Fires a deity power. `npc` is the combat target (required for use:"combat").
 function useDeityPower(powerId, npc, healTarget) {
     const player = G.player;
-    if (!player) return;
+    if (!player) return { status: "blocked" };
     const power = getUsablePowers(player).find(function (pw) { return pw.id === powerId; });
-    if (!power) return;
+    if (!power) return { status: "blocked" };
     const inCombat = !!npc && G.activeNPCMode === "combat";
+    if (healTarget && (!power.heal || !power.heal.ally || getHealableAllies().indexOf(healTarget) < 0)) return sharedChoiceResult("blocked", "That healing target is no longer available.");
+    const castingContext = !inCombat && castingSupportedPower(power) ? castingPowerCapture(power, null, healTarget) : null;
+    if (castingContext && castingContext.error) return castingContext.error;
     const refresh = function () {
         if (inCombat) renderCombatActionMenu(npc); else openPowersMenu();
     };
 
     const block = getDeityPowerBlockReason(player, power);
-    if (block) { setNarration(block); return; }
-    if (power.use === "body") { setNarration("Open the body of the one you want to bring back, and choose Resurrect."); return; }
-    if (power.use === "combat" && !inCombat) { setNarration("That power needs a foe to turn it on."); return; }
-    if (power.use === "world" && (inCombat || G.activeNPC)) { setNarration(power.regrow ? "You cannot call this down in the middle of a fight or a conversation." : "You cannot reshape yourself in the middle of a fight or a conversation."); return; }
+    if (block) { setNarration(block); return { status: "blocked" }; }
+    if (power.use === "body") { setNarration("Open the body of the one you want to bring back, and choose Resurrect."); return { status: "blocked" }; }
+    if (power.use === "combat" && !inCombat) { setNarration("That power needs a foe to turn it on."); return { status: "blocked" }; }
+    if (power.use === "world" && (inCombat || G.activeNPC)) { setNarration(power.regrow ? "You cannot call this down in the middle of a fight or a conversation." : "You cannot reshape yourself in the middle of a fight or a conversation."); return { status: "blocked" }; }
     let regrowKey = "";
     if (power.regrow) {
         const lost = getSeveredLimbKeys(player);
-        if (!lost.length) { setNarration("You have no lost limb to restore."); return; }
+        if (!lost.length) { setNarration("You have no lost limb to restore."); return { status: "blocked" }; }
         regrowKey = lost[randInt(0, lost.length - 1)]; // the deity chooses; beggars cannot be choosers
     }
     const cost = getDeityPowerManaCost(player, power);
-    if (!power.granted && player.mana < cost) { setNarration(`You do not have enough mana for ${power.name} (${cost} needed).`); return; }
-    if (power.luck && player.luckyRollPending) { setNarration("Fortune is already smiling on you."); return; }
+    if (!power.granted && player.mana < cost) { setNarration(`You do not have enough mana for ${power.name} (${cost} needed).`); return { status: "blocked" }; }
+    if (power.luck && player.luckyRollPending) { setNarration("Fortune is already smiling on you."); return { status: "blocked" }; }
     if (power.heal && !power.heal.fullStamina) {
         const needy = power.heal.party
             ? [player].concat(getHealableAllies()).some(entityNeedsHealing)
             : (healTarget ? entityNeedsHealing(healTarget) : entityNeedsHealing(player) && (player.hp < player.hpMax || (power.heal.clearBleed && getTotalBleed(player) > 0)));
-        if (!needy) { setNarration(healTarget ? `${healTarget.name || "They"} do not need that.` : "You are not hurt enough to need that."); return; }
+        if (!needy) { setNarration(healTarget ? `${healTarget.name || "They"} do not need that.` : "You are not hurt enough to need that."); return { status: "blocked" }; }
     }
 
     const lines = [];
@@ -35513,8 +38247,7 @@ function useDeityPower(powerId, npc, healTarget) {
     if (power.partyBuff) {
         const msg0 = applyStatusEffect(player, power.partyBuff, player.name || "You", { isPlayer: true });
         if (msg0) lines.push(msg0);
-        (G.partyMembers || []).forEach(function (m) {
-            if (!m || m.hp <= 0 || m.unconscious || m.isUnconsciousBody) return;
+        getHealableAllies().forEach(function (m) {
             applyStatusEffect(m, power.partyBuff, m.name || "An ally");
             lines.push(`${m.name || "An ally"} is wrapped in the light.`);
         });
@@ -35676,39 +38409,40 @@ function useDeityPower(powerId, npc, healTarget) {
         clearPlayerCombatStance();
         saveGameState();
     } else {
+        const committedCast = castingContext ? castingPowerCommitted(castingContext) : null;
+        const castStillCurrent = castingContext ? castingGuard(null, { view: true, resources: false, committed: true }) : null;
         advanceStoryTurn(1);
         if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
+        if (castStillCurrent && !castStillCurrent()) { saveGameState(); return castingPowerResult(castingContext, committedCast, true); }
         renderStats();
         saveGameState();
-        openPowersMenu(lines.join(" "));
+        const next = openPowersMenu(lines.join(" "));
+        if (castingContext) castingPowerResult(castingContext, committedCast, false);
+        return next;
     }
 }
 
 // Powers (right interact column): the non-combat view of the patron's gifts.
 function openPowersMenu(message) {
-    const room = G.activeRoom;
-    const player = G.player;
-    if (!room || !player || G.activeNPC || G.activeObject) return;
-    clearChatLog();
-    setExitGridVisible(false);
-    const el = document.getElementById("chatOptionsEl");
-    if (!el) return;
-    el.innerHTML = "";
-    const deity = getDeityArchetype(player.deity);
-    const buttons = getUsablePowers(player).map(function (power) {
-        const cost = getDeityPowerManaCost(player, power);
-        const block = getDeityPowerBlockReason(player, power);
-        const combatOnly = power.use === "combat" || power.use === "body";
-        const lacksMana = !power.granted && player.mana < cost;
-        const noLimb = !!power.regrow && !getSeveredLimbKeys(player).length;
-        const disabled = !!block || combatOnly || lacksMana || noLimb;
-        const btn = createCombatButton(`${power.name} (${getPowerCostLabel(player, power)})`, function () { activateDeityPower(power, null); }, { disabled: disabled });
-        btn.title = block || (noLimb ? "You have no lost limb to restore." : combatOnly ? (power.use === "body" ? "Used from a body's own menu. " : "Combat only. ") + power.summary : (lacksMana ? `Not enough mana (${cost} needed).` : power.summary));
-        return btn;
-    });
-    appendCombatGroup(el, deity ? deity.name + "'s gifts" : "Powers", buttons);
-    appendCombatGroup(el, "", [createCombatButton("Back", function () { openInteractMenu(); })]);
-    setNarration(message || (deity ? `${deity.name} watches. Faith ${player.faith ? player.faith.score : 0}.` : "Your patron watches."));
+ const reason=castingBlock(null,false);if(reason)return sharedChoiceResult("blocked",reason);
+ const p=G.player,el=document.getElementById("chatOptionsEl");if(!el)return {status:"blocked"};
+ clearChatLog();setExitGridVisible(false);el.innerHTML="";G.activeNPCMode="casting";
+ const menu=beginCastingMenu("powers",null,"Powers",function(){return openPowersMenu();});
+ const deity=getDeityArchetype(p.deity);
+ const buttons=getUsablePowers(p).map(function(power){
+  const cost=getDeityPowerManaCost(p,power),block=getDeityPowerBlockReason(p,power),combatOnly=power.use==="combat"||power.use==="body";
+  const noLimb=!!power.regrow&&!getSeveredLimbKeys(p).length,lacksMana=!power.granted&&p.mana<cost;
+  const disabled=!!block||combatOnly||lacksMana||noLimb;
+  const title=block||(noLimb?"You have no lost limb to restore.":combatOnly?"Use the normal combat or body target.":lacksMana?"Not enough mana.":power.summary);
+  const label=power.name+" ("+getPowerCostLabel(p,power)+")";
+  // Specialised transformation/body routes retain their original native controls.
+  if(!castingSupportedPower(power))return createCombatButton(label,function(){activateDeityPower(power,null);},{disabled:disabled,title:title});
+  return castingButton(menu,label,function(){return activateDeityPower(power,null);},{action:"power",name:power.name},{disabled:disabled,title:title});
+ });
+ appendCombatGroup(el,deity?deity.name+"'s gifts":"Powers",buttons);
+ appendCombatGroup(el,"",[castingButton(menu,"Back",function(){G.activeNPCMode=null;openInteractMenu();return {status:"completed"};},{action:"back"})]);
+ setNarration(message||(deity?deity.name+" watches. Faith "+(p.faith?p.faith.score:0)+".":"Your powers are available here."));
+ return publishCastingMenu(menu,el,{powers:castingPowers().map(function(power){return {name:power.name,summary:power.summary,cost:getPowerCostLabel(p,power),blockedReason:castingPowerBlock(power,null)};})});
 }
 
 // ── DIVINE GIFT ANNOUNCEMENTS ────────────────────────────────────
@@ -35781,6 +38515,7 @@ function scheduleDeityPowerCheck() {
 }
 
 function showDivineGiftModal(deity, powers) {
+    if (textModeState.enabled) { textDivineGiftAnnouncement(deity, powers); return; }
     const modal = document.getElementById("itemModal");
     const titleEl = document.getElementById("itemModalTitle");
     const descEl = document.getElementById("itemModalDesc");
@@ -39951,8 +42686,12 @@ function hammerRoomWall(room, dir) {
     const block = getWallHammerBlockReason(room, dir);
     if (block) { setNarration(block); return; }
     const lines = [];
+    const structuralStaminaBefore = player.stamina;
     spendEntityStamina(player, MINING_STAMINA_COST, lines, { isPlayer: true });
+    structuralToolStaminaPaid(Math.max(0, structuralStaminaBefore - player.stamina));
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
     const pick = (player.inventory || []).find(isPickaxeItem);
     const check = rollStatCheck(player, "physicalProwess", 10);
     const dmg = randInt(COLLAPSE_SWING_DAMAGE[0], COLLAPSE_SWING_DAMAGE[1]) + (check.success ? 3 : 0);
@@ -39960,6 +42699,7 @@ function hammerRoomWall(room, dir) {
     lines.push("You drive your pick into the " + (COLLAPSE_DIR_WORDS[dir] || dir) + " wall. Dust and grit rain down.");
     damageRoomWall(room, dir, dmg, "force", lines);
     chestRacketReactions(room, lines, false);
+    if (structuralCaptureFinish(room, dir, lines)) return;
     renderStats();
     if (isRoomCollapsed(room) || isExitCollapsed(room, dir)) { resetNpcPanel(); renderRoom(); renderCombatNarrationLines(lines); }
     else { renderWallMenu(room, dir); renderCombatNarrationLines(lines.concat([describeRoomWalls(room)])); }
@@ -39975,11 +42715,15 @@ function castSpellAtWall(room, dir, spellId) {
     const block = getWallSpellBlockReason(room, dir, cost, spell);
     if (block) { setNarration(block); return; }
     spendPlayerMana(player, cost);
+    structuralManaPaid(cost);
     const flat = getSpellFlatBonus(player, spell);
     const damage = Math.max(1, randInt(1, spell.damageDie) + spell.damageBonus + flat.willBonus + flat.gearDamage);
     const lines = [spell.castLine + " " + spell.hitLine.replace(/\{name\}/g, "the " + (COLLAPSE_DIR_WORDS[dir] || dir) + " wall") + " (" + damage + " damage)"];
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
     damageRoomWall(room, dir, damage, WALL_SPELL_KIND[spell.element], lines);
+    if (structuralCaptureFinish(room, dir, lines)) return;
     renderStats();
     if (isRoomCollapsed(room) || isExitCollapsed(room, dir)) { resetNpcPanel(); renderRoom(); renderCombatNarrationLines(lines); }
     else { renderWallMenu(room, dir); renderCombatNarrationLines(lines.concat([describeRoomWalls(room)])); }
@@ -40038,8 +42782,12 @@ function digCollapsedExit(room, dir) {
     const block = getDigPickBlockReason(room, dir);
     if (block) { setNarration(block); return; }
     const lines = [];
+    const structuralStaminaBefore = player.stamina;
     spendEntityStamina(player, MINING_STAMINA_COST, lines, { isPlayer: true });
+    structuralToolStaminaPaid(Math.max(0, structuralStaminaBefore - player.stamina));
+    structuralCheckpoint();
     advanceStoryTurn(COLLAPSE_DIG_TURNS);
+    if (!structuralCurrent()) return structuralInterrupted();
     const check = rollStatCheck(player, "physicalProwess", 10);
     const pick = (player.inventory || []).find(isPickaxeItem);
     if (pick) damageDurability(pick, 1, "force", { lines: lines });
@@ -40057,15 +42805,19 @@ function burnCollapsedExit(room, dir, spellId) {
     const block = getDigSpellBlockReason(room, dir, cost, spell);
     if (block) { setNarration(block); return; }
     spendPlayerMana(player, cost);
+    structuralManaPaid(cost);
     const flat = getSpellFlatBonus(player, spell);
     const roll = Math.max(1, randInt(1, spell.damageDie) + spell.damageBonus + flat.willBonus + flat.gearDamage);
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
     const lines = [spell.castLine, "The rubble glows, slumps and runs where the heat bites."];
     const done = applyDigProgress(room, dir, roll * COLLAPSE_FIRE_PROGRESS_MULT, lines);
     finishCollapseAction(room, dir, lines, done);
 }
 
 function finishCollapseAction(room, dir, lines, done) {
+    if (structuralCaptureFinish(room, dir, lines)) return;
     renderStats();
     if (done) { resetNpcPanel(); renderRoom(); renderCombatNarrationLines(lines); }
     else { renderCollapsedExitMenu(room, dir); renderCombatNarrationLines(lines); }
@@ -40087,21 +42839,23 @@ function renderCollapsedExitMenu(room, dir) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
     el.innerHTML = "";
+    const structureMenu = beginStructuralMenu(room, dir, "rubble");
     const buttons = [];
     const pickBlock = getDigPickBlockReason(room, dir);
-    buttons.push(createCombatButton("Dig through (pickaxe, " + MINING_STAMINA_COST + " stamina)", () => digCollapsedExit(room, dir), { disabled: !!pickBlock, title: pickBlock || "Slow work, but it will clear a narrow crawl." }));
+    buttons.push(structuralToolMenuButton(structureMenu, "Dig through (pickaxe, " + MINING_STAMINA_COST + " stamina)", "dig", room, dir, "", { disabled: !!pickBlock, title: pickBlock || "Slow work, but it will clear a narrow crawl." }));
     if (playerIsSpellcaster(G.player) && playerUsesMana(G.player)) {
         getCastableSpellIds(G.player).forEach(function (spellId) {
             const spell = WIZARD_SPELLS[spellId];
             if (!spell || !spell.damageDie || spell.element !== "fire") return;
             const cost = getEffectiveSpellManaCost(G.player, spell);
             const reason = getDigSpellBlockReason(room, dir, cost, spell);
-            buttons.push(createCombatButton("Burn it: " + spell.name + " (" + cost + " mana)", () => burnCollapsedExit(room, dir, spellId), { disabled: !!reason, title: reason }));
+            buttons.push(structuralMenuButton(structureMenu, "Burn it: " + spell.name + " (" + cost + " mana)", "cast", room, dir, spellId, { disabled: !!reason, title: reason }, "rubble"));
         });
     }
-    if (isPlayerTrappedByCollapse(room) && typeof renderRescuePrayerButton === "function") buttons.push(renderRescuePrayerButton(room));
+    if (isPlayerTrappedByCollapse(room) && typeof renderRescuePrayerButton === "function") buttons.push(renderRescuePrayerButton(room, structureMenu));
     appendCombatGroup(el, "Rubble", buttons);
-    appendCombatGroup(el, "", [createCombatButton("Leave it", () => { returnToRoomView(); saveGameState(); })]);
+    appendCombatGroup(el, "", [structuralBackButton(structureMenu, "Leave it", () => { returnToRoomView(); saveGameState(); })]);
+    publishStructuralMenu(structureMenu, el);
 }
 
 // ── Walls menu (left interact column, "Walls") ────────────────────
@@ -40215,15 +42969,15 @@ function openDoorWallMenu(room, dir) {
 }
 
 // "Lock it" buttons for a closed, unlocked door: with its key, or with a lockpick.
-function getDoorLockButtons(room, dir) {
+function getDoorLockButtons(room, dir, menu) {
     const buttons = [];
     const lock = getExitLock(room, dir);
     const key = lock && lock.keyId && lock.keyId !== "room-token" ? findKeyForLock(lock) : null;
     if (lock && lock.keyId && lock.keyId !== "room-token") {
-        buttons.push(createCombatButton("Lock it with your key", () => lockDoorWithKey(room, dir), { disabled: !key, title: key ? "" : "You have no key for this door." }));
+        buttons.push(structuralToolMenuButton(menu, "Lock it with your key", "lock", room, dir, "key", { disabled: !key, title: key ? "" : "You have no key for this door." }));
     }
     const pick = findPlayerItemById("lockpick");
-    buttons.push(createCombatButton("Lock it with a lockpick", () => attemptLockDoor(room, dir, true), { disabled: !pick, title: pick ? "Turn the pick the other way. It may not hold forever." : "You need a lockpick." }));
+    buttons.push(structuralToolMenuButton(menu, "Lock it with a lockpick", "lock", room, dir, "pick", { disabled: !pick, title: pick ? "Turn the pick the other way. It may not hold forever." : "You need a lockpick." }));
     return buttons;
 }
 
@@ -40231,7 +42985,9 @@ function lockDoorWithKey(room, dir) {
     const lock = getExitLock(room, dir);
     const key = lock && lock.keyId ? findKeyForLock(lock) : null;
     if (!lock || !key || lock.state === "locked") return;
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
     setExitLockState(room, dir, "locked");
     finishLockAction(room, dir, ["Your key turns and the " + describeExitDoor(room, dir) + " locks."], true);
 }
@@ -40249,15 +43005,17 @@ function renderWallsMenu(room) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
     el.innerHTML = "";
+    const structureMenu = beginSharedChoiceMenu("structure-magic", null, "Choose a wall or blocked exit", null);
     const buttons = getHorizontalExitDirs(room).map(function (d) {
         const word = COLLAPSE_DIR_WORDS[d] || d;
         const fallen = isExitCollapsed(room, d);
         const label = word.charAt(0).toUpperCase() + word.slice(1) + " wall" + (fallen ? " (fallen)" : "");
-        return createCombatButton(label, () => (fallen ? openCollapsedExitMenu(room, d) : openWallMenu(room, d)));
+        return structuralNavigateButton(structureMenu, label, room, d, fallen ? "rubble" : "wall");
     });
-    if (isPlayerTrappedByCollapse(room) && typeof renderRescuePrayerButton === "function") buttons.push(renderRescuePrayerButton(room));
+    if (isPlayerTrappedByCollapse(room) && typeof renderRescuePrayerButton === "function") buttons.push(renderRescuePrayerButton(room, structureMenu));
     appendCombatGroup(el, "Walls", buttons);
-    appendCombatGroup(el, "", [createCombatButton("Back", () => { returnToRoomView(); saveGameState(); })]);
+    appendCombatGroup(el, "", [structuralBackButton(structureMenu, "Back", () => { returnToRoomView(); saveGameState(); })]);
+    publishSharedChoiceMenu(structureMenu, el);
 }
 
 function openWallMenu(room, dir) {
@@ -40269,26 +43027,28 @@ function renderWallMenu(room, dir) {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
     el.innerHTML = "";
+    const structureMenu = beginStructuralMenu(room, dir, "wall");
     const buttons = [];
     const hammerBlock = getWallHammerBlockReason(room, dir);
-    buttons.push(createCombatButton("Hammer at it (pickaxe, " + MINING_STAMINA_COST + " stamina)", () => hammerRoomWall(room, dir), { disabled: !!hammerBlock, title: hammerBlock || "Slow, loud work. If the wall gives, the way through collapses." }));
+    buttons.push(structuralToolMenuButton(structureMenu, "Hammer at it (pickaxe, " + MINING_STAMINA_COST + " stamina)", "hammer", room, dir, "", { disabled: !!hammerBlock, title: hammerBlock || "Slow, loud work. If the wall gives, the way through collapses." }));
     if (playerIsSpellcaster(G.player) && playerUsesMana(G.player)) {
         getCastableSpellIds(G.player).forEach(function (spellId) {
             const spell = WIZARD_SPELLS[spellId];
             if (!spell || !spell.damageDie || !WALL_SPELL_KIND[spell.element]) return;
             const cost = getEffectiveSpellManaCost(G.player, spell);
             const reason = getWallSpellBlockReason(room, dir, cost, spell);
-            buttons.push(createCombatButton("Cast " + spell.name + " (" + cost + " mana)", () => castSpellAtWall(room, dir, spellId), { disabled: !!reason, title: reason }));
+            buttons.push(structuralMenuButton(structureMenu, "Cast " + spell.name + " (" + cost + " mana)", "cast", room, dir, spellId, { disabled: !!reason, title: reason }, "wall"));
         });
     }
     appendCombatGroup(el, (COLLAPSE_DIR_WORDS[dir] || dir).charAt(0).toUpperCase() + (COLLAPSE_DIR_WORDS[dir] || dir).slice(1) + " wall", buttons);
     if (getExitDoor(room, dir) === "door" && room.exits && room.exits[dir]) {
         const doorButtons = isExitLocked(room, dir)
-            ? [createCombatButton("Deal with the locked door", () => openLockedDoorMenu(room, dir))]
-            : getDoorLockButtons(room, dir);
+            ? [structuralNavigateButton(structureMenu, "Deal with the locked door", room, dir, "door")]
+            : getDoorLockButtons(room, dir, structureMenu);
         appendCombatGroup(el, "The " + describeExitDoor(room, dir), doorButtons);
     }
-    appendCombatGroup(el, "", [createCombatButton("Back", () => { returnToRoomView(); saveGameState(); })]);
+    appendCombatGroup(el, "", [structuralBackButton(structureMenu, "Back", () => { returnToRoomView(); saveGameState(); })]);
+    publishStructuralMenu(structureMenu, el);
 }
 
 // True when no horizontal or vertical exit is passable (the player cannot
@@ -40379,9 +43139,9 @@ function getRescuePrayerBlockReason(room) {
     return "";
 }
 
-function renderRescuePrayerButton(room) {
+function renderRescuePrayerButton(room, menu) {
     const reason = getRescuePrayerBlockReason(room);
-    return createCombatButton("Pray for deliverance", () => prayForRescue(room), { disabled: !!reason, title: reason || "Call on your patron. They may take pity on you, and expect repayment." });
+    return structuralToolMenuButton(menu, "Pray for deliverance", "rescue", room, "", "", { disabled: !!reason, title: reason || "Call on your patron. They may take pity on you, and expect repayment." });
 }
 
 function prayForRescue(room) {
@@ -40391,8 +43151,12 @@ function prayForRescue(room) {
     const deityId = player.deity;
     const deity = getDeityArchetype(deityId);
     ensureEntityStamina(player);
+    const structuralStaminaBefore = player.stamina;
     player.stamina = Math.max(0, player.stamina - PRAYER_STAMINA_COST);
+    structuralToolStaminaPaid(Math.max(0, structuralStaminaBefore - player.stamina));
+    structuralCheckpoint();
     advanceStoryTurn(PRAYER_TURNS);
+    if (!structuralCurrent()) return structuralInterrupted();
     player.lastRescuePrayerTurn = getCurrentStoryTurn();
     const lines = [(PRAYER_TEXT && PRAYER_TEXT[deityId]) || "You press your hands to the cold stone and call out."];
     applyFaithDelta({ [deityId]: PRAYER_FAITH_GAIN }, "called out from the rubble");
@@ -40410,12 +43174,13 @@ function prayForRescue(room) {
         rememberStoryEvent("faith", player.name + " was delivered from a collapse by " + (deity ? deity.name : "their god") + ".", 4, { tags: ["faith", "rescue"] });
         if (dest && teleportPlayerToCoords(dest.coords)) {
             lines.push("You come to your senses in " + (dest.displayName || dest.name || "another place") + ".");
-            renderCombatNarrationLines(lines);
+            if (!structuralToolNarration(lines)) renderCombatNarrationLines(lines);
             return;
         }
     } else {
         lines.push("Nothing answers but the settling of stone. Perhaps they are not listening. Perhaps you will have to try again.");
     }
+    if (structuralCaptureFinish(room, "", lines)) return;
     renderStats();
     if (G.activeRoom === room) renderCollapsedOrWalls(room, lines);
     saveGameState();
@@ -42178,10 +44943,11 @@ function createTradeItemRow(options) {
         const askBtn = document.createElement("button");
         askBtn.className = "chat-option-btn trade-option-btn";
         askBtn.textContent = "Ask";
+        const askGuard = merchantGuard(options.npc, { view: true });
         askBtn.onclick = async () => {
             askBtn.disabled = true;
             askBtn.textContent = "...";
-            await askAboutTradeItem(options.npc, options.item);
+            await runMerchantButton(askGuard, () => askAboutTradeItem(options.npc, options.item));
             askBtn.disabled = false;
             askBtn.textContent = "Ask";
         };
@@ -42309,8 +45075,9 @@ function renderTradeOptions(npc) {
     }
     if (typeof renderNPCPortrait === "function") renderNPCPortrait(npc);
 
+    merchantTradeView = {};
     appendShopNameHeading(npc, el);
-    const stock = ensureNPCTradeStock(npc);
+    const stock = ensureNPCTradeStock(npc).filter(textInventoryVisible);
     const playerInventory = (Array.isArray(G.player.inventory) ? G.player.inventory : [])
         .filter(item => isLootItemVisible(item) && !isItemEquippedByEntity(G.player, item));
 
@@ -42348,6 +45115,7 @@ function renderTradeOptions(npc) {
         }));
     });
 
+    const merchantControlGuard = merchantGuard(npc, { view: true });
     const junkUnits = playerInventory
         .filter(isVendorJunkItem)
         .reduce((sum, item) => sum + getItemQuantity(item), 0);
@@ -42355,7 +45123,7 @@ function renderTradeOptions(npc) {
         const junkValue = playerInventory
             .filter(isVendorJunkItem)
             .reduce((sum, item) => sum + getTradeSellPrice(npc, item) * getItemQuantity(item), 0);
-        el.appendChild(forgeButton(`Sell all junk (${junkUnits} item${junkUnits === 1 ? "" : "s"}, about ${junkValue}g)`, () => sellJunkItems(npc)));
+        el.appendChild(forgeButton(`Sell all junk (${junkUnits} item${junkUnits === 1 ? "" : "s"}, about ${junkValue}g)`, () => runMerchantButton(merchantControlGuard, () => sellJunkItems(npc))));
     }
 
     if (!stock.length && !playerInventory.length) {
@@ -42367,14 +45135,7 @@ function renderTradeOptions(npc) {
     }
 
     if (typeof needsBarRestock === "function" && needsBarRestock(npc)) {
-        el.appendChild(forgeButton("Ask them to fetch more drink from the cellar", () => {
-            const result = startBarRestock(npc);
-            if (!result) { renderTradeOptions(npc); return; }
-            if (!result.left) {
-                showTradeMessage(`${npc.name} ${result.narration ? "says " + result.line + " " + result.narration : result.line}`, true);
-                renderTradeOptions(npc);
-            }
-        }));
+        el.appendChild(forgeButton("Ask them to fetch more drink from the cellar", () => runMerchantButton(merchantControlGuard, () => requestMerchantRestock(npc))));
     }
 
     if (isForgeSmith(npc)) {
@@ -42390,6 +45151,7 @@ function renderTradeOptions(npc) {
         renderNPCActionMenu(npc);
     };
     el.appendChild(backBtn);
+    merchantTradeView.element = el; merchantTradeView.children = Array.from(el.children);
 }
 
 function recordTradeMemory(npc, playerGave, npcGave, playerCoins, npcCoins) {
@@ -42778,12 +45540,15 @@ function sellTradeItems(npc, group, amount) {
 // pack in one go. Same per-unit pricing, trade-acceptance and coin rules
 // as sellTradeItems - one unit at a time, stopping if the vendor runs out
 // of coin or refuses - but a single message, trade memory entry and save.
-function sellJunkItems(npc) {
+function sellJunkItems(npc, approval) {
+    if (!approval) return reviewMerchantJunk(npc);
+    if (approval.used || approval.npc !== npc || !approval.valid()) return sharedChoiceResult("blocked", "That junk sale changed. Review it again.");
+    approval.used = true;
     if (!npc || !G.player || !Array.isArray(G.player.inventory)) return;
     if (!Array.isArray(npc.inventory)) npc.inventory = [];
 
     const junkItems = G.player.inventory
-        .filter(item => item && !isItemEquippedByEntity(G.player, item) && isVendorJunkItem(item))
+        .filter(item => textInventoryVisible(item) && !isItemEquippedByEntity(G.player, item) && isVendorJunkItem(item))
         .slice();
 
     const sold = [];
@@ -42811,7 +45576,7 @@ function sellJunkItems(npc) {
     if (!sold.length) {
         showTradeMessage(`${npc.name} cannot afford your junk.`, false);
         renderTradeOptions(npc);
-        return;
+        return { status: "blocked", quantity: 0, total: 0 };
     }
 
     recordTradeMemory(npc, sold, [], 0, earned);
@@ -42828,6 +45593,9 @@ function sellJunkItems(npc) {
     renderStats();
     renderTradeOptions(npc);
     saveGameState();
+    const items = sold.map(function (item) { return { name: getItemName(item), quantity: getItemQuantity(item) }; });
+    publishTextModeOutput("merchant-extra", "You sell " + sold.length + " junk units for " + earned + "g.", { merchantExtra: { stage: "result", action: "junk", merchant: textModeNPCLabel(npc), items: items, quantity: sold.length, total: earned, partial: ranDry, turns: 0 } }, false);
+    return { status: ranDry ? "interrupted" : "completed", quantity: sold.length, total: earned };
 }
 
 function setChatOptionsDisabled(disabled) {
@@ -43569,6 +46337,7 @@ function renderCombatNarrationLines(lines, options = {}) {
     const session = { rows: rowStates, done: false };
     if (typeof textModeTrackCombatNarration === "function") textModeTrackCombatNarration(session);
     activeCombatNarration = session;
+    if (typeof textModeAttachCombatSkip === "function") textModeAttachCombatSkip(session);
 
     el.onclick = skipActiveCombatNarration;
     el.classList.add("narration-skippable");
@@ -43989,6 +46758,7 @@ function setExitGridVisible(visible) {
 }
 
 function clearChatLog() {
+    if (typeof textModeState !== "undefined" && textModeState.enabled && textModeState.storyPlayer === G.player) return;
     const el = document.getElementById("chatLogEl");
     if (el) el.innerHTML = "";
 }
@@ -44262,7 +47032,7 @@ function addNarratorMessage(text, options = {}) {
 }
 
 function addChatMessage(side, speaker, text, options = {}) {
-    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput(String(speaker || "").toLowerCase() === "narrator" ? "narration" : "dialogue", text, { speaker: speaker, side: side, source: "engine" });
+    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput(String(speaker || "").toLowerCase() === "narrator" ? "narration" : "dialogue", text, { speaker: speaker, side: side, source: "engine", renderedInChat: String(speaker || "").trim().toLowerCase() !== "narrator" });
     if (String(speaker || "").trim().toLowerCase() === "narrator") {
         addNarratorMessage(text, options);
         return;
@@ -50355,8 +53125,12 @@ function attemptBreakDoor(room, dir) {
     if (block) { setNarration(block); return; }
     const lock = getExitLock(room, dir);
     const lines = [];
+    const structuralStaminaBefore = player.stamina;
     spendEntityStamina(player, FIGHTER_BREAKDOOR_STAMINA, lines, { isPlayer: true });
+    structuralToolStaminaPaid(Math.max(0, structuralStaminaBefore - player.stamina));
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
 
     const rank = getFighterRank(player);
     const dc = Math.max(9, getLockDC(lock) + FIGHTER_BREAKDOOR_DC_BONUS - rank);
@@ -50497,12 +53271,15 @@ function castSpellAtDoor(room, dir, spellId) {
     const fx = getDoorFx(room, dir, true);
     const lines = [];
     spendPlayerMana(player, cost);
+    structuralManaPaid(cost);
 
     if (effect === "brittle") {
         const wasBurning = isDoorBurning(room, dir);
         fx.burn = null;
         fx.brittleUntil = getCurrentStoryTurn() + DOOR_BRITTLE_TURNS;
-        advanceStoryTurn(1);
+        structuralCheckpoint();
+    advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
         lines.push(spell.castLine,
             (wasBurning ? "The flames go out in a hiss of steam and the " : "Frost races over the ") + doorName +
             (wasBurning ? " freezes through." : ", locking wood and iron in white rime."),
@@ -50513,7 +53290,9 @@ function castSpellAtDoor(room, dir, spellId) {
     }
     if (effect === "douse") {
         fx.burn = null;
-        advanceStoryTurn(1);
+        structuralCheckpoint();
+    advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
         lines.push(spell.castLine, `The water hisses over the ${doorName} and drowns the flames. It is scorched, but it will not burn any further.`);
         finishLockAction(room, dir, lines, false);
         return;
@@ -50525,7 +53304,9 @@ function castSpellAtDoor(room, dir, spellId) {
     const wasBurning = isDoorBurning(room, dir);
     fx.hp = Math.max(0, fx.hp - damage);
     fx.burn = { turnsLeft: DOOR_BURN_TURNS, lastTurn: getCurrentStoryTurn() + 1 };
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
     lines.push(spell.castLine + " " + spell.hitLine.replace(/\{name\}/g, "the " + doorName) + " (" + damage + " damage)");
     if (fx.hp <= 0) {
         setExitLockState(room, dir, "unlocked", { forced: true, burnt: true });
@@ -50542,7 +53323,9 @@ function castSpellAtDoor(room, dir, spellId) {
 function watchDoorBurn(room, dir) {
     if (!isDoorBurning(room, dir)) return;
     if (roomHasActiveHostile(room)) { setNarration("Too dangerous right now."); return; }
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
     const result = settleDoorBurn(room, dir);
     const unlocked = !isExitLocked(room, dir);
     const fx = getDoorFx(room, dir, false);
@@ -50557,8 +53340,12 @@ function smashBrittleDoor(room, dir) {
     if (!isExitLocked(room, dir) || !isDoorBrittle(room, dir)) return;
     if (roomHasActiveHostile(room)) { setNarration("Too dangerous right now."); return; }
     const lines = [];
+    const structuralStaminaBefore = player.stamina;
     spendEntityStamina(player, DOOR_SMASH_STAMINA, lines, { isPlayer: true });
+    structuralToolStaminaPaid(Math.max(0, structuralStaminaBefore - player.stamina));
+    structuralCheckpoint();
     advanceStoryTurn(1);
+    if (!structuralCurrent()) return structuralInterrupted();
     const fx = getDoorFx(room, dir, false);
     if (fx) fx.brittleUntil = 0;
     setExitLockState(room, dir, "unlocked", { forced: true, shattered: true });
@@ -50755,14 +53542,18 @@ function castSpellAtFixture(fixture, spellId) {
     const lines = settled.slice();
     if (effect === "douse") {
         fixture.fire = null;
-        advanceStoryTurn(1);
+        environmentActionCheckpoint();
+    advanceStoryTurn(1);
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
         lines.push(spell.castLine, `The water hisses over the ${name} and drowns the flames. It is scorched, but it will not burn any further.`);
         finishFixtureFireAction(fixture, lines);
         return;
     }
     igniteFixture(fixture);
     fixture.fire.lastTurn = getCurrentStoryTurn() + 1; // the cast itself takes a turn
+    environmentActionCheckpoint();
     advanceStoryTurn(1);
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
     lines.push(spell.castLine, `Flames catch on the ${name} and begin to climb it. It will burn down in a few turns, and anything inside will burn with it.`);
     fixtureFireReactions(room, lines);
     finishFixtureFireAction(fixture, lines);
@@ -50772,7 +53563,9 @@ function watchFixtureFire(fixture) {
     const room = G.activeRoom;
     if (!room || !isFixtureBurning(fixture)) return;
     if (roomHasActiveHostile(room)) { setNarration("Too dangerous right now."); return; }
+    environmentActionCheckpoint();
     advanceStoryTurn(1);
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
     const lines = settleRoomFires(room);
     if (!lines.length) lines.push(`The fire crawls over the ${getEntityName(fixture)}.`);
     finishFixtureFireAction(fixture, lines);
@@ -51017,7 +53810,8 @@ function syncLiquidFixtures(room) {
     Object.keys(liquids).forEach(function (t) {
         if (liquids[t].volume < LIQUID_MIN_VOLUME && !liquids[t].natural) delete liquids[t];
     });
-    room.structural = room.structural.filter(function (f) { return !(f && f.liquidType && !liquids[f.liquidType]); });
+    const remaining = room.structural.filter(function (f) { return !(f && f.liquidType && !liquids[f.liquidType]); });
+    if (remaining.length !== room.structural.length) room.structural = remaining;
     Object.keys(liquids).forEach(function (t) {
         let f = room.structural.find(function (x) { return x && x.liquidType === t; });
         if (!f) {
@@ -51326,7 +54120,10 @@ function castSpellAtLiquid(room, spellId, type) {
     spendPlayerMana(player, cost);
     const lines = [spell.castLine];
     const res = applyLiquidElement(room, spell, lines);
+    environmentActionCheckpoint();
     advanceStoryTurn(1);
+    if (res.down && environmentExecution && environmentExecution.sameScene()) { handlePlayerCombatDefeat(lines); return environmentActionInterrupted(); }
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
     if (res.down) { handlePlayerCombatDefeat(lines); return; }
     if (isRoomLiquidBurning(room)) fixtureFireReactions(room, lines);
     finishLiquidAction(room, type, lines);
@@ -51359,13 +54156,16 @@ function getItemLiquid(item) {
 }
 
 function pourOutInventoryItem(item) {
+    if (!materialExecution) { const entry = materialItems("pour").find(function (entry) { return entry.item === item; }); return entry ? runMaterialAction("pour", null, entry.key).text || "" : ""; }
     const room = G.activeRoom;
     const liq = getItemLiquid(item);
     if (!room || !liq) return "";
     const name = getItemName(item);
-    consumeOneFromInventory(item);
+    if (!consumeOneFromInventory(item)) return "";
     const keptEmpty = giveBackEmptyContainer(item);
+    materialCheckpoint();
     advanceStoryTurn(1);
+    if (!materialCurrent()) return materialInterrupted();
     const extra = addRoomLiquid(room, liq.type, liq.volume) + (keptEmpty ? " " + keptEmpty : "");
     saveGameState();
     const f = (room.structural || []).find(function (x) { return x && x.liquidType === liq.type; });
@@ -51393,7 +54193,9 @@ function tipOverFixture(fixture) {
     const name = getEntityName(fixture);
     const volume = liq.volume;
     liq.volume = 0;
+    environmentActionCheckpoint();
     advanceStoryTurn(1);
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
     const extra = addRoomLiquid(room, liq.type, volume);
     const lines = ["You heave the " + name + " over. " + (LIQUID_TYPES[liq.type].label === "water" ? "Water" : "It") + " gushes across the floor, " + describeLiquidCoverage(room, liq.type) + " in this " + getRoomSizeClass(room) + " room." + extra];
     getLockWitnesses(room).forEach(function (npc) { nudgeNPCAgainstPlayer(npc, -4, 5); lines.push((npc.name || "Someone") + " scowls at the mess."); });
@@ -51590,7 +54392,7 @@ function getSynergyStation(room) {
     if (!room) return null;
     const tags = {};
     (Array.isArray(room.structural) ? room.structural : []).forEach(function (f) {
-        (f && Array.isArray(f.tags) ? f.tags : []).forEach(function (t) { tags[t] = true; });
+        (f && isLootItemVisible(f) && Array.isArray(f.tags) ? f.tags : []).forEach(function (t) { tags[t] = true; });
     });
     // Rooms generated before the station fixtures existed: go by room type.
     if (!tags.training && !tags.lab && room.type === "Gate") return SYNERGY_STATIONS.yard;
@@ -51689,7 +54491,7 @@ function getSynergyCatalysts(player) {
     const inv = p && Array.isArray(p.inventory) ? p.inventory : [];
     const oreHints = { ember: "fire", star: "shock", moonsilver: "holy", deepglass: "physical", bog: "poison", iron: "physical", silvered: "physical" };
     inv.forEach(function (item) {
-        if (!item) return;
+        if (!item || !isLootItemVisible(item)) return;
         const id = String(item.id || "").toLowerCase();
         if (Array.isArray(item.type) && item.type.indexOf("ore") >= 0 && typeof item.forgePower === "number") {
             const key = Object.keys(ORE_TEMPLATES).find(function (k) { return ORE_TEMPLATES[k].id === id || id.indexOf(ORE_TEMPLATES[k].id + "-") === 0; });
@@ -51927,7 +54729,10 @@ function resolveSynergyRoll(player, a, b, steps, station, proposal) {
     return { outcome: outcome, check: check, dc: dc, stat: stat };
 }
 
-async function runSynergyExperiment(room) {
+async function runSynergyExperiment(room, approval) {
+    if (!approval) return showSynergyExperimentReview(room);
+    if (!synergyAccept(approval, room, "experiment")) return sharedChoiceResult("blocked", "That experiment changed. Review it again.");
+    const attemptStart = getCurrentStoryTurn();
     const player = G.player;
     const draft = G.synergyDraft;
     if (!player || !draft || !draft.a || !draft.b || draft.busy) return;
@@ -51947,12 +54752,18 @@ async function runSynergyExperiment(room) {
     setNarration("You lay out your tools and begin, turning the two ideas over and over...");
 
     const lines = [];
+    const staminaBefore = player.stamina, manaBefore = player.mana || 0;
     spendEntityStamina(player, SYNERGY_ATTEMPT_STAMINA, lines, { isPlayer: true });
     if (playerUsesMana(player)) spendPlayerMana(player, SYNERGY_ATTEMPT_MANA);
     catalysts.forEach(function (c) { consumeOneFromInventory(c.item); });
+    const attemptCost = { turns: SYNERGY_ATTEMPT_TURNS, stamina: staminaBefore - player.stamina, mana: manaBefore - (player.mana || 0), materials: catalysts.map(function (c) { return { name: c.name, quantity: 1 }; }) };
+    const afterTime = synergyGuard(room, { view: true, resources: false });
     advanceStoryTurn(SYNERGY_ATTEMPT_TURNS);
+    if (!afterTime()) return synergyInterrupted(room, draft, "experiment", attemptCost);
+    const workValid = synergyGuard(room, { view: true });
 
     const proposal = await requestSynergyProposal(player, a, b, catalysts, station, text);
+    if (!workValid()) return synergyInterrupted(room, draft, "experiment", attemptCost);
     proposal.visualised = text;
     const preview = composeSynergyTechnique(player, a, b, catalysts, proposal, {});
     const roll = resolveSynergyRoll(player, a, b, preview.primary.steps, station, proposal);
@@ -51972,9 +54783,10 @@ async function runSynergyExperiment(room) {
         rememberStoryEvent("exploration", `${player.name || "The player"} tried to combine ${a.label} and ${b.label} and failed.`, 2, { tags: ["synergy"] });
         renderStats();
         setNarration(`${failText} ${hurt ? `The backlash costs you ${hurt} HP. ` : ""}The materials are spent, but you learned something about what does not work.`);
+        synergyOutput("experiment", { outcome: "failure", cost: attemptCost, turns: getCurrentStoryTurn() - attemptStart, hurt: hurt }, "The experiment failed.", false);
         renderSynergyLabMenu(room);
         saveGameState();
-        return;
+        return { status: "needs_input" };
     }
 
     const tech = composeSynergyTechnique(player, a, b, catalysts, proposal, { flawed: roll.outcome === "flawed", breakthrough: roll.outcome === "breakthrough" });
@@ -51988,12 +54800,18 @@ async function runSynergyExperiment(room) {
         : (roll.outcome === "flawed" ? " It works, but it is unstable and demanding. A flaw you will have to live with." : "");
     renderStats();
     setNarration(`${tech.narration}${tail}`);
+    synergyOutput("experiment", { outcome: roll.outcome, cost: attemptCost, turns: getCurrentStoryTurn() - attemptStart, technique: synergyPublicTechnique(tech) }, "A new technique is recorded.", false);
     renderSynergyMemoriseMenu(room, tech.id);
     saveGameState();
+    return { status: "needs_input" };
 }
 
 // ── memorising ───────────────────────────────────────────────────────────
-function attemptSynergyMemorise(room, id) {
+function attemptSynergyMemorise(room, id, approval) {
+    if (!approval) return showSynergyMemoryReview(room, id);
+    if (approval.technique !== getSynergyTechnique(id) || !synergyAccept(approval, room, "memorise")) return sharedChoiceResult("blocked", "That memorisation changed. Review it again.");
+    const memoryStart = getCurrentStoryTurn();
+    G.synergyReplacement = null;
     const player = G.player;
     const s = ensureSynergyState(player);
     const t = getSynergyTechnique(id);
@@ -52003,27 +54821,35 @@ function attemptSynergyMemorise(room, id) {
         s.repertoire.push(id);
         setNarration(`You drill it until it is second nature. It is yours now (${s.repertoire.length}/${getSynergySlots(player)} techniques memorised).`);
         saveGameState();
-        renderSynergyEntry(room, id);
-        return;
+        synergyOutput("memorise", { outcome: "memorised", technique: synergyPublicTechnique(t), turns: 0, grew: false }, "Technique memorised.", false);
+        return renderSynergyEntry(room, id);
     }
     const minRank = Math.min.apply(null, Object.keys(t.requires).map(function (k) { return getClassSkillRank(player, k); }));
     const dc = SYNERGY_MEMORISE_DC_BASE + t.primary.steps - Math.floor(minRank / 2) + (t.flaw ? 2 : 0);
     const check = rollStatCheck(player, "willpower", dc);
     const canGrow = getSynergySlots(player) < SYNERGY_SLOTS_HARD_CAP;
+    const memoryCurrent = synergyGuard(room, { view: false, resources: false });
     advanceStoryTurn(1);
+    if (!memoryCurrent()) return synergyInterrupted(room, null, "memorise", { turns: getCurrentStoryTurn() - memoryStart });
     if (check.success && canGrow) {
         s.bonusSlots += 1;
         s.repertoire.push(id);
         setNarration("Against the odds it fits. Somehow your mind finds room for one more technique without losing the others.");
         saveGameState();
-        renderSynergyEntry(room, id);
-        return;
+        synergyOutput("memorise", { outcome: "memorised", technique: synergyPublicTechnique(t), turns: getCurrentStoryTurn() - memoryStart, grew: true }, "Technique memorised.", false);
+        return renderSynergyEntry(room, id);
     }
     setNarration(`You cannot hold it alongside everything else you know. To commit this one to memory you would have to let one of your other techniques go.`);
-    renderSynergyReplaceMenu(room, id);
+    G.synergyReplacement = { player: player, room: room, technique: t, valid: synergyGuard(room, { view: false }) };
+    synergyOutput("memorise", { outcome: "needs_replacement", technique: synergyPublicTechnique(t), turns: getCurrentStoryTurn() - memoryStart, grew: false }, "Choose a technique to set aside, or keep notes only.", false);
+    return renderSynergyReplaceMenu(room, id);
 }
 
 function forgetSynergyTechnique(room, id, thenMemorise) {
+    const block = synergyActionBlock(room, true); if (block) return sharedChoiceResult("blocked", block);
+    const old = getSynergyTechnique(id), next = thenMemorise && getSynergyTechnique(thenMemorise), pending = G.synergyReplacement;
+    if (!old || ensureSynergyState(G.player).repertoire.indexOf(id) < 0) return sharedChoiceResult("blocked", "That memorised technique changed.");
+    if (thenMemorise && (!next || !pending || pending.player !== G.player || pending.room !== room || pending.technique !== next || !pending.valid() || ensureSynergyState(G.player).repertoire.indexOf(thenMemorise) >= 0)) return sharedChoiceResult("blocked", "That replacement decision changed. Review memorisation again.");
     const s = ensureSynergyState(G.player);
     s.repertoire = s.repertoire.filter(function (x) { return x !== id; });
     if (thenMemorise) {
@@ -52032,8 +54858,10 @@ function forgetSynergyTechnique(room, id, thenMemorise) {
     } else {
         setNarration(`You set ${getSynergyLabel(getSynergyTechnique(id))} aside. It stays in your notebook.`);
     }
+    G.synergyReplacement = null;
+    synergyOutput(thenMemorise ? "replace" : "forget", { technique: synergyPublicTechnique(old), replacement: next ? synergyPublicTechnique(next) : null, turns: 0 }, "Your memorised techniques are updated; both notes remain in the notebook.", false);
     saveGameState();
-    renderSynergyEntry(room, thenMemorise || id);
+    return renderSynergyEntry(room, thenMemorise || id);
 }
 
 // ── using a technique ────────────────────────────────────────────────────
@@ -52162,16 +54990,21 @@ function useSynergy(techId, npc) {
     const inCombat = !!npc;
 
     if (!inCombat) {
+        const selfStart = getCurrentStoryTurn(), selfBefore = { stamina: player.stamina, mana: player.mana || 0, hp: player.hp };
         payForSynergy(player, t);
         lines.push(`You call on the technique you devised: ${label}.`);
         if (t.primary.kind === "mend") applySynergyEffect({ type: "mend", m: t.primary.steps }, { lines: lines });
         if (t.primary.kind === "shield") applySynergyEffect({ type: "shield", m: t.primary.steps }, { lines: lines });
         t.effects.forEach(function (e) { if (e.type === "mend" || e.type === "shield" || e.type === "leech") applySynergyEffect(e, { lines: lines, damage: 0 }); });
+        const selfResult = { cost: { stamina: selfBefore.stamina - player.stamina, mana: selfBefore.mana - (player.mana || 0) }, healed: Math.max(0, player.hp - selfBefore.hp) };
+        const selfCurrent = synergyGuard(G.activeRoom, { self: true, view: true, resources: false });
         advanceStoryTurn(1);
+        selfResult.turns = getCurrentStoryTurn() - selfStart;
+        if (!selfCurrent()) { saveGameState(); return Object.assign({ status: "interrupted" }, selfResult); }
         renderStats();
         setNarration(lines.join(" "));
         saveGameState();
-        return;
+        return Object.assign({ status: "completed" }, selfResult);
     }
 
     judgeFaithOnFirstPlayerAttack(npc);
@@ -52256,202 +55089,188 @@ function getSelfSynergies() {
     return s.repertoire.map(function (id) { return getSynergyTechnique(id); }).filter(function (t) { return t && !techniqueNeedsTarget(t); });
 }
 
+// Shared station and notebook presentation; native actions own all consequences.
 function openSelfSynergyMenu() {
-    const el = document.getElementById("chatOptionsEl");
-    if (!el) return;
-    G.activeNPC = null;
-    G.activeObject = null;
-    G.activeNPCMode = "synergy";
-    clearChatLog();
-    setExitGridVisible(false);
-    el.innerHTML = "";
-    appendCombatGroup(el, "Techniques", getSelfSynergies().map(function (t) {
-        const block = getSynergyBlockReason(G.player, t, null);
-        return createCombatButton(getSynergyLabel(t), function () { closeSynergyLab(); useSynergy(t.id, null); }, { disabled: !!block, title: block || describeSynergyTechnique(t) });
-    }));
-    appendCombatGroup(el, "", [createCombatButton("Never mind", function () { closeSynergyLab(); })]);
-    setNarration("Which technique do you want to use?");
+ const room=G.activeRoom,block=synergyActionBlock(room,false);if(block)return sharedChoiceResult("blocked",block);
+ const el=document.getElementById("chatOptionsEl");if(!el)return {status:"blocked"};
+ G.activeNPCMode="synergy";clearChatLog();setExitGridVisible(false);el.innerHTML="";
+ const menu=beginSynergyMenu(room,"self","Use a memorised self technique",openSelfSynergyMenu,{self:true});
+ appendCombatGroup(el,"Techniques",getSelfSynergies().map(function(t){
+  const reason=getSynergyBlockReason(G.player,t,null);
+  return synergyButton(menu,getSynergyLabel(t),function(){
+   const before={player:G.player,room:room,turn:getCurrentStoryTurn(),hp:G.player.hp,stamina:G.player.stamina,mana:G.player.mana};
+   const publicTechnique=synergyPublicTechnique(t);
+   closeSynergyLab();const result=useSynergy(t.id,null);
+   const current=(!result||result.status!=="interrupted")&&G.player===before.player&&G.activeRoom===before.room&&!synergyActionBlock(room,false);
+   synergyOutput("use",{stage:current?"result":"interrupted",technique:publicTechnique,turns:getCurrentStoryTurn()-before.turn,cost:result&&result.cost,healed:result&&result.healed},"You use "+getSynergyLabel(t)+".",false);
+   return {status:current?"completed":"interrupted"};
+  },{action:"use",name:getSynergyLabel(t),technique:t},{disabled:!!reason,title:reason||describeSynergyTechnique(t)});
+ }));
+ appendCombatGroup(el,"",[synergyButton(menu,"Never mind",closeSynergyLab,{action:"back"})]);
+ setNarration("Which technique do you want to use?");return publishSynergyMenu(menu,el);
 }
-
-// ── lab UI ───────────────────────────────────────────────────────────────
 function closeSynergyLab() {
-    G.synergyDraft = null;
-    returnToRoomView();
-    saveGameState();
+ const menu=sharedChoiceState.menu;if(menu&&/^synergy-/.test(menu.kind))clearSharedChoiceMenu(menu);
+ G.synergyDraft=null;G.synergyReplacement=null;
+ returnToRoomView();saveGameState();return {status:"completed"};
 }
-
 function openSynergyLab(room) {
-    const station = getSynergyStation(room);
-    if (!station) return;
-    G.activeNPC = null;
-    G.activeObject = null;
-    G.activeNPCMode = "synergy";
-    G.synergyDraft = null;
-    clearChatLog();
-    setExitGridVisible(false);
-    setNarration(station.flavor + " You have room to experiment here.");
-    renderSynergyLabMenu(room);
+ const block=synergyActionBlock(room,true);if(block)return sharedChoiceResult("blocked",block);
+ G.activeNPCMode="synergy";G.synergyDraft=null;G.synergyReplacement=null;
+ clearChatLog();setExitGridVisible(false);
+ setNarration(getSynergyStation(room).flavor+" You have room to experiment here.");
+ return renderSynergyLabMenu(room);
 }
-
 function renderSynergyLabMenu(room) {
-    const el = document.getElementById("chatOptionsEl");
-    if (!el) return;
-    el.innerHTML = "";
-    G.activeNPCMode = "synergy";
-    const player = G.player;
-    const s = ensureSynergyState(player);
-    const block = getSynergyExperimentBlock(player);
-    const atoms = getSynergyAtoms(player);
-    let pairable = false;
-    for (let i = 0; i < atoms.length && !pairable; i++) for (let j = i + 1; j < atoms.length; j++) { if (!getSynergyPairBlock(player, atoms[i], atoms[j])) { pairable = true; break; } }
-    appendCombatGroup(el, "Experiment", [
-        createCombatButton("Combine skills", function () { G.synergyDraft = { a: null, b: null, items: [], text: "" }; renderSynergyDraft(room); }, {
-            disabled: !!block || !pairable,
-            title: block || (pairable ? `Costs ${SYNERGY_ATTEMPT_STAMINA} stamina${playerUsesMana(player) ? " and " + SYNERGY_ATTEMPT_MANA + " mana" : ""}, and any materials you add.` : "You need two skills at Journeyman rank (or two from one class at Adept).")
-        }),
-        createCombatButton(`Notebook (${s.notebook.length})`, function () { renderSynergyNotebook(room); }, { disabled: !s.notebook.length })
-    ]);
-    appendCombatGroup(el, "", [createCombatButton("Leave", function () { closeSynergyLab(); })]);
+ const block=synergyActionBlock(room,true);if(block)return sharedChoiceResult("blocked",block);
+ const el=document.getElementById("chatOptionsEl");if(!el)return {status:"blocked"};
+ el.innerHTML="";G.activeNPCMode="synergy";
+ const player=G.player,s=ensureSynergyState(player),reason=getSynergyExperimentBlock(player),atoms=getSynergyAtoms(player);
+ let pairable=false;
+ for(let i=0;i<atoms.length&&!pairable;i++)for(let j=i+1;j<atoms.length;j++)if(!getSynergyPairBlock(player,atoms[i],atoms[j])){pairable=true;break;}
+ const menu=beginSynergyMenu(room,"lab","Synergy station",function(){return renderSynergyLabMenu(room);});
+ appendCombatGroup(el,"Experiment",[
+  synergyButton(menu,"Combine skills",function(){G.synergyDraft={a:null,b:null,items:[],text:""};G.synergyReplacement=null;return renderSynergyDraft(room);},{action:"combine"},{disabled:!!reason||!pairable,title:reason||(pairable?"Review the attempt before spending resources.":"You need two different skills at Journeyman rank, or two from one class at Adept.")}),
+  synergyButton(menu,"Notebook ("+s.notebook.length+")",function(){return renderSynergyNotebook(room);},{action:"notebook"},{disabled:!s.notebook.length})
+ ]);
+ appendCombatGroup(el,"",[synergyButton(menu,"Leave",closeSynergyLab,{action:"back"})]);return publishSynergyMenu(menu,el,{station:getSynergyStation(room).label});
 }
-
-function appendSynergyTextRow(el, placeholder, initial, onInput, onSubmit, buttonLabel) {
-    const row = document.createElement("div");
-    row.className = "chat-respond-row";
-    const input = document.createElement("input");
-    input.type = "text";
-    input.maxLength = SYNERGY_TEXT_MAX;
-    input.className = "chat-respond-input";
-    input.placeholder = placeholder;
-    input.value = initial || "";
-    input.setAttribute("autocomplete", "off");
-    input.addEventListener("input", function () { onInput(input.value); });
-    input.addEventListener("keydown", function (e) { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); onSubmit(input.value); } });
-    const send = document.createElement("button");
-    send.type = "button";
-    send.className = "chat-option-btn kind-reply chat-respond-send";
-    send.textContent = buttonLabel;
-    send.onclick = function () { onSubmit(input.value); };
-    row.appendChild(input);
-    row.appendChild(send);
-    el.appendChild(row);
-    return input;
+function appendSynergyTextRow(menu,el,placeholder,initial,onInput,onSubmit,buttonLabel,meta) {
+ const row=document.createElement("div");row.className="chat-respond-row";
+ const input=document.createElement("input");input.type="text";input.maxLength=SYNERGY_TEXT_MAX;input.className="chat-respond-input";input.placeholder=placeholder;input.value=initial||"";input.setAttribute("autocomplete","off");
+ input.addEventListener("input",function(){if(menu.valid())onInput(input.value);});
+ const button=synergyButton(menu,buttonLabel,function(){return onSubmit(input.value);},meta);
+ input.addEventListener("keydown",function(e){e.stopPropagation();if(e.key==="Enter"&&!e.isComposing){e.preventDefault();return button.onclick();}});
+ row.appendChild(input);row.appendChild(button);el.appendChild(row);
+ const valid=menu.valid;menu.valid=function(){return valid()&&Array.from(el.children).indexOf(row)>=0&&row.children.length===2&&row.children[0]===input&&row.children[1]===button;};
+ return input;
 }
-
 function renderSynergyDraft(room) {
-    const el = document.getElementById("chatOptionsEl");
-    const draft = G.synergyDraft;
-    if (!el || !draft) return;
-    const player = G.player;
-    el.innerHTML = "";
-    const atoms = getSynergyAtoms(player);
-    const a = draft.a ? atoms.find(function (x) { return x.id === draft.a; }) : null;
-    const b = draft.b ? atoms.find(function (x) { return x.id === draft.b; }) : null;
-    const pick = function (key) { return function (x) { return createCombatButton(`${x.label} (${SYNERGY_CLASS_INFO[x.cls].label})`, function () { draft[key] = x.id; renderSynergyDraft(room); }, {
-        disabled: key === "b" && !!getSynergyPairBlock(player, a, x),
-        title: key === "b" && getSynergyPairBlock(player, a, x) ? getSynergyPairBlock(player, a, x) : x.text
-    }); }; };
-
-    if (!a) {
-        appendCombatGroup(el, "Choose the first skill", atoms.map(pick("a")));
-        appendCombatGroup(el, "", [createCombatButton("Back", function () { G.synergyDraft = null; renderSynergyLabMenu(room); })]);
-        setNarration("Which skill will you start from?");
-        return;
-    }
-    if (!b) {
-        appendCombatGroup(el, `Combine ${a.label} with...`, atoms.filter(function (x) { return x.id !== a.id; }).map(pick("b")));
-        appendCombatGroup(el, "", [createCombatButton("Back", function () { draft.a = null; renderSynergyDraft(room); })]);
-        setNarration(`You have ${a.label} in mind. What will you try to weave into it?`);
-        return;
-    }
-    const catalysts = getSynergyCatalysts(player);
-    draft.items = draft.items.filter(function (it) { return catalysts.some(function (c) { return c.item === it; }); });
-    if (catalysts.length) {
-        appendCombatGroup(el, `Catalysts (optional, up to ${SYNERGY_MAX_CATALYSTS}; consumed)`, catalysts.map(function (c) {
-            const on = draft.items.indexOf(c.item) >= 0;
-            return createCombatButton(`${on ? "[x] " : ""}${c.name}`, function () {
-                if (on) draft.items = draft.items.filter(function (it) { return it !== c.item; });
-                else if (draft.items.length < SYNERGY_MAX_CATALYSTS) draft.items.push(c.item);
-                renderSynergyDraft(room);
-            }, { disabled: !on && draft.items.length >= SYNERGY_MAX_CATALYSTS, title: c.fx.length || c.steps ? `Adds ${c.steps ? "power " + c.steps : ""}${c.fx.length ? " and " + c.fx.map(function (t) { return SYNERGY_FX[t].label; }).join(", ") : ""}.` : "" });
-        }));
-    }
-    const label = document.createElement("div");
-    label.className = "combat-action-heading";
-    label.textContent = "What will you picture as you work?";
-    el.appendChild(label);
-    appendSynergyTextRow(el, "Describe the image or feeling you hold in mind...", draft.text, function (v) { draft.text = v; }, function (v) { draft.text = v; runSynergyExperiment(room); }, "Begin");
-    appendCombatGroup(el, "", [
-        createCombatButton("Choose different skills", function () { draft.a = null; draft.b = null; renderSynergyDraft(room); }),
-        createCombatButton("Leave", function () { closeSynergyLab(); })
-    ]);
-    setNarration(`${a.label} and ${b.label}. ${draft.items.length ? "With " + catalysts.filter(function (c) { return draft.items.indexOf(c.item) >= 0; }).map(function (c) { return c.name; }).join(" and ") + ". " : ""}When you are ready, describe what you will picture and begin.`);
+ const block=synergyActionBlock(room,true);if(block)return sharedChoiceResult("blocked",block);
+ const el=document.getElementById("chatOptionsEl"),draft=G.synergyDraft;if(!el||!draft)return sharedChoiceResult("blocked","Start a technique draft first.");
+ el.innerHTML="";G.activeNPCMode="synergy";
+ const player=G.player,atoms=getSynergyAtoms(player),a=getSynergyAtomById(player,draft.a),b=getSynergyAtomById(player,draft.b);
+ const catalysts=getSynergyCatalysts(player);
+ draft.items=draft.items.filter(function(item){return catalysts.some(function(c){return c.item===item;});});
+ const menu=beginSynergyMenu(room,"draft","Technique draft",function(){return renderSynergyDraft(room);},{editing:true});
+ const pick=function(key,kind){return function(atom){
+  const reason=key==="b"?getSynergyPairBlock(player,a,atom):"";
+  return synergyButton(menu,atom.label+" ("+SYNERGY_CLASS_INFO[atom.cls].label+")",function(){draft[key]=atom.id;return renderSynergyDraft(room);},{action:kind,name:atom.label},{disabled:!!reason,title:reason||atom.text});
+ };};
+ if(!a){
+  appendCombatGroup(el,"Choose the first skill",atoms.map(pick("a","first")));
+  appendCombatGroup(el,"",[synergyButton(menu,"Back",function(){G.synergyDraft=null;return renderSynergyLabMenu(room);},{action:"back"})]);
+  setNarration("Which skill will you start from?");return publishSynergyMenu(menu,el);
+ }
+ if(!b){
+  appendCombatGroup(el,"Combine "+a.label+" with...",atoms.filter(function(x){return x.id!==a.id;}).map(pick("b","second")));
+  appendCombatGroup(el,"",[synergyButton(menu,"Back",function(){draft.a=null;return renderSynergyDraft(room);},{action:"back"})]);
+  setNarration("You have "+a.label+" in mind. What will you try to weave into it?");return publishSynergyMenu(menu,el,{first:a.label});
+ }
+ appendCombatGroup(el,"Catalysts (optional, up to "+SYNERGY_MAX_CATALYSTS+"; one unit each consumed)",catalysts.map(function(c){
+  const on=draft.items.indexOf(c.item)>=0;
+  return synergyButton(menu,(on?"[x] ":"")+c.name,function(){
+   if(on)draft.items=draft.items.filter(function(item){return item!==c.item;});
+   else if(draft.items.length<SYNERGY_MAX_CATALYSTS)draft.items.push(c.item);
+   return renderSynergyDraft(room);
+  },{action:"catalyst",name:c.name,item:c.item,selected:on},{disabled:!on&&draft.items.length>=SYNERGY_MAX_CATALYSTS,title:"Optional catalyst; one unit is spent on an attempt."});
+ }));
+ menu.pictureInput=appendSynergyTextRow(menu,el,"Describe the image or feeling you hold in mind...",draft.text,function(v){draft.text=v;},function(v){draft.text=String(v||"").slice(0,SYNERGY_TEXT_MAX);return showSynergyExperimentReview(room);},"Review experiment",{action:"experiment"});
+ appendCombatGroup(el,"",[
+  synergyButton(menu,"Choose different skills",function(){draft.a=draft.b=null;return renderSynergyDraft(room);},{action:"restart"}),
+  synergyButton(menu,"Leave",closeSynergyLab,{action:"back"})
+ ]);
+ setNarration(a.label+" and "+b.label+". "+(draft.items.length?"Selected: "+catalysts.filter(function(c){return draft.items.indexOf(c.item)>=0;}).map(function(c){return c.name;}).join("; ")+". ":"")+"Picture the technique, then review the attempt.");
+ return publishSynergyMenu(menu,el,{first:a.label,second:b.label,selectedCatalysts:catalysts.filter(function(c){return draft.items.indexOf(c.item)>=0;}).map(function(c){return {name:c.name,quantity:1};}),picture:draft.text});
 }
-
-function renderSynergyMemoriseMenu(room, id) {
-    const el = document.getElementById("chatOptionsEl");
-    if (!el) return;
-    el.innerHTML = "";
-    const t = getSynergyTechnique(id);
-    appendCombatGroup(el, "A new technique", [
-        createCombatButton("Try to commit it to memory", function () { attemptSynergyMemorise(room, id); }),
-        createCombatButton("Keep it in your notebook for now", function () { renderSynergyLabMenu(room); setNarration("You jot down every detail so you can come back to it."); })
-    ]);
-    appendCombatGroup(el, "", [createCombatButton("Leave", function () { closeSynergyLab(); })]);
-    if (t) {
-        const note = document.createElement("div");
-        note.className = "combat-action-heading";
-        note.textContent = describeSynergyTechnique(t);
-        el.insertBefore(note, el.firstChild);
-    }
+function showSynergyExperimentReview(room) {
+ const block=synergyActionBlock(room,true)||getSynergyExperimentBlock(G.player);if(block)return sharedChoiceResult("blocked",block);
+ const draft=G.synergyDraft,a=draft&&getSynergyAtomById(G.player,draft.a),b=draft&&getSynergyAtomById(G.player,draft.b);
+ if(!a||!b||getSynergyPairBlock(G.player,a,b))return sharedChoiceResult("blocked","Choose two available compatible skills first.");
+ const catalysts=getSynergyCatalysts(G.player).filter(function(c){return draft.items.indexOf(c.item)>=0;});
+ if(catalysts.length!==draft.items.length||draft.items.length>SYNERGY_MAX_CATALYSTS)return sharedChoiceResult("blocked","Your selected catalysts changed. Review the draft again.");
+ const el=document.getElementById("chatOptionsEl");el.innerHTML="";
+ const menu=beginSynergyMenu(room,"confirm","Review experiment — confirm separately",function(){return showSynergyExperimentReview(room);});
+ const approval=synergyApproval(room,"experiment");
+ const quote={stage:"quote",parents:[a.label,b.label],picture:String(draft.text||"").slice(0,SYNERGY_TEXT_MAX),cost:{stamina:SYNERGY_ATTEMPT_STAMINA,mana:playerUsesMana(G.player)?SYNERGY_ATTEMPT_MANA:0,turns:SYNERGY_ATTEMPT_TURNS},materials:catalysts.map(function(c){return {name:c.name,quantity:1};})};
+ const state=ensureSynergyState(G.player);if(state.notebook.length>=SYNERGY_NOTEBOOK_MAX)quote.replacesOldest=getSynergyLabel(state.notebook[0]);
+ setNarration("Combine "+a.label+" and "+b.label+". Cost: "+quote.cost.stamina+" stamina, "+quote.cost.mana+" mana, "+quote.cost.turns+" turns"+(quote.materials.length?", plus "+quote.materials.map(function(c){return c.name+" ×1";}).join("; "):"")+". Costs are spent even if it fails."+(quote.replacesOldest?" The oldest note, "+quote.replacesOldest+", will be lost if a new technique is made.":""));
+ appendCombatGroup(el,"Confirm",[
+  synergyButton(menu,"Begin experiment",function(){return runSynergyExperiment(room,approval);},{action:"confirm"}),
+  synergyButton(menu,"Back to draft",function(){return renderSynergyDraft(room);},{action:"back"})
+ ]);
+ synergyOutput("experiment",quote,"Experiment review.",false);return publishSynergyMenu(menu,el);
 }
-
+function showSynergyMemoryReview(room,id) {
+ const block=synergyActionBlock(room,true);if(block)return sharedChoiceResult("blocked",block);
+ const t=getSynergyTechnique(id),s=ensureSynergyState(G.player);if(!t||s.repertoire.indexOf(id)>=0)return sharedChoiceResult("blocked","Choose a technique you have not memorised.");
+ const el=document.getElementById("chatOptionsEl");el.innerHTML="";
+ const menu=beginSynergyMenu(room,"confirm","Review memorisation — confirm separately",function(){return showSynergyMemoryReview(room,id);});
+ const approval=synergyApproval(room,"memorise",{technique:t});
+ const full=s.repertoire.length>=getSynergySlots(G.player);
+ setNarration(full?"Your memory is full. Try the native Willpower check for one turn; if it cannot fit, choose a technique to set aside or keep notes only.":"There is a free memory slot. Memorising this technique costs no turns.");
+ appendCombatGroup(el,"Memorise "+getSynergyLabel(t),[
+  synergyButton(menu,"Confirm memorisation"+(full?" (1 turn)":" (free)"),function(){return attemptSynergyMemorise(room,id,approval);},{action:"confirm"}),
+  synergyButton(menu,"Back",function(){return renderSynergyEntry(room,id);},{action:"back"})
+ ]);
+ synergyOutput("memorise",{stage:"quote",technique:synergyPublicTechnique(t),turns:full?1:0,slots:getSynergySlots(G.player),used:s.repertoire.length},"Memorisation review.",false);return publishSynergyMenu(menu,el);
+}
+function renderSynergyMemoriseMenu(room,id) {
+ const block=synergyActionBlock(room,true);if(block)return sharedChoiceResult("blocked",block);
+ const el=document.getElementById("chatOptionsEl"),t=getSynergyTechnique(id);if(!el||!t)return sharedChoiceResult("blocked","That technique is no longer in your notebook.");
+ el.innerHTML="";
+ const menu=beginSynergyMenu(room,"new","A new technique — "+getSynergyLabel(t),function(){return renderSynergyMemoriseMenu(room,id);});
+ appendCombatGroup(el,"A new technique",[
+  synergyButton(menu,"Try to commit it to memory",function(){return showSynergyMemoryReview(room,id);},{action:"memorise",name:getSynergyLabel(t)}),
+  synergyButton(menu,"Keep it in your notebook for now",function(){setNarration("You jot down every detail so you can come back to it.");return renderSynergyLabMenu(room);},{action:"back"}),
+  synergyButton(menu,"Leave",closeSynergyLab,{action:"leave"})
+ ]);
+ return publishSynergyMenu(menu,el,{technique:synergyPublicTechnique(t)});
+}
 function renderSynergyNotebook(room) {
-    const el = document.getElementById("chatOptionsEl");
-    if (!el) return;
-    el.innerHTML = "";
-    const s = ensureSynergyState(G.player);
-    appendCombatGroup(el, `Notebook (${s.repertoire.length}/${getSynergySlots(G.player)} memorised)`, s.notebook.map(function (t) {
-        return createCombatButton(`${s.repertoire.indexOf(t.id) >= 0 ? "* " : ""}${getSynergyLabel(t)}`, function () { renderSynergyEntry(room, t.id); }, { title: describeSynergyTechnique(t) });
-    }));
-    appendCombatGroup(el, "", [createCombatButton("Back", function () { renderSynergyLabMenu(room); })]);
-    setNarration("You leaf through your notes on the techniques you have devised. A star marks the ones you know by heart.");
+ const block=synergyActionBlock(room,true);if(block)return sharedChoiceResult("blocked",block);
+ const el=document.getElementById("chatOptionsEl");if(!el)return {status:"blocked"};el.innerHTML="";
+ const s=ensureSynergyState(G.player),menu=beginSynergyMenu(room,"notebook","Notebook — "+s.repertoire.length+"/"+getSynergySlots(G.player)+" memorised",function(){return renderSynergyNotebook(room);});
+ appendCombatGroup(el,"Notebook",s.notebook.map(function(t){
+  return synergyButton(menu,(s.repertoire.indexOf(t.id)>=0?"* ":"")+getSynergyLabel(t),function(){return renderSynergyEntry(room,t.id);},{action:"entry",name:getSynergyLabel(t),technique:t},{title:describeSynergyTechnique(t)});
+ }));
+ appendCombatGroup(el,"",[synergyButton(menu,"Back",function(){return renderSynergyLabMenu(room);},{action:"back"})]);
+ setNarration("You leaf through your notes. A star marks the techniques you know by heart.");
+ return publishSynergyMenu(menu,el,{notebook:s.notebook.map(synergyPublicTechnique)});
+}
+function renderSynergyEntry(room,id) {
+ const block=synergyActionBlock(room,true);if(block)return sharedChoiceResult("blocked",block);
+ const el=document.getElementById("chatOptionsEl"),t=getSynergyTechnique(id);if(!el||!t)return sharedChoiceResult("blocked","That technique is no longer in your notebook.");
+ el.innerHTML="";
+ const s=ensureSynergyState(G.player),known=s.repertoire.indexOf(id)>=0,menu=beginSynergyMenu(room,"entry",getSynergyLabel(t),function(){return renderSynergyEntry(room,id);});
+ appendCombatGroup(el,getSynergyLabel(t),[
+  known?synergyButton(menu,"Set aside (forget)",function(){return forgetSynergyTechnique(room,id,null);},{action:"forget",name:getSynergyLabel(t)}):
+   synergyButton(menu,"Commit to memory",function(){return showSynergyMemoryReview(room,id);},{action:"memorise",name:getSynergyLabel(t)})
+ ]);
+ menu.nameInput=appendSynergyTextRow(menu,el,"Give the technique a name...",t.name,function(){},function(v){
+  t.name=String(v||"").replace(/\s+/g," ").trim().slice(0,40);saveGameState();
+  synergyOutput("name",{technique:synergyPublicTechnique(t),turns:0},"Technique named "+getSynergyLabel(t)+".",true);
+  return renderSynergyEntry(room,id);
+ },"Name",{action:"name"});
+ appendCombatGroup(el,"",[synergyButton(menu,"Back",function(){return renderSynergyNotebook(room);},{action:"back"})]);
+ setNarration((t.narration?t.narration+" ":"")+(t.visuals?t.visuals+" ":"")+describeSynergyTechnique(t)+(t.requirementNote?" Needs: "+t.requirementNote:""));
+ return publishSynergyMenu(menu,el,{technique:synergyPublicTechnique(t)});
+}
+function renderSynergyReplaceMenu(room,id) {
+ const block=synergyActionBlock(room,true);if(block)return sharedChoiceResult("blocked",block);
+ const pending=G.synergyReplacement;
+ if(!pending||pending.player!==G.player||pending.room!==room||pending.technique!==getSynergyTechnique(id)||!pending.valid())return sharedChoiceResult("blocked","Review memorisation again before replacing a technique.");
+ const el=document.getElementById("chatOptionsEl");el.innerHTML="";
+ const s=ensureSynergyState(G.player),menu=beginSynergyMenu(room,"replace","Let one memorised technique go to make room",function(){return renderSynergyReplaceMenu(room,id);});
+ menu.replacement=pending;const valid=menu.valid;menu.valid=function(){return G.synergyReplacement===pending&&valid();};
+ appendCombatGroup(el,"Let one go to make room",s.repertoire.map(function(rid){
+  const t=getSynergyTechnique(rid);
+  return synergyButton(menu,"Forget "+getSynergyLabel(t),function(){return forgetSynergyTechnique(room,rid,id);},{action:"replace",name:getSynergyLabel(t),technique:t});
+ }));
+ appendCombatGroup(el,"",[synergyButton(menu,"Not now (keep notes only)",function(){G.synergyReplacement=null;return renderSynergyEntry(room,id);},{action:"back"})]);
+ return publishSynergyMenu(menu,el,{technique:synergyPublicTechnique(pending.technique)});
 }
 
-function renderSynergyEntry(room, id) {
-    const el = document.getElementById("chatOptionsEl");
-    const t = getSynergyTechnique(id);
-    if (!el || !t) { renderSynergyLabMenu(room); return; }
-    el.innerHTML = "";
-    const s = ensureSynergyState(G.player);
-    const known = s.repertoire.indexOf(id) >= 0;
-    const buttons = [];
-    if (!known) buttons.push(createCombatButton("Commit to memory", function () { attemptSynergyMemorise(room, id); }));
-    else buttons.push(createCombatButton("Set aside (forget)", function () { forgetSynergyTechnique(room, id, null); }));
-    appendCombatGroup(el, getSynergyLabel(t), buttons);
-    const label = document.createElement("div");
-    label.className = "combat-action-heading";
-    label.textContent = "Name it (optional)";
-    el.appendChild(label);
-    appendSynergyTextRow(el, "Give the technique a name...", t.name, function () {}, function (v) {
-        t.name = String(v || "").replace(/\s+/g, " ").trim().slice(0, 40);
-        saveGameState();
-        renderSynergyEntry(room, id);
-    }, "Name");
-    appendCombatGroup(el, "", [createCombatButton("Back", function () { renderSynergyNotebook(room); })]);
-    setNarration(`${t.narration ? t.narration + " " : ""}${t.visuals ? t.visuals + " " : ""}${describeSynergyTechnique(t)}${t.requirementNote ? " Needs: " + t.requirementNote : ""}`);
-}
-
-function renderSynergyReplaceMenu(room, id) {
-    const el = document.getElementById("chatOptionsEl");
-    if (!el) return;
-    el.innerHTML = "";
-    const s = ensureSynergyState(G.player);
-    appendCombatGroup(el, "Let one go to make room", s.repertoire.map(function (rid) {
-        const rt = getSynergyTechnique(rid);
-        return createCombatButton(`Forget ${getSynergyLabel(rt)}`, function () { forgetSynergyTechnique(room, rid, id); });
-    }));
-    appendCombatGroup(el, "", [createCombatButton("Not now (keep notes only)", function () { renderSynergyEntry(room, id); })]);
-}
 
 const INTERACT_MENU_ACTIONS = [
     {
@@ -53211,9 +56030,13 @@ function getDefileBlockReason(holder, room) {
 
 // Shared by shrines and ritual fixtures. Returns the narration text.
 function performDefile(deityId, holder, label) {
+    const serviceContext = shrineServiceExecution && shrineServiceExecution.spec.action === "defile" ? shrineServiceExecution : null;
     const player = G.player;
     const deity = getDeityArchetype(deityId);
+    shrineServiceStart(serviceContext);
     advanceStoryTurn(1);
+    if (!shrineServiceCurrent(serviceContext)) return shrineServiceInterrupted(serviceContext);
+    const serviceHPBefore = player.hp, serviceFaithBefore = player.faith ? player.faith.score : null;
     holder.lastDefileTurn = getCurrentStoryTurn();
     adjustDivinePower(deityId, -DIVINE_DEFILE_LOSS);
 
@@ -53229,18 +56052,23 @@ function performDefile(deityId, holder, label) {
         player.hp -= loss;
         lines.push(`A sudden chill bites at you (-${loss} HP).`);
     }
+    shrineServiceRecord(serviceContext, { hpLost: Math.max(0, serviceHPBefore - player.hp), faithChange: player.faith && serviceFaithBefore !== null ? player.faith.score - serviceFaithBefore : 0, faithScore: player.faith ? player.faith.score : null });
     return lines.join(" ");
 }
 
 function defileShrine() {
+    if (!shrineServiceExecution || shrineServiceExecution.spec.action !== "defile") return requestShrineService("defile");
+    const serviceContext = shrineServiceExecution;
+    const serviceNarration = function (message) { return shrineServiceNarration(message, serviceContext); };
     const room = G.activeRoom;
     if (!room || !G.player || !isShrineRoom(room)) return;
     const block = getDefileBlockReason(room, room);
-    if (block) { setNarration(block); return; }
+    if (block) { serviceNarration(block); return; }
     const text = performDefile(getShrineDeityId(room), room, "shrine");
+    if (text && text.status === "interrupted") return text;
     renderStats();
     renderShrinePrayerMenu();
-    setNarration(text);
+    serviceNarration(text);
     saveGameState();
 }
 
@@ -53272,7 +56100,9 @@ function performPrayer(deityId, holderLabel) {
     ensurePlayerDeityState(player);
     ensureEntityStamina(player);
     player.stamina = Math.max(0, player.stamina - PRAYER_STAMINA_COST);
+    shrinePrayerCommitted();
     advanceStoryTurn(PRAYER_TURNS);
+    if (!shrinePrayerCurrent()) return shrinePrayerInterrupted();
 
     const lines = [];
     const becameFollower = !player.deity;
@@ -53310,6 +56140,7 @@ function getShrineDeityId(room) {
 }
 
 function prayAtShrine(newDeityId) {
+    if (!shrineExecution) return requestShrinePrayer(newDeityId);
     const player = G.player;
     const room = G.activeRoom;
     if (!player || !room || !isShrineRoom(room)) return;
@@ -53325,18 +56156,22 @@ function prayAtShrine(newDeityId) {
         room.shrineDeityId = target;
         adjustDivinePower(target, DIVINE_DEDICATION_GAIN);
         rededicated = `You rededicate the shrine to ${getDeityArchetype(target).name}. `;
+        shrineRecordDedication(rededicated);
         rememberStoryEvent("faith", `${player.name} rededicated the shrine to ${getDeityArchetype(target).name}.`, 4, { tags: ["faith", "shrine-dedication"] });
     }
     const text = performPrayer(target, "shrine");
+    if (text && text.status === "interrupted") return text;
     room.lastPrayerTurn = getCurrentStoryTurn();
 
     renderStats();
     renderShrinePrayerMenu();
-    setNarration(rededicated + text);
+    shrinePrayerNarration(rededicated + text);
     saveGameState();
 }
 
 function openShrinePrayerMenu() {
+    const access = shrineSceneBlock();
+    if (access) return sharedChoiceResult("blocked", access);
     const room = G.activeRoom;
     const player = G.player;
     if (!room || !player || !isShrineRoom(room) || G.activeNPC || G.activeObject) return;
@@ -53941,26 +56776,34 @@ function parseFavorJudgmentPayload(rawText) {
 
 // option: { kind: "stat", statKey, def } or { kind: "power", def }
 async function requestFavor(option) {
+    if (!shrineServiceExecution || shrineServiceExecution.spec.action !== "favor") return requestShrineService("favor", option);
+    const serviceContext = shrineServiceExecution;
+    const serviceNarration = function (message) { return shrineServiceNarration(message, serviceContext); };
     const player = G.player;
     const room = G.activeRoom;
     if (!player || !room || !option || !option.def) return;
     const block = getFavorRequestBlockReason(room) || getFavorOptionBlockReason(player, option);
-    if (block) { setNarration(block); return; }
+    if (block) { serviceNarration(block); return; }
     const deity = getDeityArchetype(player.deity);
     const label = option.kind === "stat" ? `a blessing of ${option.def.label}` : option.def.name;
 
     // Asking is a prayer: it costs what any prayer costs, whatever the answer.
     favorRequestPending = true;
     ensureEntityStamina(player);
+    const serviceStaminaBefore = player.stamina;
     player.stamina = Math.max(0, player.stamina - PRAYER_STAMINA_COST);
+    serviceContext.staminaSpent = serviceStaminaBefore - player.stamina;
+    shrineServiceStart(serviceContext);
     advanceStoryTurn(PRAYER_TURNS);
+    if (!shrineServiceCurrent(serviceContext)) return shrineServiceInterrupted(serviceContext);
     room.lastFavorTurn = getCurrentStoryTurn();
     adjustDivinePower(player.deity, DIVINE_PRAYER_GAIN);
     rememberStoryEvent("faith", `${player.name} asked ${deity.name} for ${label}.`, 4, { tags: ["faith", "prayer", "favor"] });
     renderStats();
-    renderFavorMenu();
-    setNarration(`You kneel and ask ${deity.name} for ${label}...`);
+    if (!shrineServiceCapture(serviceContext)) renderFavorMenu();
+    serviceNarration(`You kneel and ask ${deity.name} for ${label}...`);
 
+    if (!shrineServiceBeforeAnswer(serviceContext)) return { status: "interrupted" };
     const costDef = option.kind === "stat" ? { cost: FAVOR_STAT_COST } : option.def;
     const maxAmount = option.kind === "stat"
         ? getMaxAffordableFavorAmount({ cost: FAVOR_STAT_COST }, getDivinePower(player.deity))
@@ -53980,6 +56823,7 @@ async function requestFavor(option) {
     } catch (e) {
         console.warn("Favor judgment failed:", e);
     }
+    if (!shrineServiceAnswerCurrent(serviceContext)) return shrineServiceInterrupted(serviceContext);
     // Use AI off: the deity's answer is a weighted roll instead of a judgment.
     if (!judgment && !useAIEnabled()) {
         const granted = Math.random() < Math.max(0.05, Math.min(0.95, AI_OFF_FAVOR_GRANT_CHANCE + (typeof getDeityLensChanceShift === "function" ? getDeityLensChanceShift(deity) : 0)));
@@ -53994,7 +56838,8 @@ async function requestFavor(option) {
     // No AI or a malformed answer: do not punish the player for it. The norm is granted.
     if (!judgment) judgment = { grant: true, amount: FAVOR_NORMAL_AMOUNT, verdict: `${deity.name} says nothing, but the gift is given.` };
 
-    favorRequestPending = false;
+    shrineServiceRelease(serviceContext);
+    shrineServiceRecord(serviceContext, { granted: false, amount: 0, patronPowerSpent: 0 });
     let text = judgment.verdict;
     // Re-read the pool: it can have moved while the answer was coming.
     const affordable = option.kind === "stat"
@@ -54012,6 +56857,7 @@ async function requestFavor(option) {
     } else {
         const cost = option.kind === "stat" ? getFavorCost({ cost: FAVOR_STAT_COST }, amount) : getFavorCost(option.def, amount);
         adjustDivinePower(player.deity, -cost);
+        shrineServiceRecord(serviceContext, { granted: true, amount: amount, patronPowerSpent: cost });
         const surgeText = judgment.surge || FAVOR_SURGE_LINES[player.deity] || "";
         if (option.kind === "stat") {
             const turns = amount * FAVOR_STAT_TURNS_PER_UNIT;
@@ -54026,12 +56872,13 @@ async function requestFavor(option) {
     }
 
     renderStats();
-    renderFavorMenu();
-    setNarration(text.replace(/\s+/g, " ").trim());
+    if (!shrineServiceCapture(serviceContext)) renderFavorMenu();
+    serviceNarration(text.replace(/\s+/g, " ").trim());
     saveGameState();
 }
 
 function renderFavorMenu() {
+    if (shrineServiceCapture(shrineServiceExecution) || shrineSceneBlock()) return;
     const el = document.getElementById("chatOptionsEl");
     const player = G.player;
     if (!el || !player) return;
@@ -54040,11 +56887,12 @@ function renderFavorMenu() {
     if (!deity) { renderShrinePrayerMenu(); return; }
     const room = G.activeRoom;
     const baseBlock = getFavorRequestBlockReason(room);
+    const favorMenu = beginShrineMenu("shrine-favor", "Ask your patron for a favor — " + PRAYER_STAMINA_COST + " stamina, " + PRAYER_TURNS + " turns, " + PRAYER_COOLDOWN_TURNS + "-turn favor cooldown, whatever the answer. Patron power costs and amounts vary.");
 
     const statButtons = Object.keys(FAVOR_STAT_DEFS).map(function (statKey) {
         const option = { kind: "stat", statKey: statKey, def: Object.assign({ id: "stat:" + statKey }, FAVOR_STAT_DEFS[statKey]) };
         const block = baseBlock || getFavorOptionBlockReason(player, option);
-        return createCombatButton(`${option.def.label} (about ${FAVOR_STAT_COST} power)`, function () { requestFavor(option); }, {
+        return shrineServiceButton(favorMenu, `${option.def.label} (about ${FAVOR_STAT_COST} power)`, "favor", option, {
             disabled: !!block,
             title: block || `+2 ${option.def.label} for a time. A short blessing.`
         });
@@ -54054,17 +56902,20 @@ function renderFavorMenu() {
     const gifts = (DEITY_FAVOR_DEFS[player.deity] || []).map(function (def) {
         const option = { kind: "power", def: def };
         const block = baseBlock || getFavorOptionBlockReason(player, option);
-        return createCombatButton(`${def.name} (about ${def.cost} power)`, function () { requestFavor(option); }, {
+        return shrineServiceButton(favorMenu, `${def.name} (about ${def.cost} power)`, "favor", option, {
             disabled: !!block,
             title: block || def.power.summary + " A one-time gift, held in your Powers menu."
         });
     });
     if (gifts.length) appendCombatGroup(el, `${deity.name}'s gifts`, gifts);
 
-    appendCombatGroup(el, "", [createCombatButton("Back", function () { renderShrinePrayerMenu(); }, { disabled: favorRequestPending })]);
+    appendCombatGroup(el, "", [createSharedChoiceButton(favorMenu, "Back", function () { renderShrinePrayerMenu(); return { status: "needs_input" }; }, { disabled: favorRequestPending, textChoice: { action: "back" } })]);
+    publishShrineMenu(favorMenu, el);
 }
 
 function renderShrinePrayerMenu() {
+    if (shrineCaptureMenu()) return;
+    if (shrineSceneBlock()) return;
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
     el.innerHTML = "";
@@ -54075,8 +56926,9 @@ function renderShrinePrayerMenu() {
     const room = G.activeRoom;
     const dedicatedId = getShrineDeityId(room);
     const block = getPrayerBlockReason(room, room);
+    const shrineMenu = beginShrineMenu("shrine-prayer", "Shrine services — " + PRAYER_STAMINA_COST + " stamina, " + PRAYER_TURNS + " turns; first prayer chooses a permanent patron. for prayer/favor; other service costs are listed by show shrine services.");
     const prayButtons = [
-        createCombatButton(getPrayerButtonLabel(dedicatedId, "Pray to "), () => prayAtShrine(null), {
+        shrineMenuPrayerButton(shrineMenu, getPrayerButtonLabel(dedicatedId, "Pray to "), null, {
             disabled: !!block,
             title: block || `Costs ${PRAYER_STAMINA_COST} stamina and ${PRAYER_TURNS} turns. You cannot pray here again for ${PRAYER_COOLDOWN_TURNS} turns.`
         })
@@ -54085,7 +56937,7 @@ function renderShrinePrayerMenu() {
     if (newcomerState !== "used") {
         const blessBlock = newcomerState === "none" && roomHasActiveHostile(room) ? "You cannot ask for a blessing with danger nearby." : "";
         appendCombatGroup(el, "Newcomer's blessing", [
-            createCombatButton(newcomerState === "active" ? "You hold a newcomer's blessing" : "Ask for a newcomer's blessing", () => requestNewcomerBlessing(), {
+            shrineServiceButton(shrineMenu, newcomerState === "active" ? "You hold a newcomer's blessing" : "Ask for a newcomer's blessing", "blessing", null, {
                 disabled: newcomerState === "active" || !!blessBlock,
                 title: newcomerState === "active"
                     ? "It will pull you back from death once, to the shrine where you asked."
@@ -54097,9 +56949,9 @@ function renderShrinePrayerMenu() {
 
     const otherButtons = player.knownDeities.filter(id => id !== dedicatedId && getDeityArchetype(id)).map(deityId => {
         const deity = getDeityArchetype(deityId);
-        return createCombatButton(
+        return shrineMenuPrayerButton(shrineMenu,
             `Dedicate the shrine to ${deity.name} and pray` + (!player.deity ? " (pledges you to them for good)" : ""),
-            () => prayAtShrine(deityId),
+            deityId,
             { disabled: !!block, title: block || "The shrine's dedication can only be changed as part of a prayer." }
         );
     });
@@ -54109,7 +56961,7 @@ function renderShrinePrayerMenu() {
         const favorDeity = getDeityArchetype(player.deity);
         const favorBlock = getFavorRequestBlockReason(room);
         appendCombatGroup(el, "Favor", [
-            createCombatButton(`Ask ${favorDeity ? favorDeity.name : "your patron"} for a favor...`, () => renderFavorMenu(), {
+            shrineServiceButton(shrineMenu, `Ask ${favorDeity ? favorDeity.name : "your patron"} for a favor...`, "favor", null, {
                 disabled: !!favorBlock,
                 title: favorBlock || "Pray for a blessing or a one-time gift. Your patron decides whether the request is worthy, and it costs them divine power."
             })
@@ -54118,7 +56970,7 @@ function renderShrinePrayerMenu() {
 
     const defileBlock = getDefileBlockReason(room, room);
     appendCombatGroup(el, "Defile", [
-        createCombatButton("Defile the shrine", () => defileShrine(), {
+        shrineServiceButton(shrineMenu, "Defile the shrine", "defile", null, {
             disabled: !!defileBlock,
             title: defileBlock || `Takes ${DIVINE_DEFILE_LOSS} divine power from the shrine's deity. Can be done once every ${DEFILE_COOLDOWN_TURNS} turns.`
         })
@@ -54132,7 +56984,7 @@ function renderShrinePrayerMenu() {
         const waitLeft = Math.max(0, SHRINE_MANA_COOLDOWN_TURNS - (turn - last));
         const full = player.mana >= getPlayerManaCeiling(player);
         appendCombatGroup(el, "Devotion", [
-            createCombatButton("Pray for renewal (restore mana)", () => prayAtShrineForMana(), {
+            shrineServiceButton(shrineMenu, "Pray for renewal (restore mana)", "renewal", null, {
                 disabled: full || waitLeft > 0,
                 title: full ? "Your mana is already full."
                     : (waitLeft > 0 ? `The shrine's blessing has not settled yet (${waitLeft} more turn${waitLeft === 1 ? "" : "s"}).` : "Spend a moment in prayer to renew your mana.")
@@ -54144,20 +56996,24 @@ function renderShrinePrayerMenu() {
     if (getClassSkillRank(player, "cleric") < 1) {
         const devotionBlock = getDevotionPracticeBlockReason(G.activeRoom);
         appendCombatGroup(el, "Devotion", [
-            createCombatButton("Kneel in quiet devotion (learn the basics)", () => practiceDevotionAtShrine(), {
+            shrineServiceButton(shrineMenu, "Kneel in quiet devotion (learn the basics)", "devotion", null, {
                 disabled: !!devotionBlock,
                 title: devotionBlock || "Nobody has taught you, but practice can start you on the way."
             })
         ]);
     }
 
-    appendCombatGroup(el, "", [createCombatButton("Leave", () => closeShrinePrayerMenu())]);
+    appendCombatGroup(el, "", [shrineMenuLeaveButton(shrineMenu, "Leave")]);
+    publishShrineMenu(shrineMenu, el);
 }
 
 // Cleric devotion: kneel at a shrine to recover part of the mana pool. Takes
 // two story turns and then needs SHRINE_MANA_COOLDOWN_TURNS to pass before it
 // works again; having a patron deity restores more.
 function prayAtShrineForMana() {
+    if (!shrineServiceExecution || shrineServiceExecution.spec.action !== "renewal") return requestShrineService("renewal");
+    const serviceContext = shrineServiceExecution;
+    const serviceNarration = function (message) { return shrineServiceNarration(message, serviceContext); };
     const player = G.player;
     const room = G.activeRoom;
     if (!player || !room || !isShrineRoom(room)) return;
@@ -54167,25 +57023,30 @@ function prayAtShrineForMana() {
     const last = typeof player.lastShrinePrayerTurn === "number" ? player.lastShrinePrayerTurn : -Infinity;
     if (player.mana >= getPlayerManaCeiling(player) || turn - last < SHRINE_MANA_COOLDOWN_TURNS) return;
 
+    shrineServiceStart(serviceContext);
     advanceStoryTurn(2);
+    if (!shrineServiceCurrent(serviceContext)) return shrineServiceInterrupted(serviceContext);
     const pathDef = getFaithPathDef(player);
     let ratio = (player.deity ? SHRINE_MANA_RESTORE_PATRON : SHRINE_MANA_RESTORE_NO_PATRON) + getEquippedAffinityTotal(player, "shrineMana") +
         (pathDef ? pathDef.shrineRatioBonus : 0);
     if (pathDef && pathDef.shrineVariance) ratio *= 0.5 + Math.random();
     ratio = Math.max(0.1, Math.min(1, ratio));
+    const serviceHpBefore = player.hp;
     let bloodLine = "";
     if (pathDef && pathDef.shrineHpCost > 0 && typeof player.hp === "number") {
         player.hp = Math.max(1, player.hp - pathDef.shrineHpCost);
         bloodLine = ` It costs you ${pathDef.shrineHpCost} HP.`;
     }
     const gained = restorePlayerMana(player, Math.max(1, Math.ceil(player.manaMax * ratio)));
+    shrineServiceRecord(serviceContext, { manaRestored: gained, hpCost: Math.max(0, serviceHpBefore - player.hp) });
     player.lastShrinePrayerTurn = G.story ? (G.story.turnCounter || 0) : 0;
     const prayerXPLines = [];
     gainClassSkillXP("cleric", 2, prayerXPLines);
 
+    shrineServiceRecord(serviceContext, { clericXPAwarded: 2, clericRank: getClassSkillRank(player, "cleric") });
     renderStats();
     renderShrinePrayerMenu();
-    setNarration((pathDef
+    serviceNarration((pathDef
         ? `${pathDef.prayerLine} You regain ${gained} mana.${bloodLine}`
         : (player.deity
             ? `You pray and feel your patron's presence gather in you. You regain ${gained} mana.`
@@ -56996,8 +59857,12 @@ function openContainerFixture(fixture, openOpts) {
     // what it holds, item by item, as it is opened.
     const brokenLock = fixture.chestLock && fixture.chestLock.state === "broken" ? fixture.chestLock : null;
 
-    fixture.opened = true;
+    const guardedOpening = typeof environmentExecution !== "undefined" && environmentExecution;
+    if (!guardedOpening) fixture.opened = true;
+    if (guardedOpening) environmentActionCheckpoint();
     advanceStoryTurn(1);
+    if (guardedOpening && !environmentActionCurrent()) return environmentActionInterrupted();
+    fixture.opened = true;
 
     const name = getEntityName(fixture);
     const rich = getFixtureTags(fixture).includes("loot");
@@ -57478,7 +60343,9 @@ function damageChest(fixture, damage, method, element, text, lines) {
     const lock = fixture.chestLock;
     ensureChestHealth(fixture);
     fixture.chestHp = Math.max(0, fixture.chestHp - damage);
+    environmentActionCheckpoint();
     advanceStoryTurn(1);
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
     const broke = fixture.chestHp <= 0;
     const racket = [];
     chestRacketReactions(room, racket, broke);
@@ -57497,6 +60364,7 @@ function damageChest(fixture, damage, method, element, text, lines) {
     const intro = [text, getChestBreakLine(fixture, method, element)].concat(lines || [], racket).join(" ");
     renderStats();
     openContainerFixture(fixture, { intro: intro });
+    if (typeof environmentExecution !== "undefined" && environmentExecution && environmentExecution.interrupted) return;
     if (!fixture.opened) finishChestAction(fixture, [intro]); // a hostile turned up: stay out of the loot
 }
 
@@ -57547,7 +60415,9 @@ function castSpellAtChest(fixture, spellId) {
         fixture.chestBrittleUntil = getCurrentStoryTurn() + CHEST_BRITTLE_TURNS;
         const wasBurning = isChestBurning(fixture);
         fixture.chestBurn = null;
-        advanceStoryTurn(1);
+        environmentActionCheckpoint();
+    advanceStoryTurn(1);
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
         chestRacketReactions(room, lines, false);
         finishChestAction(fixture, [spell.castLine,
             (wasBurning ? "The flames go out in a hiss of steam, and the " : "Frost races over the ") + name +
@@ -57557,7 +60427,9 @@ function castSpellAtChest(fixture, spellId) {
     }
     if (effect === "douse") {
         fixture.chestBurn = null;
-        advanceStoryTurn(1);
+        environmentActionCheckpoint();
+    advanceStoryTurn(1);
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
         finishChestAction(fixture, [spell.castLine, `The water hisses over the ${name} and drowns the flames. It is scorched, but it will not burn any further.`]);
         return;
     }
@@ -57579,12 +60451,15 @@ function watchChestBurn(fixture) {
     const block = getChestBaseBlockReason(room);
     if (block) { setNarration(block); return; }
     const name = getEntityName(fixture);
+    environmentActionCheckpoint();
     advanceStoryTurn(1);
+    if (!environmentActionCurrent()) return environmentActionInterrupted();
     const result = settleChestBurn(fixture);
     if (!isChestLocked(fixture)) {
         // Burnt through: open what is left.
         if (fixture.chestLock && fixture.chestLock.state === "broken") {
             openContainerFixture(fixture, { intro: result });
+        if (typeof environmentExecution !== "undefined" && environmentExecution && environmentExecution.interrupted) return;
             if (!fixture.opened) finishChestAction(fixture, [result]);
             return;
         }
@@ -58809,9 +61684,9 @@ function getDippableEntries() {
     const player = G.player;
     const out = [];
     const wielded = player && player.equipped ? player.equipped.weapon : null;
-    if (wielded && !Array.isArray(wielded)) out.push({ key: "__wielded__", item: wielded, label: getItemName(wielded) + " (wielded)", wielded: true });
+    if (wielded && !Array.isArray(wielded) && isLootItemVisible(wielded)) out.push({ key: "__wielded__", item: wielded, label: getItemName(wielded) + " (wielded)", wielded: true });
     buildPlayerInventoryEntries(player).forEach(function (entry) {
-        if (!entry || !entry.item || entry.totalQuantity !== 1) return;
+        if (!entry || !entry.item || !isLootItemVisible(entry.item) || entry.totalQuantity !== 1) return;
         out.push({ key: entry.key, item: entry.item, label: formatInventoryItemLabel(entry.item, entry.totalQuantity), wielded: false });
     });
     return out;
@@ -58830,6 +61705,7 @@ function stainItemWithGrime(item, amount) {
 
 function dipItemInCauldron(fixture, stackKey) {
     if (isAlchemyTableFixture(fixture)) { dipItemInAlchemyBowl(fixture, stackKey); return; }
+    if (!materialExecution) return runMaterialAction("dip", fixture, stackKey);
     const player = G.player;
     const room = G.activeRoom;
     if (!player || !fixture || !room) return;
@@ -58838,7 +61714,9 @@ function dipItemInCauldron(fixture, stackKey) {
     const item = entry.item;
     const itemName = getItemName(item);
     const name = getEntityName(fixture);
+    materialCheckpoint();
     advanceStoryTurn(1);
+    if (!materialCurrent()) return materialInterrupted();
     let message = "";
 
     if (isSoupCauldron(fixture, room)) {
@@ -58890,6 +61768,7 @@ function dipItemInCauldron(fixture, stackKey) {
 
 // Pick what to dip (one click: choose, and it is dipped).
 function renderFixtureDipCard(fixture, cardOpts) {
+    if (!isAlchemyTableFixture(fixture)) return openMaterialMenu("dip", fixture, null, cardOpts && cardOpts.message);
     const modal = document.getElementById("itemModal");
     const titleEl = document.getElementById("itemModalTitle");
     const descEl = document.getElementById("itemModalDesc");
@@ -58975,7 +61854,7 @@ function isBurnableItem(item) {
 }
 
 function getBurnableEntries() {
-    return buildPlayerInventoryEntries(G.player).filter(function (entry) { return isBurnableItem(entry.item); });
+    return buildPlayerInventoryEntries(G.player).filter(function (entry) { return isLootItemVisible(entry.item) && isBurnableItem(entry.item); });
 }
 
 function getBurnBlockReason(room) {
@@ -58985,6 +61864,7 @@ function getBurnBlockReason(room) {
 }
 
 function burnItemAtFixture(fixture, stackKey) {
+    if (!materialExecution) return runMaterialAction("burn", fixture, stackKey);
     const player = G.player;
     if (!player || !fixture) return;
     const entry = getBurnableEntries().find(function (e) { return e.key === stackKey; });
@@ -58993,7 +61873,9 @@ function burnItemAtFixture(fixture, stackKey) {
     const wasScroll = Array.isArray(entry.item.type) && (entry.item.type.indexOf("spell-scroll") >= 0);
     const removed = takeInventoryEntryAmount(player, stackKey, 1);
     if (!removed) { openFixtureCard(fixture, { mode: "burn", message: "You no longer have that." }); return; }
+    materialCheckpoint();
     advanceStoryTurn(1);
+    if (!materialCurrent()) return materialInterrupted();
     const name = getEntityName(fixture);
     const message = `You feed the ${itemName} to the ${name}. The edges curl and blacken, and it is gone.` +
         (wasScroll ? " Whatever spell it held goes up with the smoke." : "");
@@ -59008,72 +61890,8 @@ function burnItemAtFixture(fixture, stackKey) {
 
 // Pick something from the pack to burn (two clicks: choose, then confirm).
 function renderFixtureBurnCard(fixture, cardOpts) {
-    const modal = document.getElementById("itemModal");
-    const titleEl = document.getElementById("itemModalTitle");
-    const descEl = document.getElementById("itemModalDesc");
-    const statsEl = document.getElementById("itemModalStats");
-    const actionsEl = document.getElementById("itemModalActions");
-    if (!modal || !titleEl || !descEl || !statsEl || !actionsEl) return;
-
-    const name = getEntityName(fixture);
-    titleEl.textContent = name.charAt(0).toUpperCase() + name.slice(1);
-    descEl.style.whiteSpace = "";
-    descEl.style.cursor = "";
-    descEl.title = "";
-    descEl.onclick = null;
-    statsEl.textContent = "";
-    statsEl.style.display = "none";
-    actionsEl.innerHTML = "";
-
-    const entries = getBurnableEntries();
-    const confirmEntry = cardOpts && cardOpts.confirmKey ? entries.find(function (e) { return e.key === cardOpts.confirmKey; }) : null;
-    const listEl = getItemModalContentsEl();
-
-    if (confirmEntry) {
-        descEl.textContent = `Burn ${getItemName(confirmEntry.item)}? It cannot be recovered.`;
-        const burnBtn = document.createElement("button");
-        burnBtn.type = "button";
-        burnBtn.className = "primary";
-        burnBtn.textContent = "Burn it";
-        burnBtn.onclick = () => burnItemAtFixture(fixture, confirmEntry.key);
-        actionsEl.appendChild(burnBtn);
-    } else {
-        descEl.textContent = (cardOpts && cardOpts.message) || `Choose something to put in the ${name}.`;
-        if (listEl) {
-            if (!entries.length) {
-                const empty = document.createElement("div");
-                empty.style.cssText = "font-size:13px;color:#999;font-style:italic;";
-                empty.textContent = "You have nothing left worth burning.";
-                listEl.appendChild(empty);
-            }
-            entries.forEach(function (entry) {
-                addItemModalRow(listEl, formatInventoryItemLabel(entry.item, entry.totalQuantity), entry.item.description || "", [
-                    { label: "Burn", onClick: function () { openFixtureCard(fixture, { mode: "burn", confirmKey: entry.key }); } }
-                ]);
-            });
-        }
-    }
-
-    const backBtn = document.createElement("button");
-    backBtn.type = "button";
-    backBtn.className = confirmEntry ? "" : "primary";
-    backBtn.textContent = confirmEntry ? "Not yet" : "Back";
-    backBtn.onclick = () => confirmEntry ? openFixtureCard(fixture, { mode: "burn" }) : openFixtureCard(fixture);
-    actionsEl.appendChild(backBtn);
-
-    const leaveBtn = document.createElement("button");
-    leaveBtn.type = "button";
-    leaveBtn.textContent = "Leave";
-    leaveBtn.onclick = () => leaveItemModal();
-    actionsEl.appendChild(leaveBtn);
-
-    const closeBtn = document.getElementById("itemModalClose");
-    if (closeBtn) closeBtn.onclick = () => leaveItemModal();
-    modal.onclick = (e) => { if (e.target === modal) leaveItemModal(); };
-
-    G.activeItemModal = fixture;
-    modal.classList.add("active");
-    backBtn.focus();
+    const selected = cardOpts && cardOpts.confirmKey ? materialItems("burn").find(function (entry) { return entry.key === cardOpts.confirmKey; }) : null;
+    return openMaterialMenu("burn", fixture, selected, cardOpts && cardOpts.message);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -60163,13 +62981,16 @@ function castTravelSpell(spellId) {
     if (getCastableSpellIds(player).indexOf(spellId) < 0) return "You have not learned that spell.";
     const manaCost = getSpellCastCost(player, spell);
     if (player.mana < manaCost) return `You do not have enough mana for ${spell.name} (${manaCost} needed).`;
+    const travelManaBefore = player.mana;
     spendPlayerMana(player, manaCost);
     player.nextSpellHalfCost = false;
     const msg = applyStatusEffect(player, spell.selfStatus, player.name || "You", { isPlayer: true });
     gainClassSkillXP("wizard", 1, []);
     gainBranchXP(player, spellId, 1);
     saveGameState();
-    return spell.castLine + " " + (msg || "The wind around you stirs again, renewed.");
+    const travelText = spell.castLine + " " + (msg || "The wind around you stirs again, renewed.");
+    castingOutput("travel", { spell: spell.name, cost: { mana: Math.max(0, travelManaBefore - player.mana) }, turns: 0 }, travelText, false);
+    return travelText;
 }
 
 function castSupportSpell(npc, spellId) {
@@ -60385,15 +63206,15 @@ function getEnchantTargets(player) {
     const eq = player && player.equipped ? player.equipped : {};
     ["weapon", "head", "upper", "hands", "lower", "feet"].forEach(function (slot) {
         const item = eq[slot];
-        if (item && !Array.isArray(item) && getItemBuffKind(item)) out.push({ item: item, slot: slot, owner: player, ownerName: player.name || "You" });
+        if (item && isLootItemVisible(item) && !Array.isArray(item) && getItemBuffKind(item)) out.push({ item: item, slot: slot, owner: player, ownerName: player.name || "You" });
     });
     const party = G.partyMembers || [];
     party.forEach(function (npc) {
-        if (!npc || npc.hp <= 0 || !G.activeRoom || (G.activeRoom.creatures || []).indexOf(npc) < 0) return;
+        if (!npc || npc.dead || npc.unconscious || npc.isUnconsciousBody || !isVisibleEntity(npc) || npc.hp <= 0 || !G.activeRoom || (G.activeRoom.creatures || []).indexOf(npc) < 0) return;
         const peq = npc.equipped || {};
         ["weapon", "head", "upper", "hands", "lower", "feet"].forEach(function (slot) {
             const item = peq[slot];
-            if (item && !Array.isArray(item) && getItemBuffKind(item)) out.push({ item: item, slot: slot, owner: npc, ownerName: npc.name || "an ally" });
+            if (item && isLootItemVisible(item) && !Array.isArray(item) && getItemBuffKind(item)) out.push({ item: item, slot: slot, owner: npc, ownerName: npc.name || "an ally" });
         });
     });
     return out;
@@ -60408,7 +63229,7 @@ function getEnchantRecipients(player) {
     const here = room && Array.isArray(room.creatures) ? room.creatures : [];
     const others = (G.partyMembers || []).concat(G.sessionFollowers || []);
     others.forEach(function (npc) {
-        if (!npc || npc === player || npc.hp <= 0 || here.indexOf(npc) < 0) return;
+        if (!npc || npc === player || npc.dead || npc.unconscious || npc.isUnconsciousBody || !isVisibleEntity(npc) || npc.hp <= 0 || here.indexOf(npc) < 0) return;
         if (out.some(function (r) { return r.owner === npc; })) return;
         out.push({ owner: npc, ownerName: npc.name || "an ally", isSelf: false });
     });
@@ -60424,12 +63245,12 @@ function getEnchantItemsForRecipient(recipient) {
     const eq = owner.equipped || {};
     Object.keys(eq).forEach(function (slot) {
         const item = eq[slot];
-        if (item && !Array.isArray(item) && slot !== "coinPouch" && getItemBuffKind(item)) {
+        if (item && isLootItemVisible(item) && !Array.isArray(item) && slot !== "coinPouch" && getItemBuffKind(item)) {
             out.push({ item: item, slot: slot, worn: true, owner: owner, ownerName: recipient.ownerName });
         }
     });
     (Array.isArray(owner.inventory) ? owner.inventory : []).forEach(function (item) {
-        if (item && !Array.isArray(item) && getItemBuffKind(item) && !out.some(function (t) { return t.item === item; })) {
+        if (item && isLootItemVisible(item) && !Array.isArray(item) && getItemBuffKind(item) && !out.some(function (t) { return t.item === item; })) {
             out.push({ item: item, slot: false, worn: false, owner: owner, ownerName: recipient.ownerName });
         }
     });
@@ -60440,65 +63261,44 @@ function getEnchantItemsForRecipient(recipient) {
 // (yourself or a companion here), then WHICH of their items (worn or carried),
 // then the element. The caster's mana is spent and a share is held back while
 // the effect lasts (see castItemEnchant for the narration of that drain).
-function openEnchantMenu(step, state) {
-    const room = G.activeRoom;
-    const player = G.player;
-    if (!room || !player || G.activeNPC || G.activeObject) return;
-    clearChatLog();
-    setExitGridVisible(false);
-    const el = document.getElementById("chatOptionsEl");
-    if (!el) return;
-    el.innerHTML = "";
-    const options = getEnchantOptions(player);
-    const st = state || {};
-    let message = st.message || "";
-    let back = function () { openInteractMenu(); };
-    if (!options.length) {
-        message = "You have no enchantment to cast.";
-    } else if (!st.option) {
-        appendCombatGroup(el, "Enchantment", options.map(function (o) {
-            return createCombatButton(`${o.label} (${o.cost} mana + ${Math.max(BUFF_RESERVE_MIN, Math.ceil(player.manaMax * o.reserveFraction))} held)`, function () { openEnchantMenu("recipient", { option: o }); });
-        }));
-        message = message || "Choose an enchantment. While it lasts, part of your mana stays locked.";
-    } else if (!st.recipient) {
-        const verb = st.option.source === "cleric" ? "Bless" : "Enchant";
-        appendCombatGroup(el, verb + " for", getEnchantRecipients(player).map(function (r) {
-            return createCombatButton(r.isSelf ? "Yourself" : r.ownerName, function () { openEnchantMenu("target", { option: st.option, recipient: r }); });
-        }));
-        message = "Who is it for?";
-        back = function () { openEnchantMenu("option", {}); };
-    } else if (!st.target) {
-        const r = st.recipient;
-        const items = getEnchantItemsForRecipient(r);
-        const makeButton = function (t) {
-            const label = (t.item.name || t.slot || "item") + (t.item.buff ? " (enchanted)" : "");
-            const blocked = !!getEnchantTargetBlockReason(player, st.option, t.item, st.option.elements[0]) && st.option.elements.every(function (e) { return !!getEnchantTargetBlockReason(player, st.option, t.item, e); });
-            return createCombatButton(label, function () { openEnchantMenu("element", { option: st.option, recipient: r, target: t }); }, { disabled: blocked });
-        };
-        const worn = items.filter(function (t) { return t.worn; });
-        const carried = items.filter(function (t) { return !t.worn; });
-        if (worn.length) appendCombatGroup(el, r.isSelf ? "Worn" : r.ownerName + "'s worn gear", worn.map(makeButton));
-        if (carried.length) appendCombatGroup(el, r.isSelf ? "Carried" : r.ownerName + "'s pack", carried.map(makeButton));
-        message = items.length
-            ? (r.isSelf ? "Which of your items?" : "Which of " + r.ownerName + "'s items?")
-            : (r.isSelf ? "You have nothing that can hold it." : r.ownerName + " has nothing that can hold it.");
-        back = function () { openEnchantMenu("recipient", { option: st.option }); };
-    } else {
-        appendCombatGroup(el, "Element", st.option.elements.map(function (elem) {
-            const block = getEnchantTargetBlockReason(player, st.option, st.target.item, elem);
-            return createCombatButton(elem.charAt(0).toUpperCase() + elem.slice(1), function () {
-                const text = castItemEnchant(st.option, st.target.item, elem, st.target.ownerName);
-                advanceStoryTurn(1);
-                renderStats();
-                saveGameState();
-                openEnchantMenu("done", { message: text });
-            }, { disabled: !!block, title: block || "" });
-        }));
-        message = "Which element?";
-        back = function () { openEnchantMenu("target", { option: st.option, recipient: st.recipient }); };
-    }
-    appendCombatGroup(el, "", [createCombatButton("Back", back)]);
-    setNarration(message);
+function openEnchantMenu(step,state) {
+ const reason=castingBlock(null,false);if(reason)return sharedChoiceResult("blocked",reason);
+ const p=G.player,st=state||{},options=getEnchantOptions(p),el=document.getElementById("chatOptionsEl");if(!el)return {status:"blocked"};
+ if(st.option&&!castingOptionFresh(st.option,null))return sharedChoiceResult("blocked","That enchantment changed. Start again.");
+ if(st.recipient&&!getEnchantRecipients(p).some(function(r){return r.owner===st.recipient.owner&&r.ownerName===st.recipient.ownerName;}))return sharedChoiceResult("blocked","That recipient is no longer available.");
+ if(st.target&&!castingItemCurrent(st.target,null))return sharedChoiceResult("blocked","That item moved or changed owner.");
+ clearChatLog();setExitGridVisible(false);el.innerHTML="";G.activeNPCMode="casting";
+ const kind=!st.option?"option":!st.recipient?"recipient":!st.target?"item":"element";
+ const menu=beginCastingMenu(kind,null,"Gear casting — "+kind,function(){return openEnchantMenu();});
+ let message=st.message||"",back=function(){G.activeNPCMode=null;openInteractMenu();return {status:"completed"};};
+ if(!options.length)message="You have no enchantment to cast.";
+ else if(!st.option){
+  appendCombatGroup(el,"Enchantment",options.map(function(o){
+   const held=Math.max(BUFF_RESERVE_MIN,Math.ceil(p.manaMax*o.reserveFraction));
+   return castingButton(menu,o.label+" ("+o.cost+" mana + "+held+" held)",function(){return openEnchantMenu("recipient",{option:o});},{action:"option",name:o.label});
+  }));message=message||"Choose an enchantment. While it lasts, part of your mana stays locked.";
+ }else if(!st.recipient){
+  appendCombatGroup(el,"For",getEnchantRecipients(p).map(function(r){
+   const name=r.isSelf?"Yourself":textModeNPCLabel(r.owner);
+   return castingButton(menu,name,function(){return openEnchantMenu("target",{option:st.option,recipient:r});},{action:"recipient",name:name,owner:r.owner});
+  }));message="Who is it for?";back=function(){return openEnchantMenu();};
+ }else if(!st.target){
+  const items=getEnchantItemsForRecipient(st.recipient);
+  appendCombatGroup(el,"Gear",items.map(function(t){
+   const block=st.option.elements.every(function(e){return !!getEnchantTargetBlockReason(p,st.option,t.item,e);});
+   const label=getItemName(t.item)+" ("+(t.worn?"worn":"carried")+")"+(t.item.buff?" (enchanted)":"");
+   return castingButton(menu,label,function(){return openEnchantMenu("element",{option:st.option,recipient:st.recipient,target:t});},{action:"item",name:getItemName(t.item),gear:t},{disabled:block});
+  }));message=items.length?"Which item?":"That recipient has no visible gear that can hold the effect.";
+  back=function(){return openEnchantMenu("recipient",{option:st.option});};
+ }else{
+  appendCombatGroup(el,"Element — costs "+st.option.cost+" mana; 1 turn",st.option.elements.map(function(element){
+   const block=getEnchantTargetBlockReason(p,st.option,st.target.item,element);
+   return castingButton(menu,element.charAt(0).toUpperCase()+element.slice(1),function(){return performCastingEnchant(null,st.option,st.target,element);},{action:"element",name:element},{disabled:!!block,title:block||""});
+  }));message="Which element? The cast spends mana and holds part of your pool until it ends.";
+  back=function(){return openEnchantMenu("target",{option:st.option,recipient:st.recipient});};
+ }
+ appendCombatGroup(el,"",[castingButton(menu,"Back",back,{action:"back"})]);
+ setNarration(message);return publishCastingMenu(menu,el,{spell:st.option&&st.option.label,recipient:st.recipient&&(st.recipient.isSelf?"Yourself":textModeNPCLabel(st.recipient.owner)),item:st.target&&getItemName(st.target.item)});
 }
 
 // In a fight: cast onto the equipped weapon or armour (takes the round).
@@ -62533,6 +65333,9 @@ function isNPCCasterActive(casterId) {
 }
 
 function getNPCCastBlockReason(npc, option, item, element) {
+    if (npc && (!G.activeRoom || (G.activeRoom.creatures || []).indexOf(npc) < 0 || !isVisibleEntity(npc) || (G.partyMembers || []).indexOf(npc) < 0)) return "That party caster is no longer here.";
+    if (npc && option && !getNPCEnchantOptions(npc).some(function (o) { return JSON.stringify(o) === JSON.stringify(option); })) return "That caster no longer offers this enchantment.";
+    if (item && !getEnchantTargets(G.player).some(function (t) { return t.item === item; })) return "That equipped target is no longer available.";
     if (!npc || !option) return "They cannot do that.";
     if (!npc._inParty) return `${npc.name || "They"} will not do that unless they are travelling with you.`;
     if (npc.hp <= 0 || npc.unconscious || npc.isUnconsciousBody) return `${npc.name || "They"} cannot do that right now.`;
@@ -62576,49 +65379,36 @@ function castNPCEnchant(npc, option, item, element, ownerName) {
         : `${npc.name} presses the weave into ${who}${itemName}; it hums with ${element} for ${buff.turnsLeft} turns or ${buff.hitsLeft} blows.`;
 }
 
-function openNPCCastMenu(npc, step, state) {
-    const el = document.getElementById("chatOptionsEl");
-    if (!el || !npc) return;
-    el.innerHTML = "";
-    const options = getNPCEnchantOptions(npc);
-    const st = state || {};
-    let message = st.message || "";
-    if (!options.length) {
-        message = `${npc.name} has nothing to offer there.`;
-    } else if (!st.option && options.length > 1) {
-        appendCombatGroup(el, "Ask for", options.map(function (o) {
-            return createCombatButton(o.label, function () { openNPCCastMenu(npc, "target", { option: o }); });
-        }));
-        message = message || `What should ${npc.name} cast?`;
-    } else if (!st.target) {
-        const option = st.option || options[0];
-        const targets = getEnchantTargets(G.player);
-        appendCombatGroup(el, "Cast it on", targets.map(function (t) {
-            const label = (t.owner === G.player ? "Your " : t.ownerName + "'s ") + (t.item.name || t.slot) + (t.item.buff ? " (enchanted)" : "");
-            return createCombatButton(label, function () { openNPCCastMenu(npc, "element", { option: option, target: t }); });
-        }));
-        message = "What should it go on?";
-    } else {
-        const option = st.option || options[0];
-        const doCast = function (elem) {
-            const text = castNPCEnchant(npc, option, st.target.item, elem, st.target.ownerName);
-            advanceStoryTurn(1);
-            renderStats();
-            saveGameState();
-            openNPCCastMenu(npc, "done", { message: text, option: option });
-        };
-        if (option.elements.length === 1) { doCast(option.elements[0]); return; }
-        appendCombatGroup(el, "Element", option.elements.map(function (elem) {
-            const block = getNPCCastBlockReason(npc, option, st.target.item, elem);
-            return createCombatButton(elem.charAt(0).toUpperCase() + elem.slice(1), function () { doCast(elem); }, { disabled: !!block, title: block || "" });
-        }));
-        message = "Which element?";
-    }
-    const tail = [];
-    if (step === "done") tail.push(createCombatButton("Ask for another", function () { openNPCCastMenu(npc); }, { title: `Ask ${npc.name} for another enchantment.` }));
-    tail.push(createCombatButton("Back", function () { renderNPCActionMenu(npc); }));
-    appendCombatGroup(el, "", tail);
-    setNarration(message);
+function openNPCCastMenu(npc,step,state) {
+ const reason=castingBlock(npc,false);if(reason)return sharedChoiceResult("blocked",reason);
+ const st=state||{},options=getNPCEnchantOptions(npc),el=document.getElementById("chatOptionsEl");if(!el)return {status:"blocked"};
+ if(st.option&&!castingOptionFresh(st.option,npc))return sharedChoiceResult("blocked","That caster's options changed.");
+ if(st.target&&!castingItemCurrent(st.target,npc))return sharedChoiceResult("blocked","That gear or recipient changed.");
+ el.innerHTML="";const kind=!st.option&&options.length>1?"npc-option":!st.target?"npc-item":"npc-element";
+ const menu=beginCastingMenu(kind,npc,"Ask "+textModeNPCLabel(npc)+" to cast",function(){return openNPCCastMenu(npc);});
+ let message=st.message||"";
+ if(!options.length)message=npc.name+" has nothing to offer there.";
+ else if(!st.option&&options.length>1){
+  appendCombatGroup(el,"Ask for",options.map(function(o){return castingButton(menu,o.label,function(){return openNPCCastMenu(npc,"target",{option:o});},{action:"option",name:o.label});}));
+  message="What should "+npc.name+" cast?";
+ }else if(!st.target){
+  const option=st.option||options[0];
+  appendCombatGroup(el,"Cast on",getEnchantTargets(G.player).map(function(t){
+   const name=(t.owner===G.player?"Your":textModeNPCLabel(t.owner)+"'s")+" "+getItemName(t.item);
+   return castingButton(menu,name,function(){return openNPCCastMenu(npc,"element",{option:option,target:t});},{action:"item",name:name,gear:t});
+  }));message=message||"Which equipped item should it go on?";
+ }else{
+  const option=st.option||options[0];
+  // Even a single native element gets an explicit final choice; never auto-spend.
+  appendCombatGroup(el,"Element — 1 turn, no player mana",option.elements.map(function(element){
+   const block=getNPCCastBlockReason(npc,option,st.target.item,element);
+   return castingButton(menu,element.charAt(0).toUpperCase()+element.slice(1),function(){return performCastingEnchant(npc,option,st.target,element);},{action:"element",name:element},{disabled:!!block,title:block||""});
+  }));message="Which element?";
+ }
+ const tail=[];
+ if(step==="done")tail.push(castingButton(menu,"Ask for another",function(){return openNPCCastMenu(npc);},{action:"again"}));
+ tail.push(castingButton(menu,"Back",function(){renderNPCActionMenu(npc);return {status:"completed"};},{action:"back"}));
+ appendCombatGroup(el,"",tail);setNarration(message);return publishCastingMenu(menu,el,{caster:textModeNPCLabel(npc),options:options.map(function(o){return {name:o.label,elements:o.elements.slice()};}),item:st.target&&getItemName(st.target.item)});
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -63020,16 +65810,22 @@ function getDevotionPracticeBlockReason(room) {
 }
 
 function practiceDevotionAtShrine() {
+    if (!shrineServiceExecution || shrineServiceExecution.spec.action !== "devotion") return requestShrineService("devotion");
+    const serviceContext = shrineServiceExecution;
+    const serviceNarration = function (message) { return shrineServiceNarration(message, serviceContext); };
     const player = G.player;
     const reason = getDevotionPracticeBlockReason(G.activeRoom);
-    if (reason) { setNarration(reason); return; }
+    if (reason) { serviceNarration(reason); return; }
+    shrineServiceStart(serviceContext);
     advanceStoryTurn(CLASS_DEVOTION_TURNS);
+    if (!shrineServiceCurrent(serviceContext)) return shrineServiceInterrupted(serviceContext);
     player.lastDevotionPracticeTurn = getCurrentStoryTurn();
     const lines = [];
     gainClassSkillXP("cleric", CLASS_DEVOTION_XP, lines);
+    shrineServiceRecord(serviceContext, { clericXPAwarded: CLASS_DEVOTION_XP, clericRank: getClassSkillRank(player, "cleric") });
     renderStats();
     renderShrinePrayerMenu();
-    setNarration("You kneel and say what prayers you know, clumsily. Nobody has taught you how, but the quiet itself seems to teach a little." + (lines.length ? " " + lines.join(" ") : ""));
+    serviceNarration("You kneel and say what prayers you know, clumsily. Nobody has taught you how, but the quiet itself seems to teach a little." + (lines.length ? " " + lines.join(" ") : ""));
     saveGameState();
 }
 
@@ -63566,6 +66362,8 @@ function moveThroughFixture(fixture, room, option) {
 }
 
 function openFixtureCard(fixture, cardOptions) {
+    if (typeof materialCaptureCard === "function" && materialCaptureCard(fixture, cardOptions)) return;
+    if (typeof environmentCaptureCard === "function" && environmentCaptureCard(fixture, cardOptions)) return;
     if (isTrainingDummyFixture(fixture) && !(cardOptions && cardOptions.mode === "environment")) return trainingDummyMenu(fixture);
     if (fixture && fixture.id === "commission-board") return openForgeCommissionBoard(fixture);
     if (fixture && fixture.id === "job-board" && getVisibleRoomFixtures(G.activeRoom).indexOf(fixture) >= 0) { openJobBoard(G.activeRoom); return; }
@@ -63655,7 +66453,7 @@ function openFixtureCard(fixture, cardOptions) {
         } else if (opts.keepOpen) {
             // The action re-renders this card itself (e.g. opening a chest
             // shows what was found), so the window must stay up.
-            btn.onclick = () => onClick();
+            btn.onclick = event => onClick(event);
         } else {
             btn.onclick = () => {
                 closeItemModal();
@@ -63701,7 +66499,7 @@ function openFixtureCard(fixture, cardOptions) {
                 disabledReason: getChestForceBlockReason(room)
             });
             if (isChestBurning(fixture)) {
-                addAction("Watch it burn (1 turn)", () => watchChestBurn(fixture), {
+                addAction("Watch it burn (1 turn)", environmentCardCallback("watch", fixture), {
                     keepOpen: true,
                     disabledReason: getChestBaseBlockReason(room)
                 });
@@ -63713,7 +66511,7 @@ function openFixtureCard(fixture, cardOptions) {
                     const cost = getEffectiveSpellManaCost(G.player, spell);
                     const effect = CHEST_SPELL_EFFECTS[spell.element] || "none";
                     const verb = effect === "burn" ? "Burn it: " : (effect === "brittle" ? "Freeze it: " : (effect === "douse" ? "Douse the flames: " : "Cast "));
-                    addAction(verb + spell.name + " (" + cost + " mana)", () => castSpellAtChest(fixture, spellId), {
+                    addAction(verb + spell.name + " (" + cost + " mana)", environmentCardCallback("cast", fixture, spellId), {
                         keepOpen: true,
                         disabledReason: getChestSpellBlockReason(room, cost, spell, fixture)
                     });
@@ -63765,7 +66563,7 @@ function openFixtureCard(fixture, cardOptions) {
                 if (!spell || !spell.damageDie) return;
                 const cost = getEffectiveSpellManaCost(G.player, spell);
                 const verbs = { fire: (lt === "water" ? "Melt it: " : "Set it alight: "), frost: "Freeze it: ", shock: "Shock it: ", water: (isRoomLiquidBurning(room) ? "Smother the flames: " : "Add water: "), wind: "Scatter it: " };
-                addAction((verbs[spell.element] || "Cast ") + spell.name + " (" + cost + " mana)", () => castSpellAtLiquid(room, spellId, lt), {
+                addAction((verbs[spell.element] || "Cast ") + spell.name + " (" + cost + " mana)", environmentCardCallback("cast", fixture, spellId), {
                     keepOpen: true,
                     disabledReason: getLiquidSpellBlockReason(room, cost, spell, lt)
                 });
@@ -63774,14 +66572,14 @@ function openFixtureCard(fixture, cardOptions) {
     }
     if (room && getFixtureLiquid(room, fixture)) {
         statBits.push("Sloshing");
-        addAction("Tip it over", () => tipOverFixture(fixture), { keepOpen: true, disabledReason: hostile ? "Too dangerous right now." : "" });
+        addAction("Tip it over", environmentCardCallback("tip", fixture), { keepOpen: true, disabledReason: hostile ? "Too dangerous right now." : "" });
     }
     if (isNoticeWritingSuppliesFixture(fixture)) statBits.push("Free to use; replenished each morning");
     if (fixture.burntOut) statBits.push("Charred");
     if (isFixtureBurning(fixture)) statBits.push("Burning (" + fixture.fire.turnsLeft + " turns left)");
     if (isFlammableFixture(fixture, room) || isFixtureBurning(fixture)) {
         if (isFixtureBurning(fixture)) {
-            addAction("Watch it burn (1 turn)", () => watchFixtureFire(fixture), { keepOpen: true, disabledReason: hostile ? "Too dangerous right now." : "" });
+            addAction("Watch it burn (1 turn)", environmentCardCallback("watch", fixture), { keepOpen: true, disabledReason: hostile ? "Too dangerous right now." : "" });
         }
         if (playerIsSpellcaster(G.player) && playerUsesMana(G.player)) {
             getCastableSpellIds(G.player).forEach(function (spellId) {
@@ -63790,7 +66588,7 @@ function openFixtureCard(fixture, cardOptions) {
                 const effect = CHEST_SPELL_EFFECTS[spell.element] || "none";
                 if (effect !== "burn" && effect !== "douse") return;
                 const cost = getEffectiveSpellManaCost(G.player, spell);
-                addAction((effect === "burn" ? "Set it alight: " : "Douse the flames: ") + spell.name + " (" + cost + " mana)", () => castSpellAtFixture(fixture, spellId), {
+                addAction((effect === "burn" ? "Set it alight: " : "Douse the flames: ") + spell.name + " (" + cost + " mana)", environmentCardCallback("cast", fixture, spellId), {
                     keepOpen: true,
                     disabledReason: getFixtureSpellBlockReason(room, cost, spell, fixture)
                 });
@@ -69333,10 +72131,7 @@ function renderEquipmentInventoryEntry(entry, inventoryEl) {
     }
 
     if (getItemLiquid(entry.item) || isPotionItem(entry.item)) {
-        actionsEl.appendChild(createEquipmentActionButton("Pour out", () => {
-            const line = isPotionItem(entry.item) ? pourOutPotionEntry(entry.key) : pourOutInventoryItem(entry.item);
-            refreshInventoryUi(line);
-        }, { disabled: !G.activeRoom }));
+        actionsEl.appendChild(createEquipmentActionButton("Pour out", materialPourCallback(entry), { disabled: !!materialBlock("pour", null), title: materialBlock("pour", null) }));
     }
 
     if (isHerb) {
