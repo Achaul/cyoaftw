@@ -7,7 +7,264 @@ const textModeState = {
 };
 const TEXT_COMMAND_LIMIT = 12;
 const TEXT_INPUT_LIMIT = 600;
+
+// Shared social actions: native typed replies and text commands use the same
+// gesture definitions, conversation costs, eligibility and response pipeline.
+const SOCIAL_GESTURES = Object.freeze({
+    wave: { phrase: "wave to ", fallback: "They acknowledge your wave with a small nod." },
+    bow: { phrase: "bow politely to ", fallback: "They acknowledge your bow." },
+    nod: { phrase: "nod to ", fallback: "They return a small nod." },
+    smile: { phrase: "smile at ", fallback: "They acknowledge your smile." },
+    salute: { phrase: "offer a salute to ", fallback: "They acknowledge your salute." },
+    dance: { phrase: "invite ", invitation: true, fallback: "They stay where they are. <Maybe another time.>" }
+});
+const socialReplyState = new WeakMap();
+
+function parseTextSocialCommand(input) {
+    let raw = String(input || "").trim().replace(/[.!?]+$/, "");
+    if (raw.charAt(0) === "*") raw = raw.replace(/^\*+\s*|\s*\*+$/g, "");
+    raw = raw.replace(/^(?:act|emote)\s+/i, "").replace(/^I\s+/i, "");
+    let match = /^invite\s+(.+?)\s+to\s+(?:a\s+)?dance$/i.exec(raw);
+    if (match) return { verb: "act", args: { action: "dance", target: match[1].trim() } };
+    match = /^(wave|bow|nod|smile|salute|dance)(?:\s+(?:(?:at|to|with)\s+)?(.+))?$/i.exec(raw);
+    return match ? { verb: "act", args: { action: match[1].toLowerCase(), target: (match[2] || "").trim() } } : null;
+}
+
+function socialActionBlock(npc) {
+    const p = G.player, room = G.activeRoom;
+    if (typeof roomHasActiveHostile !== "function" || typeof canConverseWithNPC !== "function" || typeof isVisibleEntity !== "function") return "Social gestures are unavailable here.";
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot gesture while incapacitated.";
+    if (G.combatEncounter || G.activeNPCMode === "combat" || roomHasActiveHostile(room)) return "There is no safe moment for a social gesture during a fight.";
+    if (G.activeObject || G.activeItemModal || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Finish the current interaction before making a social gesture.";
+    if (p.carrying) return "Put down what you are carrying before starting a social interaction.";
+    if (!npc || !Array.isArray(room.creatures) || room.creatures.indexOf(npc) < 0 || npc.dead || npc.hp <= 0 || !isVisibleEntity(npc) || !canConverseWithNPC(npc)) return "That person is no longer available for a social interaction.";
+    if (npc._inSkirmish && !(typeof isEntityExhausted === "function" && isEntityExhausted(npc))) return "They are too occupied to respond.";
+    if (G.activeNPC && G.activeNPC !== npc) return "Type leave before interacting with someone else.";
+    if (G.activeNPC && !/^(talk|respond|menu)$/.test(G.activeNPCMode || "")) return "Finish the current interaction before making a social gesture.";
+    return "";
+}
+
+function socialActionAvailable() {
+    if (!G.activeNPC && !interactionSoloBlock()) return true;
+    return (G.activeNPC ? [G.activeNPC] : textModeVisibleNPCs()).some(function (npc) { return !socialActionBlock(npc); });
+}
+
+function socialActionFeedback(status, text) {
+    const result = textModeResult(status, text);
+    if (!textModeState.enabled && typeof addChatMessage === "function") addChatMessage("left", "Narrator", text, { mode: "narration" });
+    return result;
+}
+
+function socialReplyFresh(choice, npc) {
+    if (!choice || !choice.socialGesture) return true;
+    const state = socialReplyState.get(choice);
+    if (state && state.completed) return false;
+    const conversation = npc && npc.memory && npc.memory.conversationState || {};
+    const sameConversation = state && state.session === (conversation.sessionNumber || 0) &&
+        (state.lastOption === undefined || state.lastOption === (conversation.lastOptionId || ""));
+    const fresh = state && !state.interrupted && state.player === G.player && state.room === G.activeRoom &&
+        G.activeNPC === npc && state.npc === npc && sameConversation && state.moveSeq === (G.player.moveSeq || 0) && !socialActionBlock(npc);
+    if (!fresh && state && !state.interrupted) {
+        state.interrupted = true;
+        const ownsDialogue = state.dialogue && textModeState.dialogue === state.dialogue;
+        if (ownsDialogue) textModeDialogueBusy(false);
+        if (!textModeState.dialogue && (ownsDialogue || !state.dialogue) && sameConversation && state.player === G.player && state.room === G.activeRoom && G.activeNPC === npc && /^(talk|respond|menu)$/.test(G.activeNPCMode || "") && typeof setChatOptionsDisabled === "function") setChatOptionsDisabled(false);
+        socialActionFeedback("interrupted", "The moment has passed. That social reply is no longer relevant; pending commands are paused.");
+    }
+    return !!fresh;
+}
+
+function socialReplyBegin(choice, npc) {
+    const state = choice && socialReplyState.get(choice);
+    if (state && state.lastOption === undefined) {
+        const conversation = npc && npc.memory && npc.memory.conversationState || {};
+        state.lastOption = conversation.lastOptionId || "";
+        state.dialogue = textModeState.dialogue;
+    }
+}
+
+function socialReplyCompleted(choice, npc, reply) {
+    const state = choice && socialReplyState.get(choice);
+    if (!state || state.interrupted) return;
+    state.completed = true;
+    publishTextModeOutput("social", "You exchanged a social gesture with " + state.target + ".", {
+        status: "completed", social: { gesture: choice.socialGesture, family: choice.interactionFamily || (choice.socialGesture === "dance" ? "invitation" : "expression"), phase: "response", target: state.target, reply: String(reply || "") }
+    }, false);
+}
+
+function textSocialHelp() {
+    return textModeResult("completed", "Express yourself with express <action>; invite <person> to <action>; ask for contact with contact <action> with <person>. Slap/punch/shove make a light unarmed attack and may start a fight. Familiar gestures: wave, bow, nod, smile, salute, dance. Expressions and invitations take one turn. NPCs can decline. Say followed by quoted words remains speech.");
+}
+
+async function executeTextSocialCommand(action) {
+    if (action.args && action.args.family) return executeTextInteractionCommand(action);
+    const args = action.args || {}, gesture = String(args.action || "");
+    if (!gesture) return textSocialHelp();
+    if (!Object.prototype.hasOwnProperty.call(SOCIAL_GESTURES, gesture)) return textModeResult("blocked", "That social gesture is not supported. Type help act for examples.");
+    const matches = action.targetRef ? textModeVisibleNPCs().filter(function (npc) { return npc === action.targetRef; })
+        : !args.target && G.activeNPC ? [G.activeNPC] : resolveTextNPCTarget(args.target).matches;
+    if (!matches.length) return textModeResult("blocked", "No visible person matches that description. Type who is here.");
+    if (matches.length > 1) return textModeAsk(action, "target", matches, "Who do you mean?");
+    const npc = matches[0];
+    let reason = socialActionBlock(npc);
+    if (reason) return textModeResult("blocked", reason);
+    if (G.activeNPC !== npc) selectNPC(npc);
+    reason = socialActionBlock(npc);
+    if (G.activeNPC !== npc || reason) return textModeResult("blocked", reason || "You could not start that social interaction.");
+    const result = await submitTypedResponse(npc, "*" + gesture + "*");
+    return result && result.status ? result : { status: "completed" };
+}
+
+
+// Finite effect families; free-form descriptions never become game effects.
+const INTERACTION_FAMILIES = ["expression", "invitation", "contact", "assault"];
+function interactionRequest(args) {
+    if (!args || !INTERACTION_FAMILIES.includes(args.family) || typeof args.action !== "string") return null;
+    if (args.target !== undefined && (typeof args.target !== "string" || args.target.length > 160)) return null;
+    const action = textCommandUnquote(args.action).replace(/^(?:I|you)\s+/i, "").replace(/[.!?]+$/, "").trim();
+    if (!action || action.length > 160 || /[\r\n<>]/.test(action)) return null;
+    return { family: args.family, action: action, target: String(args.target || "").trim() };
+}
+function interactionDescriptionBlock(request) {
+    if (request.family === "assault") return "";
+    if (/\b(?:slap|punch|kick|shove|smack|backhand|headbutt|stab|strangle|attack|damage|kill)\b/i.test(request.action)) return "That is an aggressive physical action. Use a direct attack or physical command instead.";
+    if (/\b(?:heal|resurrect|teleport|cast|steal|buy|sell|equip|unlock|loot|gain|summon|conjure|transform)\b/i.test(request.action)) return "That needs its own game action. Use the matching command; a gesture cannot perform it.";
+    if (request.family === "expression" && /\b(?:hug|kiss|touch|pat|grab|shake hands|handshake)\b/i.test(request.action)) return "That involves contact. Use contact <action> with <person> to ask their permission.";
+    return "";
+}
+function parseTextInteractionCommand(input) {
+    const raw = String(input || "").trim().replace(/^\*+\s*|\s*\*+$/g, "").replace(/[.!?]+$/, "").replace(/^I\s+/i, "");
+    let match = /^(slap|punch|kick|shove|smack|backhand|headbutt|elbow)(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "act", directAssault: true, args: { family: "assault", action: match[1].toLowerCase(), target: match[2] || "" } };
+    match = /^(express|contact)\s+(.+?)(?:\s+(?:at|to|with)\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "act", args: { family: match[1].toLowerCase() === "express" ? "expression" : "contact", action: match[2], target: match[3] || "" } };
+    match = /^invite\s+(.+?)\s+to\s+(.+)$/i.exec(raw);
+    return match ? { verb: "act", args: { family: "invitation", action: match[2], target: match[1] } } : null;
+}
+function interactionSoloBlock() {
+    const p = G.player;
+    if (!p || !G.activeRoom || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot act while incapacitated.";
+    if (G.activeNPC || G.activeObject || G.activeItemModal || G.combatEncounter || typeof roomHasActiveHostile !== "function" || roomHasActiveHostile(G.activeRoom) || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Finish the current interaction before expressing yourself freely.";
+    return "";
+}
+function interactionPhysicalBlock(npc) {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot act while incapacitated.";
+    if (G.activeObject || G.activeItemModal || p.carrying || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Finish the current interaction or put down what you are carrying first.";
+    if (!npc || !(room.creatures || []).includes(npc) || !isVisibleEntity(npc) || npc.dead || npc.hp <= 0 || npc.unconscious || npc.isUnconsciousBody || npc.surrendered) return "That person is no longer a valid physical target.";
+    if (npc._inSkirmish && !(typeof isEntityExhausted === "function" && isEntityExhausted(npc))) return "They are too occupied to approach.";
+    if (G.activeNPC && G.activeNPC !== npc && !textModeInCombat()) return "Leave your current conversation first.";
+    if (G.activeNPC && !/^(talk|respond|menu|combat)$/.test(G.activeNPCMode || "")) return "Finish the current interaction first.";
+    if (textModeInCombat() && !textCombatFoes().includes(npc)) return "Choose a standing opponent in this fight.";
+    const enc = G.combatEncounter;
+    return enc && (enc.running || enc.beginning || enc.concluding || enc.playerDown) ? "The current combat turn is still resolving." : "";
+}
+function performPhysicalInteraction(npc, request) {
+    let reason = interactionPhysicalBlock(npc);
+    if (reason) return socialActionFeedback("blocked", reason);
+    if (G.activeNPC !== npc) {
+        if (textModeInCombat()) encounterSetTarget(npc); else selectNPC(npc);
+    }
+    reason = interactionPhysicalBlock(npc);
+    if (reason || G.activeNPC !== npc) return socialActionFeedback("blocked", reason || "You could not approach that person.");
+    const parts = getCombatTargetOptions(npc), part = /\b(?:slap|smack|backhand|headbutt)\b/i.test(request.action) && parts.includes("head") ? "head" : "torso";
+    const player = G.player, room = G.activeRoom;
+    publishTextModeOutput("interaction", "You attempt to " + request.action + " " + textModeNPCLabel(npc) + ".", {
+        interaction: { family: "assault", action: request.action, target: getNPCRoomSightName(npc), phase: "attempt", unarmed: true }
+    });
+    if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || interactionPhysicalBlock(npc)) return socialActionFeedback("interrupted", "The moment changed before you could act.");
+    attackNPC(npc, { style: "light", target: part, unarmed: true });
+    return { status: "completed" };
+}
+function reviewPhysicalInteraction(npc, request) {
+    if (textModeInCombat()) return socialActionFeedback("blocked", "Use a direct physical command such as slap <opponent>, or attack, during a fight.");
+    const reason = interactionPhysicalBlock(npc);
+    if (reason) return socialActionFeedback("blocked", reason);
+    const title = "You intend to " + request.action + " " + textModeNPCLabel(npc) + ". This is a light unarmed attack and may start a fight.";
+    const menu = beginSharedChoiceMenu("interaction-assault", npc, title, null), valid = menu.valid, turn = getCurrentStoryTurn();
+    menu.valid = function () { return valid() && turn === getCurrentStoryTurn() && !interactionPhysicalBlock(npc); };
+    const root = document.getElementById("chatOptionsEl");
+    if (root) root.innerHTML = "";
+    const attack = createSharedChoiceButton(menu, "Make the unarmed attack", function () { return performPhysicalInteraction(npc, request); }, { textChoice: { action: "attack" } });
+    const cancel = createSharedChoiceButton(menu, "Cancel", function () { if (G.activeNPC === npc) { G.activeNPCMode = "talk"; renderChatOptions(npc); } else renderRoom(); return { status: "completed" }; }, { textChoice: { action: "back" } });
+    if (root) { root.appendChild(attack); root.appendChild(cancel); }
+    publishSharedChoiceMenu(menu, root);
+    return { status: "needs_input" };
+}
+async function performPlayerInteraction(npc, args, options) {
+    const request = interactionRequest(args);
+    if (!request) return socialActionFeedback("blocked", "Use help act for supported interaction families.");
+    const denied = interactionDescriptionBlock(request);
+    if (denied) return socialActionFeedback("blocked", denied);
+    if (request.family === "assault") return options && options.directAssault ? performPhysicalInteraction(npc, request) : reviewPhysicalInteraction(npc, request);
+    if (!npc) {
+        if (request.family !== "expression") return socialActionFeedback("blocked", "Choose someone for that invitation or contact request.");
+        const reason = interactionSoloBlock();
+        if (reason) return socialActionFeedback("blocked", reason);
+        const player = G.player, room = G.activeRoom;
+        advanceNPCAffectTime(1); advanceStoryTurn(1);
+        if (player !== G.player || room !== G.activeRoom || interactionSoloBlock()) return socialActionFeedback("interrupted", "Your attempt was interrupted. The time already spent is preserved.");
+        publishTextModeOutput("interaction", "You take a moment to try to " + request.action + ".", {
+            interaction: { family: "expression", action: request.action, target: null, phase: "result", turns: 1 }
+        }, false);
+        setNarration("You take a moment to try to " + request.action + ".");
+        renderStats(); saveGameState();
+        return { status: "completed" };
+    }
+    let reason = socialActionBlock(npc);
+    if (reason) return socialActionFeedback("blocked", reason);
+    if (G.activeNPC !== npc) selectNPC(npc);
+    reason = socialActionBlock(npc);
+    if (reason || G.activeNPC !== npc) return socialActionFeedback("blocked", reason || "You could not approach that person.");
+    return await submitTypedResponse(npc, request.action, { interaction: Object.assign({}, request, { target: "" }) });
+}
+async function executeTextInteractionCommand(action) {
+    const request = interactionRequest(action.args);
+    if (!request) return textModeResult("blocked", "That interaction is not supported. Type help act for examples.");
+    const candidates = request.family === "assault" && textModeInCombat() ? textCombatFoes() : textModeVisibleNPCs();
+    const matches = action.targetRef ? candidates.filter(function (npc) { return npc === action.targetRef; })
+        : !request.target && G.activeNPC ? [G.activeNPC]
+        : !request.target && request.family === "expression" ? [] : resolveTextNPCTarget(request.target, candidates).matches;
+    if (!matches.length && (request.target || request.family !== "expression" || action.targetRef)) return textModeResult("blocked", "No visible person matches that description.");
+    if (matches.length > 1) return textModeAsk(action, "target", matches, "Who do you mean?");
+    const npc = matches[0] || null;
+    if (request.family === "assault") action.combatTarget = npc;
+    return performPlayerInteraction(npc, request, { directAssault: action.directAssault === true });
+}
+async function interpretInteractionRequest(input) {
+    if (!aiAvailable()) return null;
+    let timer;
+    try {
+        const response = await Promise.race([callAI({ instruction: 'JSON only:{"family":"expression|invitation|contact|assault","action":"brief attempted verb phrase without target","target":""}. Self gestures=expression; voluntary offers=invitation; gentle touch=contact; physical force=assault. Game effects/uncertain:{}. Intent only.\n' + JSON.stringify(input), endButtons: "none" }),
+            new Promise(function (resolve) { timer = setTimeout(function () { resolve(null); }, 12000); })]);
+        const raw = typeof response === "string" ? response : response && response.text;
+        const parsed = raw && JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+        if (!parsed || Object.keys(parsed).some(function (key) { return !["family","action","target"].includes(key); })) return null;
+        return interactionRequest(parsed);
+    } catch (_) { return null; } finally { clearTimeout(timer); }
+}
+async function submitFreeformNPCAction(npc, body) {
+    try {
+    const scene = textModeScene(), epoch = textModeState.epoch, turn = getCurrentStoryTurn();
+    const moveSeq = G.player.moveSeq || 0, session = npc.memory && npc.memory.conversationState || {};
+    const sessionNumber = session.sessionNumber || 0, lastOption = session.lastOptionId || "";
+    let parsed = parseTextInteractionCommand(body), request = parsed && parsed.args;
+    if (!request) request = await interpretInteractionRequest(body);
+    if (!textModeSameScene(scene) || epoch !== textModeState.epoch || turn !== getCurrentStoryTurn() || G.activeNPC !== npc || moveSeq !== (G.player.moveSeq || 0) || sessionNumber !== (npc.memory && npc.memory.conversationState && npc.memory.conversationState.sessionNumber || 0) || lastOption !== (npc.memory && npc.memory.conversationState && npc.memory.conversationState.lastOptionId || "")) return socialActionFeedback("interrupted", "The moment changed while you considered that action.");
+    if (!request) return socialActionFeedback("blocked", "I cannot see a way to put that into action here. Try help act, or use a specific game command.");
+    if (request.target) {
+        const matches = resolveTextNPCTarget(request.target).matches;
+        if (matches.length !== 1 || matches[0] !== npc) return socialActionFeedback("blocked", "That action must address your current conversation partner.");
+    }
+    return performPlayerInteraction(npc, request, { directAssault: !!(parsed && parsed.directAssault) });
+    } finally {
+        if (!textModeState.enabled && G.activeNPC === npc && G.activeNPCMode === "respond" && !sharedChoiceState.menu) { G.activeNPCMode = "talk"; renderChatOptions(npc); }
+    }
+}
+
+
 const TEXT_COMMANDS = [
+    { id: "act", social: true, args: ["action", "target", "family"], aliases: ["act", "emote", "social", "gestures", "interactions", "express", "invite", "contact", "wave", "bow", "nod", "smile", "salute", "dance"], example: "wave at human; I dance with second human; express stretch dramatically; invite human to share a joke; slap human; help act", description: "Express yourself freely with express <action>, invite <person> to <action>, or contact <action> with <person>. Familiar gestures: wave, bow, nod, smile, salute, dance. A dance is an invitation, never assumed agreement. Target the current partner, name a visible person, or answer a numbered question. Expressions and invitations take one turn. Contact asks permission. Slap/punch/shove use light unarmed combat and can start a fight; unclear physical requests ask for review. Say \"I dance\" is speech." },
     {id:"phrases",info:true,args:["action","phrase"],aliases:["phrases","learned phrases"],example:'phrases; forget phrase "please survey the room"; clear phrases',description:"List successfully learned AI phrases, remove an exact phrase or clear the local dictionary. Learning stores action templates after complete success; targets and costs are checked fresh. These controls are free."},
     { id:"casting", casting:true, args:["action","target"], aliases:["powers","divine gifts","enchantments","cast enchant","ask for enchantment"], example:"powers; power mending touch; cast mending touch on <ally>; cast enchant; enchant recipient yourself; enchant item sword; enchant element fire; ask for enchantment; cast fleet foot; show casting; how casting", description:"Use shared native powers/heal targets, player and companion gear casts and learned travel spells. Final gear element choices spend native costs and 1 turn. Power costs/uses and healing stay native; travel spells keep zero-turn behavior. Answer one step per reply; explicitly continue older batches." },
     { id:"synergy", synergy:true, args:["action","target"], aliases:["synergies","combine skills","notebook"], example:"synergy; combine skills; first skill firebolt; second skill trained strike; add catalyst greenwort; picture \"a burning arc\"; experiment; notebook; memorise synergy <name>; forget synergy <name>; name synergy <old> as \"new\"; use synergy <name>", description:"Use native synergy experiments, catalyst choices, notebook, naming and memory rules. Review attempts and memorisation, then confirm separately. Show synergy and how synergy are free. Answer one step at a time; explicitly continue older batches." },
@@ -152,6 +409,9 @@ function parseTextCommand(input) {
     if (match) return { verb: "say", args: { text: textCommandUnquote(match[1]) } };
     match = /^(?:look\s+at|examine|inspect|x)\s+(?:npc|creature|person)\s+(.+)$/i.exec(raw);
     if (match) return { verb: "examine", args: { item: textCommandUnquote(match[1]), scope: "npc" } };
+    const social = parseTextSocialCommand(raw); if (social) return social;
+    const interaction = parseTextInteractionCommand(raw); if (interaction) return interaction;
+    if (/^I\s+/i.test(raw)) return null;
     const casting = parseTextCastingCommand(raw); if (casting) return casting;
     const synergy = parseTextSynergyCommand(raw); if (synergy) return synergy;
     const shrineService = typeof parseTextShrineService === "function" ? parseTextShrineService(raw) : null;
@@ -239,6 +499,7 @@ function validateTextAIPlan(value) {
         if (Object.keys(action).some(function (key) { return key !== "verb" && key !== "args"; })) return null;
         if (Object.keys(action.args).some(function (key) { return fields[action.verb].indexOf(key) < 0 || typeof action.args[key] !== "string" || action.args[key].length > TEXT_INPUT_LIMIT; })) return null;
         if (action.verb === "synergy" && /^(picture|name|confirm|replace)$/.test(action.args.action || "")) return null;
+        if (action.verb === "act" && (Object.prototype.hasOwnProperty.call(action.args, "family") ? !interactionRequest(action.args) : !Object.prototype.hasOwnProperty.call(SOCIAL_GESTURES, action.args.action || ""))) return null;
         if (action.verb === "say" && !String(action.args.text || "").trim()) return null;
         if (action.verb === "choose" && !/^[1-9]\d*$/.test(action.args.number || "")) return null;
         if (action.verb === "attack" && ((action.args.style && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.styles, action.args.style)) || (action.args.bodyPart && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.parts, action.args.bodyPart)))) return null;
@@ -253,7 +514,7 @@ function validateTextAIPlan(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases)$/.test(def.id) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases)$/.test(def.id) && (!def.social || socialActionAvailable() || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -261,7 +522,8 @@ async function interpretTextCommands(input) {
     });
     const schema = shapes.map(function (shape) { return shape.verbs.join("|") + (shape.args ? ":" + shape.args : ""); }).join(";");
     const combatWords = textModeInCombat() ? '\nCOMBAT: styles=' + Object.keys(TEXT_COMBAT_KEYWORDS.styles).join(',') + '; bodyPart=' + Object.keys(TEXT_COMBAT_KEYWORDS.parts).join(',') + '; use ability=' + textCombatActions().map(function (action) { return action.name; }).join(',').slice(0, 1200) : '';
-    const instruction = '{"actions":[{"verb":"","args":{}}]};say=raw\n' + schema + combatWords + '\n' + JSON.stringify(input);
+    const socialWords = shapes.some(function (shape) { return shape.verbs.includes("act"); }) ? "\nact.family=expression(self),invitation,contact(permission),assault(unarmed);action=attempt;game effects use other verbs." : "";
+    const instruction = '{"actions":[{"verb":"","args":{}}]};say=raw\n' + schema + combatWords + socialWords + '\n' + JSON.stringify(input);
     let timer;
     try {
         const result = await Promise.race([
@@ -274,7 +536,7 @@ async function interpretTextCommands(input) {
         const plan = validateTextAIPlan(JSON.parse(clean));
         if (plan && !textModeInCombat() && plan.some(function (action) { return action.verb === "attack"; })) {
             const split = splitTextCommands(input);
-            const explicitAttack = split.parts && split.parts.some(function (part) { return /^(?:please\s+)?(?:attack|hit|strike|swing)\b/i.test(part.trim()); });
+            const explicitAttack = split.parts && split.parts.some(function (part) { return /^(?:please\s+)?(?:I\s+)?(?:attack|hit|strike|swing)\b/i.test(part.trim()); });
             if (!explicitAttack) return null;
         }
         return plan;
@@ -298,13 +560,14 @@ function textModeDisplayWords(text) {
         .replace(/\bor how\b/gi, "or help");
 }
 const textStoryTyping = {queue:[],active:null};
-function textModeStoryOutput(event, text) {
+function textModeStoryOutput(event, text, objectNames) {
     const log = document.getElementById("chatLogEl");
     if (!log || !text || event.renderedInChat) return;
     const line=document.createElement("div");line.className="text-story-line text-story-"+event.kind;log.appendChild(line);
     const content=event.kind==="dialogue"&&event.speaker?event.speaker+": "+text:text;
     let resolve;const completion=new Promise(function(r){resolve=r;});
     const entry={line:line,log:log,text:content,event:event,player:G.player,done:false,controller:null,resolve:resolve,completion:completion,combatSession:null};
+    entry.objectNames=Array.isArray(objectNames)?objectNames:textModeObjectNames(event);
     line._textTypingEntry=entry;textStoryTyping.queue.push(entry);
     if(event.kind==="combat")textModeState.combatStoryEntry=line;
     while(log.children.length>100){const first=log.firstChild;if(first._textTypingEntry)textModeFinishStoryEntry(first._textTypingEntry);log.removeChild(first);}
@@ -341,7 +604,7 @@ function textModePumpStoryTyping() {
         line.onclick=function(){textModeFinishStoryEntry(entry);};
         line.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();textModeFinishStoryEntry(entry);}};
     }
-    entry.controller=animateChatBubbleText(line,"left","Narrator",entry.text,{mode:"narration",preserveWhitespace:true},entry.log);
+    entry.controller=animateChatBubbleText(line,"left","Narrator",entry.text,{mode:"narration",preserveWhitespace:true,objectNames:entry.objectNames},entry.log);
     if(typeof getChatTextSpeedMs==="function" && getChatTextSpeedMs()<=0){textModeCompleteStoryEntry(entry);return;}
     if(entry.controller && entry.controller.completion)entry.controller.completion.then(function(){textModeCompleteStoryEntry(entry);});
     else textModeCompleteStoryEntry(entry);
@@ -369,7 +632,10 @@ function textModeSystemOutput(event, text) {
         textModeState.systemEntry = line;
     }
     if (event.kind === "command") line.dataset.command = event.text;
-    line.textContent = String(text || "").replace(/\s+/g, " ").trim();
+    const feedback = String(text || "").replace(/\s+/g, " ").trim();
+    line.textContent = event.kind !== "command" && line.dataset.command
+        ? line.dataset.command + "\n" + feedback
+        : feedback;
     line.title = (line.dataset.command || "") + (event.kind === "command" ? "" : "\n" + text);
     while (log.children.length > 40) log.removeChild(log.lastChild || log.firstChild);
     log.scrollTop = 0;
@@ -383,6 +649,7 @@ function publishTextModeOutput(kind, text, details, display) {
     event.presentation = display === false ? "supplement" : kind === "command" || event.systemOnly ? "system" : kind === "choices" ? "decision" : "story";
     textModeState.events.push(event);
     if (textModeState.events.length > 100) textModeState.events.shift();
+    const objectNames=display!==false && textModeState.enabled && !event.systemOnly && kind!=="command" ? textModeObjectNames(event) : [];
     if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") window.dispatchEvent(new CustomEvent("cyoa:output", { detail: event }));
     if (display === false || !textModeState.enabled) return;
     const visible = textModeDisplayWords(event.text);
@@ -392,7 +659,7 @@ function publishTextModeOutput(kind, text, details, display) {
     if (kind === "choices" && !event.narration) {
         story = visible.split("\n").filter(function (line) { return !/^(?:Type|Use|Answer|Choose a number)\b/i.test(line.trim()); }).join("\n");
     }
-    if (!event.systemOnly) textModeStoryOutput(event, story);
+    if (!event.systemOnly) textModeStoryOutput(event, story, objectNames);
 }
 
 function textModeAttachCombatSkip(session) {
@@ -519,9 +786,10 @@ function textModeHelpContent(topic, show) {
     if (entry) return textModeResult("completed", entry.description + "\nExamples: " + entry.example);
     if (key && !show) return textModeHelpContent(topic, true);
     if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
-    const ids = ["help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
+    const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
         if (ids.indexOf(def.id) < 0 && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !/^(back|cancel)$/.test(def.id)) return false;
+        if (def.social && !socialActionAvailable()) return false;
         if (def.casting && !castingAvailable()) return false;
         if (def.synergy && !synergyTextAvailable()) return false;
         if (def.travel && !G.guiding && (!G.activeNPC || travelNPCBlock(G.activeNPC, "directions"))) return false;
@@ -639,6 +907,7 @@ async function executeTextCommand(action) {
     if (combatBlock) return textModeResult("blocked", combatBlock);
     const physicalIntent = structuralLegacyIntent(action);
     if (physicalIntent) return executeTextStructuralTool(physicalIntent);
+    if (def.social) return executeTextSocialCommand(action);
     if (def.casting) return executeTextCastingCommand(action);
     if (def.synergy) return executeTextSynergyCommand(action);
     if (def.travel) return executeTextTravelCommand(action);
@@ -745,7 +1014,7 @@ async function executeTextCommand(action) {
         const body = String(args.text || "").trim();
         if (!body || body.length > 240) return textModeResult("blocked", "Use say followed by up to 240 characters of speech.");
         if (G.activeNPCMode === "menu") chooseNPCAction("talk");
-        await submitTypedResponse(npc, body);
+        await submitTypedResponse(npc, body, { speechOnly: true });
         return { status: "completed" };
     }
     if (action.verb === "leave") {
@@ -1114,7 +1383,8 @@ function textCombatQueueBoundary(before, action) {
 
 function textCombatActionBlock(action) {
     const def = textCommandDefinition(action.verb);
-    if (textModeInCombat() && !(def && (def.combat || def.info))) return "A fight is in progress. Type show for combat actions.";
+    const physical = action.verb === "act" && action.args && action.args.family === "assault";
+    if (textModeInCombat() && !physical && !(def && (def.combat || def.info))) return "A fight is in progress. Type show for combat actions.";
     if (def && def.combatOnly && !textModeInCombat()) return "That action needs an active fight. Use attack <npc> to start one.";
     if (textModeInCombat()) {
         const enc = G.combatEncounter;
@@ -7036,7 +7306,7 @@ function textPhrasePlan(input, actions, context) {
 function textPhraseAttackAllowed(input, plan, context) {
     if ((context ? context.split("/")[2] === "combat" : textModeInCombat()) || !plan.some(function(a) { return a.verb === "attack"; })) return true;
     const split = splitTextCommands(input);
-    return !!(split.parts && split.parts.some(function(p) { return /^(?:please\s+)?(?:attack|hit|strike|swing)\b/i.test(p.trim()); }));
+    return !!(split.parts && split.parts.some(function(p) { return /^(?:please\s+)?(?:I\s+)?(?:attack|hit|strike|swing)\b/i.test(p.trim()); }));
 }
 function textPhraseLoad() {
     if (textPhraseState.loaded) return;
@@ -7143,11 +7413,47 @@ function textModeImmersiveOutput(event) {
     event.narration = thought;
 }
 
+// Capture public target names when an output is published, never while replaying history.
+function textModeObjectNames(event) {
+    const names = new Set(),room=G.activeRoom,player=G.player;
+    function add(value) {
+        const name=String(value || "").trim();if(!name || name.length>160 || names.size>=120)return;
+        names.add(name);const plain=name.replace(/^(?:the|an?|some)\s+/i,"");if(plain && plain!==name && names.size<120)names.add(plain);
+    }
+    function visible(item,allowConcealed) {return !!item && !Array.isArray(item) && !item.hidden && !item.isHidden && (!item.concealed || allowConcealed===true) && item.visible!==false;}
+    function itemName(item) {if(visible(item))add(item.name || item.displayName);}
+    (room && room.structural || []).forEach(function(item) {
+        if(visible(item,true) && (typeof isFixtureVisible==="function" ? isFixtureVisible(item,room) : item.alwaysShow===true || item.revealed===true || !item.concealed && room.examined===true))add(item.name || item.displayName);
+    });
+    (room && room.items || []).forEach(itemName);
+    (player && player.inventory || []).forEach(itemName);
+    Object.keys(player && player.equipped || {}).forEach(function(slot){itemName(player.equipped[slot]);});
+    // These are already-published public lists, never a trader's private inventory.
+    const trade=event && event.trade,inventory=event && event.inventory;
+    if(trade && Array.isArray(trade.items))trade.items.forEach(function(item){add(item.name);});
+    if(inventory && Array.isArray(inventory.items))inventory.items.forEach(function(item){add(item.name);});
+    return Array.from(names);
+}
+function textModeObjectParts(text,names) {
+    const source=String(text || ""),parts=[];
+    const labels=Array.from(new Set((names || []).filter(function(n){return typeof n==="string" && n.length>0 && n.length<=160;}))).slice(0,120).sort(function(a,b){return b.length-a.length;});
+    if(!labels.length)return [{text:source,className:"narration-text"}];
+    const escaped=labels.map(function(label){return label.split("").map(function(c){return "\\^$.*+?()[]{}|".indexOf(c)>=0?"\\"+c:c;}).join("");});
+    const pattern=new RegExp("(?<![\\p{L}\\p{N}_])(?:"+escaped.join("|")+")(?![\\p{L}\\p{N}_])","giu");
+    let cursor=0,match;
+    while((match=pattern.exec(source))){
+        if(match.index>cursor)parts.push({text:source.slice(cursor,match.index),className:"narration-text"});
+        parts.push({text:match[0],className:"text-interactable-object"});cursor=match.index+match[0].length;
+    }
+    if(cursor<source.length)parts.push({text:source.slice(cursor),className:"narration-text"});
+    return parts.length?parts:[{text:source,className:"narration-text"}];
+}
+
 // END TEXT COMMANDS
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-19-019
+// Core Engine Version: 2026-10-19-023
 // Latest: Shared power/heal targets, player and companion gear casts, travel spells and guarded native results.
 // Previous: Shared synergy experiment reviews, notebook/naming, memory/replacement and self-technique choices with guarded async completion.
 // Previous: Shared directions, guide questions and paced following, plus guarded weekly rental reviews.
@@ -7189,7 +7495,7 @@ function textModeImmersiveOutput(event) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-19-019";
+window.__ENGINE_CORE_VERSION = "2026-10-19-020";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -26028,6 +26334,12 @@ function buildTopicFallbackReply(npc, choice, room) {
 }
 
 function pickNPCConversationFallbackReply(npc, interaction) {
+    if (interaction && interaction.interactionFamily) return interaction.interactionFamily === "expression" ? "They acknowledge your gesture." : "They stay where they are. <Not just now.>";
+    if (interaction && Object.prototype.hasOwnProperty.call(SOCIAL_GESTURES, interaction.socialGesture || "")) {
+        return getConversationRelationshipBand(npc) === "hostile"
+            ? "They keep their distance. <Leave me be.>"
+            : SOCIAL_GESTURES[interaction.socialGesture].fallback;
+    }
     const topical = buildTopicFallbackReply(npc, interaction, G.activeRoom);
     if (topical) return topical;
     const intentKey = String(interaction && interaction.intent || "talk").toLowerCase();
@@ -26379,6 +26691,8 @@ function normalizeNPCReplyText(text) {
 }
 
 async function npcRespond(npc, interaction) {
+    socialReplyBegin(interaction, npc);
+    if (!socialReplyFresh(interaction, npc)) return;
     if (!canConverseWithNPC(npc)) {
         clearChatOptions();
         // A handed-off encounter start can never run now; drop it so a
@@ -26494,6 +26808,8 @@ async function npcRespond(npc, interaction) {
         }
     }
 
+    if (!socialReplyFresh(choice, npc)) return;
+
     // Last resort only: the live AI call failed or timed out.
     if (!responseText) {
         responseText = pickNPCConversationFallbackReply(npc, choice);
@@ -26569,6 +26885,7 @@ async function npcRespond(npc, interaction) {
     }
 
     saveGameState();
+    socialReplyCompleted(choice, npc, responseText);
 
     // Pending encounter start (the phase-2 encounter-starting options,
     // handed off by handleIntimacyConversationChoice): the reply above is the
@@ -26708,7 +27025,7 @@ function showRespondInput(npc) {
     if (typeof textModeState !== "undefined" && textModeState.enabled) {
         G.activeNPCMode = "talk";
         renderChatOptions(npc);
-        textModeResult("completed", 'Use say "..." in the command box to speak.');
+        textModeResult("completed", 'Use say "..." in the command box to speak, or use act wave / dance with <npc> for a social gesture.');
         focusTextModeInput();
         return;
     }
@@ -27761,11 +28078,28 @@ window.showRentRoomMenu = showRentRoomMenu;
 window.rentInnRoom = rentInnRoom;
 window.getActiveLodging = getActiveLodging;
 
-function submitTypedResponse(npc, raw) {
+function submitTypedResponse(npc, raw, options) {
     if (!npc || !raw) return;
-    const isAction = raw.charAt(0) === "*";
-    const body = raw.replace(/^\*+\s*/, "").replace(/\*+\s*$/, "").replace(/"/g, "'").trim();
+    const isAction = !!(options && options.interaction) || !(options && options.speechOnly) && raw.charAt(0) === "*";
+    let body = (isAction ? raw.replace(/^\*+\s*/, "").replace(/\*+\s*$/, "") : raw).replace(/"/g, "'").trim();
     if (!body) return;
+    const familyAction = isAction && !(options && options.interaction) ? parseTextInteractionCommand(body) : null;
+    if (familyAction || isAction && !(options && options.interaction) && !parseTextSocialCommand(body)) return submitFreeformNPCAction(npc, body);
+    const social = options && options.interaction ? { args: options.interaction } : isAction ? parseTextSocialCommand(body) : null;
+    if (social) {
+        const reason = socialActionBlock(npc);
+        if (reason) return socialActionFeedback("blocked", reason);
+        if (social.args.target) {
+            const matches = resolveTextNPCTarget(social.args.target).matches;
+            if (matches.length !== 1 || matches[0] !== npc) return socialActionFeedback("blocked", "That gesture must address your current conversation partner. Choose them first, or use a targeted text command.");
+        }
+        const def = social.args.family ? null : SOCIAL_GESTURES[social.args.action];
+        const target = typeof getNPCRoomSightName === "function" ? getNPCRoomSightName(npc) : npc.name || "them";
+        body = def ? def.phrase + target + (def.invitation ? " to share a brief dance" : "")
+            : social.args.family === "expression" ? "try to " + social.args.action + " toward " + target
+            : social.args.family === "contact" ? "ask " + target + " whether you may " + social.args.action
+            : "invite " + target + " to " + social.args.action;
+    }
 
     // A drunk player's words come out slurred, on screen and to the NPC.
     const drunkTier = typeof getDrunkTier === "function" ? getDrunkTier(G.player) : 0;
@@ -27786,6 +28120,17 @@ function submitTypedResponse(npc, raw) {
         typedText: body,
         noPrefetch: true
     };
+    if (social) {
+        choice.socialGesture = social.args.action;
+        choice.interactionFamily = social.args.family || "";
+        choice.judgeTone = false;
+        choice.promptText = "(social attempt: " + body + ")";
+        choice.contextNote = "The player makes only this social gesture or invitation: " + body +
+            ". React in character in 1-3 sentences; you may accept, decline or acknowledge it. A dance invitation does not assume agreement. Do not treat it as spoken words. You may describe a brief voluntary response, but do not invent items, payments, travel, secrets, combat outcomes or changes to health, skills or relationships. The engine owns all game effects.";
+        if (choice.interactionFamily) choice.contextNote = "Player attempts only a " + choice.interactionFamily + ": " + body + ". React in character in 1-3 sentences. Expressions grant no contact. Invitations and gentle contact require your willingness; you may decline. Do not invent items, payments, secrets, travel, damage, healing or other game effects. The engine owns all game effects.";
+        socialReplyState.set(choice, { player: G.player, room: G.activeRoom, npc: npc,
+            target: typeof getNPCRoomSightName === "function" ? getNPCRoomSightName(npc) : npc.name || "the person", completed: false, interrupted: false, moveSeq: G.player.moveSeq || 0, session: npc.memory && npc.memory.conversationState && npc.memory.conversationState.sessionNumber || 0 });
+    }
     // The guide knows basic, common things (see GUIDE_KNOWLEDGE in
     // cyoaftw-world-data.js). A typed question that matches a topic gets the
     // scripted answer (always right, no AI); anything else goes to the AI with a
@@ -27810,7 +28155,16 @@ function submitTypedResponse(npc, raw) {
         }
     }
     G.activeNPCMode = "talk";
-    return chooseChatOption(choice);
+    if (!social) return chooseChatOption(choice);
+    const state = socialReplyState.get(choice);
+    publishTextModeOutput("social", choice.text, { status: "started",
+        social: { gesture: choice.socialGesture, phase: "request", target: state.target, family: choice.interactionFamily || (choice.socialGesture === "dance" ? "invitation" : "expression"), invitation: !!(SOCIAL_GESTURES[choice.socialGesture] && SOCIAL_GESTURES[choice.socialGesture].invitation) || /^(invitation|contact)$/.test(choice.interactionFamily) }
+    }, false);
+    if (!socialReplyFresh(choice, npc)) return { status: "interrupted" };
+    return Promise.resolve(chooseChatOption(choice)).then(function () {
+        if (state.interrupted) return { status: "interrupted" };
+        return state.completed ? { status: "completed" } : socialActionFeedback("blocked", "That social interaction could not finish. Pending commands are paused.");
+    });
 }
 
 function clearChatOptions() {
@@ -31441,9 +31795,14 @@ function buildNaturalPlanLine(npcName, styleKey, mode) {
     return `${npcName} attacks with a ${noun}.`;
 }
 
-function getEntityWeaponProfile(entity) {
-    const weaponItem = getEntityWeaponItem(entity);
-    const weaponName = getEntityWeaponName(entity).toLowerCase();
+function getUnarmedInteractionProfile() {
+    return getEntityWeaponProfile(null, { unarmed: true });
+}
+
+function getEntityWeaponProfile(entity, options) {
+    const unarmed = !!(options && options.unarmed);
+    const weaponItem = unarmed ? null : getEntityWeaponItem(entity);
+    const weaponName = (unarmed ? "unarmed" : getEntityWeaponName(entity)).toLowerCase();
     const weaponType = String((weaponItem && weaponItem.weaponType) || getWeaponTypeFromName(weaponName, "generic")).toLowerCase();
 
     let damageDie = !!weaponItem && typeof weaponItem.damage === "number" ? Math.max(2, weaponItem.damage) : 4;
@@ -31463,7 +31822,7 @@ function getEntityWeaponProfile(entity) {
     if (weaponItem && weaponItem.broken === true) {
         return {
             item: weaponItem,
-            name: getEntityWeaponName(entity),
+            name: unarmed ? "unarmed" : getEntityWeaponName(entity),
             type: weaponType,
             damageDie: 2,
             hitBonus: -2,
@@ -31510,7 +31869,7 @@ function getEntityWeaponProfile(entity) {
 
     return {
         item: weaponItem,
-        name: getEntityWeaponName(entity),
+        name: unarmed ? "unarmed" : getEntityWeaponName(entity),
         type: weaponType,
         damageDie,
         hitBonus,
@@ -37251,7 +37610,7 @@ function attackNPC(npc, options = {}) {
     const targetKey = options.target || "torso";
     const style = COMBAT_ATTACK_STYLES[styleKey] || COMBAT_ATTACK_STYLES.balanced;
     const target = COMBAT_TARGETS[targetKey] || COMBAT_TARGETS.torso;
-    const playerWeapon = getEntityWeaponProfile(player);
+    const playerWeapon = options.unarmed === true ? getUnarmedInteractionProfile() : getEntityWeaponProfile(player);
     const damageType = getWeaponDamageType(playerWeapon.type);
     // Rogue sneak attack / backstab (see getSneakAttackProfile): the opening
     // strike on someone unaware, helpless, or who has lost track of a hidden
@@ -37494,7 +37853,7 @@ function attackNPC(npc, options = {}) {
         }
         if (playerWeapon.item && playerWeapon.item.buff) applyWeaponBuffOnHit(playerWeapon.item, npc, npcName, lines, { finished: !!finishOutcome || npc.hp <= 0 });
         // Like the Wind: a chance of a free second blow (never the killing one).
-        if (!finishOutcome && npc.hp > 0 && playerHasActiveStatus(player, "windHaste") && !incorporealShrugsOff(npc, playerWeapon.elementalType) &&
+        if (!options.unarmed && !finishOutcome && npc.hp > 0 && playerHasActiveStatus(player, "windHaste") && !incorporealShrugsOff(npc, playerWeapon.elementalType) &&
             Math.random() < WIND_HASTE_EXTRA_HIT_CHANCE) {
             lines.push(formatCombatActionLine(player, npc, "The wind carries you through a second strike before they can react!"));
             dealFighterBonusStrike(npc, lines, 1, {});
@@ -46972,9 +47331,9 @@ window.setChatTextSpeed = setChatTextSpeed;
 
 function renderChatBubbleText(bubble, side, text, options = {}) {
     if (!bubble) return;
-    if (options.preserveWhitespace) { bubble.textContent=String(text || ""); return; }
+    if (options.preserveWhitespace && !options.objectNames) { bubble.textContent=String(text || ""); return; }
 
-    const parts = getChatTextRenderParts(side, text, options);
+    const parts = options.objectNames ? textModeObjectParts(text,options.objectNames) : getChatTextRenderParts(side,text,options);
     if (!parts.length) {
         bubble.textContent = text || "";
         return;
@@ -46995,7 +47354,7 @@ function animateChatBubbleText(bubble, side, speaker, text, options = {}, scroll
     const controller = { completion: completion, finish: function() { if (!done) { paint(Infinity); complete(); } } };
     function complete() { if (done) return; done = true; resolve(); }
     if (!bubble) { complete(); return controller; }
-    const parts = options.preserveWhitespace ? [{text:String(text || ""),className:"narration-text"}] : getChatTextRenderParts(side,text,options);
+    const parts = options.objectNames ? textModeObjectParts(text,options.objectNames) : options.preserveWhitespace ? [{text:String(text || ""),className:"narration-text"}] : getChatTextRenderParts(side,text,options);
     if (!parts.length) { bubble.textContent = text || ""; complete(); return controller; }
     if (!shouldAnimateChatMessage(side,speaker,options)) {
         renderChatBubbleText(bubble,side,text,options); complete(); return controller;
@@ -68384,6 +68743,22 @@ window.setShowTextMode = setShowTextMode;
     let on = false;
     try { on = localStorage.getItem(SHOW_TEXT_MODE_PREF_KEY) === "on"; } catch (e) {}
     applyShowTextModePreference(on);
+})();
+
+// Pure presentation preference, saved separately from the adventure.
+const TEXT_MODE_BOLD_OBJECTS_PREF_KEY="cyoaftwTextModeBoldObjects";
+function applyTextModeBoldObjects(on) {
+    document.body.classList.toggle("text-mode-bold-objects",!!on);
+    const box=document.getElementById("textModeBoldObjectsInput");if(box)box.checked=!!on;
+}
+function setTextModeBoldObjects(on) {
+    try{localStorage.setItem(TEXT_MODE_BOLD_OBJECTS_PREF_KEY,on?"on":"off");}catch(_){}
+    applyTextModeBoldObjects(on);
+}
+window.setTextModeBoldObjects=setTextModeBoldObjects;
+(function(){
+    let on=true;try{on=localStorage.getItem(TEXT_MODE_BOLD_OBJECTS_PREF_KEY)!=="off";}catch(_){}
+    applyTextModeBoldObjects(on);
 })();
 
 // ── FONT PREFERENCES ─────────────────────────────────────────────
