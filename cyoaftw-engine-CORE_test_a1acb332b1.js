@@ -3633,6 +3633,8 @@ async function runSharedChoice(menu, choice) {
     if (choice.meta.target && (!isVisibleEntity(choice.meta.target) || getLootMembersInRoom(G.activeRoom).indexOf(choice.meta.target) < 0)) return sharedChoiceResult("blocked", "That companion is no longer available. Type options to refresh the choices.");
     clearSharedChoiceMenu(menu); // consume before running: no double allocation
     const result = await choice.run();
+    // Keep an action's published outcome; a queue pause is not a presentation failure.
+    if (result && result.outputPublished) return result;
     if (result && result.status === "needs_input" && (/^(notice|material|shrine)-/.test(menu.kind) || menu.kind === "structure-magic" || menu.kind === "gift" || /^(nectar|travel|synergy|casting)-/.test(menu.kind))) return result;
     if (result && result.status && result.status !== "completed") return sharedChoiceResult(result.status, result.message || "The choice could not finish. Pending commands are paused.");
     if (result && result.accepted === false) return sharedChoiceResult("blocked", "The gift was refused; you keep it. Pending commands are paused.");
@@ -6773,9 +6775,12 @@ function runStructuralAction(spec) {
     if (textModeState.enabled && G.player === player && G.activeRoom === room && !G.activeNPC && !G.activeObject && !G.activeItemModal && !G.combatEncounter && !hasPendingPartyLoot() && !sharedChoiceState.menu && !roomHasActiveHostile(room) && typeof renderExits === "function") renderExits(room.exits);
     const result = Object.assign(environmentPublicSpec(spec), { stage: interrupted ? "interrupted" : "result", direction: entry.dir, turns: getCurrentStoryTurn() - start, manaCost: ctx.manaSpent });
     delete result.blockedReason; delete result.openingMayTakeTurn;
-    const text = ctx.lines.join(" ") + (interrupted ? " The situation changed. Spent mana/time and effects already applied are preserved; later commands are paused." : "");
-    publishTextModeOutput("structure", text.trim() || "The structural action resolved.", { structure: result });
-    return { status: interrupted ? "interrupted" : "completed" };
+    const text = ctx.lines.join(" ");
+    publishTextModeOutput("structure", text.trim() || (interrupted ? "Your attempt is cut short." : "The structural action resolved."), {
+        structure: result,
+        guidance: interrupted && textModeState.enabled ? "Pending commands are paused. Spent mana/time and effects already applied are preserved." : ""
+    }, textModeState.enabled);
+    return { status: interrupted ? "interrupted" : "completed", outputPublished: true };
 }
 function structuralSpecs(entry) {
     const out = environmentSpells().map(function (ability) { return structuralSpec("cast", entry, ability); });
@@ -7187,9 +7192,12 @@ function runStructuralTool(spec) {
     }
     const result = Object.assign(structuralToolPublic(spec), { stage: changed ? "interrupted" : "result", staminaCost: ctx.staminaSpent, turns: getCurrentStoryTurn() - start, moved: !!expectedMove });
     delete result.blockedReason;
-    const message = ctx.lines.filter(function (line) { return typeof isCombatDebugLine !== "function" || !isCombatDebugLine(line); }).join(" ") || (changed ? "The structural attempt was interrupted before its remaining effects." : spec.verb === "push" ? moved ? "You pass through the burning doorway." : "You did not pass through the doorway." : "The structural attempt resolved.");
-    publishTextModeOutput("structure", message + (pause ? " Later commands are paused; completed effects and spent costs are preserved." : ""), { structure: result });
-    return { status: changed || expectedMove || decision ? "interrupted" : incomplete ? "blocked" : pause ? "interrupted" : "completed" };
+    const message = ctx.lines.filter(function (line) { return typeof isCombatDebugLine !== "function" || !isCombatDebugLine(line); }).join(" ") || (changed ? "Your attempt is cut short." : spec.verb === "push" ? moved ? "You pass through the burning doorway." : "You did not pass through the doorway." : "The structural attempt resolved.");
+    publishTextModeOutput("structure", message, {
+        structure: result,
+        guidance: pause && textModeState.enabled ? "Pending commands are paused; completed effects and spent costs are preserved." : ""
+    }, textModeState.enabled);
+    return { status: changed || expectedMove || decision ? "interrupted" : incomplete ? "blocked" : pause ? "interrupted" : "completed", outputPublished: true };
 }
 function parseTextStructuralTool(raw) {
     if (/^(?:rescue|pray for (?:rescue|deliverance))$/i.test(raw)) return { verb: "structure", args: { action: "rescue" } };
@@ -13080,6 +13088,7 @@ window.advanceStoryTurn = function(steps = 1) {
     if (typeof tickWorldPoison === "function") tickWorldPoison();
     if (typeof tickWorldPotions === "function") tickWorldPotions();
     if (typeof tickWorldBleeding === "function") tickWorldBleeding();
+    if (typeof tickSettlementWatch === "function") tickSettlementWatch();
     if (typeof tickNPCOpportunism === "function") tickNPCOpportunism();
     if (typeof tickAmbientNPCActivity === "function") tickAmbientNPCActivity();
     if (typeof tickNPCScheduleActiveRoom === "function") tickNPCScheduleActiveRoom();
@@ -16176,6 +16185,7 @@ async function resumeSavedGame() {
         repairRoomMapExits();
         if (typeof ensureTownClassTrainers === "function") ensureTownClassTrainers();
         ensureTownPortalRoom();
+        if (typeof ensureSettlementWatch === "function") ensureSettlementWatch();
         G.activeRoom = G.roomMap[G.player.coords] || null;
         syncPortalChamberWaygates(findPortalChamberRoom(G.roomMap));
         G.activeNPC = null;
@@ -16703,6 +16713,7 @@ function assignGeneratedExits(room, zoneName, options) {
 function assignGeneratedNPCs(room, zoneName) {
     if (!room) return [];
     room.creatures = spawnNPCsForRoom(room, zoneName);
+    ensureSettlementGuardPost(room);
     return room.creatures;
 }
 
@@ -17008,6 +17019,7 @@ function populatePlannedRooms(rooms) {
             }
         });
         if (rooms.length && rooms[0].zone === "Town" && typeof ensureTownClassTrainers === "function") ensureTownClassTrainers();
+        ensureSettlementWatch();
     } finally {
         PLANNED_GENERATION_ACTIVE = false;
     }
@@ -24092,6 +24104,7 @@ function moveScheduledNPC(npc, fromRoom, destCoords, target) {
 // Returns "moved" (took a step), "stay" (on target, or waiting for its turn:
 // do not wander), or null (no schedule applies: fall back to the old wander).
 function stepNPCSchedule(npc, room) {
+    if (npc && npc._guardDuty) return "stay";
     if (!canNPCFollowSchedule(npc)) return null;
     const target = getNPCScheduleTarget(npc, room);
     if (!target) return null;
@@ -24647,6 +24660,13 @@ function stepNPCAutonomy(npc, room) {
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
     clearNPCAmbientAction(npc);
 
+    // The watch has one shared movement step for both partners per story turn.
+    if (npc._guardDuty) {
+        healNPCOverTime(npc);
+        if (typeof tickNPCCrimeStep === "function") tickNPCCrimeStep(npc, room);
+        return;
+    }
+
     // A fleer already mid-run keeps running before anything else.
     if (npc._fleeRun && continueNPCFleeRun(npc, room)) return;
 
@@ -24824,6 +24844,9 @@ function relocateNPCBetweenRooms(npc, fromRoom, toCoords, options) {
     // and dragged bodies - or when a caller opts out explicitly.
     const isEscortedMove = npc._inParty || npc._prisoner || npc.isUnconsciousBody ||
         (Array.isArray(G.sessionFollowers) && G.sessionFollowers.indexOf(npc) >= 0);
+    if (npc._guardDuty && !isEscortedMove && !(options && options.settlementWatchPair)) {
+        return moveSettlementGuardPair(npc, fromRoom, toCoords, true);
+    }
     if (!isEscortedMove && !(options && options.ignoreDrunkStumble)) {
         const drunkCrowdNames = (Array.isArray(fromRoom.creatures) ? fromRoom.creatures : [])
             .filter(creature => creature && creature !== npc && !creature.dead && !creature.unconscious)
@@ -40416,22 +40439,29 @@ function summonPeerReinforcement(enemy, room, lines) {
 // enemy) or "npc" (guard sides against the player for attacking a civilized
 // humanoid).
 function summonGuardAssist(enemy, room, lines, side) {
-    const found = findReinforcementCandidate(room, candidate =>
+    const local = (room.creatures || []).find(candidate =>
+        candidate !== enemy && isGuardNPC(candidate) && isEligibleReinforcement(candidate)
+    );
+    const found = local ? { npc: local, room: room } : findReinforcementCandidate(room, candidate =>
         candidate !== enemy &&
         Array.isArray(GUARD_CHECKPOINT_ROLES) &&
         GUARD_CHECKPOINT_ROLES.includes(candidate.role) &&
+        (!candidate._guardDuty || candidate._guardDuty.kind === "patrol") &&
         isEligibleReinforcement(candidate)
     );
     if (!found) return false;
 
-    if (!relocateNPCBetweenRooms(found.npc, found.room, room.coords)) return false;
+    if (found.room !== room && !relocateNPCBetweenRooms(found.npc, found.room, room.coords)) return false;
     const guardName = found.npc.name || "A guard";
 
     if (side === "npc") {
-        found.npc.hostility = Math.max(found.npc.hostility || 0, 85);
-        lines.push(`${guardName} hears the fighting and storms in - "Stand down!" - moving to defend ${enemy.name || "the townsfolk"}.`);
+        const defenders = found.npc._guardDuty ? settlementGuardPair(found.npc, room) : [found.npc];
+        defenders.forEach(function (guard) { guard.hostility = Math.max(guard.hostility || 0, 85); });
+        lines.push(found.room === room
+            ? `${guardName} moves to defend ${enemy.name || "the townsfolk"}. "Stand down!"`
+            : `${guardName} hears the fighting and storms in - "Stand down!" - moving to defend ${enemy.name || "the townsfolk"}.`);
     } else {
-        lines.push(`${guardName} hears the fighting and storms in to help you!`);
+        lines.push(found.room === room ? `${guardName} moves to help you!` : `${guardName} hears the fighting and storms in to help you!`);
         reinforcementOpeningStrike(found.npc, enemy, lines);
     }
     return true;
@@ -50503,6 +50533,7 @@ function reportCrime(room, kind, lines, opts) {
     recordDeed(room, kind, lines, { force: !!opts.force });
     let amount = typeof opts.amount === "number" ? opts.amount : (BOUNTY_AMOUNTS[kind] || 0);
     if (witnesses.some(isGuardNPC)) amount = Math.round(amount * 1.5);
+    if (typeof alertSettlementWatchToCrime === "function") alertSettlementWatchToCrime(room, kind);
     return addBounty(room.zone, amount, lines, kind);
 }
 
@@ -52692,6 +52723,8 @@ function getPickpocketDC(npc) {
     const now = getCurrentStoryTurn();
     let dc = ROGUE_PICKPOCKET_BASE_DC;
     if (npc && GUARD_CHECKPOINT_ROLES.includes(npc.role)) dc += 3;
+    if (typeof settlementVendorPresent === "function" && settlementVendorPresent(G.activeRoom) &&
+        G.activeRoom.creatures.indexOf(npc) >= 0) dc += Math.min(4, settlementWatchWitnesses(G.activeRoom).length * 2);
     dc += Math.floor(hostility / 25);
     if (npc && typeof npc._pickedTurn === "number" && now - npc._pickedTurn < ROGUE_PICKPOCKET_REPEAT_TURNS) dc += ROGUE_PICKPOCKET_REPEAT_DC;
     if (isPlayerHidden()) dc -= 3;
@@ -53876,6 +53909,247 @@ const NPC_GUARD_FIGHT_RANGE = 2;
 const NPC_GUARD_PURSUIT_RANGE = 3;
 const NPC_GUARD_RETURN_CHANCE = 0.5;
 
+// SETTLEMENT WATCH: persistent pairs, fixed gate posts and a public-space patrol.
+function isSettlementWatchRoom(room) {
+    return !!(room && (room.zone === "Town" || room.zone === "Underground City") &&
+        !room.isNPCHome && !(room.zoneTransitionStep > 0));
+}
+
+function isSettlementPatrolRoom(room) {
+    if (!isSettlementWatchRoom(room) || guardRoomIsPost(room)) return false;
+    if (settlementVendorPresent(room)) return true;
+    if (room.isBuildingRoom) return false;
+    return ["Gate", "Square", "Street", "Avenue", "Alleyway", "Market",
+        "Underground Gate", "Market Cavern", "Lantern Hall", "Underground Hallway", "Cavern"].indexOf(room.type) >= 0;
+}
+
+function isSettlementGate(room) {
+    return isSettlementWatchRoom(room) && (room.type === "Gate" || room.type === "Underground Gate");
+}
+
+function settlementVendorPresent(room) {
+    if (!isSettlementWatchRoom(room) || guardRoomIsPost(room) || room.isBuildingRoom && !room.isEntrance) return false;
+    return (room.creatures || []).some(function (npc) {
+        return npc && npc.isHumanoid !== false && npc.hp > 0 && !npc.unconscious && !npc.isUnconsciousBody &&
+            !npc.hidden && !npc.isHidden && !(npc.currentState && npc.currentState.sleeping) &&
+            !npc._prisoner && !npc.bound && !isCompanionNPC(npc) &&
+            isMerchantRole(npc.role) && (typeof isNPCOffDuty !== "function" || !isNPCOffDuty(npc, room));
+    });
+}
+
+function settlementWatchWitnesses(room) {
+    if (!isSettlementWatchRoom(room)) return [];
+    return (room.creatures || []).filter(function (npc) {
+        return isGuardNPC(npc) && isAwakeHumanoidNPC(npc) && !npc._prisoner && !npc.bound &&
+            !isCompanionNPC(npc) && !(npc.currentState && npc.currentState.sleeping);
+    });
+}
+
+function settlementTheftDeterrence(room) {
+    return settlementWatchWitnesses(room).length >= 2 ? 0.95 : NPC_THIEF_GUARD_WARY;
+}
+
+function settlementWatchRoutes(guard, room, maxSteps, responding) {
+    const frontier = [{ room: room, path: [] }], seen = new Set([room.coords]);
+    for (let i = 0; i < frontier.length; i++) {
+        const node = frontier[i];
+        if (node.path.length >= maxSteps) continue;
+        getNPCExitCoords(node.room, guard).forEach(function (key) {
+            const next = G.roomMap[key], dir = getNPCExitDirTo(node.room, key);
+            if (seen.has(key) || !isSettlementPatrolRoom(next) || next.zone !== guard._guardDuty.zone ||
+                !responding && isExitLocked(node.room, dir)) return;
+            seen.add(key); frontier.push({ room: next, path: node.path.concat([key]) });
+        });
+    }
+    return frontier.slice(1);
+}
+
+function settlementWatchAlarm(room) {
+    const alarm = room && room._settlementGuardAlarm;
+    return !!(alarm && alarm.turn <= getCurrentStoryTurn() && getCurrentStoryTurn() - alarm.turn <= 6);
+}
+
+function alertSettlementWatchToCrime(room, kind) {
+    if (!isSettlementPatrolRoom(room) || ["pickpocket", "theft", "assault", "backstab", "murder", "attackGuard"].indexOf(kind) < 0) return;
+    // Called only after native witness validation. No unseen crime is revealed.
+    room._settlementGuardAlarm = { turn: getCurrentStoryTurn(), kind: kind };
+    let best = null;
+    const seen = new Set();
+    Object.keys(G.roomMap || {}).forEach(function (key) {
+        const source = G.roomMap[key];
+        (source.creatures || []).forEach(function (guard) {
+            const duty = guard && guard._guardDuty;
+            if (!duty || duty.kind !== "patrol" || seen.has(duty.pairId) || source === room || source.skirmish) return;
+            seen.add(duty.pairId);
+            const pair = settlementGuardPair(guard, source);
+            if (pair.length !== 2 || pair.some(function (npc) { return !settlementGuardCanMove(npc) || npc._guardDuty.lastMoveTurn === getCurrentStoryTurn(); })) return;
+            const route = settlementWatchRoutes(guard, source, NPC_GUARD_PURSUIT_RANGE, true).find(function (node) { return node.room === room; });
+            if (route && (!best || route.path.length < best.path.length)) best = { guard: guard, room: source, path: route.path };
+        });
+    });
+    if (best) moveSettlementGuardPair(best.guard, best.room, best.path[0], true);
+}
+
+function createSettlementGuard(room) {
+    const zone = getZoneTemplate(room.zone);
+    if (!zone) return null;
+    const pool = (room.npcSpecies || zone.allowedSpecies || []).filter(function (species) {
+        return getSpeciesIsCivilized(species) && getSpeciesHumanoidFlag(species) === true;
+    });
+    if (!pool.length) return null;
+    const npc = createNPC(rand(pool), room, zone, {
+        forceRole: room.zone === "Underground City" ? "Stone Guard" : "Town Guard", skipHome: true
+    });
+    if (npc) {
+        // Starting watch members keep the same safe hostility cap as hub residents.
+        if (typeof room.hostilityCap === "number") npc.hostility = Math.min(npc.hostility, room.hostilityCap);
+        room.creatures.push(npc);
+    }
+    return npc;
+}
+
+function assignSettlementGuardPair(room, members, kind) {
+    const pairId = "watch:" + room.coords + ":" + members[0].id;
+    members.forEach(function (npc) {
+        npc._guardDuty = { pairId: pairId, kind: kind, postCoords: room.coords, zone: room.zone };
+        npc._onCall = false;
+        npc.action = kind === "patrol" ? "patrolling with a fellow guard" : "standing watch with a fellow guard";
+        if (npc.currentState) npc.currentState.gesture = npc.action;
+    });
+}
+
+function ensureSettlementGuardPost(room) {
+    if (!isSettlementWatchRoom(room) || room._settlementWatchReady) return;
+    room.creatures = Array.isArray(room.creatures) ? room.creatures : [];
+    const guards = room.creatures.filter(function (npc) {
+        return isGuardNPC(npc) && npc.hp > 0 && !npc.boss && !npc._guardDuty && !npc._prisoner && !isCompanionNPC(npc);
+    });
+    const minimum = isSettlementGate(room) ? 2 : 0;
+    while (guards.length < minimum || guards.length % 2) {
+        const npc = createSettlementGuard(room);
+        if (!npc) return;
+        guards.push(npc);
+    }
+    for (let i = 0; i < guards.length; i += 2) assignSettlementGuardPair(room, guards.slice(i, i + 2), "post");
+    room._settlementWatchReady = true;
+}
+
+function ensureSettlementWatch() {
+    const map = G.roomMap || {}, seen = new Set();
+    Object.keys(map).forEach(function (coords) { ensureSettlementGuardPost(map[coords]); });
+    // Each connected network of settlement streets gets its own patrol. The
+    // marker survives casualties, recruiting and saves; checks never respawn it.
+    Object.keys(map).forEach(function (coords) {
+        const start = map[coords];
+        if (!isSettlementPatrolRoom(start) || seen.has(coords)) return;
+        const rooms = [start]; seen.add(coords);
+        for (let i = 0; i < rooms.length; i++) {
+            const room = rooms[i];
+            Object.keys(room.exits || {}).forEach(function (dir) {
+                const key = room.exits[dir], next = map[key];
+                if (isVerticalDirection(dir) || seen.has(key) || !isSettlementPatrolRoom(next) || next.zone !== start.zone) return;
+                seen.add(key); rooms.push(next);
+            });
+        }
+        if (!rooms.some(isSettlementGate) || rooms.some(function (room) { return room._settlementPatrolCreated; })) return;
+        const post = rooms.find(function (room) { return room.type === "Square" || room.type === "Market Cavern"; }) || start;
+        const members = [];
+        for (let i = 0; i < 2; i++) {
+            const npc = createSettlementGuard(post);
+            if (npc) members.push(npc);
+        }
+        if (members.length !== 2) {
+            post.creatures = post.creatures.filter(function (npc) { return members.indexOf(npc) < 0; });
+            return;
+        }
+        assignSettlementGuardPair(post, members, "patrol");
+        post._settlementPatrolCreated = true;
+    });
+}
+
+function settlementGuardPair(guard, room) {
+    const duty = guard && guard._guardDuty;
+    if (!duty || !room || !Array.isArray(room.creatures)) return [];
+    return room.creatures.filter(function (npc) {
+        return npc && npc._guardDuty && npc._guardDuty.pairId === duty.pairId;
+    });
+}
+
+function settlementGuardCanMove(npc) {
+    return isAwakeHumanoidNPC(npc) && !npc.dead && !npc.bound && !npc._prisoner &&
+        !npc._inSkirmish && !npc._fleeRun && !npc._drunkBlackout && !npc.isUnconsciousBody &&
+        !isCompanionNPC(npc) && G.activeNPC !== npc && ((npc.hostility || 0) < 70 || npc._bountyHostile) &&
+        !(npc.currentState && npc.currentState.sleeping) &&
+        !(Array.isArray(G.sessionFollowers) && G.sessionFollowers.indexOf(npc) >= 0);
+}
+
+function moveSettlementGuardPair(guard, room, dest, responding) {
+    const pair = settlementGuardPair(guard, room), target = G.roomMap[dest], now = getCurrentStoryTurn();
+    if (pair.length !== 2 || guard._guardDuty.kind !== "patrol" || room.skirmish ||
+        !isSettlementPatrolRoom(target) || target.zone !== guard._guardDuty.zone ||
+        pair.some(function (npc) { return !settlementGuardCanMove(npc) || npc._guardDuty.lastMoveTurn === now; })) return false;
+    const dir = getNPCExitDirTo(room, dest);
+    if (!dir || isVerticalDirection(dir) || pair.some(function (npc) { return !npcLockAccess(npc, room, dir).ok; })) return false;
+    if (!responding && isExitLocked(room, dir)) return false;
+    // Both pass the same actual doorway before either is transferred. No solo
+    // movement or drunk stumble can split an otherwise eligible pair.
+    if (!pair.every(function (npc) { return npcPassExit(npc, room, dir); })) return false;
+    pair.forEach(function (npc) {
+        relocateNPCBetweenRooms(npc, room, dest, { ignoreLocks: true, ignoreDrunkStumble: true, settlementWatchPair: true });
+        npc._guardDuty.lastMoveTurn = now;
+        npc._guardDuty.previousCoords = room.coords;
+    });
+    const leader = pair[0]._guardDuty;
+    leader.visits = leader.visits || {};
+    leader.visits[dest] = (leader.visits[dest] || 0) + 1;
+    if (pair.some(function (npc) { return !isVisibleEntity(npc); })) return true;
+    const names = pair.map(function (npc) { return npc.name || "a guard"; }).join(" and ");
+    if (room === G.activeRoom) guardNote(room, names + (responding ? " head out together to investigate nearby trouble." : " continue their patrol together."));
+    else if (target === G.activeRoom) guardNote(target, names + (responding ? " arrive together, looking for trouble." : " arrive together on patrol."));
+    return true;
+}
+
+function tickSettlementWatch() {
+    if (!G.player || G.activeNPCMode === "combat" || G.activeObject || isPlayerJailed()) return;
+    ensureSettlementWatch();
+    const seen = new Set(), now = getCurrentStoryTurn(), map = G.roomMap || {};
+    Object.keys(map).forEach(function (coords) {
+        const room = map[coords];
+        (room.creatures || []).slice().forEach(function (guard) {
+            const duty = guard && guard._guardDuty;
+            if (!duty || duty.kind !== "patrol" || seen.has(duty.pairId)) return;
+            seen.add(duty.pairId);
+            const pair = settlementGuardPair(guard, room);
+            if (pair.length !== 2 || pair.some(function (npc) { return !settlementGuardCanMove(npc); })) return;
+            if (settlementWatchAlarm(room) || roomHasWantedThief(room) || room.skirmish || roomHasActiveHostile(room)) return;
+            if (duty.lastStepTurn === now) return;
+            pair.forEach(function (npc) { npc._guardDuty.lastStepTurn = now; });
+            // Shops are part of the beat. Witnessed alarms and theft fights take priority.
+            const call = settlementWatchRoutes(guard, room, NPC_GUARD_PURSUIT_RANGE, true).find(function (node) {
+                return settlementWatchAlarm(node.room) || roomHasWantedThief(node.room) ||
+                    node.path.length <= NPC_GUARD_FIGHT_RANGE && skirmishAttractsGuards(node.room);
+            });
+            if (call) { moveSettlementGuardPair(guard, room, call.path[0], true); return; }
+            if (now % 3 !== 0) return;
+            const visits = duty.visits || {};
+            const shops = settlementWatchRoutes(guard, room, Object.keys(map).length, false).filter(function (node) {
+                return settlementVendorPresent(node.room);
+            });
+            shops.sort(function (a, b) {
+                return (visits[a.room.coords] || 0) - (visits[b.room.coords] || 0) || a.path.length - b.path.length;
+            });
+            if (shops.length) { moveSettlementGuardPair(guard, room, shops[0].path[0], false); return; }
+            let options = getNPCExitCoords(room, guard).filter(function (key) {
+                return isSettlementPatrolRoom(map[key]) && map[key].zone === duty.zone;
+            });
+            if (options.length > 1) options = options.filter(function (key) { return key !== duty.previousCoords; });
+            options.sort(function (a, b) { return (visits[a] || 0) - (visits[b] || 0); });
+            if (options.length) moveSettlementGuardPair(guard, room, options[0], false);
+        });
+    });
+}
+// END SETTLEMENT WATCH
+
 function guardRoomIsPost(room) {
     return !!room && (room.isJailCell || /jail/i.test(String(room.type || "")));
 }
@@ -53964,6 +54238,7 @@ function guardNote(room, text) {
 
 function guardStepAlong(guard, room, path) {
     const dest = path && path[0];
+    if (guard._guardDuty) return moveSettlementGuardPair(guard, room, dest, true);
     if (!dest || !relocateNPCBetweenRooms(guard, room, dest)) return false;
     const toRoom = G.roomMap[dest];
     guard._onCall = true;
@@ -53983,11 +54258,14 @@ function guardRespondToTrouble(guard, room) {
         }
         return false;
     }
+    // Gate and building posts remain staffed; the separate patrol answers calls.
+    if (guard._guardDuty && guard._guardDuty.kind === "post") return false;
     const target = findNearestRoomFrom(room, NPC_GUARD_PURSUIT_RANGE, function (r, depth) {
         if (depth <= NPC_GUARD_FIGHT_RANGE && skirmishAttractsGuards(r)) return true;
         return roomHasWantedThief(r);
     }, guard);
     if (target && guardStepAlong(guard, room, target.path)) return true;
+    if (guard._guardDuty) return false;
     // Nothing to answer: wander back to the post.
     if (guard._onCall) {
         const home = guard._homeCoords && G.roomMap[guard._homeCoords];
@@ -54271,7 +54549,7 @@ function tickNPCCrimeStep(npc, room) {
     if (npc._loot && thiefSeekFence(npc, room)) return true;
     if (!isOpportunistThief(npc) || (npc.hostility || 0) >= 50) return false;
     if (isNPCWanted(npc)) return false;
-    if (roomHasGuard(room) && Math.random() < NPC_THIEF_GUARD_WARY) return false;
+    if (roomHasGuard(room) && Math.random() < settlementTheftDeterrence(room)) return false;
     const now = getCurrentStoryTurn();
     if (typeof npc._theftTurn === "number" && now - npc._theftTurn < NPC_THEFT_COOLDOWN) return false;
     if (Math.random() >= NPC_NPC_THEFT_CHANCE) return false;
@@ -54351,7 +54629,7 @@ function tickNPCOpportunism() {
         if (!isOpportunistThief(npc) || (npc.hostility || 0) >= 50) continue;
         if (isNPCWanted(npc)) continue;
         if (typeof npc._theftTurn === "number" && now - npc._theftTurn < NPC_THEFT_COOLDOWN) continue;
-        if (guardPresent && Math.random() < NPC_THIEF_GUARD_WARY) continue;
+        if (guardPresent && Math.random() < settlementTheftDeterrence(room)) continue;
         let chance = NPC_THEFT_BASE_CHANCE;
         if (coins >= 100) chance += NPC_THEFT_VERY_RICH_BONUS;
         else if (coins >= 30) chance += NPC_THEFT_RICH_BONUS;
