@@ -6,6 +6,110 @@ if (typeof window !== "undefined") {
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
+// Physical definitions use kg, cm and litres. Inventory unitSize remains a
+// separate game abstraction. Existing elemental damage stays in DURABILITY_MATERIALS.
+const WORLD_MATERIAL_RULES = {
+    wood:    { density: 0.65, hardness: 2, brittle: false, flexible: false, absorbency: 0.3 },
+    cloth:   { density: 0.25, hardness: 0, brittle: false, flexible: true, absorbency: 1 },
+    leather: { density: 0.85, hardness: 1, brittle: false, flexible: true, absorbency: 0.4 },
+    paper:   { density: 0.7, hardness: 0, brittle: false, flexible: true, absorbency: 1 },
+    bone:    { density: 1.8, hardness: 3, brittle: true, flexible: false, absorbency: 0.1 },
+    glass:   { density: 2.5, hardness: 4, brittle: true, flexible: false, absorbency: 0 },
+    ceramic: { density: 2.3, hardness: 4, brittle: true, flexible: false, absorbency: 0.1 },
+    iron:    { density: 7.8, hardness: 5, brittle: false, flexible: false, absorbency: 0 },
+    steel:   { density: 7.85, hardness: 6, brittle: false, flexible: false, absorbency: 0 },
+    gold:    { density: 19.3, hardness: 2, brittle: false, flexible: false, absorbency: 0 },
+    stone:   { density: 2.6, hardness: 5, brittle: true, flexible: false, absorbency: 0.1 },
+    brick:   { density: 1.8, hardness: 3, brittle: true, flexible: false, absorbency: 0.3 },
+    plaster: { density: 0.9, hardness: 1, brittle: true, flexible: false, absorbency: 0.8 },
+    earth:   { density: 1.5, hardness: 0, brittle: false, flexible: false, absorbency: 0.8 },
+    misc:    { density: 1, hardness: 1, brittle: false, flexible: false, absorbency: 0.2 }
+};
+// Templates define construction, including actual material volume. A frame
+// occupies only part of its bounding box; a vessel has walls and an open top.
+const WORLD_OBJECT_CATALOGUE = {
+    coin:   { size: [2,2,0.15], form: "frame", fill: 0.78, material: "gold", unitSize: 0 },
+    block:  { size: [20,20,20], form: "solid", fill: 1, material: "stone", unitSize: 4 },
+    plank:  { size: [100,15,3], form: "solid", fill: 1, material: "wood", unitSize: 4 },
+    bar:    { size: [60,2.5,2.5], form: "solid", fill: 1, material: "iron", unitSize: 3 },
+    bucket: { size: [28,28,30], form: "vessel", thickness: 1, material: "wood", unitSize: 4, liquid: true },
+    cup:    { size: [9,9,12], form: "vessel", thickness: 0.4, material: "ceramic", unitSize: 1, liquid: true },
+    bottle: { size: [9,9,25], form: "vessel", thickness: 0.3, material: "glass", unitSize: 2, liquid: true },
+    barrel: { size: [55,55,85], form: "vessel", thickness: 2, material: "wood", unitSize: 12, liquid: true },
+    crate:  { size: [60,45,40], form: "vessel", thickness: 1.5, material: "wood", unitSize: 8, storage: true },
+    chest:  { size: [80,45,45], form: "vessel", thickness: 2, material: "wood", unitSize: 8, storage: true },
+    chair:  { size: [45,45,90], form: "frame", fill: 0.04, material: "wood", unitSize: 8 },
+    stool:  { size: [35,35,45], form: "frame", fill: 0.07, material: "wood", unitSize: 4 },
+    table:  { size: [120,75,75], form: "frame", fill: 0.045, material: "wood", unitSize: 16 },
+    bench:  { size: [150,40,50], form: "frame", fill: 0.06, material: "wood", unitSize: 12 },
+    pallet: { size: [180,70,15], form: "frame", fill: 0.3, material: "cloth", unitSize: 12 },
+    anvil:  { size: [45,20,25], form: "frame", fill: 0.45, material: "iron", unitSize: 12, secured: true },
+    statue: { size: [50,50,170], form: "frame", fill: 0.3, material: "stone", unitSize: 24, secured: true },
+    cloth:  { size: [100,100,0.2], form: "solid", fill: 1, material: "cloth", unitSize: 2 },
+    rope:   { size: [300,1.5,1.5], form: "frame", fill: 0.78, material: "cloth", unitSize: 2 },
+    item:   { size: [10,10,10], form: "solid", fill: 0.3, material: "misc", unitSize: 2 }
+};
+// Native spill-volume units are abstract. This explicit bridge gives them a
+// stable mass without changing any native coverage, capacity or spell rules.
+const WORLD_FLUID_PHYSICS = { litresPerUnit: 0.25, density: { water: 1, oil: 0.9, spirits: 0.85, ale: 1, blood: 1.06 } };
+
+function validateWorldObjectDefinition(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    if (Object.keys(value).some(function (key) { return ["name", "template", "material", "scale"].indexOf(key) < 0; })) return null;
+    if (typeof value.name !== "string" || !value.name.trim() || value.name.length > 100 || /[<>\r\n]/.test(value.name)) return null;
+    if (!Object.prototype.hasOwnProperty.call(WORLD_OBJECT_CATALOGUE, value.template) || !Object.prototype.hasOwnProperty.call(WORLD_MATERIAL_RULES, value.material)) return null;
+    const scale = value.scale === undefined ? 1 : value.scale;
+    if (typeof scale !== "number" || !Number.isFinite(scale) || scale < 0.5 || scale > 2) return null;
+    const template = WORLD_OBJECT_CATALOGUE[value.template], material = WORLD_MATERIAL_RULES[value.material];
+    // A rigid vessel/frame cannot be made from loose earth or a flexible sheet.
+    if ((template.form === "vessel" || template.form === "frame" && value.template !== "rope" && value.template !== "pallet") && (material.flexible || value.material === "earth" || value.material === "paper")) return null;
+    if (value.template === "rope" && !material.flexible) return null;
+    return { name: value.name.trim(), template: value.template, material: value.material, scale: scale };
+}
+
+function calculateWorldObjectPhysics(definition) {
+    const def = validateWorldObjectDefinition(definition);
+    if (!def) return null;
+    const template = WORLD_OBJECT_CATALOGUE[def.template], material = WORLD_MATERIAL_RULES[def.material];
+    const dimensions = template.size.map(function (n) { return n * def.scale; });
+    const outer = dimensions[0] * dimensions[1] * dimensions[2] / 1000;
+    let materialLitres = outer * (template.fill || 1), capacityLitres = 0;
+    if (template.form === "vessel") {
+        const wall = template.thickness * def.scale;
+        capacityLitres = Math.max(0, dimensions[0] - 2 * wall) * Math.max(0, dimensions[1] - 2 * wall) * Math.max(0, dimensions[2] - wall) / 1000;
+        materialLitres = outer - capacityLitres;
+    }
+    return { version: 1, template: def.template, material: def.material, scale: def.scale, dimensionsCm: dimensions,
+        dryMassKg: Math.round(materialLitres * material.density * 1000) / 1000,
+        capacityLitres: Math.round(capacityLitres * 1000) / 1000,
+        unitSize: Math.max(0, Math.ceil(template.unitSize * Math.pow(def.scale, 3))), secured: !!template.secured };
+}
+
+function inferWorldObjectDefinition(object, kind) {
+    if (!object || typeof object !== "object") return null;
+    if (object.physicalDefinition) return validateWorldObjectDefinition(object.physicalDefinition);
+    const name = String(object.name || object.id || "object"), text = name.toLowerCase().replace(/-/g, " ");
+    const rules = [[/\bcoins?\b/,"coin"],[/\b(bucket|pail)\b/,"bucket"],[/\b(barrel|cask|keg)\b/,"barrel"],[/\b(chest|trunk)\b/,"chest"],[/\bcrate\b/,"crate"],
+        [/\b(bottle|flask|vial)\b/,"bottle"],[/\b(cup|mug|bowl)\b/,"cup"],[/\bstool\b/,"stool"],[/\bchair\b/,"chair"],[/\bbench\b/,"bench"],
+        [/\btable\b/,"table"],[/\b(pallet|bedroll)\b/,"pallet"],[/\banvil\b/,"anvil"],[/\bstatue\b/,"statue"],[/\b(plank|board)\b/,"plank"],[/\b(crowbar|pry bar|iron bar|steel bar)\b/,"bar"],[/\brope\b/,"rope"]];
+    const match = rules.find(function (row) { return row[0].test(text); });
+    if (!match && kind === "fixture") return null;
+    const key = match ? match[1] : "item", template = WORLD_OBJECT_CATALOGUE[key];
+    const explicit = object.material || object.durability && object.durability.material;
+    let material = Object.prototype.hasOwnProperty.call(WORLD_MATERIAL_RULES, explicit) ? explicit : template.material;
+    if (!explicit) Object.keys(WORLD_MATERIAL_RULES).some(function (key) { if (new RegExp("\\b" + key + "\\b").test(text)) { material = key; return true; } return false; });
+    let scale = 1;
+    if (key === "bottle" && /\bvial\b/.test(text)) scale = 0.5;
+    if (key === "item" && typeof object.unitSize === "number") scale = Math.max(0.5, Math.min(2, Math.pow(Math.max(0.25, object.unitSize) / 2, 1/3)));
+    return validateWorldObjectDefinition({ name: name.slice(0,100), template: key, material: material, scale: scale });
+}
+
+function worldObjectGenerationRules() {
+    return "Return JSON only: {name,template,material,scale}. No effects, weight, value, contents, magic or attachment fields. " +
+        "Scale 0.5..2 multiplies the template dimensions; the engine calculates mass, size and capacity. " +
+        "Rigid vessels/frames need rigid materials; ropes need flexible material. Templates=" + JSON.stringify(WORLD_OBJECT_CATALOGUE) + "; materials=" + JSON.stringify(WORLD_MATERIAL_RULES);
+}
+
 // ── ZONE TEMPLATES ───────────────────────────────────────────────
 
 const ZONE_TEMPLATES = [
@@ -697,6 +801,10 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "ale-barrels",  name: "ale barrels",      tags: ["storage", "commerce"] },
             { id: "shelving",     name: "shelving",         tags: ["storage"] },
+            { id: "packing-board", name: "nailed packing board", tags: [], material: "wood", attachment: "nailed", anchored: true, pryable: true,
+                examineText: "A wooden packing board is held to an old rack by exposed nails. There is room to slip a lever under its edge." },
+            { id: "cellar-pry-bar", name: "iron pry bar", tags: [], material: "iron", anchored: false, unitSize: 3,
+                examineText: "A loose iron bar with a flattened end leans against the rack." },
             { id: "trapdoor",     name: "trapdoor",         tags: ["passage"] }
         ],
         imageKey: "Cellar"

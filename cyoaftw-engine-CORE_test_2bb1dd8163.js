@@ -44,9 +44,9 @@ function socialActionBlock(npc) {
     return "";
 }
 
-function socialActionAvailable() {
+function socialActionAvailable(includePhysical) {
     if (!G.activeNPC && !interactionSoloBlock()) return true;
-    return (G.activeNPC ? [G.activeNPC] : textModeVisibleNPCs()).some(function (npc) { return !socialActionBlock(npc); });
+    return (G.activeNPC ? [G.activeNPC] : textModeVisibleNPCs()).some(function (npc) { return !socialActionBlock(npc) || includePhysical && !physicalEffectBlock(npc); });
 }
 
 function socialActionFeedback(status, text) {
@@ -93,7 +93,7 @@ function socialReplyCompleted(choice, npc, reply) {
 }
 
 function textSocialHelp() {
-    return textModeResult("completed", "Express yourself with express <action>; invite <person> to <action>; ask for contact with contact <action> with <person>. Slap/punch/shove make a light unarmed attack and may start a fight. Familiar gestures: wave, bow, nod, smile, salute, dance. Expressions and invitations take one turn. NPCs can decline. Say followed by quoted words remains speech.");
+    return textModeResult("completed", "Express yourself with express <action>; invite <person> to <action>; ask for contact with contact <action> with <person>. Use attempt <minor bare-hand action> with <person> for AI-proposed pain, minor damage, a brief condition and an NPC reaction; for example attempt pinch an arm with human. This costs 1 stamina and one story turn outside combat, or one combat action in a fight. It needs AI and can provoke retaliation. Push/shove/slap/punch retain normal light unarmed combat. Familiar gestures: wave, bow, nod, smile, salute, dance. Say followed by quoted words remains speech.");
 }
 
 async function executeTextSocialCommand(action) {
@@ -117,7 +117,7 @@ async function executeTextSocialCommand(action) {
 
 
 // Finite effect families; free-form descriptions never become game effects.
-const INTERACTION_FAMILIES = ["expression", "invitation", "contact", "assault"];
+const INTERACTION_FAMILIES = ["expression", "invitation", "contact", "assault", "physical"];
 function interactionRequest(args) {
     if (!args || !INTERACTION_FAMILIES.includes(args.family) || typeof args.action !== "string") return null;
     if (args.target !== undefined && (typeof args.target !== "string" || args.target.length > 160)) return null;
@@ -127,21 +127,305 @@ function interactionRequest(args) {
 }
 function interactionDescriptionBlock(request) {
     if (request.family === "assault") return "";
-    if (/\b(?:slap|punch|kick|shove|smack|backhand|headbutt|stab|strangle|attack|damage|kill)\b/i.test(request.action)) return "That is an aggressive physical action. Use a direct attack or physical command instead.";
+    if (request.family === "physical") return /\b(?:heal|resurrect|teleport|cast|steal|buy|sell|equip|unlock|loot|summon|conjure|transform)\b/i.test(request.action) ? "That needs its own game action rather than a minor bare-hand attempt." : "";
+    if (/\b(?:slap|punch|kick|push|shove|smack|backhand|headbutt|elbow|stab|strangle|attack|damage|kill)\b/i.test(request.action)) return "That is an aggressive physical action. Use a direct attack or physical command instead.";
     if (/\b(?:heal|resurrect|teleport|cast|steal|buy|sell|equip|unlock|loot|gain|summon|conjure|transform)\b/i.test(request.action)) return "That needs its own game action. Use the matching command; a gesture cannot perform it.";
     if (request.family === "expression" && /\b(?:hug|kiss|touch|pat|grab|shake hands|handshake)\b/i.test(request.action)) return "That involves contact. Use contact <action> with <person> to ask their permission.";
     return "";
 }
 function parseTextInteractionCommand(input) {
     const raw = String(input || "").trim().replace(/^\*+\s*|\s*\*+$/g, "").replace(/[.!?]+$/, "").replace(/^I\s+/i, "");
-    let match = /^(slap|punch|kick|shove|smack|backhand|headbutt|elbow)(?:\s+(.+))?$/i.exec(raw);
+    if (/^push\s+through\b/i.test(raw)) return null; // Existing door/passage command.
+    let match = /^(slap|punch|kick|push|shove|smack|backhand|headbutt|elbow)(?:\s+(.+))?$/i.exec(raw);
     if (match) return { verb: "act", directAssault: true, args: { family: "assault", action: match[1].toLowerCase(), target: match[2] || "" } };
+    match = /^(?:attempt|try\s+physical)\s+(.+?)(?:\s+(?:on|with)\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "act", args: { family: "physical", action: match[1], target: match[2] || "" } };
     match = /^(express|contact)\s+(.+?)(?:\s+(?:at|to|with)\s+(.+))?$/i.exec(raw);
     if (match) return { verb: "act", args: { family: match[1].toLowerCase() === "express" ? "expression" : "contact", action: match[2], target: match[3] || "" } };
     match = /^invite\s+(.+?)\s+to\s+(.+)$/i.exec(raw);
     return match ? { verb: "act", args: { family: "invitation", action: match[2], target: match[1] } } : null;
 }
-function interactionSoloBlock() {
+
+
+// Parse NSFW physical touch commands (touch, grab, hug, grope)
+function parseTextTouchCommand(input) {
+  const raw = String(input || "").trim().replace(/[.!?]+$/, "");
+  let match = /^(?:touch(?:\s+gently)?|grab|hug|embrace|grope)(?:\s+(.+))?$/i.exec(raw);
+  if (match) {
+    let verb = match[0].toLowerCase();
+    if (verb.includes("gently")) verb = "touch";
+    if (verb === "embrace") verb = "hug";
+    return { verb: verb, args: { target: match[2] || "" } };
+  }
+  return null;
+// Execute NSFW physical touch commands
+async function executeTextTouchCommand(action) {
+  const args = action.args || {};
+  const verb = action.verb;
+  const targetName = args.target || "";
+  
+  // Check if NSFW touch system is available
+  if (typeof window.handlePhysicalTouch !== "function") {
+    return textModeResult("blocked", "Physical touch actions are not available in this configuration.");
+  }
+  
+  // Check if we're in a valid state
+  const interrupted = textModeInterruptReason();
+  if (interrupted) return textModeResult("interrupted", interrupted);
+  
+  // Get the target NPC
+  const candidates = textModeVisibleNPCs();
+  const matches = targetName ? resolveTextNPCTarget(targetName, candidates).matches : [];
+  
+  if (!matches.length) {
+    if (G.activeNPC) {
+      matches.push(G.activeNPC);
+    } else {
+      return textModeResult("blocked", "No visible person matches that description.");
+    }
+  }
+  
+  if (matches.length > 1) {
+    return textModeAsk(action, "target", matches, "Who do you mean?");
+  }
+  
+  const npc = matches[0];
+  
+  // Block if NPC is not in a valid state for touch
+  if (!npc || !npc.isHumanoid || !npc.romanceEligible) {
+    return textModeResult("blocked", getNPCPublicName(npc) + " is not someone you can touch that way.");
+  }
+  
+  // Check if we're in combat
+  if (textModeInCombat() && !textCombatFoes().includes(npc)) {
+    return textModeResult("blocked", "Finish the current combat first.");
+  }
+  
+  // Check if we're currently in conversation with someone else
+  if (G.activeNPC && G.activeNPC !== npc && !textModeInCombat()) {
+    return textModeResult("blocked", "Leave your current conversation first.");
+  }
+  
+  // Map verb to touch type
+  const touchTypeMap = {
+    touch: "gentle",
+    grab: "firm",
+    hug: "affectionate",
+    embrace: "affectionate",
+    grope: "bold"
+  };
+  const touchType = touchTypeMap[verb] || "gentle";
+  
+  // Build context
+  const room = G.activeRoom;
+  const player = G.player;
+  const memory = npc.memory || {};
+  const isPrivate = room && (typeof isPrivateLocationFunc === "function" && isPrivateLocationFunc(room));
+  const hasOthers = room && room.creatures && room.creatures.some(c => c && !c.isPlayer && c !== npc && (c.isHumanoid || c.humanoid));
+  
+  // Calculate receptivity for stat tracking
+  const ctx = { room: room, npc: npc, player: player };
+  const result = window.handlePhysicalTouch(npc, touchType, ctx);
+  
+  if (!result.success) {
+    return textModeResult("blocked", result.message);
+  }
+  
+  // Check if this should start an intimacy encounter
+  if (result.startEncounter && typeof window.startIntimacyEncounter === "function") {
+    npc._advanceRebuffed = false;
+    if (typeof window.setIntimacyNPC === "function") {
+      window.setIntimacyNPC(npc);
+    }
+    return window.startIntimacyEncounter(npc, touchType);
+  }
+  
+  // Apply stat impacts from the touch system
+  const impacts = result.impacts || {};
+  
+  // Build rich AI prompt for immersive, creature-lore-specific response
+  // This leverages the AI to generate context-aware, personality-driven reactions
+  let aiResponseText = result.message; // Fallback to static text
+  
+  if (aiAvailable()) {
+    try {
+      // Get NPC profile info
+      const npcName = getNPCPublicName(npc);
+      const gender = npc.gender === "male" ? "male" : npc.gender === "female" ? "female" : "their";
+      const temperament = String(npc.temperament || "neutral").toLowerCase();
+      const species = npc.species || "unknown";
+      const role = npc.role || "";
+      
+      // Get relationship stats
+      const attraction = memory.attraction || 0;
+      const lust = memory.lust || 0;
+      const favor = memory.favorability || memory.favor || 0;
+      const hostility = memory.hostility || 0;
+      const mood = memory.mood || 0;
+      const disinhibition = memory.disinhibition || 0;
+      const arousal = memory.arousal || 0;
+      
+      // Get lore and enrichment
+      const lore = npc.loreNotes || "";
+      const enrichment = npc.enrichment || {};
+      const speciesLore = enrichment.speciesLore || "";
+      const values = Array.isArray(enrichment.values) ? enrichment.values : [];
+      const speechStyle = npc.speechStyle || "";
+      
+      // Location context
+      const roomType = room ? (room.type || room.displayName || "unknown") : "unknown";
+      const roomDesc = room ? (room.baseDescription || room.description || "") : "";
+      
+      // Action description
+      const actionDescMap = {
+        gentle: "a gentle, tentative touch",
+        firm: "a firm grab",
+        affectionate: "a warm, affectionate hug",
+        bold: "a bold, intimate grope"
+      };
+      const actionDesc = actionDescMap[touchType] || actionDescMap.gentle;
+      
+      // Privacy context
+      const privacyContext = isPrivate 
+        ? "You are alone together." 
+        : hasOthers 
+          ? "Others are present and can see this." 
+          : "You are in a semi-private setting.";
+      
+      // Reaction guidance based on stats
+      let reactionGuidance = "";
+      if (attraction >= 70 && lust >= 50) {
+        reactionGuidance = "They have strong positive feelings toward you. Respond warmly and perhaps with growing arousal.";
+      } else if (attraction >= 50) {
+        reactionGuidance = "They like you reasonably well. Respond positively but with some reservation appropriate to your personality.";
+      } else if (attraction >= 20) {
+        reactionGuidance = "They are neutral or mildly positive. Respond cautiously - neither welcoming nor rejecting outright.";
+      } else if (hostility >= 50) {
+        reactionGuidance = "They dislike or are wary of you. Respond with irritation, discomfort, or a sharp rebuke.";
+      } else {
+        reactionGuidance = "They are indifferent. Respond with mild reaction, appropriate to your temperament.";
+      }
+      
+      // Temperature context for the action
+      const tempContextMap = {
+        bold: temperament === "shy" || temperament === "cautious" 
+          ? "This is forward for someone with your temperament - your discomfort shows."
+          : temperament === "bold" || temperament === "forward" || temperament === "lustful"
+            ? "This matches your bold nature - you may welcome or reciprocate the initiative."
+            : "This is a bit forward - respond according to your personality.",
+        affectionate: temperament === "shy"
+          ? "Physical affection makes you nervous, but you try to be polite."
+          : temperament === "warm" || temperament === "friendly"
+            ? "You naturally respond to affection with warmth."
+            : "You accept the affection according to your nature.",
+        firm: temperament === "shy"
+          ? "Being grabbed makes you tense and uncomfortable."
+          : temperament === "aggressive" || temperament === "hostile"
+            ? "You may bristle at the presumption."
+            : "You react based on your current mood and relationship with them.",
+        gentle: "A gentle touch allows you to respond naturally based on your feelings."
+      };
+      
+      // Build the prompt
+      const prompt = [
+        "SCENE: The player has made physical contact with you.",
+        "ACTION: They " + verb + "ed you - " + actionDesc + ".",
+        "",
+        "YOUR IDENTITY:",
+        "- Name: " + npcName,
+        "- Species: " + species,
+        "- Gender: " + gender,
+        "- Role: " + role,
+        "- Temperament: " + temperament,
+        speechStyle ? "- Speech style: " + speechStyle : "",
+        lore ? "- Lore: " + lore.slice(0, 200) : "",
+        speciesLore ? "- Species lore: " + speciesLore.slice(0, 200) : "",
+        values.length ? "- Values: " + values.join(", ") : "",
+        "",
+        "YOUR FEELINGS TOWARD THE PLAYER:",
+        "- Attraction: " + attraction + "/100 (" + (attraction >= 70 ? "very attracted" : attraction >= 40 ? "somewhat attracted" : attraction >= 20 ? "mildly interested" : "not attracted") + ")",
+        "- Lust: " + lust + "/100 (" + (lust >= 70 ? "high" : lust >= 40 ? "moderate" : "low") + ")",
+        "- Favor: " + favor + "/100 (" + (favor >= 70 ? "trusted" : favor >= 40 ? "liked" : favor >= 20 ? "neutral" : "disliked") + ")",
+        "- Hostility: " + hostility + "/100 (" + (hostility >= 70 ? "angry" : hostility >= 40 ? "upset" : hostility >= 20 ? "wary" : "neutral") + ")",
+        "- Disinhibition: " + disinhibition + "/100",
+        "- Arousal: " + arousal + "/100",
+        "- Mood: " + (mood >= 50 ? "positive" : mood >= 20 ? "neutral" : mood >= -20 ? "slightly negative" : "negative"),
+        "",
+        "CONTEXT:",
+        "- Location: " + roomType,
+        roomDesc ? "- Setting: " + roomDesc.slice(0, 150) : "",
+        "- " + privacyContext,
+        "",
+        "GUIDANCE:",
+        reactionGuidance,
+        tempContextMap[touchType],
+        "",
+        "RESPOND IN CHARACTER: Reply as " + npcName + " would to this physical contact. " +
+        "Speak 1-2 sentences maximum, in your natural voice. " +
+        "Stay immersive and true to your personality, temperament, and current feelings toward the player. " +
+        "Include subtle physical reactions if appropriate. " +
+        "Do NOT narrate actions you take - only speak your response. " +
+        "Do NOT mention stats or numbers. " +
+        "Do NOT break character."
+      ].filter(Boolean).join("\n");
+      
+      // Call AI
+      const aiOptions = { instruction: prompt, startWith: "", endButtons: "none" };
+      
+      // Try with timeout
+      let aiTimer;
+      const aiPromise = Promise.race([
+        callAI(aiOptions),
+        new Promise(resolve => { aiTimer = setTimeout(() => resolve(null), 10000); })
+      ]);
+      
+      const aiResult = await aiPromise;
+      clearTimeout(aiTimer);
+      
+      if (aiResult && aiResult.text) {
+        const rawText = String(aiResult.text).trim();
+        // Clean up any markdown formatting the AI might add
+        const cleanText = rawText
+          .replace(/^[\"`]|[\"`]$/g, "")
+          .replace(/^\s*[\-*]\s*|\s*[\-*]\s*$/g, "")
+          .replace(/\n\n+/g, " ").trim();
+        
+        // Use AI response if it's valid
+        if (cleanText && cleanText.length > 0 && cleanText.length < 500) {
+          aiResponseText = cleanText;
+        }
+      }
+    } catch (err) {
+      console.warn("[NSFW Touch] AI call failed:", err);
+      // Fall through to static text
+    }
+  }
+  
+  // Publish the AI-generated or fallback response
+  publishTextModeOutput("interaction", aiResponseText, {
+    interaction: { 
+      family: "contact", 
+      action: verb, 
+      target: getNPCPublicName(npc),
+      phase: "result",
+      nsfw: true,
+      touchType: touchType,
+      receptivity: result.receptivity,
+      reactionCategory: result.reactionCategory,
+      aiGenerated: aiResponseText !== result.message
+    }
+  }, false);
+  
+  // Advance turn
+  advanceNPCAffectTime(1);
+  advanceStoryTurn(1);
+  
+  renderStats();
+  saveGameState();
+  
+  return textModeResult("completed", aiResponseText);
+}
+}function interactionSoloBlock() {
     const p = G.player;
     if (!p || !G.activeRoom || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot act while incapacitated.";
     if (G.activeNPC || G.activeObject || G.activeItemModal || G.combatEncounter || typeof roomHasActiveHostile !== "function" || roomHasActiveHostile(G.activeRoom) || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Finish the current interaction before expressing yourself freely.";
@@ -151,7 +435,10 @@ function interactionPhysicalBlock(npc) {
     const p = G.player, room = G.activeRoom;
     if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot act while incapacitated.";
     if (G.activeObject || G.activeItemModal || p.carrying || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Finish the current interaction or put down what you are carrying first.";
-    if (!npc || !(room.creatures || []).includes(npc) || !isVisibleEntity(npc) || npc.dead || npc.hp <= 0 || npc.unconscious || npc.isUnconsciousBody || npc.surrendered) return "That person is no longer a valid physical target.";
+    if (!npc || !(room.creatures || []).includes(npc)) return "You cannot reach that person from here.";
+    if (!isVisibleEntity(npc)) return "You cannot see that person well enough to strike them.";
+    if (npc.dead || npc.hp <= 0 || npc.unconscious || npc.isUnconsciousBody) return "That person is already down and cannot be engaged in a standing fight.";
+    if (npc.surrendered) return "That person has surrendered; you cannot start a standing fight with them this way.";
     if (npc._inSkirmish && !(typeof isEntityExhausted === "function" && isEntityExhausted(npc))) return "They are too occupied to approach.";
     if (G.activeNPC && G.activeNPC !== npc && !textModeInCombat()) return "Leave your current conversation first.";
     if (G.activeNPC && !/^(talk|respond|menu|combat)$/.test(G.activeNPCMode || "")) return "Finish the current interaction first.";
@@ -173,7 +460,7 @@ function performPhysicalInteraction(npc, request) {
         interaction: { family: "assault", action: request.action, target: getNPCRoomSightName(npc), phase: "attempt", unarmed: true }
     });
     if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || interactionPhysicalBlock(npc)) return socialActionFeedback("interrupted", "The moment changed before you could act.");
-    attackNPC(npc, { style: "light", target: part, unarmed: true });
+    attackNPC(npc, { style: "light", target: part, unarmed: true, physicalAction: request.action });
     return { status: "completed" };
 }
 function reviewPhysicalInteraction(npc, request) {
@@ -191,11 +478,181 @@ function reviewPhysicalInteraction(npc, request) {
     publishSharedChoiceMenu(menu, root);
     return { status: "needs_input" };
 }
+// Novel SFW hand actions compose bounded effects rather than adding verb handlers.
+// This adjudicator is separate from the compact command-intent parser.
+const physicalEffectRuntime = { active: null, sequence: 0 };
+const PHYSICAL_EFFECT_CONDITIONS = ["none", "sore", "distracted"];
+
+function validatePhysicalEffectPlan(value) {
+    const keys = ["possible", "reason", "description", "method", "part", "pain", "damage", "condition", "duration", "reaction"];
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(function (key) { return keys.indexOf(key) < 0; })) return null;
+    if (typeof value.possible !== "boolean") return null;
+    if (!value.possible) return typeof value.reason === "string" && value.reason.trim() && value.reason.length <= 180 && !/[\r\n<>]/.test(value.reason) ? { possible: false, reason: value.reason.trim() } : null;
+    if (typeof value.description !== "string" || !value.description.trim() || value.description.length > 160 || /[\r\n<>.!?]/.test(value.description)) return null;
+    if (["touch", "pressure", "impact"].indexOf(value.method) < 0 || ["head", "torso", "arms", "legs"].indexOf(value.part) < 0) return null;
+    const cap = { touch: 0, pressure: 1, impact: 3 }[value.method];
+    if (!Number.isInteger(value.damage) || value.damage < 0 || value.damage > cap || !Number.isInteger(value.pain) || value.pain < 0 || value.pain > 3) return null;
+    if (PHYSICAL_EFFECT_CONDITIONS.indexOf(value.condition) < 0 || !Number.isInteger(value.duration) || value.duration < 0 || value.duration > 2 || (value.condition === "none" ? value.duration !== 0 : value.duration < 1)) return null;
+    if (["acknowledge", "protest", "recoil", "retaliate"].indexOf(value.reaction) < 0) return null;
+    return { possible: true, description: value.description.trim(), method: value.method, part: value.part, pain: value.pain, damage: value.damage, condition: value.condition, duration: value.duration, reaction: value.reaction };
+}
+
+function physicalEffectBlock(npc) {
+    const reason = interactionPhysicalBlock(npc);
+    if (reason) return reason;
+    if (typeof isEntityIncorporeal === "function" && isEntityIncorporeal(npc)) return "Your bare hands cannot make contact with that incorporeal body.";
+    if (typeof isEntityExhausted === "function" && isEntityExhausted(G.player)) return "You are too exhausted to attempt that physical action.";
+    if (typeof G.player.stamina === "number" && G.player.stamina < 1) return "You need enough stamina to attempt that physical action.";
+    return "";
+}
+
+function physicalEffectStamp(npc) {
+    const player = G.player, room = G.activeRoom;
+    return { player: player, room: room, npc: npc, activeNPC: G.activeNPC, mode: G.activeNPCMode, modal: G.activeItemModal, object: G.activeObject, epoch: textModeState.epoch,
+        turn: getStatusClock(), move: player.moveSeq || 0, playerState: choiceEntitySnapshot(player), npcState: choiceEntitySnapshot(npc),
+        health: JSON.stringify([player.hp, player.stamina, player.statusEffects, npc.hp, npc.hostility, npc.statusEffects]), conversation: JSON.stringify(npc.memory && npc.memory.conversationState || null) };
+}
+
+function physicalEffectFresh(stamp, committed) {
+    return stamp.player === G.player && stamp.room === G.activeRoom && stamp.activeNPC === G.activeNPC && stamp.mode === G.activeNPCMode &&
+        stamp.modal === G.activeItemModal && stamp.object === G.activeObject && (committed || stamp.epoch === textModeState.epoch) && stamp.turn === getStatusClock() && stamp.move === (G.player.moveSeq || 0) &&
+        (stamp.room.creatures || []).indexOf(stamp.npc) >= 0 && isVisibleEntity(stamp.npc) && !stamp.npc.dead && !stamp.npc.unconscious &&
+        stamp.playerState() && stamp.npcState() && stamp.conversation === JSON.stringify(stamp.npc.memory && stamp.npc.memory.conversationState || null) && stamp.health === JSON.stringify([G.player.hp, G.player.stamina, G.player.statusEffects, stamp.npc.hp, stamp.npc.hostility, stamp.npc.statusEffects]);
+}
+
+async function physicalEffectAI(instruction) {
+    let timer;
+    try {
+        const response = await Promise.race([callAI({ instruction: instruction, endButtons: "none" }), new Promise(function (resolve) { timer = setTimeout(function () { resolve(null); }, 12000); })]);
+        const raw = typeof response === "string" ? response : response && response.text;
+        return raw ? JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")) : null;
+    } catch (_) { return null; } finally { clearTimeout(timer); }
+}
+
+function physicalEffectContext(npc, request) {
+    const gear = Object.keys(npc.equipped || {}).map(function (key) { return npc.equipped[key]; }).filter(function (item) { return item && !Array.isArray(item) && !item.hidden && !item.isHidden; }).map(function (item) { return getEntityName(item); }).slice(0, 8);
+    return { attempt: request.action, target: getNPCRoomSightName(npc), sameRoom: true, room: String(G.activeRoom.displayName || G.activeRoom.name || G.activeRoom.type || "room").slice(0, 100),
+        humanoid: npc.isHumanoid !== false, parts: getCombatTargetOptions(npc), worn: gear, temperament: String(npc.temperament || "").slice(0, 80),
+        hostile: (npc.hostility || 0) >= 30, combat: textModeInCombat(), undead: typeof isUndeadNPC === "function" && isUndeadNPC(npc) };
+}
+
+async function proposePhysicalEffects(npc, request) {
+    const instruction = 'Adjudicate one SFW minor bare-hand physical attempt by meaning, including novel verbs. Propose effects, never outcomes or target compliance. JSON only:{"possible":true,"description":"present-tense verb clause including the target, no outcomes","method":"touch|pressure|impact","part":"head|torso|arms|legs","pain":0,"damage":0,"condition":"none|sore|distracted","duration":0,"reaction":"acknowledge|protest|recoil|retaliate"}. Pain is a transient sensation, independent of HP. Damage caps: touch=0, pressure=1, impact=3. Pain=0..3. Condition duration=1..2, none=0. Mild interference may provoke words or recoil without a fight; consider temperament. No equipment use, intimacy, healing, transfers, magic, forced movement, new abilities or permanent effects. No invented barriers/anatomy/gear. Prefer no HP injury for an ordinary pinch; harder intent can vary. If it needs unsupported mechanics return {"possible":false,"reason":"brief accurate explanation"}. The engine owns costs, rolls, defence, actual effects and retaliation.\n' + JSON.stringify(physicalEffectContext(npc, request));
+    return validatePhysicalEffectPlan(await physicalEffectAI(instruction));
+}
+
+function physicalEffectPublish(result, text) {
+    publishTextModeOutput("physical-effect", text, { status: result.stage === "interrupted" ? "interrupted" : "completed", effectAction: result }, false);
+}
+
+async function physicalEffectReply(task, result) {
+    const npc = task.npc;
+    if (!canConverseWithNPC(npc)) return true;
+    const stamp = physicalEffectStamp(npc);
+    task.controlsStamp = stamp;
+    const fallbacks = { acknowledge: "All right. I noticed.", protest: "Keep your hands to yourself.", recoil: "Enough. Give me some space." };
+    let reply = fallbacks[result.reaction] || "What are you doing?";
+    if (aiAvailable()) {
+        const value = await physicalEffectAI('One short in-character SPOKEN reply to the resolved SFW action. JSON only:{"reply":"spoken words"}. Use the supplied reaction. Do not add physical actions, damage, conditions, secrets or demands requiring another menu. No new effects.\n' + JSON.stringify({ target: result.target, temperament: String(npc.temperament || "").slice(0, 80), result: result }));
+        if (value && Object.keys(value).length === 1 && typeof value.reply === "string" && value.reply.trim() && value.reply.length <= 240 && !/[\r\n<>]/.test(value.reply)) reply = value.reply.trim();
+    }
+    if (physicalEffectRuntime.active !== task || !physicalEffectFresh(stamp, true)) return false;
+    if (textModeState.enabled) publishTextModeOutput("dialogue", reply, { speaker: result.target, source: "engine" });
+    else addChatMessage("left", result.target, "<" + reply + ">");
+    if (typeof addNPCMemory === "function") addNPCMemory(npc, { id: "physical-effect-" + task.id, text: result.summary + " They replied: " + reply, importance: 3, tags: ["interaction"] });
+    return true;
+}
+
+async function performEffectInteraction(npc, request) {
+    const blocked = physicalEffectBlock(npc);
+    if (blocked) return socialActionFeedback("blocked", blocked);
+    if (physicalEffectRuntime.active) return socialActionFeedback("blocked", "The previous physical action is still resolving.");
+    if (!aiAvailable()) return textModeResult("blocked", "This unfamiliar physical attempt needs AI effect interpretation. Nothing was attempted.", { systemOnly: true });
+    const task = { id: ++physicalEffectRuntime.sequence, npc: npc, stamp: physicalEffectStamp(npc) };
+    physicalEffectRuntime.active = task;
+    if (typeof setChatOptionsDisabled === "function") setChatOptionsDisabled(true);
+    try {
+        const plan = await proposePhysicalEffects(npc, request);
+        if (!physicalEffectFresh(task.stamp, false)) return socialActionFeedback("interrupted", "The situation changed before you could attempt that action. Nothing was attempted.");
+        if (!plan) return textModeResult("blocked", "The proposed effects could not be validated. Nothing was attempted; try describing the action more clearly.", { systemOnly: true });
+        if (!plan.possible) return socialActionFeedback("blocked", plan.reason);
+        if (getCombatTargetOptions(npc).indexOf(plan.part) < 0) return socialActionFeedback("blocked", "That body part is not available on this target.");
+        if (typeof isUndeadNPC === "function" && isUndeadNPC(npc) && (plan.pain || plan.condition === "sore")) return socialActionFeedback("blocked", "That body cannot feel the proposed pain.");
+        if (G.activeNPC !== npc) { if (textModeInCombat()) encounterSetTarget(npc); else selectNPC(npc); }
+        const reason = physicalEffectBlock(npc);
+        if (G.player !== task.stamp.player || G.activeRoom !== task.stamp.room || G.activeNPC !== npc || reason) return socialActionFeedback("blocked", reason || "You could not approach that person.");
+        const inCombat = textModeInCombat(), lines = [], selectedMode = G.activeNPCMode, storyBefore = getCurrentStoryTurn();
+        const harmful = plan.method === "impact" || plan.pain > 0 || plan.damage > 0 || plan.condition !== "none";
+        const result = { stage: "result", action: request.action, target: getNPCRoomSightName(npc), part: plan.part, method: plan.method, success: false, pain: 0, damage: 0, condition: null, durationTurns: 0, reaction: "protest", staminaCost: 0, storyTurns: inCombat ? 0 : 1, combatRound: inCombat };
+        const narrationName = result.target.charAt(0).toUpperCase() + result.target.slice(1);
+        const staminaBefore = G.player.stamina;
+        spendEntityStamina(G.player, 1, lines, { isPlayer: true });
+        result.staminaCost = Math.max(0, staminaBefore - G.player.stamina);
+        advanceNPCAffectTime(1);
+        if (!inCombat) advanceStoryTurn(1);
+        result.storyTurns = Math.max(0, getCurrentStoryTurn() - storyBefore);
+        if (G.player !== task.stamp.player || G.activeRoom !== task.stamp.room || G.activeNPC !== npc || G.activeNPCMode !== selectedMode || G.activeObject !== task.stamp.object || G.activeItemModal !== task.stamp.modal || (G.player.moveSeq || 0) !== task.stamp.move || G.player.dead || G.player.hp <= 0 || G.player.unconscious || G.player._dying || G.player._collapsing || (G.activeRoom.creatures || []).indexOf(npc) < 0 || npc.dead || npc.hp <= 0 || npc.unconscious || npc.surrendered || !isVisibleEntity(npc) || getCombatTargetOptions(npc).indexOf(plan.part) < 0 || typeof isEntityIncorporeal === "function" && isEntityIncorporeal(npc)) {
+            result.stage = "interrupted"; physicalEffectPublish(result, "The attempt was interrupted; spent time and stamina are preserved.");
+            return socialActionFeedback("interrupted", "The attempt was interrupted; spent time and stamina are preserved.");
+        }
+        const check = rollStatCheck(G.player, plan.method === "impact" ? "physicalProwess" : "flexibility", Math.max(10, getEntityArmorClass(npc, plan.part)));
+        result.success = !!check.success;
+        lines.push(check.success ? "You " + plan.description + "." : "You try to " + plan.description + ", but fail to make contact.");
+        if (harmful) {
+            registerAttackCrime(npc, lines, false);
+            if (typeof judgeFaithOnFirstPlayerAttack === "function") judgeFaithOnFirstPlayerAttack(npc);
+        }
+        if (check.success) {
+            const hpBeforeEffect = npc.hp;
+            result.pain = plan.pain;
+            const reduction = getTargetDamageReduction(npc, plan.part, "physical");
+            const damage = Math.min(Math.max(0, plan.damage - reduction), Math.max(0, npc.hp - 1));
+            if (damage > 0) applyCombatDamage(npc, damage, plan.part, { damageType: "blunt", crit: false, bleed: false, heavy: false, noCombo: true, superficial: true, aggressor: "player" });
+            result.damage = Math.max(0, hpBeforeEffect - npc.hp);
+            if (plan.pain) lines.push("The contact causes " + ["", "a sharp sting", "a painful jolt", "a burst of pain"][plan.pain] + ".");
+            if (result.damage) lines.push(narrationName + " takes " + result.damage + " damage.");
+            if (plan.condition !== "none") {
+                const note = applyStatusEffect(npc, plan.condition, narrationName, { durationTurns: plan.duration });
+                result.condition = plan.condition; result.durationTurns = plan.duration;
+                if (note) lines.push(note);
+            }
+        }
+        if (harmful) applyNPCImpact(npc, { mood: -1, favor: -(1 + result.pain + result.damage), hostility: 3 + result.pain * 2 + result.damage * 3, intent: "attack", markMet: true, actionTag: "attacked-by-player" });
+        result.reaction = inCombat || (npc.hostility || 0) >= 50 ? "retaliate" : check.success ? plan.reaction : harmful ? "protest" : "recoil";
+        if (result.reaction === "recoil") lines.push("They recoil from you.");
+        if (result.reaction === "protest") lines.push("They object to your attempt.");
+        if (result.reaction === "acknowledge") lines.push("They acknowledge the contact.");
+        result.summary = lines.join(" ");
+        if (typeof rememberStoryEvent === "function") rememberStoryEvent("interaction", result.summary, 3);
+        if (typeof addNPCMemory === "function") addNPCMemory(npc, { id: "physical-effect-" + task.id, text: result.summary, importance: harmful ? 4 : 2, tags: ["interaction"] });
+        task.controlsStamp = physicalEffectStamp(npc);
+        physicalEffectPublish(result, result.summary);
+        if (!physicalEffectFresh(task.controlsStamp, true)) return textModeResult("interrupted", "Completed effects are preserved; the scene changed before the response.", { systemOnly: true });
+        if (result.reaction === "retaliate") {
+            G.activeNPCMode = "combat";
+            const ended = resolveNPCCounter(npc, lines, { playerMissed: !check.success, playerStyle: "light" });
+            if (!ended && G.activeNPC === npc && !npc.dead && !npc.unconscious) { renderStats(); renderCombatActionMenu(npc); renderCombatNarrationLines(lines); saveGameState(); }
+            return { status: "completed" };
+        }
+        G.activeNPCMode = "talk";
+        setNarration(result.summary); renderStats(); renderChatOptions(npc); saveGameState();
+        if (!await physicalEffectReply(task, result)) return socialActionFeedback("interrupted", "The response was interrupted. Completed effects and spent costs are preserved.");
+        saveGameState();
+        return { status: "completed" };
+    } finally {
+        if (physicalEffectRuntime.active === task) {
+            physicalEffectRuntime.active = null;
+            if (physicalEffectFresh(task.controlsStamp || task.stamp, true) && !textModeInCombat() && typeof setChatOptionsDisabled === "function") setChatOptionsDisabled(false);
+        }
+    }
+}
+
 async function performPlayerInteraction(npc, args, options) {
     const request = interactionRequest(args);
     if (!request) return socialActionFeedback("blocked", "Use help act for supported interaction families.");
     const denied = interactionDescriptionBlock(request);
     if (denied) return socialActionFeedback("blocked", denied);
+    if (request.family === "physical") return performEffectInteraction(npc, request);
     if (request.family === "assault") return options && options.directAssault ? performPhysicalInteraction(npc, request) : reviewPhysicalInteraction(npc, request);
     if (!npc) {
         if (request.family !== "expression") return socialActionFeedback("blocked", "Choose someone for that invitation or contact request.");
@@ -221,21 +678,21 @@ async function performPlayerInteraction(npc, args, options) {
 async function executeTextInteractionCommand(action) {
     const request = interactionRequest(action.args);
     if (!request) return textModeResult("blocked", "That interaction is not supported. Type help act for examples.");
-    const candidates = request.family === "assault" && textModeInCombat() ? textCombatFoes() : textModeVisibleNPCs();
+    const candidates = /^(assault|physical)$/.test(request.family) && textModeInCombat() ? textCombatFoes() : textModeVisibleNPCs();
     const matches = action.targetRef ? candidates.filter(function (npc) { return npc === action.targetRef; })
         : !request.target && G.activeNPC ? [G.activeNPC]
         : !request.target && request.family === "expression" ? [] : resolveTextNPCTarget(request.target, candidates).matches;
     if (!matches.length && (request.target || request.family !== "expression" || action.targetRef)) return textModeResult("blocked", "No visible person matches that description.");
     if (matches.length > 1) return textModeAsk(action, "target", matches, "Who do you mean?");
     const npc = matches[0] || null;
-    if (request.family === "assault") action.combatTarget = npc;
+    if (/^(assault|physical)$/.test(request.family)) action.combatTarget = npc;
     return performPlayerInteraction(npc, request, { directAssault: action.directAssault === true });
 }
 async function interpretInteractionRequest(input) {
     if (!aiAvailable()) return null;
     let timer;
     try {
-        const response = await Promise.race([callAI({ instruction: 'JSON only:{"family":"expression|invitation|contact|assault","action":"brief attempted verb phrase without target","target":""}. Self gestures=expression; voluntary offers=invitation; gentle touch=contact; physical force=assault. Game effects/uncertain:{}. Intent only.\n' + JSON.stringify(input), endButtons: "none" }),
+        const response = await Promise.race([callAI({ instruction: 'JSON only:{"family":"expression|invitation|contact|assault|physical","action":"brief attempted verb phrase without target","target":""}. Self gestures=expression; voluntary offers=invitation; gentle consent=contact; ordinary strikes=assault; novel minor bare-hand attempts=physical (separate effect adjudication). Game effects/uncertain:{}. Intent only.\n' + JSON.stringify(input), endButtons: "none" }),
             new Promise(function (resolve) { timer = setTimeout(function () { resolve(null); }, 12000); })]);
         const raw = typeof response === "string" ? response : response && response.text;
         const parsed = raw && JSON.parse(raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
@@ -256,15 +713,589 @@ async function submitFreeformNPCAction(npc, body) {
         const matches = resolveTextNPCTarget(request.target).matches;
         if (matches.length !== 1 || matches[0] !== npc) return socialActionFeedback("blocked", "That action must address your current conversation partner.");
     }
-    return performPlayerInteraction(npc, request, { directAssault: !!(parsed && parsed.directAssault) });
+    return await performPlayerInteraction(npc, request, { directAssault: !!(parsed && parsed.directAssault) });
     } finally {
         if (!textModeState.enabled && G.activeNPC === npc && G.activeNPCMode === "respond" && !sharedChoiceState.menu) { G.activeNPCMode = "talk"; renderChatOptions(npc); }
     }
 }
 
 
+// Shared world-object mechanics. Text/buttons only select an operation and an
+// exact live source; physics, costs and dice belong to this engine seam.
+let worldObjectExecution = null;
+function worldObjectDefinition(object, kind) {
+    if (typeof inferWorldObjectDefinition !== "function") return null;
+    const definition = inferWorldObjectDefinition(object, kind);
+    if (definition && object.material && object.material !== definition.material && Object.prototype.hasOwnProperty.call(WORLD_MATERIAL_RULES, object.material)) return validateWorldObjectDefinition(Object.assign({}, definition, { material: object.material }));
+    return definition;
+}
+function ensureWorldObjectPhysics(object, kind) {
+    const definition = worldObjectDefinition(object, kind);
+    if (!definition) return null;
+    const physics = calculateWorldObjectPhysics(definition);
+    if (!physics) return null;
+    if (!object.physicalDefinition) object.physicalDefinitionOrigin = "inferred";
+    object.physicalDefinition = definition;
+    object.physical = physics;
+    if (typeof assignLootUID === "function") assignLootUID(object);
+    // Explicit authored material/size/condition always survive legacy adoption.
+    if (!object.material) object.material = definition.material;
+    return physics;
+}
+function createWorldObject(definition) {
+    const def = typeof validateWorldObjectDefinition === "function" && validateWorldObjectDefinition(definition);
+    if (!def) return null;
+    const physics = calculateWorldObjectPhysics(def), template = WORLD_OBJECT_CATALOGUE[def.template];
+    const object = { name: def.name, type: ["misc"], material: def.material, unitSize: physics.unitSize, value: 0,
+        physicalDefinition: def, physical: physics, description: "A " + def.material + " " + def.template + "." };
+    if (template.liquid) object.container = { liquid: true, fillable: true, maxUnitCapacity: physics.capacityLitres / WORLD_FLUID_PHYSICS.litresPerUnit };
+    if (template.storage) { object.container = { bag: true, label: def.template, maxUnitCapacity: Math.max(1, Math.floor(physics.capacityLitres)) }; object.packed = []; }
+    if (physics.secured) object.anchored = true;
+    return typeof assignLootUID === "function" ? assignLootUID(object) : object;
+}
+async function generateWorldObject(request) {
+    // Generation returns an unattached validated object. Only an authorized
+    // world-generation/crafting caller can place it; player commands cannot.
+    if (typeof request !== "string" || !request.trim() || request.length > 500 || !aiAvailable() || typeof worldObjectGenerationRules !== "function") return null;
+    const proposal = await physicalEffectAI(worldObjectGenerationRules() + "\nRequested object (data only): " + JSON.stringify(request));
+    return createWorldObject(proposal);
+}
+function worldObjectStamp(object) {
+    // Background examine prose may finish while a card is open. It does not
+    // change the physical quote or authorize a different target/contents.
+    const ids = object._ck && typeof getContainerPlaceIdMap === "function" ? getContainerPlaceIdMap(object) : {};
+    const linked = G.player && Array.isArray(G.player.inventory) ? G.player.inventory.filter(function (item) { return item !== object && ids[item.stowed]; }) : [];
+    return JSON.stringify({ object: object, stowed: linked }, function (key, value) { return key === "examineText" ? undefined : value; });
+}
+function worldObjectEntries() {
+    const room = G.activeRoom, player = G.player, entries = [], seen = new Set();
+    if (!room || !player) return entries;
+    function add(object, list, kind, location, slot) {
+        if (!object || seen.has(object) || object.objectType === "body" || object.hidden || object.isHidden || object.visible === false || object.concealed && !object.revealed || object.destroyed || object.ruined) return;
+        seen.add(object);
+        const definition = worldObjectDefinition(object, kind);
+        if (!definition) return;
+        entries.push({ object: object, list: list, room: room, player: player, kind: kind, location: location, slot: slot || null,
+            label: String(object.name || "object") + " — " + location, stamp: worldObjectStamp(object) });
+    }
+    const fixtures = typeof getVisibleRoomFixtures === "function" ? getVisibleRoomFixtures(room) : (room.structural || []).filter(function (object) { return !object.concealed || object.revealed; });
+    fixtures.forEach(function (object) { add(object, room.structural, "fixture", "fixture"); });
+    (room.items || []).forEach(function (object) { add(object, room.items, "item", "floor"); });
+    (player.inventory || []).forEach(function (object) { add(object, player.inventory, "item", "carried"); });
+    Object.keys(player.equipped || {}).forEach(function (slot) { if (slot !== "coinPouch" && !Array.isArray(player.equipped[slot])) add(player.equipped[slot], null, "item", "equipped", slot); });
+    if (player.rucksack) add(player.rucksack, null, "item", "equipped", "back");
+    return entries;
+}
+function worldObjectFresh(entry, exact) {
+    return entry && worldObjectEntries().find(function (now) { return now.object === entry.object && now.list === entry.list && now.room === entry.room && now.player === entry.player && now.location === entry.location && now.slot === entry.slot && (!exact || now.stamp === entry.stamp); });
+}
+function worldObjectMass(object, kind, seen) {
+    seen = seen || new Set();
+    if (seen.has(object)) return 0;
+    seen.add(object);
+    const definition = worldObjectDefinition(object, kind), physics = definition && calculateWorldObjectPhysics(definition);
+    if (!physics) return Infinity;
+    let mass = physics.dryMassKg;
+    const liquid = object.liquid || (typeof getItemLiquid === "function" && kind !== "fixture" ? getItemLiquid(object) : null);
+    if (liquid && Number.isFinite(liquid.volume) && liquid.volume > 0) mass += liquid.volume * WORLD_FLUID_PHYSICS.litresPerUnit * (WORLD_FLUID_PHYSICS.density[liquid.type] || 1);
+    // Packed containers and fixed-container contents use their existing stores.
+    const lists = [object.packed, object.contents && object.contents.items];
+    if (object.contents && Number.isFinite(object.contents.coins) && object.contents.coins > 0) {
+        const coin = calculateWorldObjectPhysics({ name: "coin", template: "coin", material: "gold", scale: 1 });
+        mass += coin.dryMassKg * Math.floor(object.contents.coins);
+    }
+    if (object._ck && typeof getContainerPlaceIdMap === "function" && G.player) {
+        const ids = getContainerPlaceIdMap(object);
+        lists.push((G.player.inventory || []).filter(function (item) { return item !== object && ids[item.stowed]; }));
+    }
+    lists.forEach(function (list) { (Array.isArray(list) ? list : []).forEach(function (item) { mass += worldObjectMass(item, "item", seen); }); });
+    return mass * Math.max(1, typeof getItemQuantity === "function" ? getItemQuantity(object) : object.quantity || 1);
+}
+function fillWorldObjectAtFixture(fixture, entry) {
+    if (worldObjectExecution || typeof worldToolExecution !== "undefined" && worldToolExecution) return worldObjectResult("blocked", "Your previous physical action is still resolving.");
+    const object = entry.item, room = G.activeRoom, player = G.player;
+    const fixtures = typeof getVisibleRoomFixtures === "function" ? getVisibleRoomFixtures(room) : [];
+    const blocked = function () { return !player || player.hp <= 0 || player.dead || player.unconscious || player._dying || player._collapsing || G.activeNPC || roomHasActiveHostile(room) || typeof isRoomCollapsed === "function" && isRoomCollapsed(room) || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot(); };
+    if (fixtures.indexOf(fixture) < 0 || !isDrinkableFixture(fixture) || blocked() || !Array.isArray(player.inventory) || player.inventory.indexOf(object) < 0 || !isEmptyFillableItem(object)) return worldObjectResult("blocked", "You cannot fill that vessel here.");
+    const physical = ensureWorldObjectPhysics(object, "item");
+    if (!physical || physical.capacityLitres <= 0) return worldObjectResult("blocked", "It cannot hold liquid.");
+    const scene = textModeScene(), epoch = textModeState.epoch, stamp = worldObjectStamp(object), sourceStamp = worldObjectStamp(fixture), inventory = player.inventory;
+    advanceStoryTurn(1);
+    if (!textModeSameScene(scene) || epoch !== textModeState.epoch || player.inventory !== inventory || inventory.indexOf(object) < 0 || worldObjectStamp(object) !== stamp || worldObjectStamp(fixture) !== sourceStamp || blocked() || (typeof getVisibleRoomFixtures === "function" && getVisibleRoomFixtures(room).indexOf(fixture) < 0)) return worldObjectResult("interrupted", "You stop filling as the situation changes.");
+    object.liquid = { type: "water", volume: Math.min(object.container.maxUnitCapacity, physical.capacityLitres / WORLD_FLUID_PHYSICS.litresPerUnit) };
+    renderStats(); saveGameState();
+    return worldObjectResult("completed", "You fill " + object.name + " with clean water.", { objectAction: { action: "fill", target: object.name, success: true, turns: 1, staminaCost: 0, liquid: { type: "water", volume: object.liquid.volume } } });
+}
+function worldObjectSecured(entry) {
+    const object = entry.object, def = worldObjectDefinition(object, entry.kind), template = def && WORLD_OBJECT_CATALOGUE[def.template];
+    if (typeof worldObjectRelation === "function" && worldObjectRelation(object, entry.room)) return true;
+    if (object.anchored === true || object.fixed === true || object.attachment && object.attachment !== "free") return true;
+    if (object.anchored === false || object.movable === true) return false;
+    // Functional fixtures retain their native role and contents. Explicit
+    // attachment metadata can opt an authored fixture into movement later.
+    const tags = (object.tags || []).join(" ");
+    return !!(template && template.secured || entry.kind === "fixture" && /alchemy|portal|structural|workstation|trap|shrine|training|quest|notice|forge/.test(tags + " " + object.id));
+}
+function worldObjectLimits(player) {
+    const prowess = Math.max(0, typeof getEntityStatValue === "function" ? getEntityStatValue(player, "physicalProwess", 3) : 3);
+    const size = typeof getPlayerSpeciesSize === "function" ? getPlayerSpeciesSize(player) : "medium";
+    const factor = { tiny: 0.25, small: 0.6, medium: 1, large: 2 }[size] || 1;
+    return { easy: (2 + prowess * 2) * factor, lift: (12 + prowess * 12) * factor, drag: (24 + prowess * 24) * factor };
+}
+function worldObjectActionSpec(entry, action) {
+    const object = entry.object, definition = worldObjectDefinition(object, entry.kind), physics = definition && calculateWorldObjectPhysics(definition);
+    if (!physics || !/^(lift|drag|shift|take)$/.test(action)) return { reason: "That physical approach is unavailable." };
+    let reason = "";
+    const player = G.player, room = G.activeRoom, limits = worldObjectLimits(player), mass = worldObjectMass(object, entry.kind);
+    const limit = action === "drag" || action === "shift" ? limits.drag : limits.lift;
+    if (!worldObjectFresh(entry, false)) reason = "That object is no longer within reach.";
+    else if (player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing) reason = "You cannot do that while incapacitated.";
+    else if (G.activeNPCMode === "combat" || typeof roomHasActiveHostile === "function" && roomHasActiveHostile(room)) reason = "You cannot safely handle that while a threat is bearing down on you.";
+    else if (typeof isRoomCollapsed === "function" && isRoomCollapsed(room)) reason = "The rubble prevents you from reaching it.";
+    else if (G.activeNPC) reason = "You are still engaged with someone.";
+    else if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) reason = "The party's loot decision needs settling first.";
+    else if (worldObjectSecured(entry)) reason = "It is secured in place. Its fastenings would have to be dealt with first.";
+    else if (object.occupied || object.inUse) reason = "Someone is using it; you cannot safely move it beneath them.";
+    else if (object.fire && object.fire.turnsLeft > 0 || object.chestBurn && object.chestBurn.turnsLeft > 0) reason = "It is burning; you cannot safely handle it with bare hands.";
+    else if (object.reachable === false) reason = "You cannot reach it from here.";
+    else if (/^(drag|shift|take)$/.test(action) && /^(carried|equipped)$/.test(entry.location)) reason = "You are already carrying it.";
+    else if (action === "take" && object.takeable === false) reason = "You can move it here, but cannot carry it away.";
+    else if (mass > limit) reason = "It is too heavy for you to " + (action === "take" ? "lift" : action) + " unaided.";
+    else if (action === "take" && entry.kind === "fixture" && (object.contents || object.liquid || typeof isContainerFixture === "function" && isContainerFixture(object))) reason = "You cannot pack it up with its fixed fittings and contents; you can try shifting it here.";
+    const effort = mass > limits.easy || action === "drag" || action === "shift";
+    const cost = effort ? 1 : 0, turns = effort ? 1 : 0;
+    if (!reason && cost && (typeof player.stamina !== "number" || player.stamina < cost)) reason = "You are too exhausted to make that effort.";
+    return { reason: reason, massKg: mass, physics: physics, staminaCost: cost, turns: turns, stat: "physicalProwess",
+        dc: effort ? Math.min(25, Math.max(6, Math.round(7 + 16 * mass / limit))) : null };
+}
+function worldObjectPublic(entry) {
+    const definition = worldObjectDefinition(entry.object, entry.kind), physics = definition && calculateWorldObjectPhysics(definition);
+    if (!physics) return null;
+    const estimated = !entry.object.physicalDefinition || entry.object.physicalDefinitionOrigin === "inferred";
+    return { name: entry.object.name || "object", location: entry.location, material: physics.material, dimensionsCm: estimated && physics.template === "item" ? null : physics.dimensionsCm, estimated: estimated,
+        dryMassKg: physics.dryMassKg, capacityLitres: physics.capacityLitres, secured: worldObjectSecured(entry),
+        actions: ["lift", "drag", "shift", "take"].map(function (action) { const spec = worldObjectActionSpec(entry, action); return { action: action, command: action + " " + entry.object.name, blockedReason: spec.reason, staminaCost: spec.staminaCost, turns: spec.turns }; }) };
+}
+function worldObjectResult(status, text, details) {
+    if (status === "interrupted") details = Object.assign({}, details || {}, { systemOnly: true });
+    if (textModeState.enabled) return textModeResult(status, text, details);
+    if (!(details && details.systemOnly)) {
+        if (!G.activeNPC && !G.activeObject && G.activeRoom && typeof renderNarrationWithRoomObservations === "function") renderNarrationWithRoomObservations(G.activeRoom, text);
+        else if (typeof setNarration === "function") setNarration(text);
+    }
+    publishTextModeOutput("object-action", text, Object.assign({ status: status, source: "engine", presentation: "supplement" }, details || {}), false);
+    return { status: status, text: text };
+}
+function performWorldObjectAction(entry, action) {
+    if (worldObjectExecution || typeof worldToolExecution !== "undefined" && worldToolExecution) return worldObjectResult("blocked", "Your previous physical action is still resolving.");
+    const current = worldObjectFresh(entry, true);
+    if (!current) return worldObjectResult("blocked", "That object or its contents changed. Look at it again.");
+    // Settle native barrel contents only at the action boundary, never by help.
+    if (entry.kind === "fixture" && typeof getFixtureLiquid === "function") getFixtureLiquid(entry.room, entry.object);
+    const physics = ensureWorldObjectPhysics(entry.object, entry.kind);
+    if (!physics) return worldObjectResult("blocked", "You cannot judge how to handle that object.");
+    entry = worldObjectFresh(entry, false);
+    const spec = worldObjectActionSpec(entry, action);
+    if (spec.reason) return worldObjectResult("blocked", spec.reason);
+    const object = entry.object, room = entry.room, player = entry.player;
+    const scene = textModeScene(), epoch = textModeState.epoch, modal = G.activeItemModal, activeObject = G.activeObject;
+    const before = worldObjectStamp(object), turn = typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : 0;
+    worldObjectExecution = { entry: entry, action: action };
+    try {
+        if (spec.staminaCost) spendEntityStamina(player, spec.staminaCost);
+        if (spec.turns) { advanceNPCAffectTime(); advanceStoryTurn(spec.turns); }
+        if (!textModeSameScene(scene) || epoch !== textModeState.epoch || G.activeItemModal !== modal || G.activeObject !== activeObject || !worldObjectFresh(entry, false) || worldObjectStamp(object) !== before || player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing || typeof roomHasActiveHostile === "function" && roomHasActiveHostile(room)) {
+            return worldObjectResult("interrupted", "You break off as the situation changes.", { objectAction: { action: action, target: object.name, committed: false, staminaCost: spec.staminaCost, turns: spec.turns } });
+        }
+        const roll = spec.dc === null ? null : rollStatCheck(player, spec.stat, spec.dc);
+        const success = !roll || roll.success;
+        let text = "", completed = success;
+        if (!success) text = "You strain against " + object.name + ", but cannot get it moving.";
+        else if (action === "take") {
+            // Transfer the same instance; never clone a fixture's contents or
+            // replace the existing pack-capacity/coin handling.
+            const index = entry.list.indexOf(object), fixture = entry.kind === "fixture";
+            if (fixture) {
+                entry.list.splice(index, 1);
+                if (!Array.isArray(room.items)) room.items = [];
+                if (!object.type) object.type = ["misc"];
+                if (object.unitSize === undefined) object.unitSize = physics.unitSize;
+                room.items.push(object);
+            }
+            takeRoomObject(object);
+            completed = room.items.indexOf(object) < 0;
+            if (!completed && fixture) { room.items.splice(room.items.indexOf(object), 1); entry.list.splice(index, 0, object); }
+            text = completed ? "You pick up " + object.name + "." : "You can lift " + object.name + ", but have no room to carry it.";
+        } else {
+            object.physicalState = Object.assign({}, object.physicalState || {}, { lastAction: action, lastTurn: typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : turn, moves: ((object.physicalState || {}).moves || 0) + (action === "lift" ? 0 : 1) });
+            text = action === "lift" ? "You lift " + object.name + ", then set it down again." : "You " + (action === "drag" ? "drag " : "push ") + object.name + " a short distance across the floor.";
+        }
+        if (typeof renderStats === "function") renderStats();
+        if (typeof saveGameState === "function") saveGameState();
+        return worldObjectResult(completed ? "completed" : "blocked", text, { objectAction: { action: action, target: object.name, success: completed, checked: !!roll,
+            roll: roll ? { die: roll.roll, bonus: roll.bonus, total: roll.total, dc: spec.dc, stat: spec.stat } : null,
+            staminaCost: spec.staminaCost, turns: spec.turns, moved: completed && /^(drag|shift)$/.test(action) } });
+    } finally { worldObjectExecution = null; }
+}
+function parseTextObjectCommand(raw) {
+    const match = /^(lift|heave|drag|haul|shift|move object|push object|pull object)\s+(.+)$/i.exec(raw);
+    if (match) return { verb: "object", args: { action: /^(lift|heave)$/i.test(match[1]) ? "lift" : /^(drag|haul|pull object)$/i.test(match[1]) ? "drag" : "shift", target: textCommandUnquote(match[2]) } };
+    // Plain push remains an NPC action when a visible person matches.
+    const push = /^(push|pull)\s+(.+)$/i.exec(raw);
+    if (push && !/^through\b/i.test(push[2]) && worldObjectMatches(push[2]).length && !resolveTextNPCTarget(push[2]).matches.length) return { verb: "object", args: { action: push[1].toLowerCase() === "push" ? "shift" : "drag", target: textCommandUnquote(push[2]) } };
+    return null;
+}
+function worldObjectMatches(selector) {
+    return textLootMatch(String(selector || ""), worldObjectEntries(), function (entry) { return entry.object.name || "object"; });
+}
+function executeTextObjectCommand(action) {
+    const args = action.args || {};
+    if (!/^(lift|drag|shift|take)$/.test(args.action || "")) return textModeResult("blocked", "Choose lift, drag or shift, and name the object.", { systemOnly: true });
+    if (!action.objectRef && !String(args.target || "").trim()) return textModeResult("blocked", "Name the object you want to handle.", { systemOnly: true });
+    const matches = action.objectRef ? [worldObjectFresh(action.objectRef, true)].filter(Boolean) : worldObjectMatches(args.target);
+    if (!matches.length) return textModeResult("blocked", "You cannot find that object within reach.");
+    if (matches.length > 1) return textModeAsk(action, "worldObject", matches, "Which object do you mean?");
+    return performWorldObjectAction(matches[0], args.action);
+}
+function textWorldObjectShow(key) {
+    if (!/^(objects|physical objects|lift|drag|shift|move object)(?:\s+.*)?$/.test(key)) return null;
+    const target = key.replace(/^(objects|physical objects|lift|drag|shift|move object)\s*/, ""), entries = target ? worldObjectMatches(target) : worldObjectEntries();
+    const objects = entries.map(worldObjectPublic).filter(Boolean);
+    return textModeResult("completed", "Objects within reach:\n" + (objects.length ? objects.map(function (object) { return object.name + " — " + object.location + ", " + object.material + ", about " + object.dryMassKg + " kg empty" + (object.secured ? ", secured" : "") + "\n" + object.actions.map(function (action) { return action.command + (action.blockedReason ? ": " + action.blockedReason : " — " + action.staminaCost + " stamina, " + action.turns + " turn"); }).join("\n"); }).join("\n") : "None within reach.") , { worldObjects: objects, systemOnly: true });
+}
+function worldObjectFixtureActions(fixture, kind) {
+    const entry = worldObjectEntries().find(function (entry) { return entry.object === fixture && entry.kind === (kind || "fixture"); });
+    if (!entry) return [];
+    const actions = ["lift", "drag", "shift", "take"].map(function (action) {
+        const spec = worldObjectActionSpec(entry, action);
+        return { id: action, label: action + " " + fixture.name, reason: spec.reason, note: spec.staminaCost + " stamina, " + spec.turns + " turn", objectAction: true,
+            run: function () { return performWorldObjectAction(entry, action); } };
+    });
+    if (typeof worldToolSpecs === "function" && worldToolSpecs().some(function (spec) { return spec.target.object === fixture || spec.tool && spec.tool.object === fixture; })) {
+        actions.push({ id: "tools", label: "Use with another object", reason: "", note: "choose a tool action", objectAction: true, run: function () { return openWorldToolMenu(fixture.name); } });
+    }
+    return actions;
+}
+function worldObjectEquipBlock(object, list) {
+    if (typeof inferWorldObjectDefinition !== "function") return "";
+    const entry = worldObjectEntries().find(function (entry) { return entry.object === object && entry.list === list && entry.location === "floor"; });
+    if (!entry) return "";
+    const spec = worldObjectActionSpec(entry, "take");
+    return spec.reason || (spec.dc !== null ? "It is too cumbersome to equip straight from the floor. You would need to pick it up first." : "");
+}
+function worldObjectCardAction(object, action, event) {
+    const button = event && event.currentTarget;
+    if (!button || !button.isConnected || button.disabled || !button.getClientRects().length || G.activeItemModal !== object) return { status: "blocked" };
+    closeItemModal();
+    return action.run();
+}
+
+// Object-on-object effects: intent selects an approach; native physics and
+// dice resolve it. Saved relations contain IDs/coordinates, never live refs.
+let worldToolExecution = null;
+function worldToolCondition(object) {
+    if (!object || object.ruined || object.wrecked || object.destroyed || object.burntOut || object.broken || object.armorBroken) return 0;
+    const d = object.durability;
+    return d && Number.isFinite(d.hp) && Number.isFinite(d.max) && d.max > 0 ? Math.max(0, Math.min(1, d.hp / d.max)) : 1;
+}
+function worldToolDoorExists(room, dir, destination) {
+    if (!room || !room.exits || room.exits[dir] !== destination || typeof getExitDoor !== "function" || getExitDoor(room, dir) !== "door") return false;
+    if (typeof isPortalExit === "function" && isPortalExit(room, dir) || typeof isExitCollapsed === "function" && isExitCollapsed(room, dir)) return false;
+    const lock = room.locks && room.locks[dir];
+    return !(lock && (lock.burnt || lock.shattered || lock.forced || lock.fx && lock.fx.hp <= 0));
+}
+function worldActiveWedges(room) {
+    return (room && Array.isArray(room.objectRelations) ? room.objectRelations : []).map(function (relation) {
+        if (!relation || relation.kind !== "wedged" || !worldToolDoorExists(room, relation.dir, relation.destination)) return null;
+        const objects = (room.structural || []).concat(room.items || []).filter(function (object) { return object && object._uid === relation.toolUid && worldToolCondition(object) > 0 && (!object.durability || object.durability.hp > 0); });
+        return objects.length === 1 ? { owner: room, relation: relation, object: objects[0] } : null;
+    }).filter(Boolean);
+}
+function getDoorObstruction(room, direction) {
+    const dir = typeof normalizeDirection === "function" ? normalizeDirection(direction) : direction;
+    if (!room || !room.exits || !room.exits[dir]) return null;
+    const own = worldActiveWedges(room).find(function (entry) { return entry.relation.dir === dir; });
+    if (own) return own;
+    const other = G.roomMap && G.roomMap[room.exits[dir]], back = typeof oppositeDirection === "function" ? oppositeDirection(dir) : null;
+    return other && back && other.exits && other.exits[back] === room.coords ? worldActiveWedges(other).find(function (entry) { return entry.relation.dir === back && entry.relation.destination === room.coords; }) || null : null;
+}
+function worldObjectRelation(object, room) {
+    return object && worldActiveWedges(room || G.activeRoom).find(function (entry) { return entry.object === object; }) || null;
+}
+function clearDoorObstruction(room, dir) {
+    const destination = room && room.exits && room.exits[dir], other = G.roomMap && G.roomMap[destination], back = typeof oppositeDirection === "function" ? oppositeDirection(dir) : null;
+    let changed = false;
+    [{ room: room, dir: dir, destination: destination }, { room: other, dir: back, destination: room && room.coords }].forEach(function (side) {
+        if (!side.room || !Array.isArray(side.room.objectRelations)) return;
+        const rows = side.room.objectRelations.filter(function (row) { return !(row.kind === "wedged" && row.dir === side.dir && row.destination === side.destination); });
+        if (rows.length !== side.room.objectRelations.length) { side.room.objectRelations = rows; changed = true; }
+    });
+    return changed;
+}
+function worldToolDoors() {
+    const room = G.activeRoom;
+    if (!room) return [];
+    return Object.keys(room.exits || {}).filter(function (dir) { return worldToolDoorExists(room, dir, room.exits[dir]); }).map(function (dir) {
+        const name = (typeof COLLAPSE_DIR_WORDS !== "undefined" && COLLAPSE_DIR_WORDS[dir] || dir) + " door";
+        const entry = { kind: "door", room: room, list: room.exits, dir: dir, destination: room.exits[dir], object: null, name: name, label: name };
+        entry.stamp = worldToolTargetStamp(entry);
+        return entry;
+    });
+}
+function worldToolTargetStamp(entry) {
+    if (entry.kind !== "door") return worldObjectStamp(entry.object);
+    const obstruction = getDoorObstruction(entry.room, entry.dir);
+    return JSON.stringify([entry.room.exits && entry.room.exits[entry.dir], entry.room.doors && entry.room.doors[entry.dir], entry.room.locks && entry.room.locks[entry.dir],
+        obstruction && obstruction.relation, obstruction && worldObjectStamp(obstruction.object)]);
+}
+function worldToolTargets() {
+    return worldToolDoors().concat(worldObjectEntries().filter(function (entry) { return entry.kind === "fixture" && entry.object.pryable === true; }).map(function (entry) {
+        return { kind: "fixture", room: entry.room, object: entry.object, objectRef: entry, name: entry.object.name, label: entry.label, stamp: worldToolTargetStamp(entry) };
+    }));
+}
+function worldToolFreshTarget(entry, exact) {
+    return entry && worldToolTargets().find(function (now) { return now.room === entry.room && now.kind === entry.kind && now.object === entry.object && now.dir === entry.dir && now.destination === entry.destination && now.list === entry.list && (!entry.objectRef || now.objectRef.list === entry.objectRef.list) && (!exact || now.stamp === entry.stamp); });
+}
+function worldToolProfile(entry) {
+    const definition = entry && worldObjectDefinition(entry.object, entry.kind), physical = definition && calculateWorldObjectPhysics(definition);
+    if (!physical) return null;
+    const material = WORLD_MATERIAL_RULES[physical.material], dims = physical.dimensionsCm.slice().sort(function (a,b) { return b-a; });
+    const condition = worldToolCondition(entry.object);
+    return { physical: physical, material: material, condition: condition,
+        lever: condition >= 0.25 && !material.flexible && !material.brittle && material.hardness >= 2 && dims[0] >= 25 && dims[0] / Math.max(1, dims[1]) >= 4,
+        brace: condition >= 0.25 && !material.flexible && material.hardness >= 1 && /^(chair|stool|bench|plank|bar|block)$/.test(physical.template) && dims[0] >= 15 && dims[0] <= 200,
+        leverage: Math.min(5, Math.max(1, Math.floor(dims[0] / 30))) };
+}
+function worldToolSceneBlock() {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot do that while incapacitated.";
+    if (G.activeNPC || G.combatEncounter || G.activeNPCMode && G.activeNPCMode !== "door" || G.activeObject || G.activeItemModal) return "Finish the current interaction first.";
+    if (typeof roomHasActiveHostile === "function" && roomHasActiveHostile(room)) return "You cannot safely work on that with a threat bearing down on you.";
+    if (typeof isPlayerJailed === "function" && isPlayerJailed()) return "The cell's fittings are beyond your reach or built to hold you.";
+    if (typeof isRoomCollapsed === "function" && isRoomCollapsed(room)) return "Rubble prevents you from reaching it.";
+    if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Settle the party's loot decision first.";
+    return "";
+}
+function worldBraceResistance(obstruction) {
+    if (!obstruction) return 12;
+    const kind = (obstruction.owner.structural || []).indexOf(obstruction.object) >= 0 ? "fixture" : "item";
+    const profile = worldToolProfile({ object: obstruction.object, kind: kind });
+    const current = profile ? 8 + profile.material.hardness * 2 * profile.condition + worldObjectMass(obstruction.object, kind) / 10 : 8;
+    return Math.max(6, Math.min(obstruction.relation.strength, Math.round(current)));
+}
+function worldToolSpec(action, target, tool) {
+    let reason = worldToolSceneBlock(), dc = 10, stat = "physicalProwess", cost = action === "unwedge" ? 0 : action === "force" ? 2 : 1;
+    const obstruction = target && target.kind === "door" ? getDoorObstruction(target.room, target.dir) : null;
+    const profile = tool && worldToolProfile(tool);
+    if (!reason && !worldToolFreshTarget(target, false)) reason = "That target is no longer available.";
+    if (!reason && target.kind === "door") {
+        const lock = target.room.locks && target.room.locks[target.dir];
+        if (lock && lock.fx && lock.fx.burn && lock.fx.burn.turnsLeft > 0) reason = "Flames prevent you from safely working at that doorway.";
+    }
+    if (!reason && !/^(pry|wedge|unwedge|force)$/.test(action)) reason = "That physical approach is unavailable.";
+    if (!reason && /^(pry|wedge)$/.test(action)) {
+        if (!tool || !worldObjectFresh(tool, false)) reason = "That tool is no longer within reach.";
+        else if (tool.object === target.object) reason = "You cannot use an object as its own lever.";
+        else if (worldObjectSecured(tool) || worldObjectRelation(tool.object, tool.room)) reason = "That object is already secured or being used to brace something.";
+        else if (tool.object.reachable === false || tool.object.occupied || tool.object.inUse) reason = "You cannot safely get hold of it.";
+        else if (tool.object.fire && tool.object.fire.turnsLeft > 0 || tool.object.chestBurn && tool.object.chestBurn.turnsLeft > 0) reason = "It is burning; you cannot handle it safely.";
+        else if ((typeof getItemQuantity === "function" ? getItemQuantity(tool.object) : tool.object.quantity || 1) !== 1) reason = "Separate a single object before using it as a tool.";
+        else if (!profile || worldObjectMass(tool.object, tool.kind) > worldObjectLimits(G.player).lift) reason = "It is too heavy for you to position unaided.";
+        else if (action === "pry" && !profile.lever) reason = "It is too short, soft, brittle or damaged to serve as a lever.";
+        else if (action === "wedge" && !profile.brace) reason = "Its shape, material or condition will not brace a door securely.";
+    }
+    if (action === "wedge") {
+        stat = "flexibility";
+        if (!reason && target.kind !== "door") reason = "You need an actual hinged doorway to brace.";
+        if (!reason && obstruction) reason = "That doorway is already braced.";
+        if (!reason && tool.location === "equipped") reason = "You would have to remove it before leaving it wedged in the door.";
+        if (!reason && tool.object.stowed && tool.location === "carried" && tool.object.stowed !== "hand" && tool.object.stowed !== "overflow") reason = "Take it out of storage before using it to brace the door.";
+        if (!reason && (typeof isContainerFixture === "function" && isContainerFixture(tool.object) || tool.object.contents || tool.object.container || tool.object.liquid)) reason = "You cannot brace the doorway with those fittings or contents still attached.";
+        dc = profile ? Math.min(22, 9 + Math.ceil(worldObjectMass(tool.object, tool.kind) / 10)) : 10;
+    } else if (action === "unwedge" || action === "force" || action === "pry" && target.kind === "door") {
+        if (!reason && !obstruction) reason = "There is no brace holding that doorway shut.";
+        if (!reason && action === "unwedge" && obstruction.owner !== G.activeRoom) reason = "The brace is on the other side; you cannot reach it from here.";
+        if (!reason && action === "unwedge" && !worldObjectEntries().some(function (entry) { return entry.object === obstruction.object; })) reason = "You cannot reach the brace from here.";
+        dc = action === "unwedge" ? null : Math.max(6, worldBraceResistance(obstruction) - (action === "pry" && profile ? profile.leverage : 0));
+    } else if (action === "pry") {
+        const object = target && target.object;
+        if (!reason && (!object || object.pryable !== true || !/^(nailed|pegged)$/.test(object.attachment || ""))) reason = "There are no exposed nails or pegs here that you can lever free.";
+        if (!reason && (object.occupied || object.inUse || object.reachable === false || worldToolCondition(object) <= 0)) reason = "You cannot safely work under its edge.";
+        if (!reason && (object.fire && object.fire.turnsLeft > 0 || object.chestBurn && object.chestBurn.turnsLeft > 0)) reason = "It is burning; you cannot safely work under its edge.";
+        const definition = object && worldObjectDefinition(object, "fixture"), material = definition && WORLD_MATERIAL_RULES[definition.material];
+        const base = object && Number.isFinite(object.fasteningStrength) ? Math.max(6, Math.min(25, object.fasteningStrength)) : object && object.attachment === "pegged" ? 10 : 12;
+        dc = Math.max(6, Math.min(25, base + (material ? material.hardness : 2) - (profile ? profile.leverage : 0)));
+    }
+    if (!reason && G.player.stamina < cost) reason = "You are too exhausted to make that effort.";
+    return { action: action, target: target, tool: tool || null, reason: reason || "", dc: dc, stat: stat, staminaCost: cost, turns: 1 };
+}
+function worldToolSpecs() {
+    const targets = worldToolTargets(), tools = worldObjectEntries().filter(function (entry) { const p = worldToolProfile(entry); return p && (p.brace || p.lever); }).slice(0, 24), specs = [];
+    targets.forEach(function (target) {
+        if (target.kind === "door" && getDoorObstruction(target.room, target.dir)) {
+            specs.push(worldToolSpec("unwedge", target), worldToolSpec("force", target));
+            tools.forEach(function (tool) { const p = worldToolProfile(tool); if (p.lever) specs.push(worldToolSpec("pry", target, tool)); });
+        } else tools.forEach(function (tool) { const p = worldToolProfile(tool); if (tool.object !== target.object && (target.kind === "door" && p.brace || target.kind !== "door" && /^(nailed|pegged)$/.test(target.object.attachment || "") && p.lever)) specs.push(worldToolSpec(target.kind === "door" ? "wedge" : "pry", target, tool)); });
+    });
+    return specs.slice(0, 80);
+}
+function worldToolAvailable() {
+    return typeof WORLD_MATERIAL_RULES !== "undefined" && !worldToolSceneBlock() && worldToolSpecs().some(function (spec) { return !spec.reason; });
+}
+function worldToolIntentAvailable() {
+    return typeof WORLD_MATERIAL_RULES !== "undefined" && !G.activeNPC && worldToolTargets().length > 0;
+}
+function worldToolCommand(spec) {
+    return spec.action === "wedge" ? "wedge " + spec.tool.object.name + " under " + spec.target.name : spec.action === "pry" ? "pry " + spec.target.name + " with " + spec.tool.object.name : (spec.action === "force" ? "force obstruction " : "unwedge ") + spec.target.name;
+}
+function worldToolNarrativeName(name) {
+    return /^(a|an|the|my|your)\s/i.test(name) ? name : "the " + name;
+}
+function worldToolStamp(spec) {
+    const player = G.player, room = G.activeRoom, mode = G.activeNPCMode, object = G.activeObject, modal = G.activeItemModal, npc = G.activeNPC, epoch = textModeState.epoch;
+    const targetStamp = worldToolTargetStamp(spec.target), toolStamp = spec.tool && worldObjectStamp(spec.tool.object), map = G.roomMap;
+    const actor = typeof choiceEntitySnapshot === "function" ? choiceEntitySnapshot(player) : function () { return true; };
+    const origin = map && map[room.coords], neighbor = map && map[spec.target.destination], hp = player.hp;
+    const stats = JSON.stringify([player.stats, player.statusEffects]);
+    return function () { return G.player === player && G.activeRoom === room && G.roomMap === map && G.activeNPCMode === mode && G.activeObject === object && G.activeItemModal === modal && G.activeNPC === npc && textModeState.epoch === epoch && !worldToolSceneBlock() &&
+        (!map || map[room.coords] === origin && map[spec.target.destination] === neighbor) && player.hp === hp && JSON.stringify([player.stats, player.statusEffects]) === stats && actor() &&
+        !!worldToolFreshTarget(spec.target, false) && worldToolTargetStamp(spec.target) === targetStamp && (!spec.tool || !!worldObjectFresh(spec.tool, false) && worldObjectStamp(spec.tool.object) === toolStamp); };
+}
+function worldToolWitnessReaction(spec, success, lines) {
+    if (typeof getLockWitnesses !== "function") return;
+    getLockWitnesses(G.activeRoom).forEach(function (npc) {
+        if (spec.action !== "unwedge" && typeof nudgeNPCAgainstPlayer === "function") nudgeNPCAgainstPlayer(npc, -2, 5);
+        if (typeof addNPCMemory === "function") addNPCMemory(npc, { text: "The player " + (success ? "completed" : "attempted") + " an action: " + worldToolCommand(spec) + ".", importance: 2, tags: ["world-object"] });
+        if (typeof isVisibleEntity !== "function" || isVisibleEntity(npc)) lines.push((typeof getNPCRoomSightName === "function" ? getNPCRoomSightName(npc) : "Someone nearby") + " watches what you are doing.");
+    });
+}
+function performWorldToolAction(original) {
+    if (worldToolExecution || worldObjectExecution) return worldObjectResult("blocked", "Your previous physical action is still resolving.");
+    const target = worldToolFreshTarget(original.target, true), tool = original.tool && worldObjectFresh(original.tool, true);
+    if (!target || original.tool && !tool) return worldObjectResult("blocked", "The target or tool changed. Look at them again.");
+    let spec = worldToolSpec(original.action, target, tool);
+    if (spec.reason) return worldObjectResult("blocked", spec.reason);
+    if (tool) { ensureWorldObjectPhysics(tool.object, tool.kind); if (typeof ensureDurability === "function") ensureDurability(tool.object, tool.kind); }
+    spec = worldToolSpec(spec.action, worldToolFreshTarget(target, false), tool && worldObjectFresh(tool, false));
+    if (spec.reason) return worldObjectResult("blocked", spec.reason);
+    const current = worldToolStamp(spec), player = G.player, room = G.activeRoom, start = getCurrentStoryTurn(), lines = [];
+    worldToolExecution = spec;
+    try {
+        if (spec.staminaCost) spendEntityStamina(player, spec.staminaCost);
+        advanceNPCAffectTime(1); advanceStoryTurn(1);
+        const result = { action: spec.action, target: target.name, tool: tool ? tool.object.name : null, staminaCost: spec.staminaCost, turns: Math.max(0, getCurrentStoryTurn()-start) };
+        if (!current()) { saveGameState(); return worldObjectResult("interrupted", "You stop as the situation changes.", { toolAction: Object.assign(result, { committed: false }) }); }
+        const check = spec.dc === null ? null : rollStatCheck(player, spec.stat, spec.dc), success = !check || check.success;
+        result.success = success; result.roll = check ? { die: check.roll, bonus: check.bonus, total: check.total, dc: spec.dc, stat: spec.stat } : null;
+        if (!success) lines.push(spec.action === "wedge" ? "You cannot get " + worldToolNarrativeName(tool.object.name) + " seated securely against the door." : "You strain against " + worldToolNarrativeName(target.name) + ", but it holds.");
+        else if (spec.action === "wedge") {
+            const object = tool.object, room = target.room;
+            if (tool.location === "carried" && typeof packContainerContents === "function") packContainerContents(player, object);
+            if (tool.location === "carried") { tool.list.splice(tool.list.indexOf(object), 1); if (!Array.isArray(room.items)) room.items = []; room.items.push(object); delete object.stowed; }
+            const profile = worldToolProfile(tool), strength = Math.max(8, Math.min(24, Math.round(8 + profile.material.hardness * 2 * profile.condition + worldObjectMass(object, tool.kind) / 10)));
+            room.objectRelations = worldActiveWedges(room).map(function (entry) { return entry.relation; });
+            room.objectRelations.push({ kind: "wedged", toolUid: object._uid, dir: target.dir, destination: target.destination, strength: strength });
+            lines.push("You wedge " + worldToolNarrativeName(object.name) + " against " + worldToolNarrativeName(target.name) + ". It holds the door shut.");
+            result.relation = "wedged";
+        } else if (spec.action === "pry" && target.kind !== "door") {
+            const object = target.object;
+            object.physicalState = Object.assign({}, object.physicalState || {}, { detachedFrom: object.attachment, lastAction: "pry", lastTurn: getCurrentStoryTurn() });
+            object.attachment = "free"; object.anchored = false; object.fixed = false; object.movable = true;
+            lines.push("You work " + worldToolNarrativeName(tool.object.name) + " under " + worldToolNarrativeName(target.name) + " until its fastenings pull free.");
+            result.relation = "detached";
+        } else {
+            clearDoorObstruction(target.room, target.dir);
+            lines.push(spec.action === "unwedge" ? "You pull the brace clear of " + worldToolNarrativeName(target.name) + "." : "The brace gives way under the pressure, leaving " + worldToolNarrativeName(target.name) + " free of the obstruction.");
+            result.relation = "released";
+        }
+        if (spec.action === "pry" && tool && typeof damageDurability === "function") {
+            const wear = damageDurability(tool.object, 1, "force", { kind: tool.kind, lines: lines });
+            result.toolWear = wear.lost; if (wear.broke) lines.push("The lever gives out under the strain.");
+        }
+        worldToolWitnessReaction(spec, success, lines);
+        if (typeof renderStats === "function") renderStats();
+        saveGameState();
+        if (G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0 || player.unconscious) return worldObjectResult("interrupted", "The situation changes after your attempt.", { toolAction: Object.assign(result, { committed: true }) });
+        if (!textModeState.enabled && !G.activeNPC && !G.activeObject && !G.activeItemModal) { G.activeNPCMode = null; if (typeof setExitGridVisible === "function") setExitGridVisible(true); }
+        return worldObjectResult(success ? "completed" : "blocked", lines.join(" "), { toolAction: result });
+    } finally { worldToolExecution = null; }
+}
+function parseTextWorldToolCommand(raw) {
+    let match = /^(?:tools|tool use|use objects)(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "tool", args: { action: "menu", target: textCommandUnquote(match[1] || "") } };
+    match = /^(?:pry|lever)\s+(.+?)\s+(?:loose\s+)?(?:with|using)\s+(.+)$/i.exec(raw);
+    if (match) return { verb: "tool", args: { action: "pry", target: textCommandUnquote(match[1].replace(/\s+loose$/i, "")), item: textCommandUnquote(match[2]) } };
+    match = /^(?:wedge|jam)\s+(.+?)\s+(?:under|against|into)\s+(.+)$/i.exec(raw);
+    if (match) return { verb: "tool", args: { action: "wedge", target: textCommandUnquote(match[2]), item: textCommandUnquote(match[1]) } };
+    match = /^brace\s+(.+?)\s+with\s+(.+)$/i.exec(raw);
+    if (match) return { verb: "tool", args: { action: "wedge", target: textCommandUnquote(match[1]), item: textCommandUnquote(match[2]) } };
+    match = /^(?:unwedge|remove (?:the )?wedge from|force obstruction)\s+(.+)$/i.exec(raw);
+    return match ? { verb: "tool", args: { action: /^force/i.test(raw) ? "force" : "unwedge", target: textCommandUnquote(match[1]) } } : null;
+}
+function worldToolTargetMatches(selector) {
+    return textLootMatch(selector, worldToolTargets(), function (entry) { return entry.name; });
+}
+function executeTextWorldToolCommand(action) {
+    const args = action.args || {};
+    if (args.action === "menu") return openWorldToolMenu(args.target || "");
+    if (!/^(pry|wedge|unwedge|force)$/.test(args.action || "")) return textModeResult("blocked", "Use how tools for examples.", { systemOnly: true });
+    const targets = action.toolTargetRef ? [worldToolFreshTarget(action.toolTargetRef, true)].filter(Boolean) : worldToolTargetMatches(args.target || "");
+    if (!targets.length) {
+        if (action.toolTargetRef) return worldObjectResult("blocked", "That target or its fittings changed. Look at it again.");
+        const visible = worldObjectMatches(args.target || "").length || typeof getVisibleRoomFixtures === "function" && textLootMatch(args.target || "", getVisibleRoomFixtures(G.activeRoom), function (object) { return object.name || ""; }).length;
+        return worldObjectResult("blocked", visible ? args.action === "pry" ? "Those fittings do not offer exposed nails or pegs that you can safely lever free." : "That object is not a hinged doorway you can brace or free." : "You cannot find that target within reach.");
+    }
+    if (targets.length > 1) return textModeAsk(action, "worldToolTarget", targets, "Which target do you mean?");
+    action.toolTargetRef = targets[0];
+    if (/^(unwedge|force)$/.test(args.action)) return performWorldToolAction(worldToolSpec(args.action, targets[0]));
+    if (!args.item) return textModeResult("blocked", "Name the object to use, for example pry packing board with iron bar.", { systemOnly: true });
+    const tools = action.toolItemRef ? [worldObjectFresh(action.toolItemRef, true)].filter(Boolean) : worldObjectMatches(args.item);
+    if (!tools.length) return worldObjectResult("blocked", "You cannot find that tool within reach.");
+    if (tools.length > 1) return textModeAsk(action, "worldToolItem", tools, "Which object will you use?");
+    return performWorldToolAction(worldToolSpec(args.action, targets[0], tools[0]));
+}
+function worldToolShow(key) {
+    if (!/^(tools|tool use|pry|wedge|unwedge|brace|force obstruction)(?:\s+.*)?$/.test(key)) return null;
+    const specs = worldToolSpecs();
+    const actions = specs.map(function (spec) { return { action: spec.action, target: spec.target.name, tool: spec.tool ? spec.tool.object.name : null, command: worldToolCommand(spec), staminaCost: spec.staminaCost, turns: spec.turns, blockedReason: spec.reason }; });
+    return textModeResult("completed", "Using objects together:\n" + (actions.length ? actions.map(function (action) { return action.command + " — " + action.staminaCost + " stamina, 1 turn" + (action.blockedReason ? ": " + action.blockedReason : ""); }).join("\n") : "No supported tool-and-target combination is available here.") + "\nUse how tools for examples.", { worldToolActions: actions, systemOnly: true });
+}
+function worldDoorObstructionPublic(room) {
+    if (!room || room !== G.activeRoom) return [];
+    return Object.keys(room.exits || {}).map(function (dir) {
+        const obstruction = getDoorObstruction(room, dir);
+        if (!obstruction) return null;
+        const visible = obstruction.owner === room && worldObjectEntries().some(function (entry) { return entry.object === obstruction.object; });
+        return { direction: dir, blocked: true, brace: visible ? obstruction.object.name : null, reachable: visible };
+    }).filter(Boolean);
+}
+function openWorldToolMenu(selector) {
+    const block = worldToolSceneBlock();
+    if (block) return worldObjectResult("blocked", block);
+    const selected = selector ? worldObjectMatches(selector).map(function (entry) { return entry.object; }) : null;
+    const selectedTargets = selector ? worldToolTargetMatches(selector) : [];
+    const specs = worldToolSpecs().filter(function (spec) { return !selected || selectedTargets.some(function (target) { return target.kind === spec.target.kind && target.dir === spec.target.dir && target.object === spec.target.object; }) || selected.indexOf(spec.target.object) >= 0 || spec.tool && selected.indexOf(spec.tool.object) >= 0; });
+    if (!specs.length) return worldObjectResult("blocked", "You cannot find a suitable combination here.");
+    const el = document.getElementById("chatOptionsEl");
+    if (el) el.innerHTML = "";
+    const menu = beginSharedChoiceMenu("world-tools", null, "Using objects", function () { return openWorldToolMenu(selector); });
+    const valid = menu.valid, guards = specs.map(worldToolStamp), turn = getCurrentStoryTurn();
+    menu.valid = function () { return valid() && getCurrentStoryTurn() === turn && guards.every(function (guard) { return guard(); }); };
+    specs.forEach(function (spec) {
+        const button = createSharedChoiceButton(menu, worldToolCommand(spec) + " — " + spec.staminaCost + " stamina, 1 turn", function () { return performWorldToolAction(spec); }, { disabled: !!spec.reason, title: spec.reason, textChoice: { action: spec.action } });
+        if (el) el.appendChild(button);
+    });
+    const back = createSharedChoiceButton(menu, "Back", function () { if (typeof returnToRoomView === "function" && !textModeState.enabled) returnToRoomView(); return { status: "completed" }; }, { textChoice: { action: "back" } });
+    if (el) el.appendChild(back);
+    publishSharedChoiceMenu(menu, el);
+    if (!textModeState.enabled && typeof setExitGridVisible === "function") setExitGridVisible(false);
+    return { status: "needs_input" };
+}
+
 const TEXT_COMMANDS = [
-    { id: "act", social: true, args: ["action", "target", "family"], aliases: ["act", "emote", "social", "gestures", "interactions", "express", "invite", "contact", "wave", "bow", "nod", "smile", "salute", "dance"], example: "wave at human; I dance with second human; express stretch dramatically; invite human to share a joke; slap human; help act", description: "Express yourself freely with express <action>, invite <person> to <action>, or contact <action> with <person>. Familiar gestures: wave, bow, nod, smile, salute, dance. A dance is an invitation, never assumed agreement. Target the current partner, name a visible person, or answer a numbered question. Expressions and invitations take one turn. Contact asks permission. Slap/punch/shove use light unarmed combat and can start a fight; unclear physical requests ask for review. Say \"I dance\" is speech." },
+    { id: "tool", jobs: true, args: ["action", "target", "item"], aliases: ["tools", "tool use", "pry", "lever", "wedge", "jam", "brace", "unwedge", "force obstruction"], example: "pry packing board with iron pry bar; wedge chair under north door; unwedge north door; force obstruction north door; tools; show tools", description: "Use real objects together. Pry exposed nailed/pegged fittings with a sound rigid lever; wedge suitable furniture or a solid object against a real door. Material, shape, size, condition, reach and stats determine eligibility and dice difficulty. Pry/wedge cost 1 stamina and 1 turn; forcing a brace costs 2 stamina and 1 turn; removing your reachable brace costs 1 turn. Failures spend costs and pause later commands. A brace stays in place, blocks both sides and cannot be picked up until released. Unwedging does not unlock a lock. Show tools lists current combinations; tools opens the same choices as native controls. Options/back/cancel/leave work; explicitly continue older queued commands." },
+    { id: "object", info: false, jobs: true, args: ["action", "target"], aliases: ["objects", "physical objects", "lift", "heave", "drag", "haul", "shift", "move object", "push object", "pull object"], example: "lift bucket; drag bench; shift crate; push object chair; show objects; how lift", description: "Lift an accessible object and set it down, or drag/shift it a short distance within the room. Heave means lift; haul/pull object means drag; push object/move object means shift. The engine checks reach, attachment, occupancy, material, size, contents and physical prowess. Easy lifts succeed without a roll or cost; uncertain lifts and floor moves use a stat-based d20 check, 1 stamina and 1 turn, including failures. Impossible attempts never roll. These actions do not carry objects between rooms or create cover, block exits or spill contents. Take retains pack limits. Show objects lists public properties and current availability." },
+    { id: "act", social: true, args: ["action", "target", "family"], aliases: ["act", "emote", "social", "gestures", "interactions", "express", "invite", "contact", "attempt", "try physical", "wave", "bow", "nod", "smile", "salute", "dance"], example: "wave at human; express stretch dramatically; invite human to share a joke; attempt pinch an arm with human; push human; help attempt", description: "Express yourself with express <action>, invite <person> to <action>, or contact <action> with <person>. Familiar gestures: wave, bow, nod, smile, salute, dance. A dance is an invitation. Contact asks permission. Attempt <minor bare-hand action> with <person> uses AI-proposed pain, minor HP damage, a brief condition and an NPC reaction. It needs AI, costs 1 stamina and one story turn outside combat or one combat action, and can provoke retaliation. Push/shove/slap/punch retain native unarmed combat; inferred attacks ask for review. Push/shove do not move someone into another room. Say \"I dance\" is speech." },
     {id:"phrases",info:true,args:["action","phrase"],aliases:["phrases","learned phrases"],example:'phrases; forget phrase "please survey the room"; clear phrases',description:"List successfully learned AI phrases, remove an exact phrase or clear the local dictionary. Learning stores action templates after complete success; targets and costs are checked fresh. These controls are free."},
     { id:"casting", casting:true, args:["action","target"], aliases:["powers","divine gifts","enchantments","cast enchant","ask for enchantment"], example:"powers; power mending touch; cast mending touch on <ally>; cast enchant; enchant recipient yourself; enchant item sword; enchant element fire; ask for enchantment; cast fleet foot; show casting; how casting", description:"Use shared native powers/heal targets, player and companion gear casts and learned travel spells. Final gear element choices spend native costs and 1 turn. Power costs/uses and healing stay native; travel spells keep zero-turn behavior. Answer one step per reply; explicitly continue older batches." },
     { id:"synergy", synergy:true, args:["action","target"], aliases:["synergies","combine skills","notebook"], example:"synergy; combine skills; first skill firebolt; second skill trained strike; add catalyst greenwort; picture \"a burning arc\"; experiment; notebook; memorise synergy <name>; forget synergy <name>; name synergy <old> as \"new\"; use synergy <name>", description:"Use native synergy experiments, catalyst choices, notebook, naming and memory rules. Review attempts and memorisation, then confirm separately. Show synergy and how synergy are free. Answer one step at a time; explicitly continue older batches." },
@@ -345,6 +1376,10 @@ const TEXT_COMMANDS = [
     { id: "status", info: true, aliases: ["status", "health", "stats"], example: "status", description: "Read your health, stamina, mana, and coins. Costs no turn." },
     { id: "stop", aliases: ["stop"], example: "stop", description: "Cancel pending commands. An action already in progress finishes normally." },
     { id: "continue", aliases: ["continue", "resume"], example: "continue", description: "Explicitly resume the remaining commands after a pause. A failed action is not retried." }
+    ,{ id: "touch", nsfw: true, args: ["target"], aliases: ["touch", "touch gently"], example: "touch elf; touch gently human", description: "Gently touch a visible humanoid NPC. Their reaction depends on your relationship, their temperament, and the context. Only works on romance-eligible NPCs." },
+    { id: "grab", nsfw: true, args: ["target"], aliases: ["grab"], example: "grab elf; grab second human", description: "Firmly grab a visible humanoid NPC. Their reaction depends on your relationship and the context. Only works on romance-eligible NPCs." },
+    { id: "hug", nsfw: true, args: ["target"], aliases: ["hug", "embrace"], example: "hug elf; embrace human", description: "Hug a visible humanoid NPC affectionately. Their reaction depends on relationship. Only works on romance-eligible NPCs." },
+    { id: "grope", nsfw: true, args: ["target"], aliases: ["grope"], example: "grope elf", description: "Boldly and intimately touch a visible humanoid NPC. High risk/high reward. Only works on romance-eligible NPCs." }
 ];
 
 function textCommandDefinition(id) {
@@ -407,9 +1442,12 @@ function parseTextCommand(input) {
     if (/^(?:"[\s\S]*"|“[\s\S]*”|'[\s\S]*')$/.test(raw)) return { verb: "say", args: { text: textCommandUnquote(raw) } };
     match = /^(?:say|reply|respond)\s+([\s\S]+)$/i.exec(original);
     if (match) return { verb: "say", args: { text: textCommandUnquote(match[1]) } };
+    const toolCommand = parseTextWorldToolCommand(raw); if (toolCommand) return toolCommand;
+    const objectCommand = parseTextObjectCommand(raw); if (objectCommand) return objectCommand;
     match = /^(?:look\s+at|examine|inspect|x)\s+(?:npc|creature|person)\s+(.+)$/i.exec(raw);
     if (match) return { verb: "examine", args: { item: textCommandUnquote(match[1]), scope: "npc" } };
     const social = parseTextSocialCommand(raw); if (social) return social;
+    const touch = parseTextTouchCommand(raw); if (touch) return touch;
     const interaction = parseTextInteractionCommand(raw); if (interaction) return interaction;
     if (/^I\s+/i.test(raw)) return null;
     const casting = parseTextCastingCommand(raw); if (casting) return casting;
@@ -462,6 +1500,10 @@ function parseTextCommand(input) {
     if (trade) return trade;
     const inventory = parseTextInventoryCommand(raw);
     if (inventory) return inventory;
+    // A descriptive use-of-object sentence needs intent interpretation. Do
+    // not let the generic combat "use <ability>" catch it first.
+    const toolSentence = /^use\s+(.+?)\s+to\s+.+$/i.exec(raw);
+    if (toolSentence && worldObjectMatches(toolSentence[1]).length) return null;
     const combat = parseTextCombatCommand(raw);
     if (combat) return combat;
     match = /^(?:talk\s+to|speak\s+to|talk)(?:\s+(.+))?$/i.exec(raw);
@@ -500,6 +1542,8 @@ function validateTextAIPlan(value) {
         if (Object.keys(action.args).some(function (key) { return fields[action.verb].indexOf(key) < 0 || typeof action.args[key] !== "string" || action.args[key].length > TEXT_INPUT_LIMIT; })) return null;
         if (action.verb === "synergy" && /^(picture|name|confirm|replace)$/.test(action.args.action || "")) return null;
         if (action.verb === "act" && (Object.prototype.hasOwnProperty.call(action.args, "family") ? !interactionRequest(action.args) : !Object.prototype.hasOwnProperty.call(SOCIAL_GESTURES, action.args.action || ""))) return null;
+        if (action.verb === "object" && (!/^(lift|drag|shift|take)$/.test(action.args.action || "") || !String(action.args.target || "").trim())) return null;
+        if (action.verb === "tool" && (!/^(menu|pry|wedge|unwedge|force)$/.test(action.args.action || "") || action.args.action !== "menu" && !String(action.args.target || "").trim() || /^(pry|wedge)$/.test(action.args.action || "") && !String(action.args.item || "").trim())) return null;
         if (action.verb === "say" && !String(action.args.text || "").trim()) return null;
         if (action.verb === "choose" && !/^[1-9]\d*$/.test(action.args.number || "")) return null;
         if (action.verb === "attack" && ((action.args.style && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.styles, action.args.style)) || (action.args.bodyPart && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.parts, action.args.bodyPart)))) return null;
@@ -514,7 +1558,7 @@ function validateTextAIPlan(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases)$/.test(def.id) && (!def.social || socialActionAvailable() || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases)$/.test(def.id) && (def.id !== "tool" || worldToolIntentAvailable()) && (def.id !== "object" || !G.activeNPC && worldObjectEntries().length > 0) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -522,8 +1566,9 @@ async function interpretTextCommands(input) {
     });
     const schema = shapes.map(function (shape) { return shape.verbs.join("|") + (shape.args ? ":" + shape.args : ""); }).join(";");
     const combatWords = textModeInCombat() ? '\nCOMBAT: styles=' + Object.keys(TEXT_COMBAT_KEYWORDS.styles).join(',') + '; bodyPart=' + Object.keys(TEXT_COMBAT_KEYWORDS.parts).join(',') + '; use ability=' + textCombatActions().map(function (action) { return action.name; }).join(',').slice(0, 1200) : '';
-    const socialWords = shapes.some(function (shape) { return shape.verbs.includes("act"); }) ? "\nact.family=expression(self),invitation,contact(permission),assault(unarmed);action=attempt;game effects use other verbs." : "";
-    const instruction = '{"actions":[{"verb":"","args":{}}]};say=raw\n' + schema + combatWords + socialWords + '\n' + JSON.stringify(input);
+    const socialWords = shapes.some(function (shape) { return shape.verbs.includes("act"); }) ? "\nact.family=expression|invitation|contact(consent)|assault|physical(hands);action=free phrase." : "";
+    const objectWords = (!G.activeNPC && worldObjectEntries().length ? "\nobject.action=lift|drag|shift|take(existing target)." : "") + (worldToolIntentAvailable() ? "\ntool.action=pry|wedge|unwedge|force|menu;item=tool,target=object/door." : "");
+    const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\n' + schema + combatWords + socialWords + objectWords + '\n' + JSON.stringify(input);
     let timer;
     try {
         const result = await Promise.race([
@@ -534,11 +1579,6 @@ async function interpretTextCommands(input) {
         if (!raw) return null;
         const clean = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
         const plan = validateTextAIPlan(JSON.parse(clean));
-        if (plan && !textModeInCombat() && plan.some(function (action) { return action.verb === "attack"; })) {
-            const split = splitTextCommands(input);
-            const explicitAttack = split.parts && split.parts.some(function (part) { return /^(?:please\s+)?(?:I\s+)?(?:attack|hit|strike|swing)\b/i.test(part.trim()); });
-            if (!explicitAttack) return null;
-        }
         return plan;
     } catch (err) {
         console.warn("[Text commands] Interpretation unavailable", err);
@@ -600,7 +1640,7 @@ function textModePumpStoryTyping() {
     const line=entry.line;
     if(line.setAttribute){
         line.classList.add("text-story-typing");line.setAttribute("role","button");line.setAttribute("tabindex","0");line.setAttribute("aria-label","Finish typing this text");
-        line.title="Click or press Enter to finish typing.";
+        line.title="";
         line.onclick=function(){textModeFinishStoryEntry(entry);};
         line.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();textModeFinishStoryEntry(entry);}};
     }
@@ -640,12 +1680,40 @@ function textModeSystemOutput(event, text) {
     while (log.children.length > 40) log.removeChild(log.lastChild || log.firstChild);
     log.scrollTop = 0;
 }
+function textModeGuidanceOutput(text, append) {
+    const el = document.getElementById("textModeGuidanceEl");
+    if (!el) return;
+    el.textContent = append && el.textContent ? el.textContent + "\n\n" + text : text;
+    el.hidden = !el.textContent;
+}
+
+function textModeSeparateGuidance(event) {
+    if (event.renderedInChat || event.kind === "command") return;
+    if (textModeState.helpActive || event.systemOnly) {
+        event.systemOnly = true;
+        event.guidance = event.text;
+        return;
+    }
+    if (!/^(feedback|choices|narration)$/.test(event.kind)) return;
+    const isHint = function (line) {
+        return /^(?:Type|Use|Try|Answer|Click|Press|Select|Choose|Examples?:|Commands?:|Start a conversation with|Pending commands|Remaining commands|They are waiting for your answer|Choice selected\.)(?:\s|$)/i.test(line.trim());
+    };
+    const parts = event.text.split(/\n|(?<=[.!?])(?<!\d\.)\s+(?=[A-Z])/);
+    const hints = parts.filter(isHint);
+    if (!hints.length) return;
+    event.guidance = hints.join("\n");
+    const prose = parts.filter(function (line) { return !isHint(line); }).join("\n").trim();
+    if (!prose) { event.systemOnly = true; delete event.narration; return; }
+    event.narration = (event.narration || prose).split(/\n|(?<=[.!?])(?<!\d\.)\s+(?=[A-Z])/).filter(function (line) { return !isHint(line); }).join("\n").trim();
+}
+
 function publishTextModeOutput(kind, text, details, display) {
     const event = Object.assign({ kind: kind, text: String(text || ""), source: "text-mode" }, details || {});
     if (!event.text) return;
     event.systemOnly = !!event.systemOnly || kind === "feedback" && /^(?:Text mode ready\.|Choice resolved\.|Pending commands|The new command replaces|There are no pending commands|An action is still finishing)/.test(event.text);
     textPhraseObserve(event);
     textModeImmersiveOutput(event);
+    textModeSeparateGuidance(event);
     event.presentation = display === false ? "supplement" : kind === "command" || event.systemOnly ? "system" : kind === "choices" ? "decision" : "story";
     textModeState.events.push(event);
     if (textModeState.events.length > 100) textModeState.events.shift();
@@ -653,7 +1721,9 @@ function publishTextModeOutput(kind, text, details, display) {
     if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") window.dispatchEvent(new CustomEvent("cyoa:output", { detail: event }));
     if (display === false || !textModeState.enabled) return;
     const visible = textModeDisplayWords(event.text);
-    if (/^(command|feedback|choices)$/.test(kind)) textModeSystemOutput(event, textModeState.helpActive ? "Help is shown in the chat log." : visible);
+    if (kind === "command") textModeGuidanceOutput("");
+    if (event.guidance) textModeGuidanceOutput(textModeDisplayWords(event.guidance), textModeState.helpActive);
+    if (/^(command|feedback|choices)$/.test(kind)) textModeSystemOutput(event, textModeState.helpActive ? "Help is shown below the input." : visible);
     if (kind === "command") return;
     let story = event.narration || visible;
     if (kind === "choices" && !event.narration) {
@@ -673,7 +1743,7 @@ function textModeAttachCombatSkip(session) {
     line.classList.add("text-combat-skippable");
     line.setAttribute("role", "button"); line.setAttribute("tabindex", "0");
     line.setAttribute("aria-label", "Finish current combat narration");
-    line.title = "Click or press Enter to finish the current narration.";
+    line.title = "";
     const finish = function () { if (activeCombatNarration === session && !session.done) skipActiveCombatNarration(); };
     line.onclick = finish;
     line.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); finish(); } };
@@ -688,6 +1758,7 @@ function textModeAttachCombatSkip(session) {
 
 function textModeHelp(topic, show) {
     const previous = textModeState.helpActive; textModeState.helpActive = true;
+    if (textModeState.enabled) textModeGuidanceOutput("");
     try { return textModeHelpContent(topic, show); } finally { textModeState.helpActive = previous; }
 }
 
@@ -746,6 +1817,8 @@ function textModeInspectNPC(action) {
 
 function textModeHelpContent(topic, show) {
     let key = textCommandNormalize(topic).replace(/^(?:to|use)\s+/, "");
+    if (show) { const tools = worldToolShow(key); if (tools) return tools; }
+    if (show) { const objects = textWorldObjectShow(key); if (objects) return objects; }
     if (/^(phrases|learned phrases)$/.test(key)) return executeTextPhraseCommand({args:{action:"list"}});
     if (/^(available\s+)?(verbs|actions|commands)$/.test(key)) key = "";
     if (textModeInCombat() && /^(cast|magic)$/.test(key)) return textCombatShow("spells");
@@ -790,6 +1863,8 @@ function textModeHelpContent(topic, show) {
     const entries = TEXT_COMMANDS.filter(function (def) {
         if (ids.indexOf(def.id) < 0 && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !/^(back|cancel)$/.test(def.id)) return false;
         if (def.social && !socialActionAvailable()) return false;
+        if (def.id === "object" && !worldObjectEntries().length) return false;
+        if (def.id === "tool" && !worldToolAvailable()) return false;
         if (def.casting && !castingAvailable()) return false;
         if (def.synergy && !synergyTextAvailable()) return false;
         if (def.travel && !G.guiding && (!G.activeNPC || travelNPCBlock(G.activeNPC, "directions"))) return false;
@@ -833,6 +1908,7 @@ function textModeHelpContent(topic, show) {
         return true;
     });
     const lines = entries.filter(function (def) { return def.id !== "show"; }).map(function (def) { return (def.primary || def.id) + ": " + def.example; });
+    if (!socialActionAvailable() && socialActionAvailable(true)) lines.push("attempt: attempt <minor bare-hand action> with <person>; help attempt");
     return textModeResult("completed", "Commands you can use:\n" + lines.join("\n") + '\nAsk how talk for examples. Combine actions with then, commas, or semicolons. Quote speech: say "Hello, how are you?".');
 }
 
@@ -907,8 +1983,15 @@ async function executeTextCommand(action) {
     if (combatBlock) return textModeResult("blocked", combatBlock);
     const physicalIntent = structuralLegacyIntent(action);
     if (physicalIntent) return executeTextStructuralTool(physicalIntent);
+    if (action.verb === "tool") return executeTextWorldToolCommand(action);
+    if (action.verb === "object") return executeTextObjectCommand(action);
+    if (action.verb === "take" && !args.source && !action.itemRef && !textLootTakeHasSource(action)) {
+        const objects = worldObjectMatches(args.item || "").filter(function (entry) { return entry.kind === "fixture"; });
+        if (objects.length) return executeTextObjectCommand({ verb: "object", args: { action: "take", target: args.item } });
+    }
     if (def.social) return executeTextSocialCommand(action);
     if (def.casting) return executeTextCastingCommand(action);
+    if (def.nsfw && action.verb.match(/^(touch|grab|hug|grope)$/)) return executeTextTouchCommand(action);
     if (def.synergy) return executeTextSynergyCommand(action);
     if (def.travel) return executeTextTravelCommand(action);
     if (def.nectar) return executeTextNectarCommand(action);
@@ -955,6 +2038,7 @@ async function executeTextCommand(action) {
             return textModeAsk(action, "direction", dirs, "Which direction?");
         }
         if (!room.exits || !room.exits[dir]) return textModeResult("blocked", "There is no exit " + dir + " here.");
+        if (getDoorObstruction(room, dir)) return worldObjectResult("blocked", "A brace holds the doorway shut. You cannot pass through it.", { doorObstruction: { direction: dir, blocked: true } });
         if (isExitLocked(room, dir)) return textModeResult("blocked", "The way " + dir + " is locked. Use show doors, unlock, pick or force <direction> door.");
         if (isExitCollapsed(room, dir)) return textModeResult("blocked", "The way " + dir + " is blocked by rubble.");
         if (action.verb === "glance") {
@@ -991,7 +2075,7 @@ async function executeTextCommand(action) {
         if (G.activeNPC !== npc) selectNPC(npc);
         if (G.activeNPC !== npc || G.activeNPCMode === "combat") return textModeResult("blocked", "You could not start that conversation.");
         chooseNPCAction("talk");
-        textModeResult("completed", 'Talking with ' + textModeNPCLabel(npc) + '. Use say "Hello" to speak, options for topics, or leave to step away.');
+        textModeResult("completed", 'Talking with ' + textModeNPCLabel(npc) + '. Use say "Hello" to speak, options for topics, or leave to step away.', { systemOnly: true });
         return { status: "completed" };
     }
     if (action.verb === "options") return textModeInCombat() ? textCombatShow("") : G.activeNPCMode === "trade" ? textTradeList("buy") : textModeListOptions();
@@ -1126,6 +2210,9 @@ async function submitTextModeCommand(raw) {
         else if (pending.kind === "ability") pending.action.abilityId = pick.id;
         else if (pending.kind === "abilityTarget") pending.action.targetChoiceId = pick.id;
         else if (pending.kind === "item") pending.action.itemRef = pick;
+        else if (pending.kind === "worldObject") pending.action.objectRef = pick;
+        else if (pending.kind === "worldToolTarget") pending.action.toolTargetRef = pick;
+        else if (pending.kind === "worldToolItem") pending.action.toolItemRef = pick;
         else if (pending.kind === "tradeItem") pending.action.tradeRef = pick;
         else if (pending.kind === "lootSource") pending.action.sourceRef = pick;
         else if (pending.kind === "lootItem") pending.action.lootItemRef = pick;
@@ -1155,7 +2242,7 @@ async function submitTextModeCommand(raw) {
     const learned = local.unresolved ? textPhraseLookup(input) : null;
     if (learned) actions = learned;
     if (local.unresolved && !learned) {
-        if (!aiAvailable()) { textModeResult("blocked", 'That wording is not recognized locally, and AI command help is unavailable. Check Use AI in Preferences and the AI connection, or type how for supported commands.'); return; }
+        if (!aiAvailable()) { textModeResult("blocked", 'That wording is not recognized locally, and AI command help is unavailable. Nothing was attempted. Check Use AI in Preferences and the AI connection, or type help for supported commands.', { systemOnly: true, commandFailure: "ai-unavailable" }); return; }
         textModeState.parsing = true;
         renderTextModeStatus("Interpreting your command...");
         try { actions = await interpretTextCommands(input); learnedFromAI = !!actions; }
@@ -1163,9 +2250,10 @@ async function submitTextModeCommand(raw) {
         if (!textModeState.enabled || epoch !== textModeState.epoch) return;
         if (!textModeSameScene(scene)) { textModeResult("blocked", "The scene changed while interpreting. Please repeat your command."); return; }
     }
-    if (!actions) { textModeResult("blocked", 'I could not understand that. Try how, or say "..." when speaking to an NPC.'); return; }
+    if (!actions) { textModeResult("blocked", 'That wording could not be matched to an available action. Nothing was attempted. The interpreter may have failed or returned an unsupported action. Try help for supported commands, or say "..." when speaking to an NPC.', { systemOnly: true, commandFailure: "unresolved" }); return; }
     // A batch is interpreted in full before any action is allowed to run.
     if (learnedFromAI) textPhrasePrepare(input, actions, phraseContext);
+    if (learnedFromAI || learned) actions.forEach(function (action) { if (action.verb === "attack") action.inferredAttack = true; });
     textModeState.queue = actions;
     return runTextCommandQueue();
 }
@@ -1383,7 +2471,7 @@ function textCombatQueueBoundary(before, action) {
 
 function textCombatActionBlock(action) {
     const def = textCommandDefinition(action.verb);
-    const physical = action.verb === "act" && action.args && action.args.family === "assault";
+    const physical = action.verb === "act" && action.args && /^(assault|physical)$/.test(action.args.family || "");
     if (textModeInCombat() && !physical && !(def && (def.combat || def.info))) return "A fight is in progress. Type show for combat actions.";
     if (def && def.combatOnly && !textModeInCombat()) return "That action needs an active fight. Use attack <npc> to start one.";
     if (textModeInCombat()) {
@@ -1413,6 +2501,7 @@ function textCombatShow(topic) {
     const available = all.filter(function (action) { return !action.disabled && (!group || action.group === group); });
     const lines = group ? [] : ["attack [style] [body part] — e.g. heavy head or attack head light", "Styles: light, balanced, heavy, precise. Default: balanced torso.", "Body parts here: " + getCombatTargetOptions(G.activeNPC).join(", "), "target <npc>; show targets; status; stop; continue", "inventory; equipment; examine <item>; equip <item>; unequip <item>; drop <item>", "drink <potion or alcohol>; eat <healing herb> — uses your combat turn"];
     available.forEach(function (action) { lines.push(action.label + " — type " + (action.primary || action.name.toLowerCase())); });
+    if (!group && G.activeNPC && !physicalEffectBlock(G.activeNPC)) lines.push("attempt <minor bare-hand action> with <opponent> — AI effects, normal combat response");
     return textModeResult("completed", (G.activeNPC ? "Current opponent: " + textModeNPCLabel(G.activeNPC) + ".\n" : "") + (lines.length ? lines.join("\n") : "No available actions in this group.") + "\nUse how <action> for details. Each combat action uses the normal turn and costs.");
 }
 
@@ -1431,6 +2520,24 @@ function textCombatResolveOpponent(action) {
     return { npc: npc };
 }
 
+function reviewInferredAttack(npc, action) {
+    const reason = interactionPhysicalBlock(npc);
+    if (reason) return textModeResult("blocked", reason);
+    const args = Object.assign({}, action.args), turn = getCurrentStoryTurn();
+    const title = "You intend to attack " + textModeNPCLabel(npc) + " using your current combat equipment (" + (args.style || "balanced") + ", " + (args.bodyPart || "torso") + "). This may start a fight.";
+    const menu = beginSharedChoiceMenu("interaction-attack", npc, title, null), valid = menu.valid;
+    menu.valid = function () { return valid() && turn === getCurrentStoryTurn() && !interactionPhysicalBlock(npc); };
+    const root = document.getElementById("chatOptionsEl");
+    if (root) root.innerHTML = "";
+    const attack = createSharedChoiceButton(menu, "Make the attack", function () {
+        return executeTextCombatCommand({ verb: "attack", args: args, targetRef: npc, reviewedAttack: true });
+    }, { textChoice: { action: "attack" } });
+    const cancel = createSharedChoiceButton(menu, "Cancel", function () { return { status: "completed" }; }, { textChoice: { action: "back" } });
+    if (root) { root.appendChild(attack); root.appendChild(cancel); }
+    publishSharedChoiceMenu(menu, root);
+    return { status: "needs_input" };
+}
+
 async function executeTextCombatCommand(action) {
     const args = action.args || {};
     if (action.verb === "attack" || action.verb === "target") {
@@ -1441,6 +2548,7 @@ async function executeTextCombatCommand(action) {
             if (!Object.prototype.hasOwnProperty.call(COMBAT_ATTACK_STYLES, args.style || "balanced")) return textModeResult("blocked", "Choose one attack style: light, balanced, heavy, or precise.");
             const part = args.bodyPart || "torso";
             if (getCombatTargetOptions(npc).indexOf(part) < 0) return textModeResult("blocked", "That body part is unavailable on this opponent. Choose " + getCombatTargetOptions(npc).join(", ") + ".");
+            if (action.inferredAttack && !action.reviewedAttack && !textModeInCombat()) return reviewInferredAttack(npc, action);
         }
         if (G.activeNPC !== npc) {
             if (textModeInCombat()) encounterSetTarget(npc);
@@ -1657,6 +2765,8 @@ async function executeTextInventoryCommand(action) {
     }
     if (action.verb === "equip") {
         if (!getDirectEquipmentSlot(item)) return textModeResult("blocked", name + " cannot be equipped.");
+        const physicalBlock = worldObjectEquipBlock(item, entry.list);
+        if (physicalBlock) return textModeResult("blocked", physicalBlock);
         return textInventoryRefresh(equipPlayerItemFromSource(item, entry.list));
     }
     if (action.verb === "unequip") {
@@ -1675,7 +2785,8 @@ async function executeTextInventoryCommand(action) {
     if (action.verb === "take") {
         // The engine handles coins, wearable packs, overflow refusal and persistence.
         const scene = textModeScene();
-        takeRoomObject(item);
+        const outcome = takeRoomObject(item);
+        if (outcome && outcome.status) return outcome;
         if (scene.room.items.indexOf(item) >= 0) return textModeResult("blocked", "You could not carry " + name + ". Check your pack space.");
         return textModeResult("completed", "You pick up " + name + ".");
     }
@@ -2274,6 +3385,7 @@ function textFixtureActions(fixture) {
     });
     if (typeof environmentFixtureActions === "function") actions.push.apply(actions, environmentFixtureActions(fixture));
     if (typeof materialFixtureActions === "function") actions.push.apply(actions, materialFixtureActions(fixture));
+    if (typeof worldObjectFixtureActions === "function") actions.push.apply(actions, worldObjectFixtureActions(fixture));
     return actions;
 }
 
@@ -2300,7 +3412,7 @@ function textFixtureDescribe(entry) {
     if (noticeIsBoard(fixture)) lines.push("notices at " + entry.label + "; take paper from " + entry.label + "; take pencil from " + entry.label + "; jobs — work postings and bounties");
     if (fixture.id === "job-board") lines.push("jobs — view job postings and bounties");
     if (isAlchemyTableFixture(fixture)) lines.push("alchemy — recipes, preparation and experiments; show ingredients; show bowl");
-    return textModeResult("completed", entry.label + "\n" + description + (lines.length ? "\nActions:\n" + lines.join("\n") : "\nNo typed fixture action is available here yet."), { fixture: { name: entry.label, description: description, actions: actions.map(function (action) { return { verb: action.id, command: textFixtureCommand(action, entry), blockedReason: action.reason, note: action.note || "" }; }) } });
+    return textModeResult("completed", entry.label + "\n" + description + (lines.length ? "\nActions:\n" + lines.join("\n") : "\nNo typed fixture action is available here yet."), { narration: entry.label + "\n" + description, guidance: lines.length ? "Actions:\n" + lines.join("\n") : "No typed fixture action is available here yet.", fixture: { name: entry.label, description: description, actions: actions.map(function (action) { return { verb: action.id, command: textFixtureCommand(action, entry), blockedReason: action.reason, note: action.note || "" }; }) } });
 }
 
 function textExplorationShow(topic) {
@@ -2391,6 +3503,7 @@ async function executeTextExplorationCommand(action) {
     const selected = action.fixtureRoute ? choices.find(function (value) { return value.route && value.route.direction === action.fixtureRoute.route.direction && value.route.target === action.fixtureRoute.route.target; }) : choices[0];
     if (!selected) return textModeResult("blocked", "That route changed. Repeat the command.");
     if (selected.reason) return textModeResult("blocked", selected.reason);
+    if (selected.objectAction) return selected.run();
     if (verb === "fill") {
         const fillable = getFillableEmptyEntries().map(function (value) { return { ...value, label: textInventoryItemName(value.item) }; });
         const matches = action.fillRef ? fillable.filter(function (value) { return value.key === action.fillRef.key && value.item === action.fillRef.item && value.totalQuantity === action.fillRef.totalQuantity; }) : textLootMatch(args.item || "", fillable, function (value) { return value.label; });
@@ -2511,7 +3624,7 @@ function sharedChoiceResult(status, message) {
 }
 
 function showSharedChoiceMenu(menu) {
-    return textModeResult("needs_input", menu.title + "\n" + menu.options.map(function (choice, index) { return (index + 1) + ". " + choice.label + (choice.disabled ? " — unavailable" + (choice.reason ? ": " + choice.reason : "") : ""); }).join("\n") + "\nType choose <number> (or the number alone). Use back or cancel where available. Later commands stay paused.", { menu: { id: menu.id, kind: menu.kind }, choices: menu.options.map(function (choice, index) { return { number: index + 1, label: choice.label, response: "choose " + (index + 1), disabled: choice.disabled }; }) });
+    return textModeResult("needs_input", menu.title + "\n" + menu.options.map(function (choice, index) { return (index + 1) + ". " + choice.label + (choice.disabled ? " — unavailable" + (choice.reason ? ": " + choice.reason : "") : ""); }).join("\n") + "\nType choose <number> (or the number alone). Use back or cancel where available. Later commands stay paused.", { systemOnly: menu.kind === "world-tools", menu: { id: menu.id, kind: menu.kind }, choices: menu.options.map(function (choice, index) { return { number: index + 1, label: choice.label, response: "choose " + (index + 1), disabled: choice.disabled }; }) });
 }
 
 async function runSharedChoice(menu, choice) {
@@ -2657,6 +3770,7 @@ function textSharedChoiceCanHandle(input, action) {
     if (menu && /^goods-/.test(menu.kind) && action && action.verb === "leave") return true;
     if (action && action.verb === "options") return !!menu || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot();
     if (!menu) return false;
+    if (menu.kind === "world-tools" && (action && /^(tool|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^casting-/.test(menu.kind) && (action && /^(casting|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^synergy-/.test(menu.kind) && (action && /^(synergy|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^travel-/.test(menu.kind) && (action && /^(travel|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
@@ -2693,6 +3807,12 @@ async function textRunSharedChoice(menu, choice) {
 
 async function textSharedChoiceInput(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && menu.kind === "world-tools" && (action && /^(tool|leave|back|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) {
+        if ((splitTextCommands(input || "").parts || []).length > 1) textModeResult("needs_input", "Answer one tool choice at a time.", { systemOnly: true });
+        else if (action && /^(leave|back|cancel)$/.test(action.verb)) { clearSharedChoiceMenu(menu); G.activeNPCMode = null; setExitGridVisible(true); textModeResult("completed", "You step away from the tools.", { systemOnly: true }); }
+        else showSharedChoiceMenu(menu);
+        return true;
+    }
     if (menu && /^casting-/.test(menu.kind) && (action && /^(casting|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textCastingMenuInput(menu, action, input); return true; }
     if (menu && /^synergy-/.test(menu.kind) && (action && /^(synergy|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textSynergyMenuInput(menu, action, input); return true; }
     if (menu && /^travel-/.test(menu.kind) && (action && /^(travel|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textTravelMenuInput(menu, action, input); return true; }
@@ -17654,6 +18774,7 @@ function setExitLockState(room, direction, state, extra) {
     const dir = normalizeDirection(direction);
     const lock = getExitLock(room, dir);
     if (!lock) return false;
+    if (extra && (extra.forced || extra.burnt || extra.shattered) && typeof clearDoorObstruction === "function") clearDoorObstruction(room, dir);
     lock.state = state;
     if (extra) Object.assign(lock, extra);
     const other = room.exits && G.roomMap ? G.roomMap[room.exits[dir]] : null;
@@ -18322,6 +19443,11 @@ function movePlayer(direction) {
     const dir = normalizeDirection(direction);
     const room = G.activeRoom;
     if (!room || !dir) return;
+    if (typeof getDoorObstruction === "function" && getDoorObstruction(room, dir)) {
+        worldObjectResult("blocked", "A brace holds the doorway shut. You cannot pass through it.", { doorObstruction: { direction: dir, blocked: true } });
+        if (!textModeState.enabled) openWorldToolMenu((typeof COLLAPSE_DIR_WORDS !== "undefined" && COLLAPSE_DIR_WORDS[dir] || dir) + " door");
+        return;
+    }
     const bodyMoveBlock = getBodyMoveBlockReason();
     if (bodyMoveBlock) {
         setNarration(bodyMoveBlock);
@@ -23648,6 +24774,7 @@ function npcHoldsKeyFor(npc, room, lock) {
 
 // Can this NPC get through the door in direction dir? { ok, how, rank }.
 function npcLockAccess(npc, room, dir) {
+    if (typeof getDoorObstruction === "function" && getDoorObstruction(room, dir)) return { ok: false, how: "braced" };
     if (isExitCollapsed(room, dir)) return { ok: false, how: "collapsed" };
     if (!isExitLocked(room, dir)) return { ok: true, how: "open" };
     const lock = getExitLock(room, dir);
@@ -27323,6 +28450,7 @@ function findRoomRoute(fromRoom, toKey, opts) {
             if (!dir || isPortalExit(room, dir)) continue;
             if (npc && isVerticalDirection(dir)) continue;      // NPCs do not use stairs on their own
             if (isExitCollapsed(room, dir)) continue;
+            if (typeof getDoorObstruction === "function" && getDoorObstruction(room, dir)) continue;
             if (npc) { if (!npcLockAccess(npc, room, dir).ok) continue; }
             else if (isExitLocked(room, dir)) continue;
             const nextKey = room.exits[dirKeys[i]];
@@ -29011,7 +30139,7 @@ function createEmptyContainer(emptyId) {
 }
 
 function isEmptyFillableItem(item) {
-    return !!(item && item.container && item.container.fillable && /^empty-/.test(String(item.stackKey || item.id || "")));
+    return !!(item && item.container && item.container.fillable && (item.physicalDefinition && !item.container.emptyId ? !item.liquid || item.liquid.volume <= 0 : /^empty-/.test(String(item.stackKey || item.id || ""))));
 }
 
 // Which empty container an item leaves behind once emptied (id, or "").
@@ -29975,6 +31103,7 @@ function wearRucksack(item) {
 function fillContainerAtFixture(fixture, stackKey) {
     const entry = getFillableEmptyEntries().find(function (e) { return e.key === stackKey; });
     if (!entry) { setNarration("You no longer have that."); return; }
+    if (entry.item.physicalDefinition && !entry.item.container.emptyId && typeof fillWorldObjectAtFixture === "function") return fillWorldObjectAtFixture(fixture, entry);
     const taken = takeInventoryEntryAmount(G.player, stackKey, 1);
     if (!taken) return;
     const filled = createFilledWaterContainer(taken.stackKey || stackKey);
@@ -30080,6 +31209,7 @@ function cloneItemForStackAmount(item, quantity) {
 
 function getInventoryStackKey(item) {
     if (!item || typeof item !== "object") return "";
+    if (item.physicalDefinition && item._uid) return "world-object:" + item._uid;
     // Containers and pocketed garments keep their own identity and contents.
     if (isCarryContainerItem(item)) return "container:" + ensureContainerKey(item);
     if (typeof isNectarItem === "function" && isNectarItem(item)) return "nectar:" + getItemName(item).toLowerCase() + ":" + getNectarCapacityDrops(item) + ":" + getNectarDrops(item);
@@ -31105,6 +32235,10 @@ function equipPlayerItemFromSource(item, list, fixture) {
     const room = G.activeRoom;
     const inFixture = fixture && room && (room.structural || []).includes(fixture) && fixture.opened && !fixture.concealed && ensureContainerContents(fixture).items === list;
     if (!accessible && !inFixture) return "That item is no longer available.";
+    if (typeof worldObjectEquipBlock === "function") {
+        const physicalBlock = worldObjectEquipBlock(item, list);
+        if (physicalBlock) return physicalBlock;
+    }
     ensurePlayerEquipmentState(player);
     const unit = splitOneUnit(list, item);
     delete unit.stowed;
@@ -31636,7 +32770,9 @@ function buildStrikeHitLine(c) {
         base = `${c.attackerName} ${conjugateStrikeVerb(verb)} ${defPart}`;
     }
 
-    const tail = rand(getStrikeTails(c, damageClass)[tier]);
+    const physicalAction = c.attackerIsPlayer && !armed && /^(push|shove)$/.test(c.physicalAction || "") ? c.physicalAction : "";
+    if (physicalAction) base = `You ${physicalAction} ${c.defenderName} hard`;
+    const tail = physicalAction ? "" : rand(getStrikeTails(c, damageClass)[tier]);
     const hpDamage = Number.isFinite(c.hpLost) ? c.hpLost : c.damage;
     const hpChange = c.defenderIsPlayer && Number.isFinite(c.hpBefore) && Number.isFinite(c.hpAfter)
         ? `; HP ${c.hpBefore} → ${c.hpAfter}` : "";
@@ -31652,6 +32788,10 @@ function buildStrikeMissLine(c) {
     const weaponName = String((c.weapon && c.weapon.name) || "unarmed").toLowerCase();
     const unarmed = !c.naturalMode && weaponName === "unarmed";
     const vars = { A: c.attackerName, D: c.defenderName, w: weaponName };
+
+    if (c.attackerIsPlayer && unarmed && /^(push|shove)$/.test(c.physicalAction || "")) {
+        return formatCombatStrikeLine(c, `You try to ${c.physicalAction} ${c.defenderName}, but fail to connect.`);
+    }
 
     if (c.attackerIsPlayer) {
         const pool = STRIKE_PLAYER_MISS_LINES[unarmed ? "unarmed" : damageClass];
@@ -32922,6 +34062,7 @@ const STATUS_EFFECT_DEFINITIONS = {
     },
     jolted: { label: "Jolted", combatMods: { hitBonus: -2 }, durationTurns: 2, selfNarration: "Your muscles will not obey cleanly." },
     distracted: { label: "Distracted", combatMods: { counterHit: -2 }, durationTurns: 2, narration: "{name} glances away, distracted." },
+    sore: { label: "Sore", combatMods: { hitBonus: -1, counterHit: -1 }, durationTurns: 2, narration: "{name} is briefly sore from the contact." },
     dirtInEyes: { label: "Blinded", combatMods: { counterHit: -4 }, durationTurns: 2, narration: "{name} claws at {pronoun2} eyes." },
     markedPrey: { label: "Marked", durationTurns: 6, narration: "{name}'s weak points are plain to you." },
     spearSet: { label: "Spear Set", combatMods: { counterHit: -2 }, durationTurns: 3, narration: "{name} hesitates before the levelled point." },
@@ -33817,7 +34958,9 @@ function applyCombatDamage(entity, amount, targetKey, options = {}) {
     let newlyDisabledLimb = null;
     let bled = false;
 
-    if (limb) {
+    // Bounded minor-contact effects can remove a little HP without creating
+    // permanent limb trauma. Ordinary weapon/unarmed attacks keep full wounds.
+    if (limb && !options.superficial) {
         // Remembered so wound summaries can say "gashed" / "bruised" / "pierced".
         if (damageType) limb.lastDamageType = damageType;
         const wasIntact = limb.hp > 0;
@@ -37611,6 +38754,7 @@ function attackNPC(npc, options = {}) {
     const style = COMBAT_ATTACK_STYLES[styleKey] || COMBAT_ATTACK_STYLES.balanced;
     const target = COMBAT_TARGETS[targetKey] || COMBAT_TARGETS.torso;
     const playerWeapon = options.unarmed === true ? getUnarmedInteractionProfile() : getEntityWeaponProfile(player);
+    const physicalAction = options.unarmed === true && /^(push|shove)$/.test(options.physicalAction || "") ? options.physicalAction : "";
     const damageType = getWeaponDamageType(playerWeapon.type);
     // Rogue sneak attack / backstab (see getSneakAttackProfile): the opening
     // strike on someone unaware, helpless, or who has lost track of a hidden
@@ -37688,7 +38832,7 @@ function attackNPC(npc, options = {}) {
     if (isEntityExhausted(player)) {
         lines.push(describeEntityCannotAct(player.name || "You", true));
     } else {
-    lines.push(formatCombatActionLine(player, npc, `${style.text} You aim for ${npcName}'s ${target.label.toLowerCase()}.`));
+    lines.push(formatCombatActionLine(player, npc, physicalAction ? `You lunge forward to ${physicalAction} ${npcName}.` : `${style.text} You aim for ${npcName}'s ${target.label.toLowerCase()}.`));
     spendEntityStamina(player, style.staminaCost, lines, { isPlayer: true });
     if (maneuver) {
         spendEntityStamina(player, maneuver.stamina, lines, { isPlayer: true });
@@ -37788,7 +38932,7 @@ function attackNPC(npc, options = {}) {
         const strikeCtx = {
             attackerName: player.name || "You", attackerIsPlayer: true,
             defenderName: npcName, defenderIsPlayer: false,
-            weapon: playerWeapon, naturalMode: null, damageType: damageType,
+            weapon: playerWeapon, naturalMode: null, damageType: damageType, physicalAction: physicalAction,
             targetKey: targetKey, damage: damageResult.damage, hpLost: damageResult.hpLost, blocked: blocked,
             hpMax: npc.hpMax || npc.hp, crit: crit, bled: damageResult.bled,
             defenderBody: getBodyKind(npc)
@@ -37912,7 +39056,7 @@ function attackNPC(npc, options = {}) {
         lines.push(buildStrikeMissLine({
             attackerName: player.name || "You", attackerIsPlayer: true,
             defenderName: npcName, defenderIsPlayer: false,
-            weapon: playerWeapon, naturalMode: null, damageType: damageType
+            weapon: playerWeapon, naturalMode: null, damageType: damageType, physicalAction: physicalAction
         }));
 
         // The NPC successfully dodged - endurance XP only (no specific
@@ -42752,6 +43896,10 @@ function guessDurabilityMaterial(thing) {
 
 function getDurabilityScale(thing, kind) {
     if (kind === "wall") return DURABILITY_WALL_FACTOR;
+    if (thing && thing.physicalDefinition && thing.physicalDefinitionOrigin !== "inferred" && typeof calculateWorldObjectPhysics === "function") {
+        const physical = calculateWorldObjectPhysics(thing.physicalDefinition);
+        if (physical) return Math.max(0.25, Math.min(8, Math.pow(physical.scale, 2))) * (kind === "fixture" ? DURABILITY_FIXTURE_FACTOR : 1);
+    }
     if (kind === "fixture") return DURABILITY_FIXTURE_FACTOR;
     let value = 0;
     try { value = typeof getItemValue === "function" ? getItemValue(thing) : 0; } catch (e) { value = 0; }
@@ -43372,6 +44520,7 @@ function openWallFromLook(room, dir) {
 // one offers to lock it with a key or a lockpick.
 function openDoorWallMenu(room, dir) {
     if (!room || !dir || getExitDoor(room, dir) !== "door" || !room.exits || !room.exits[dir]) { renderRoom(); return; }
+    if (typeof getDoorObstruction === "function" && getDoorObstruction(room, dir)) return openWorldToolMenu((typeof COLLAPSE_DIR_WORDS !== "undefined" && COLLAPSE_DIR_WORDS[dir] || dir) + " door");
     if (isExitLocked(room, dir)) { openLockedDoorMenu(room, dir); return; }
     G.activeNPC = null;
     G.activeObject = null;
@@ -46971,7 +48120,9 @@ function appendNarrationText(parent, text) {
 }
 
 function appendNarrationBreak(parent) {
-    parent.appendChild(document.createElement("br"));
+    // Narration uses white-space: pre-line; a literal newline also survives
+    // textContent snapshots for text mode and semantic output.
+    appendNarrationText(parent, "\n");
 }
 
 function appendObservationSeparator(parent, hasObservations) {
@@ -48102,10 +49253,11 @@ function renderExits(exits) {
             const door = getExitDoor(G.activeRoom, dir);
             const locked = isExitLocked(G.activeRoom, dir);
             const collapsed = isExitCollapsed(G.activeRoom, dir);
+            const braced = typeof getDoorObstruction === "function" && !!getDoorObstruction(G.activeRoom, dir);
             // A visible door (or archway) marks a boundary: a building's
             // edge, a private room, someone's home. A lock is shown on top.
-            el.textContent = collapsed ? `${label} \u2715` : locked ? `${label} \u{1F512}` : door === "door" ? `${label} \u{1F6AA}` : door === "arch" ? `${label} \u2229` : label;
-            el.title       = collapsed ? "Blocked by a collapse" : locked ? "A locked door" : door === "door" ? "A door" : door === "arch" ? "An archway" : "";
+            el.textContent = collapsed || braced ? `${label} \u2715` : locked ? `${label} \u{1F512}` : door === "door" ? `${label} \u{1F6AA}` : door === "arch" ? `${label} \u2229` : label;
+            el.title       = collapsed ? "Blocked by a collapse" : braced ? "A braced door" : locked ? "A locked door" : door === "door" ? "A door" : door === "arch" ? "An archway" : "";
             el.disabled    = false;
             el.onclick     = () => movePlayer(dir);
         } else {
@@ -54544,6 +55696,7 @@ function finishLiquidAction(room, type, lines) {
 // Item name/id -> liquid and how much a unit of it spills.
 function getItemLiquid(item) {
     if (!item || isPotionItem(item)) return null;
+    if (item.physicalDefinition && item.liquid) return Number.isFinite(item.liquid.volume) && item.liquid.volume > 0 && /^(water|oil|spirits|ale|blood)$/.test(item.liquid.type) ? item.liquid : null;
     const text = (String(item.id || "") + " " + String(item.name || "")).toLowerCase();
     if (/poison|antitoxin|venom/.test(text)) return null;
     if (/(^|[^a-z])(oil flask|lamp oil|oil-flask|lamp-oil)([^a-z]|$)/.test(text)) return { type: "oil", volume: /lamp/.test(text) ? 4 : 3 };
@@ -54562,15 +55715,18 @@ function pourOutInventoryItem(item) {
     const liq = getItemLiquid(item);
     if (!room || !liq) return "";
     const name = getItemName(item);
-    if (!consumeOneFromInventory(item)) return "";
-    const keptEmpty = giveBackEmptyContainer(item);
+    const retained = !!(item.physicalDefinition && item.container && item.liquid);
+    const volume = liq.volume, type = liq.type;
+    if (retained) item.liquid = { type: type, volume: 0 };
+    else if (!consumeOneFromInventory(item)) return "";
+    const keptEmpty = retained ? "You keep the empty vessel." : giveBackEmptyContainer(item);
     materialCheckpoint();
     advanceStoryTurn(1);
     if (!materialCurrent()) return materialInterrupted();
-    const extra = addRoomLiquid(room, liq.type, liq.volume) + (keptEmpty ? " " + keptEmpty : "");
+    const extra = addRoomLiquid(room, type, volume) + (keptEmpty ? " " + keptEmpty : "");
     saveGameState();
     const f = (room.structural || []).find(function (x) { return x && x.liquidType === liq.type; });
-    return "You pour out " + withIndefiniteArticle(name) + ". It spreads into " + describeLiquidCoverage(room, liq.type) + " in the " + getRoomSizeClass(room) + " room." + extra;
+    return (retained ? "You pour out the contents of " + name : "You pour out " + withIndefiniteArticle(name)) + ". It spreads into " + describeLiquidCoverage(room, liq.type) + " in the " + getRoomSizeClass(room) + " room." + extra;
 }
 
 const FIXTURE_LIQUID_BY_ID = { "water-barrel": "water", "oil-barrel": "oil", "lamp-oil-barrel": "oil", "spirits-cask": "spirits", "rain-barrel": "water", "ale-barrels": "ale" };
@@ -55674,6 +56830,7 @@ function renderSynergyReplaceMenu(room,id) {
 
 
 const INTERACT_MENU_ACTIONS = [
+    { id: "tools", label: "Use objects", group: "act", visible: function () { return worldToolAvailable(); }, disabledReason: worldToolSceneBlock, title: "Use objects as levers or door braces.", run: function () { return openWorldToolMenu(""); } },
     {
         id: "putdown",
         label: "Put down",
@@ -67143,6 +68300,11 @@ function openFixtureCard(fixture, cardOptions) {
         const fxDur = getDurabilityExamineLine(fixture, "fixture");
         if (fxDur) statBits.push(fxDur);
     }
+    if (typeof worldObjectFixtureActions === "function") {
+        worldObjectFixtureActions(fixture).forEach(function (action) {
+            addAction(action.label, function (event) { return worldObjectCardAction(fixture, action, event); }, { keepOpen: true, disabledReason: action.reason, title: action.note });
+        });
+    }
     statsEl.textContent = statBits.join("  ·  ");
     statsEl.style.display = statBits.length ? "block" : "none";
 
@@ -67265,6 +68427,7 @@ function renderContainerStoreCard(fixture, cardOpts) {
 // washable.
 function isRoomItemTakeable(item) {
     if (!item) return false;
+    if (typeof worldObjectRelation === "function" && worldObjectRelation(item, G.activeRoom)) return false;
     if (item.fixed === true || item.takeable === false) return false;
     if (isWashableRoomObject(item)) return false;
     return true;
@@ -67387,6 +68550,14 @@ function openItemModal(item) {
         actionsEl.appendChild(searchBtn);
     }
     actionsEl.appendChild(takeBtn);
+    if (typeof worldObjectFixtureActions === "function") {
+        worldObjectFixtureActions(item, "item").filter(function (action) { return action.id !== "take"; }).forEach(function (action) {
+            const button = document.createElement("button");
+            button.type = "button"; button.textContent = action.label; button.disabled = !!action.reason; button.title = action.reason || action.note;
+            button.onclick = function (event) { return worldObjectCardAction(item, action, event); };
+            actionsEl.appendChild(button);
+        });
+    }
     if (getDirectEquipmentSlot(item) && isRoomItemTakeable(item)) {
         const equipBtn = document.createElement("button");
         equipBtn.type = "button";
@@ -67888,6 +69059,11 @@ function collectBodyLoot(item, options) {
 
 function takeRoomObject(item) {
     if (!item || item.objectType === "body") return;
+    if (typeof performWorldObjectAction === "function" && typeof inferWorldObjectDefinition === "function" && !worldObjectExecution) {
+        const entry = worldObjectEntries().find(function (entry) { return entry.object === item && entry.location === "floor"; });
+        if (!entry) return worldObjectResult("blocked", "That object is no longer within reach.");
+        return performWorldObjectAction(entry, "take");
+    }
 
     const room = G.activeRoom || getRoom(G.player && G.player.coords);
     if (!room) return;
@@ -67903,6 +69079,7 @@ function takeRoomObject(item) {
     if (itemTypes.includes("coin")) {
         adjustCoins(G.player, getItemValue(item));
     } else if (item.container && item.container.wearable === "back" && G.player.rucksack === null) {
+        if (typeof worldObjectExecution !== "undefined" && worldObjectExecution) { wearRucksack(item); return; }
         resetNpcPanel();
         refreshInventoryUi(wearRucksack(item));
         return;
@@ -67910,12 +69087,14 @@ function takeRoomObject(item) {
         const packed = addToPlayerPack(item);
         if (packed.refused) {
             room.items.splice(Math.min(itemIndex, room.items.length), 0, packed.refused);
+            if (typeof worldObjectExecution !== "undefined" && worldObjectExecution) return;
             resetNpcPanel();
             refreshInventoryUi(packFullText([packed.refused]));
             return;
         }
     }
 
+    if (typeof worldObjectExecution !== "undefined" && worldObjectExecution) return;
     resetNpcPanel();
     refreshInventoryUi(`You pick up ${withIndefiniteArticle(name)}.`);
 }
@@ -71102,24 +72281,54 @@ function renderIntimacyActionMenu(npc) {
         // (happens on first action when there's no lastAction), add one now.
         // When penetration is active, use pull_out_generic (withdraws with
         // proper narration). Otherwise use step_away (stops the action).
+        // After Pull Away was used and there are no engaged acts, show End session instead.
         if (!actionBtnContainer.querySelector(".end-btn") &&
             npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active) {
-            const pullAwayBtn = document.createElement("button");
-            pullAwayBtn.className = "chat-option-btn intimacy-action-btn end-btn";
-            var isPenetrating = npc.intimacy.penetration && npc.intimacy.penetration.active;
-            pullAwayBtn.textContent = isPenetrating ? "Pull Out" : "Pull Away";
-            pullAwayBtn.title = isPenetrating ? "Withdraw from current penetration" : "Pull away from current action";
-            pullAwayBtn.style.whiteSpace = "nowrap";
-            pullAwayBtn.onclick = () => {
-                if (typeof chooseIntimacyAction === "function") {
-                    if (isPenetrating) {
-                        chooseIntimacyAction(npc, "pull_out_generic");
-                    } else {
-                        chooseIntimacyAction(npc, "pull_away_acts");
+            const engagedActIds = (typeof window.getEngagedActIds === "function") 
+                ? window.getEngagedActIds(npc) 
+                : [];
+            const hasEngagedActs = engagedActIds && engagedActIds.length > 0;
+            const isPenetrating = npc.intimacy.penetration && npc.intimacy.penetration.active;
+            
+            // If there are no engaged acts, show End session instead of Pull Away
+            if (!hasEngagedActs && !isPenetrating) {
+                const endSessionBtn = document.createElement("button");
+                endSessionBtn.className = "chat-option-btn intimacy-action-btn end-btn";
+                endSessionBtn.textContent = "End session";
+                endSessionBtn.title = "End the intimacy session and clear chat";
+                endSessionBtn.style.whiteSpace = "nowrap";
+                endSessionBtn.onclick = () => {
+                    if (typeof endIntimacyEncounter === "function") {
+                        endIntimacyEncounter(npc);
+                        // Clear chat log
+                        const chatLog = document.getElementById("chatLogEl");
+                        if (chatLog) {
+                            chatLog.innerHTML = "";
+                        }
+                        // Refresh room view
+                        if (typeof resetRoomViewAfterIntimacy === "function") {
+                            resetRoomViewAfterIntimacy(npc);
+                        }
                     }
-                }
-            };
-            actionBtnContainer.appendChild(pullAwayBtn);
+                };
+                actionBtnContainer.appendChild(endSessionBtn);
+            } else {
+                const pullAwayBtn = document.createElement("button");
+                pullAwayBtn.className = "chat-option-btn intimacy-action-btn end-btn";
+                pullAwayBtn.textContent = isPenetrating ? "Pull Out" : "Pull Away";
+                pullAwayBtn.title = isPenetrating ? "Withdraw from current penetration" : "Pull away from current action";
+                pullAwayBtn.style.whiteSpace = "nowrap";
+                pullAwayBtn.onclick = () => {
+                    if (typeof chooseIntimacyAction === "function") {
+                        if (isPenetrating) {
+                            chooseIntimacyAction(npc, "pull_out_generic");
+                        } else {
+                            chooseIntimacyAction(npc, "pull_away_acts");
+                        }
+                    }
+                };
+                actionBtnContainer.appendChild(pullAwayBtn);
+            }
         }
 
         returnBtn.onclick = () => {
@@ -72147,6 +73356,10 @@ function getExamineScore(stats) {
 
 function buildEquipmentExamineLines(item, slot) {
     const lines = [];
+    if (item.physicalDefinition && typeof calculateWorldObjectPhysics === "function") {
+        const physical = calculateWorldObjectPhysics(item.physicalDefinition);
+        if (physical) lines.push("Material: " + physical.material + ". Empty weight: " + physical.dryMassKg + " kg. Dimensions: " + physical.dimensionsCm.join(" × ") + " cm.");
+    }
     if (slot) lines.push("Slot: " + getEquipmentSlotMeta(slot).label);
     lines.push("Size when carried: " + getItemUnitSize(item) + " units. Equipped items use no storage space.");
     if (item.qualityName) lines.push("Quality: " + item.qualityName);

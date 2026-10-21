@@ -868,6 +868,21 @@ function buildPlayerStandingBlock(room, npc) {
     return "PLAYER STANDING:\n" + lines.join("\n");
 }
 
+// Only public, visible object properties. Contents, IDs, hidden inventory,
+// action DCs and private fixture state do not enter a narration prompt.
+function serializeWorldObjectContext(room) {
+    if (typeof worldObjectEntries !== "function" || typeof G === "undefined" || G.activeRoom !== room) return "";
+    const objects = worldObjectEntries().slice(0, 20).map(function (entry) {
+        const definition = worldObjectDefinition(entry.object, entry.kind), physical = definition && calculateWorldObjectPhysics(definition);
+        const estimated = !entry.object.physicalDefinition || entry.object.physicalDefinitionOrigin === "inferred";
+        if (estimated && physical && physical.template === "item") return null;
+        return physical ? { name: entry.object.name, location: entry.location, material: physical.material, dimensionsCm: physical.dimensionsCm,
+            emptyMassKg: physical.dryMassKg, estimated: estimated, secured: worldObjectSecured(entry) } : null;
+    }).filter(Boolean);
+    const obstructions = typeof worldDoorObstructionPublic === "function" ? worldDoorObstructionPublic(room) : [];
+    return objects.length || obstructions.length ? "PHYSICAL OBJECTS: " + JSON.stringify(objects) + "\nDOOR BRACES: " + JSON.stringify(obstructions) + "\nEstimated properties are template defaults, not measurements. A door brace blocks passage independently of locks. Describe known facts consistently. An attempted action is not a completed effect; engine results determine changes. Mentioning an object never creates it." : "";
+}
+
 // ── MASTER PROMPT BUILDER ────────────────────────────────────────
 function buildPrompt(room, npc, instruction, options = {}) {
     const locCtx = buildLocationNarrativeContext(room);
@@ -891,6 +906,7 @@ function buildPrompt(room, npc, instruction, options = {}) {
 
     return [
         sceneBlock,
+        serializeWorldObjectContext(room),
         storyBlock,
         awarenessBlock,
         npcBlock,
