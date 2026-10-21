@@ -70231,10 +70231,15 @@ const GAME_FONT_FAMILIES = {
     mono: "Consolas, 'Courier New', monospace"
 };
 function setGameFontSize(px) {
+    const index = ['14px', '16px', '18px', '20px'].indexOf(px);
+    if (index < 0) return;
     try { localStorage.setItem(FONT_SIZE_PREF_KEY, px); } catch (e) {}
     document.body.style.fontSize = px;
+    document.body.style.setProperty('--game-font-increase', (index * 2) + 'px');
     const sel = document.getElementById("fontSizeSelect");
     if (sel) sel.value = px;
+    const btn = document.getElementById("fontSizeBtn");
+    if (btn) btn.textContent = 'A' + (index > 0 ? '+' + index : '') + ' Text';
 }
 function setGameFontStyle(key) {
     try { localStorage.setItem(FONT_STYLE_PREF_KEY, key); } catch (e) {}
@@ -70250,7 +70255,7 @@ window.setGameFontStyle = setGameFontStyle;
     try {
         const size = localStorage.getItem(FONT_SIZE_PREF_KEY);
         const styleKey = localStorage.getItem(FONT_STYLE_PREF_KEY) || "default";
-        if (size) document.body.style.fontSize = size;
+        setGameFontSize(['14px', '16px', '18px', '20px'].includes(size) ? size : '14px');
         document.body.style.fontFamily = GAME_FONT_FAMILIES[styleKey] || "";
         const sizeSel = document.getElementById("fontSizeSelect");
         if (sizeSel) sizeSel.value = size || "14px";
