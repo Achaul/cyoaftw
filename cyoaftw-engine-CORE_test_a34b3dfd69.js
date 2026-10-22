@@ -75527,12 +75527,23 @@ function renderIntimacyActionMenu(npc) {
         const sectionItems = menuItems.filter(item => item.type === "section");
         
         // Get NPC gender and anatomy to filter sections
-        const npcGender = npc.gender || "";
+        const npcGender = (npc.gender || "").toString().toLowerCase();
+        const npcSpecies = (npc.species || "").toString().toLowerCase();
         const npcAnatomy = npc.anatomy || {};
-        const hasCock = npcGender.toLowerCase().includes("male") || npcAnatomy.cock || npcAnatomy.penis;
-        const hasPussy = npcGender.toLowerCase().includes("female") || npcAnatomy.vagina || npcAnatomy.pussy;
-        const hasCloaca = npcAnatomy.cloaca || (npc.species && npc.species.toLowerCase().includes("avian"));
-        const hasBreasts = npcAnatomy.breasts || npcGender.toLowerCase().includes("female") || npcGender.toLowerCase().includes("non-binary");
+        
+        // Debug: log NPC properties for debugging
+        console.log(`[DEBUG] NPC gender: ${npc.gender}, species: ${npc.species}, anatomy:`, npc.anatomy);
+        
+        // Determine anatomy
+        const isMale = npcGender.includes("male");
+        const isFemale = npcGender.includes("female");
+        const isHerm = npcGender.includes("herm");
+        const hasCock = isMale || isHerm || npcAnatomy.cock || npcAnatomy.penis || npcAnatomy.dick;
+        const hasPussy = isFemale || isHerm || npcAnatomy.vagina || npcAnatomy.pussy || npcAnatomy.vulva;
+        const hasCloaca = npcAnatomy.cloaca || npcSpecies.includes("avian") || npcSpecies.includes("bird");
+        const hasBreasts = npcAnatomy.breasts || isFemale || isHerm || npcGender.includes("non-binary");
+        
+        console.log(`[DEBUG] hasCock: ${hasCock}, hasPussy: ${hasPussy}, hasBreasts: ${hasBreasts}, hasCloaca: ${hasCloaca}`);
         
         // Define tab order priority
         const tabPriority = {
@@ -75604,30 +75615,47 @@ function renderIntimacyActionMenu(npc) {
             tab.className = "intimacy-tab-btn" + (firstTab ? " active" : "");
             tab.textContent = tabLabel;
             tab.dataset.section = actualSection;
-            tab.onclick = () => showIntimacyTab(actualSection);
             tabContainer.appendChild(tab);
             firstTab = false;
         });
         
-        // Helper to show tab content
-        function showIntimacyTab(sectionLabel) {
-            const allTabs = document.querySelectorAll(".intimacy-tab-btn");
-            allTabs.forEach(tab => tab.classList.remove("active"));
+        // Add click handler to el (parent that doesn't get recreated) using event delegation
+        // This handles tab clicks and survives re-renders
+        // Remove any existing handler first to avoid duplicates
+        const existingHandler = el._intimacyTabHandler;
+        if (existingHandler) {
+            el.removeEventListener("click", existingHandler);
+        }
+        
+        const handleTabClick = function(e) {
+            // Only handle clicks on tab buttons
+            if (!e.target.closest(".intimacy-tab-btn")) return;
             
-            const activeTab = Array.from(allTabs).find(tab => tab.dataset.section === sectionLabel);
-            if (activeTab) activeTab.classList.add("active");
+            const tab = e.target.closest(".intimacy-tab-btn");
+            const sectionLabel = tab.dataset.section;
+            
+            // Update active tab
+            const allTabs = document.querySelectorAll(".intimacy-tab-btn");
+            allTabs.forEach(t => t.classList.remove("active"));
+            tab.classList.add("active");
             
             // Hide all sections
             const allSections = document.querySelectorAll(".intimacy-section-content");
             allSections.forEach(s => s.style.display = "none");
             
-            // Show selected section - use attribute selector that matches the actual stored value
+            // Show selected section
             const escapedLabel = sectionLabel.replace(/&/g, "&amp;");
             const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + escapedLabel + "\"]");
             if (targetSection) {
                 targetSection.style.display = "";
             }
-        }
+        };
+        
+        el.addEventListener("click", handleTabClick);
+        el._intimacyTabHandler = handleTabClick;
+        
+        // Helper to show tab content - use event delegation instead of inline handlers
+        // We'll attach a single handler to tabContainer
         
         // Render each menu item
         for (const item of menuItems) {
@@ -75772,8 +75800,26 @@ function renderIntimacyActionMenu(npc) {
         
         // Show the first tab's content by default
         // We need to do this after all sections are created
-        if (tabOrder.length > 0) {
-            showIntimacyTab(tabOrder[0]);
+        if (tabOrder.length > 0 && tabContainer.children.length > 0) {
+            const firstTab = tabContainer.children[0];
+            const sectionLabel = firstTab.dataset.section;
+            
+            // Trigger click on first tab to activate it (this will use the same logic as user clicks)
+            // But we need to do it programmatically since the event delegation is on el
+            const allTabs = document.querySelectorAll(".intimacy-tab-btn");
+            allTabs.forEach(t => t.classList.remove("active"));
+            firstTab.classList.add("active");
+            
+            // Hide all sections
+            const allSections = document.querySelectorAll(".intimacy-section-content");
+            allSections.forEach(s => s.style.display = "none");
+            
+            // Show first section
+            const escapedLabel = sectionLabel.replace(/&/g, "&amp;");
+            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + escapedLabel + "\"]");
+            if (targetSection) {
+                targetSection.style.display = "";
+            }
         }
         
         // Add end encounter button
