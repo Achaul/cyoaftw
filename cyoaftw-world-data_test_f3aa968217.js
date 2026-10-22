@@ -1925,7 +1925,7 @@ const ROOM_TEMPLATES = [
             { id: "guild-shields", name: "painted guild shields", tags: ["landmark"] },
             { id: "muster-bench", name: "muster bench",      tags: ["social", "rest"] }
         ],
-        imageKey: "Town Hall"
+        imageKey: "Guildhall"
     },
     {
         type: "Training Yard",
@@ -1942,7 +1942,7 @@ const ROOM_TEMPLATES = [
             { id: "weapon-rack",   name: "weapon rack",    tags: ["storage", "combat"] },
             { id: "sparring-ring", name: "chalked sparring ring", tags: ["training", "formal"] }
         ],
-        imageKey: "Town Hall"
+        imageKey: "Training Yard"
     },
     {
         type: "Guildmaster's Office",
@@ -1958,7 +1958,7 @@ const ROOM_TEMPLATES = [
             { id: "contract-shelf", name: "shelf of contracts", tags: ["storage", "information"] },
             { id: "district-map",  name: "pinned district map", tags: ["information", "landmark"] }
         ],
-        imageKey: "Library"
+        imageKey: "Guildmaster's Office"
     },
     {
         type: "Chapel",
@@ -2262,6 +2262,11 @@ const ROOM_IMAGE_MAP = {
     "Gate": "https://iili.io/qFWrByl.jpg",
     "Portal Chamber": "https://iili.io/nOGrwyN.jpg",
 
+    // ───────── Guild ─────────
+    "Guildhall": "https://iili.io/nOM5pqv.jpg",
+    "Training Yard": "https://iili.io/nOM5y1R.jpg",
+    "Guildmaster's Office": "https://iili.io/nOM5bLJ.jpg",
+
     // ───────── Tavern ─────────
     "Tavern": "https://iili.io/qFWVXYg.jpg",
     "Taproom": "https://iili.io/qFWVXYg.jpg",
@@ -2382,7 +2387,10 @@ function ensureRoomImage(room) {
     const image = template && getRoomImage(template.imageKey || template.type);
     const previousImages = {
         "Portal Chamber": ["https://iili.io/qFVGWL7.jpg"],
-        "Lift Shaft": ["https://iili.io/qFXxz6N.jpg", "https://iili.io/nOGrjvp.jpg"]
+        "Lift Shaft": ["https://iili.io/qFXxz6N.jpg", "https://iili.io/nOGrjvp.jpg"],
+        "Guildhall": ["https://iili.io/qFVGWL7.jpg"],
+        "Training Yard": ["https://iili.io/qFVGWL7.jpg"],
+        "Guildmaster's Office": ["https://iili.io/qFXfr9j.jpg"]
     };
     if (image && (!room.image || (previousImages[room.type] || []).includes(room.image))) {
         room.image = image;
