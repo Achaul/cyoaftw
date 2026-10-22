@@ -74729,14 +74729,16 @@ function renderIntimacyActionMenu(npc) {
     
     el.innerHTML = "";
     
-    // Create tab container for body zones (single row, wraps as needed)
+    // Create tab container at the top of el
     const tabContainer = document.createElement("div");
     tabContainer.className = "intimacy-tab-container";
-    tabContainer.style.marginBottom = "8px";
     tabContainer.style.display = "flex";
     tabContainer.style.flexWrap = "wrap";
     tabContainer.style.gap = "4px";
-    el.parentNode.insertBefore(tabContainer, el);
+    tabContainer.style.padding = "4px 0";
+    tabContainer.style.borderBottom = "1px solid #444";
+    tabContainer.style.marginBottom = "4px";
+    el.appendChild(tabContainer);
     
     // Create separate position container (fixed at top)
     let positionContainer = document.getElementById("intimacyPositionContainer");
@@ -75118,12 +75120,6 @@ function renderIntimacyActionMenu(npc) {
                 firstTab = false;
             }
             
-            // Category header
-            const categoryEl = document.createElement("div");
-            categoryEl.className = "chat-option-category" + (item.label === "Receive" ? " receive-category" : "");
-            categoryEl.textContent = item.label;
-            sectionContainer.appendChild(categoryEl);
-            
             // Actions
             for (const action of item.actions) {
                 // Skip disabled actions if "Show all" is not checked
@@ -75167,7 +75163,7 @@ function renderIntimacyActionMenu(npc) {
                     btn.onclick = () => chooseIntimacyAction(npc, action.id);
                 }
                 
-                el.appendChild(btn);
+                sectionContainer.appendChild(btn);
             }
         }
         
@@ -75238,7 +75234,7 @@ function renderIntimacyActionMenu(npc) {
             clearChatOptions();
             resetRoomViewAfterIntimacy(npc);
         };
-        el.appendChild(returnBtn);
+        actionBtnContainer.appendChild(returnBtn);
     }
 
     // Re-rendering the menu can shift the chat log's layout — pin the log
