@@ -74922,41 +74922,73 @@ function renderIntimacyActionMenu(npc) {
             ? window.getEngagedActIds(npc) : [];
         const engagedActSet = new Set(engagedActIds);
         
-        // Build tabs: Clothing + anatomy-based zones + Climax + Requests
+        // Build tabs from actual sections returned by getMenuActions
         const sectionItems = menuItems.filter(item => item.type === "section");
         
-        // Tab order: Clothing first, then anatomy-based zones, then Climax, then Requests
-        const tabOrder = ["Clothing"];
+        // Define tab order priority
+        const tabPriority = {
+            "Clothing": 0,
+            "Mouth & Lips": 10,
+            "Hair": 20,
+            "Breasts": 30,
+            "Cock": 40,
+            "Pussy": 50,
+            "Anus": 60,
+            "Cloaca": 70,
+            "Lower Body": 80,
+            "Tail": 90,
+            "Body": 100,
+            "Impact": 110,
+            "Watersports": 120,
+            "Climax": 130,
+            "Receive": 140,
+            "Other": 150,
+            "Foreplay": 160
+        };
         
-        // Add anatomy-based zones (only those with actions)
-        const anatomyZones = ["Mouth & Lips", "Hair", "Breasts", "Cock", "Pussy", "Anus", "Cloaca", "Lower Body", "Tail", "Body"];
-        anatomyZones.forEach(zone => {
-            const hasActions = sectionItems.some(item => item.label === zone && item.actions && item.actions.length > 0);
-            if (hasActions) tabOrder.push(zone);
-        });
+        // Get anatomy type for surface renaming
+        const anatomyType = (typeof getNPCAnatomyType === "function") 
+            ? getNPCAnatomyType(npc) 
+            : "humanoid";
         
-        // Add special tabs
-        if (sectionItems.some(item => item.label === "Climax" && item.actions && item.actions.length > 0)) {
-            tabOrder.push("Climax");
+        // Helper to get display label for a section
+        function getTabLabel(sectionLabel) {
+            // Rename Hair based on anatomy type
+            if (sectionLabel === "Hair") {
+                if (anatomyType === "furry") return "Fur";
+                if (anatomyType === "scaled") return "Scales";
+                if (anatomyType === "feathered") return "Feathers";
+            }
+            // Rename Receive to Requests
+            if (sectionLabel === "Receive") return "Requests";
+            return sectionLabel;
         }
-        if (sectionItems.some(item => item.label === "Receive" && item.actions && item.actions.length > 0)) {
-            tabOrder.push("Requests"); // Renamed from Receive to Requests
-        }
+        
+        // Collect all section labels with actions
+        const sectionsWithActions = sectionItems
+            .filter(item => item.actions && item.actions.length > 0)
+            .map(item => item.label);
+        
+        // Sort by priority, then alphabetically
+        const tabOrder = sectionsWithActions
+            .sort((a, b) => {
+                const aPrio = tabPriority[a] !== undefined ? tabPriority[a] : 200;
+                const bPrio = tabPriority[b] !== undefined ? tabPriority[b] : 200;
+                return aPrio - bPrio || a.localeCompare(b);
+            });
         
         // Create all tabs
         let firstTab = true;
         tabOrder.forEach(label => {
-            const zoneItem = sectionItems.find(item => item.label === label || (label === "Requests" && item.label === "Receive"));
-            if (zoneItem && zoneItem.actions && zoneItem.actions.length > 0) {
-                const actualSection = label === "Requests" ? "Receive" : label;
-                const tab = document.createElement("button");
-                tab.className = "intimacy-tab-btn" + (firstTab ? " active" : "");
-                tab.textContent = label;
-                tab.dataset.section = actualSection;
-                tab.onclick = () => showIntimacyTab(actualSection);
-                tabContainer.appendChild(tab);
-                firstTab = false;
-            }
+            const tabLabel = getTabLabel(label);
+            const actualSection = label; // Use the actual section name for data-section
+            const tab = document.createElement("button");
+            tab.className = "intimacy-tab-btn" + (firstTab ? " active" : "");
+            tab.textContent = tabLabel;
+            tab.dataset.section = actualSection;
+            tab.onclick = () => showIntimacyTab(actualSection);
+            tabContainer.appendChild(tab);
+            firstTab = false;
         });
         
         // Helper to show tab content
