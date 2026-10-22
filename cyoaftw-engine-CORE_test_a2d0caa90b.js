@@ -75136,7 +75136,8 @@ function renderIntimacyActionMenu(npc) {
             if (!visibleActions.length) continue;
             
             // Create section content div for tabbed display
-            const sectionName = item.label === "Receive" ? "Requests" : item.label;
+            // Use the actual label as the section name, not the display name
+            const sectionName = item.label;
             let sectionContainer = document.querySelector(".intimacy-section-content[data-section=\"" + sectionName + "\"]");
             if (!sectionContainer) {
                 sectionContainer = document.createElement("div");
@@ -75144,12 +75145,6 @@ function renderIntimacyActionMenu(npc) {
                 sectionContainer.dataset.section = sectionName;
                 sectionContainer.style.display = "none";
                 el.appendChild(sectionContainer);
-            }
-            
-            // Show first section by default
-            if (firstTab) {
-                sectionContainer.style.display = "";
-                firstTab = false;
             }
             
             // Actions
@@ -75197,6 +75192,12 @@ function renderIntimacyActionMenu(npc) {
                 
                 sectionContainer.appendChild(btn);
             }
+        }
+        
+        // Show the first tab's content by default
+        // We need to do this after all sections are created
+        if (tabOrder.length > 0) {
+            showIntimacyTab(tabOrder[0]);
         }
         
         // Add end encounter button
