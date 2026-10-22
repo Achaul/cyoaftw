@@ -179,7 +179,6 @@ async function executeTextTouchCommand(action) {
   
   if (!matches.length) {
     if (G.activeNPC) {
-      // Use the currently active NPC if no target specified
       matches.push(G.activeNPC);
     } else {
       return textModeResult("blocked", "No visible person matches that description.");
@@ -217,14 +216,15 @@ async function executeTextTouchCommand(action) {
   };
   const touchType = touchTypeMap[verb] || "gentle";
   
-  // Build context for the touch system
-  const ctx = {
-    room: G.activeRoom,
-    npc: npc,
-    player: G.player
-  };
+  // Build context
+  const room = G.activeRoom;
+  const player = G.player;
+  const memory = npc.memory || {};
+  const isPrivate = room && (typeof isPrivateLocationFunc === "function" && isPrivateLocationFunc(room));
+  const hasOthers = room && room.creatures && room.creatures.some(c => c && !c.isPlayer && c !== npc && (c.isHumanoid || c.humanoid));
   
-  // Call the touch handler
+  // Calculate receptivity for stat tracking
+  const ctx = { room: room, npc: npc, player: player };
   const result = window.handlePhysicalTouch(npc, touchType, ctx);
   
   if (!result.success) {
@@ -233,17 +233,176 @@ async function executeTextTouchCommand(action) {
   
   // Check if this should start an intimacy encounter
   if (result.startEncounter && typeof window.startIntimacyEncounter === "function") {
-    // Set up the NPC for intimacy
     npc._advanceRebuffed = false;
     if (typeof window.setIntimacyNPC === "function") {
       window.setIntimacyNPC(npc);
     }
-    // Call the intimacy system
     return window.startIntimacyEncounter(npc, touchType);
   }
   
-  // Publish the result
-  publishTextModeOutput("interaction", result.message, {
+  // Apply stat impacts from the touch system
+  const impacts = result.impacts || {};
+  
+  // Build rich AI prompt for immersive, creature-lore-specific response
+  // This leverages the AI to generate context-aware, personality-driven reactions
+  let aiResponseText = result.message; // Fallback to static text
+  
+  if (aiAvailable()) {
+    try {
+      // Get NPC profile info
+      const npcName = getNPCPublicName(npc);
+      const gender = npc.gender === "male" ? "male" : npc.gender === "female" ? "female" : "their";
+      const temperament = String(npc.temperament || "neutral").toLowerCase();
+      const species = npc.species || "unknown";
+      const role = npc.role || "";
+      
+      // Get relationship stats
+      const attraction = memory.attraction || 0;
+      const lust = memory.lust || 0;
+      const favor = memory.favorability || memory.favor || 0;
+      const hostility = memory.hostility || 0;
+      const mood = memory.mood || 0;
+      const disinhibition = memory.disinhibition || 0;
+      const arousal = memory.arousal || 0;
+      
+      // Get lore and enrichment
+      const lore = npc.loreNotes || "";
+      const enrichment = npc.enrichment || {};
+      const speciesLore = enrichment.speciesLore || "";
+      const values = Array.isArray(enrichment.values) ? enrichment.values : [];
+      const speechStyle = npc.speechStyle || "";
+      
+      // Location context
+      const roomType = room ? (room.type || room.displayName || "unknown") : "unknown";
+      const roomDesc = room ? (room.baseDescription || room.description || "") : "";
+      
+      // Action description
+      const actionDescMap = {
+        gentle: "a gentle, tentative touch",
+        firm: "a firm grab",
+        affectionate: "a warm, affectionate hug",
+        bold: "a bold, intimate grope"
+      };
+      const actionDesc = actionDescMap[touchType] || actionDescMap.gentle;
+      
+      // Privacy context
+      const privacyContext = isPrivate 
+        ? "You are alone together." 
+        : hasOthers 
+          ? "Others are present and can see this." 
+          : "You are in a semi-private setting.";
+      
+      // Reaction guidance based on stats
+      let reactionGuidance = "";
+      if (attraction >= 70 && lust >= 50) {
+        reactionGuidance = "They have strong positive feelings toward you. Respond warmly and perhaps with growing arousal.";
+      } else if (attraction >= 50) {
+        reactionGuidance = "They like you reasonably well. Respond positively but with some reservation appropriate to your personality.";
+      } else if (attraction >= 20) {
+        reactionGuidance = "They are neutral or mildly positive. Respond cautiously - neither welcoming nor rejecting outright.";
+      } else if (hostility >= 50) {
+        reactionGuidance = "They dislike or are wary of you. Respond with irritation, discomfort, or a sharp rebuke.";
+      } else {
+        reactionGuidance = "They are indifferent. Respond with mild reaction, appropriate to your temperament.";
+      }
+      
+      // Temperature context for the action
+      const tempContextMap = {
+        bold: temperament === "shy" || temperament === "cautious" 
+          ? "This is forward for someone with your temperament - your discomfort shows."
+          : temperament === "bold" || temperament === "forward" || temperament === "lustful"
+            ? "This matches your bold nature - you may welcome or reciprocate the initiative."
+            : "This is a bit forward - respond according to your personality.",
+        affectionate: temperament === "shy"
+          ? "Physical affection makes you nervous, but you try to be polite."
+          : temperament === "warm" || temperament === "friendly"
+            ? "You naturally respond to affection with warmth."
+            : "You accept the affection according to your nature.",
+        firm: temperament === "shy"
+          ? "Being grabbed makes you tense and uncomfortable."
+          : temperament === "aggressive" || temperament === "hostile"
+            ? "You may bristle at the presumption."
+            : "You react based on your current mood and relationship with them.",
+        gentle: "A gentle touch allows you to respond naturally based on your feelings."
+      };
+      
+      // Build the prompt
+      const prompt = [
+        "SCENE: The player has made physical contact with you.",
+        "ACTION: They " + verb + "ed you - " + actionDesc + ".",
+        "",
+        "YOUR IDENTITY:",
+        "- Name: " + npcName,
+        "- Species: " + species,
+        "- Gender: " + gender,
+        "- Role: " + role,
+        "- Temperament: " + temperament,
+        speechStyle ? "- Speech style: " + speechStyle : "",
+        lore ? "- Lore: " + lore.slice(0, 200) : "",
+        speciesLore ? "- Species lore: " + speciesLore.slice(0, 200) : "",
+        values.length ? "- Values: " + values.join(", ") : "",
+        "",
+        "YOUR FEELINGS TOWARD THE PLAYER:",
+        "- Attraction: " + attraction + "/100 (" + (attraction >= 70 ? "very attracted" : attraction >= 40 ? "somewhat attracted" : attraction >= 20 ? "mildly interested" : "not attracted") + ")",
+        "- Lust: " + lust + "/100 (" + (lust >= 70 ? "high" : lust >= 40 ? "moderate" : "low") + ")",
+        "- Favor: " + favor + "/100 (" + (favor >= 70 ? "trusted" : favor >= 40 ? "liked" : favor >= 20 ? "neutral" : "disliked") + ")",
+        "- Hostility: " + hostility + "/100 (" + (hostility >= 70 ? "angry" : hostility >= 40 ? "upset" : hostility >= 20 ? "wary" : "neutral") + ")",
+        "- Disinhibition: " + disinhibition + "/100",
+        "- Arousal: " + arousal + "/100",
+        "- Mood: " + (mood >= 50 ? "positive" : mood >= 20 ? "neutral" : mood >= -20 ? "slightly negative" : "negative"),
+        "",
+        "CONTEXT:",
+        "- Location: " + roomType,
+        roomDesc ? "- Setting: " + roomDesc.slice(0, 150) : "",
+        "- " + privacyContext,
+        "",
+        "GUIDANCE:",
+        reactionGuidance,
+        tempContextMap[touchType],
+        "",
+        "RESPOND IN CHARACTER: Reply as " + npcName + " would to this physical contact. " +
+        "Speak 1-2 sentences maximum, in your natural voice. " +
+        "Stay immersive and true to your personality, temperament, and current feelings toward the player. " +
+        "Include subtle physical reactions if appropriate. " +
+        "Do NOT narrate actions you take - only speak your response. " +
+        "Do NOT mention stats or numbers. " +
+        "Do NOT break character."
+      ].filter(Boolean).join("\n");
+      
+      // Call AI
+      const aiOptions = { instruction: prompt, startWith: "", endButtons: "none" };
+      
+      // Try with timeout
+      let aiTimer;
+      const aiPromise = Promise.race([
+        callAI(aiOptions),
+        new Promise(resolve => { aiTimer = setTimeout(() => resolve(null), 10000); })
+      ]);
+      
+      const aiResult = await aiPromise;
+      clearTimeout(aiTimer);
+      
+      if (aiResult && aiResult.text) {
+        const rawText = String(aiResult.text).trim();
+        // Clean up any markdown formatting the AI might add
+        const cleanText = rawText
+          .replace(/^[\"`]|[\"`]$/g, "")
+          .replace(/^\s*[\-*]\s*|\s*[\-*]\s*$/g, "")
+          .replace(/\n\n+/g, " ").trim();
+        
+        // Use AI response if it's valid
+        if (cleanText && cleanText.length > 0 && cleanText.length < 500) {
+          aiResponseText = cleanText;
+        }
+      }
+    } catch (err) {
+      console.warn("[NSFW Touch] AI call failed:", err);
+      // Fall through to static text
+    }
+  }
+  
+  // Publish the AI-generated or fallback response
+  publishTextModeOutput("interaction", aiResponseText, {
     interaction: { 
       family: "contact", 
       action: verb, 
@@ -252,7 +411,8 @@ async function executeTextTouchCommand(action) {
       nsfw: true,
       touchType: touchType,
       receptivity: result.receptivity,
-      reactionCategory: result.reactionCategory
+      reactionCategory: result.reactionCategory,
+      aiGenerated: aiResponseText !== result.message
     }
   }, false);
   
@@ -263,7 +423,7 @@ async function executeTextTouchCommand(action) {
   renderStats();
   saveGameState();
   
-  return textModeResult("completed", result.message);
+  return textModeResult("completed", aiResponseText);
 }
 }function interactionSoloBlock() {
     const p = G.player;
@@ -560,7 +720,581 @@ async function submitFreeformNPCAction(npc, body) {
 }
 
 
+// Shared world-object mechanics. Text/buttons only select an operation and an
+// exact live source; physics, costs and dice belong to this engine seam.
+let worldObjectExecution = null;
+function worldObjectDefinition(object, kind) {
+    if (typeof inferWorldObjectDefinition !== "function") return null;
+    const definition = inferWorldObjectDefinition(object, kind);
+    if (definition && object.material && object.material !== definition.material && Object.prototype.hasOwnProperty.call(WORLD_MATERIAL_RULES, object.material)) return validateWorldObjectDefinition(Object.assign({}, definition, { material: object.material }));
+    return definition;
+}
+function ensureWorldObjectPhysics(object, kind) {
+    const definition = worldObjectDefinition(object, kind);
+    if (!definition) return null;
+    const physics = calculateWorldObjectPhysics(definition);
+    if (!physics) return null;
+    if (!object.physicalDefinition) object.physicalDefinitionOrigin = "inferred";
+    object.physicalDefinition = definition;
+    object.physical = physics;
+    if (typeof assignLootUID === "function") assignLootUID(object);
+    // Explicit authored material/size/condition always survive legacy adoption.
+    if (!object.material) object.material = definition.material;
+    return physics;
+}
+function createWorldObject(definition) {
+    const def = typeof validateWorldObjectDefinition === "function" && validateWorldObjectDefinition(definition);
+    if (!def) return null;
+    const physics = calculateWorldObjectPhysics(def), template = WORLD_OBJECT_CATALOGUE[def.template];
+    const object = { name: def.name, type: ["misc"], material: def.material, unitSize: physics.unitSize, value: 0,
+        physicalDefinition: def, physical: physics, description: "A " + def.material + " " + def.template + "." };
+    if (template.liquid) object.container = { liquid: true, fillable: true, maxUnitCapacity: physics.capacityLitres / WORLD_FLUID_PHYSICS.litresPerUnit };
+    if (template.storage) { object.container = { bag: true, label: def.template, maxUnitCapacity: Math.max(1, Math.floor(physics.capacityLitres)) }; object.packed = []; }
+    if (physics.secured) object.anchored = true;
+    return typeof assignLootUID === "function" ? assignLootUID(object) : object;
+}
+async function generateWorldObject(request) {
+    // Generation returns an unattached validated object. Only an authorized
+    // world-generation/crafting caller can place it; player commands cannot.
+    if (typeof request !== "string" || !request.trim() || request.length > 500 || !aiAvailable() || typeof worldObjectGenerationRules !== "function") return null;
+    const proposal = await physicalEffectAI(worldObjectGenerationRules() + "\nRequested object (data only): " + JSON.stringify(request));
+    return createWorldObject(proposal);
+}
+function worldObjectStamp(object) {
+    // Background examine prose may finish while a card is open. It does not
+    // change the physical quote or authorize a different target/contents.
+    const ids = object._ck && typeof getContainerPlaceIdMap === "function" ? getContainerPlaceIdMap(object) : {};
+    const linked = G.player && Array.isArray(G.player.inventory) ? G.player.inventory.filter(function (item) { return item !== object && ids[item.stowed]; }) : [];
+    return JSON.stringify({ object: object, stowed: linked }, function (key, value) { return key === "examineText" ? undefined : value; });
+}
+function worldObjectEntries() {
+    const room = G.activeRoom, player = G.player, entries = [], seen = new Set();
+    if (!room || !player) return entries;
+    function add(object, list, kind, location, slot) {
+        if (!object || seen.has(object) || object.objectType === "body" || object.hidden || object.isHidden || object.visible === false || object.concealed && !object.revealed || object.destroyed || object.ruined) return;
+        seen.add(object);
+        const definition = worldObjectDefinition(object, kind);
+        if (!definition) return;
+        entries.push({ object: object, list: list, room: room, player: player, kind: kind, location: location, slot: slot || null,
+            label: String(object.name || "object") + " — " + location, stamp: worldObjectStamp(object) });
+    }
+    const fixtures = typeof getVisibleRoomFixtures === "function" ? getVisibleRoomFixtures(room) : (room.structural || []).filter(function (object) { return !object.concealed || object.revealed; });
+    fixtures.forEach(function (object) { add(object, room.structural, "fixture", "fixture"); });
+    (room.items || []).forEach(function (object) { add(object, room.items, "item", "floor"); });
+    (player.inventory || []).forEach(function (object) { add(object, player.inventory, "item", "carried"); });
+    Object.keys(player.equipped || {}).forEach(function (slot) { if (slot !== "coinPouch" && !Array.isArray(player.equipped[slot])) add(player.equipped[slot], null, "item", "equipped", slot); });
+    if (player.rucksack) add(player.rucksack, null, "item", "equipped", "back");
+    return entries;
+}
+function worldObjectFresh(entry, exact) {
+    return entry && worldObjectEntries().find(function (now) { return now.object === entry.object && now.list === entry.list && now.room === entry.room && now.player === entry.player && now.location === entry.location && now.slot === entry.slot && (!exact || now.stamp === entry.stamp); });
+}
+function worldObjectMass(object, kind, seen) {
+    seen = seen || new Set();
+    if (seen.has(object)) return 0;
+    seen.add(object);
+    const definition = worldObjectDefinition(object, kind), physics = definition && calculateWorldObjectPhysics(definition);
+    if (!physics) return Infinity;
+    let mass = physics.dryMassKg;
+    const liquid = object.liquid || (typeof getItemLiquid === "function" && kind !== "fixture" ? getItemLiquid(object) : null);
+    if (liquid && Number.isFinite(liquid.volume) && liquid.volume > 0) mass += liquid.volume * WORLD_FLUID_PHYSICS.litresPerUnit * (WORLD_FLUID_PHYSICS.density[liquid.type] || 1);
+    // Packed containers and fixed-container contents use their existing stores.
+    const lists = [object.packed, object.contents && object.contents.items];
+    if (object.contents && Number.isFinite(object.contents.coins) && object.contents.coins > 0) {
+        const coin = calculateWorldObjectPhysics({ name: "coin", template: "coin", material: "gold", scale: 1 });
+        mass += coin.dryMassKg * Math.floor(object.contents.coins);
+    }
+    if (object._ck && typeof getContainerPlaceIdMap === "function" && G.player) {
+        const ids = getContainerPlaceIdMap(object);
+        lists.push((G.player.inventory || []).filter(function (item) { return item !== object && ids[item.stowed]; }));
+    }
+    lists.forEach(function (list) { (Array.isArray(list) ? list : []).forEach(function (item) { mass += worldObjectMass(item, "item", seen); }); });
+    return mass * Math.max(1, typeof getItemQuantity === "function" ? getItemQuantity(object) : object.quantity || 1);
+}
+function fillWorldObjectAtFixture(fixture, entry) {
+    if (worldObjectExecution || typeof worldToolExecution !== "undefined" && worldToolExecution) return worldObjectResult("blocked", "Your previous physical action is still resolving.");
+    const object = entry.item, room = G.activeRoom, player = G.player;
+    const fixtures = typeof getVisibleRoomFixtures === "function" ? getVisibleRoomFixtures(room) : [];
+    const blocked = function () { return !player || player.hp <= 0 || player.dead || player.unconscious || player._dying || player._collapsing || G.activeNPC || roomHasActiveHostile(room) || typeof isRoomCollapsed === "function" && isRoomCollapsed(room) || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot(); };
+    if (fixtures.indexOf(fixture) < 0 || !isDrinkableFixture(fixture) || blocked() || !Array.isArray(player.inventory) || player.inventory.indexOf(object) < 0 || !isEmptyFillableItem(object)) return worldObjectResult("blocked", "You cannot fill that vessel here.");
+    const physical = ensureWorldObjectPhysics(object, "item");
+    if (!physical || physical.capacityLitres <= 0) return worldObjectResult("blocked", "It cannot hold liquid.");
+    const scene = textModeScene(), epoch = textModeState.epoch, stamp = worldObjectStamp(object), sourceStamp = worldObjectStamp(fixture), inventory = player.inventory;
+    advanceStoryTurn(1);
+    if (!textModeSameScene(scene) || epoch !== textModeState.epoch || player.inventory !== inventory || inventory.indexOf(object) < 0 || worldObjectStamp(object) !== stamp || worldObjectStamp(fixture) !== sourceStamp || blocked() || (typeof getVisibleRoomFixtures === "function" && getVisibleRoomFixtures(room).indexOf(fixture) < 0)) return worldObjectResult("interrupted", "You stop filling as the situation changes.");
+    object.liquid = { type: "water", volume: Math.min(object.container.maxUnitCapacity, physical.capacityLitres / WORLD_FLUID_PHYSICS.litresPerUnit) };
+    renderStats(); saveGameState();
+    return worldObjectResult("completed", "You fill " + object.name + " with clean water.", { objectAction: { action: "fill", target: object.name, success: true, turns: 1, staminaCost: 0, liquid: { type: "water", volume: object.liquid.volume } } });
+}
+function worldObjectSecured(entry) {
+    const object = entry.object, def = worldObjectDefinition(object, entry.kind), template = def && WORLD_OBJECT_CATALOGUE[def.template];
+    if (typeof worldObjectRelation === "function" && worldObjectRelation(object, entry.room)) return true;
+    if (object.anchored === true || object.fixed === true || object.attachment && object.attachment !== "free") return true;
+    if (object.anchored === false || object.movable === true) return false;
+    // Functional fixtures retain their native role and contents. Explicit
+    // attachment metadata can opt an authored fixture into movement later.
+    const tags = (object.tags || []).join(" ");
+    return !!(template && template.secured || entry.kind === "fixture" && /alchemy|portal|structural|workstation|trap|shrine|training|quest|notice|forge/.test(tags + " " + object.id));
+}
+function worldObjectLimits(player) {
+    const prowess = Math.max(0, typeof getEntityStatValue === "function" ? getEntityStatValue(player, "physicalProwess", 3) : 3);
+    const size = typeof getPlayerSpeciesSize === "function" ? getPlayerSpeciesSize(player) : "medium";
+    const factor = { tiny: 0.25, small: 0.6, medium: 1, large: 2 }[size] || 1;
+    return { easy: (2 + prowess * 2) * factor, lift: (12 + prowess * 12) * factor, drag: (24 + prowess * 24) * factor };
+}
+function worldObjectActionSpec(entry, action) {
+    const object = entry.object, definition = worldObjectDefinition(object, entry.kind), physics = definition && calculateWorldObjectPhysics(definition);
+    if (!physics || !/^(lift|drag|shift|take)$/.test(action)) return { reason: "That physical approach is unavailable." };
+    let reason = "";
+    const player = G.player, room = G.activeRoom, limits = worldObjectLimits(player), mass = worldObjectMass(object, entry.kind);
+    const limit = action === "drag" || action === "shift" ? limits.drag : limits.lift;
+    if (!worldObjectFresh(entry, false)) reason = "That object is no longer within reach.";
+    else if (player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing) reason = "You cannot do that while incapacitated.";
+    else if (G.activeNPCMode === "combat" || typeof roomHasActiveHostile === "function" && roomHasActiveHostile(room)) reason = "You cannot safely handle that while a threat is bearing down on you.";
+    else if (typeof isRoomCollapsed === "function" && isRoomCollapsed(room)) reason = "The rubble prevents you from reaching it.";
+    else if (G.activeNPC) reason = "You are still engaged with someone.";
+    else if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) reason = "The party's loot decision needs settling first.";
+    else if (worldObjectSecured(entry)) reason = "It is secured in place. Its fastenings would have to be dealt with first.";
+    else if (object.occupied || object.inUse) reason = "Someone is using it; you cannot safely move it beneath them.";
+    else if (object.fire && object.fire.turnsLeft > 0 || object.chestBurn && object.chestBurn.turnsLeft > 0) reason = "It is burning; you cannot safely handle it with bare hands.";
+    else if (object.reachable === false) reason = "You cannot reach it from here.";
+    else if (/^(drag|shift|take)$/.test(action) && /^(carried|equipped)$/.test(entry.location)) reason = "You are already carrying it.";
+    else if (action === "take" && object.takeable === false) reason = "You can move it here, but cannot carry it away.";
+    else if (mass > limit) reason = "It is too heavy for you to " + (action === "take" ? "lift" : action) + " unaided.";
+    else if (action === "take" && entry.kind === "fixture" && (object.contents || object.liquid || typeof isContainerFixture === "function" && isContainerFixture(object))) reason = "You cannot pack it up with its fixed fittings and contents; you can try shifting it here.";
+    const effort = mass > limits.easy || action === "drag" || action === "shift";
+    const cost = effort ? 1 : 0, turns = effort ? 1 : 0;
+    if (!reason && cost && (typeof player.stamina !== "number" || player.stamina < cost)) reason = "You are too exhausted to make that effort.";
+    return { reason: reason, massKg: mass, physics: physics, staminaCost: cost, turns: turns, stat: "physicalProwess",
+        dc: effort ? Math.min(25, Math.max(6, Math.round(7 + 16 * mass / limit))) : null };
+}
+function worldObjectPublic(entry) {
+    const definition = worldObjectDefinition(entry.object, entry.kind), physics = definition && calculateWorldObjectPhysics(definition);
+    if (!physics) return null;
+    const estimated = !entry.object.physicalDefinition || entry.object.physicalDefinitionOrigin === "inferred";
+    return { name: entry.object.name || "object", location: entry.location, material: physics.material, dimensionsCm: estimated && physics.template === "item" ? null : physics.dimensionsCm, estimated: estimated,
+        dryMassKg: physics.dryMassKg, capacityLitres: physics.capacityLitres, secured: worldObjectSecured(entry),
+        actions: ["lift", "drag", "shift", "take"].map(function (action) { const spec = worldObjectActionSpec(entry, action); return { action: action, command: action + " " + entry.object.name, blockedReason: spec.reason, staminaCost: spec.staminaCost, turns: spec.turns }; }) };
+}
+function worldObjectResult(status, text, details) {
+    if (status === "interrupted") details = Object.assign({}, details || {}, { systemOnly: true });
+    if (textModeState.enabled) return textModeResult(status, text, details);
+    if (!(details && details.systemOnly)) {
+        if (!G.activeNPC && !G.activeObject && G.activeRoom && typeof renderNarrationWithRoomObservations === "function") renderNarrationWithRoomObservations(G.activeRoom, text);
+        else if (typeof setNarration === "function") setNarration(text);
+    }
+    publishTextModeOutput("object-action", text, Object.assign({ status: status, source: "engine", presentation: "supplement" }, details || {}), false);
+    return { status: status, text: text };
+}
+function performWorldObjectAction(entry, action) {
+    if (worldObjectExecution || typeof worldToolExecution !== "undefined" && worldToolExecution) return worldObjectResult("blocked", "Your previous physical action is still resolving.");
+    const current = worldObjectFresh(entry, true);
+    if (!current) return worldObjectResult("blocked", "That object or its contents changed. Look at it again.");
+    // Settle native barrel contents only at the action boundary, never by help.
+    if (entry.kind === "fixture" && typeof getFixtureLiquid === "function") getFixtureLiquid(entry.room, entry.object);
+    const physics = ensureWorldObjectPhysics(entry.object, entry.kind);
+    if (!physics) return worldObjectResult("blocked", "You cannot judge how to handle that object.");
+    entry = worldObjectFresh(entry, false);
+    const spec = worldObjectActionSpec(entry, action);
+    if (spec.reason) return worldObjectResult("blocked", spec.reason);
+    const object = entry.object, room = entry.room, player = entry.player;
+    const scene = textModeScene(), epoch = textModeState.epoch, modal = G.activeItemModal, activeObject = G.activeObject;
+    const before = worldObjectStamp(object), turn = typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : 0;
+    worldObjectExecution = { entry: entry, action: action };
+    try {
+        if (spec.staminaCost) spendEntityStamina(player, spec.staminaCost);
+        if (spec.turns) { advanceNPCAffectTime(); advanceStoryTurn(spec.turns); }
+        if (!textModeSameScene(scene) || epoch !== textModeState.epoch || G.activeItemModal !== modal || G.activeObject !== activeObject || !worldObjectFresh(entry, false) || worldObjectStamp(object) !== before || player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing || typeof roomHasActiveHostile === "function" && roomHasActiveHostile(room)) {
+            return worldObjectResult("interrupted", "You break off as the situation changes.", { objectAction: { action: action, target: object.name, committed: false, staminaCost: spec.staminaCost, turns: spec.turns } });
+        }
+        const roll = spec.dc === null ? null : rollStatCheck(player, spec.stat, spec.dc);
+        const success = !roll || roll.success;
+        let text = "", completed = success;
+        if (!success) text = "You strain against " + object.name + ", but cannot get it moving.";
+        else if (action === "take") {
+            // Transfer the same instance; never clone a fixture's contents or
+            // replace the existing pack-capacity/coin handling.
+            const index = entry.list.indexOf(object), fixture = entry.kind === "fixture";
+            if (fixture) {
+                entry.list.splice(index, 1);
+                if (!Array.isArray(room.items)) room.items = [];
+                if (!object.type) object.type = ["misc"];
+                if (object.unitSize === undefined) object.unitSize = physics.unitSize;
+                room.items.push(object);
+            }
+            takeRoomObject(object);
+            completed = room.items.indexOf(object) < 0;
+            if (!completed && fixture) { room.items.splice(room.items.indexOf(object), 1); entry.list.splice(index, 0, object); }
+            text = completed ? "You pick up " + object.name + "." : "You can lift " + object.name + ", but have no room to carry it.";
+        } else {
+            object.physicalState = Object.assign({}, object.physicalState || {}, { lastAction: action, lastTurn: typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : turn, moves: ((object.physicalState || {}).moves || 0) + (action === "lift" ? 0 : 1) });
+            text = action === "lift" ? "You lift " + object.name + ", then set it down again." : "You " + (action === "drag" ? "drag " : "push ") + object.name + " a short distance across the floor.";
+        }
+        if (typeof renderStats === "function") renderStats();
+        if (typeof saveGameState === "function") saveGameState();
+        return worldObjectResult(completed ? "completed" : "blocked", text, { objectAction: { action: action, target: object.name, success: completed, checked: !!roll,
+            roll: roll ? { die: roll.roll, bonus: roll.bonus, total: roll.total, dc: spec.dc, stat: spec.stat } : null,
+            staminaCost: spec.staminaCost, turns: spec.turns, moved: completed && /^(drag|shift)$/.test(action) } });
+    } finally { worldObjectExecution = null; }
+}
+function parseTextObjectCommand(raw) {
+    const match = /^(lift|heave|drag|haul|shift|move object|push object|pull object)\s+(.+)$/i.exec(raw);
+    if (match) return { verb: "object", args: { action: /^(lift|heave)$/i.test(match[1]) ? "lift" : /^(drag|haul|pull object)$/i.test(match[1]) ? "drag" : "shift", target: textCommandUnquote(match[2]) } };
+    // Plain push remains an NPC action when a visible person matches.
+    const push = /^(push|pull)\s+(.+)$/i.exec(raw);
+    if (push && !/^through\b/i.test(push[2]) && worldObjectMatches(push[2]).length && !resolveTextNPCTarget(push[2]).matches.length) return { verb: "object", args: { action: push[1].toLowerCase() === "push" ? "shift" : "drag", target: textCommandUnquote(push[2]) } };
+    return null;
+}
+function worldObjectMatches(selector) {
+    return textLootMatch(String(selector || ""), worldObjectEntries(), function (entry) { return entry.object.name || "object"; });
+}
+function executeTextObjectCommand(action) {
+    const args = action.args || {};
+    if (!/^(lift|drag|shift|take)$/.test(args.action || "")) return textModeResult("blocked", "Choose lift, drag or shift, and name the object.", { systemOnly: true });
+    if (!action.objectRef && !String(args.target || "").trim()) return textModeResult("blocked", "Name the object you want to handle.", { systemOnly: true });
+    const matches = action.objectRef ? [worldObjectFresh(action.objectRef, true)].filter(Boolean) : worldObjectMatches(args.target);
+    if (!matches.length) return textModeResult("blocked", "You cannot find that object within reach.");
+    if (matches.length > 1) return textModeAsk(action, "worldObject", matches, "Which object do you mean?");
+    return performWorldObjectAction(matches[0], args.action);
+}
+function textWorldObjectShow(key) {
+    if (!/^(objects|physical objects|lift|drag|shift|move object)(?:\s+.*)?$/.test(key)) return null;
+    const target = key.replace(/^(objects|physical objects|lift|drag|shift|move object)\s*/, ""), entries = target ? worldObjectMatches(target) : worldObjectEntries();
+    const objects = entries.map(worldObjectPublic).filter(Boolean);
+    return textModeResult("completed", "Objects within reach:\n" + (objects.length ? objects.map(function (object) { return object.name + " — " + object.location + ", " + object.material + ", about " + object.dryMassKg + " kg empty" + (object.secured ? ", secured" : "") + "\n" + object.actions.map(function (action) { return action.command + (action.blockedReason ? ": " + action.blockedReason : " — " + action.staminaCost + " stamina, " + action.turns + " turn"); }).join("\n"); }).join("\n") : "None within reach.") , { worldObjects: objects, systemOnly: true });
+}
+function worldObjectFixtureActions(fixture, kind) {
+    const entry = worldObjectEntries().find(function (entry) { return entry.object === fixture && entry.kind === (kind || "fixture"); });
+    if (!entry) return [];
+    const actions = ["lift", "drag", "shift", "take"].map(function (action) {
+        const spec = worldObjectActionSpec(entry, action);
+        return { id: action, label: action + " " + fixture.name, reason: spec.reason, note: spec.staminaCost + " stamina, " + spec.turns + " turn", objectAction: true,
+            run: function () { return performWorldObjectAction(entry, action); } };
+    });
+    if (typeof worldToolSpecs === "function" && worldToolSpecs().some(function (spec) { return spec.target.object === fixture || spec.tool && spec.tool.object === fixture; })) {
+        actions.push({ id: "tools", label: "Use with another object", reason: "", note: "choose a tool action", objectAction: true, run: function () { return openWorldToolMenu(fixture.name); } });
+    }
+    return actions;
+}
+function worldObjectEquipBlock(object, list) {
+    if (typeof inferWorldObjectDefinition !== "function") return "";
+    const entry = worldObjectEntries().find(function (entry) { return entry.object === object && entry.list === list && entry.location === "floor"; });
+    if (!entry) return "";
+    const spec = worldObjectActionSpec(entry, "take");
+    return spec.reason || (spec.dc !== null ? "It is too cumbersome to equip straight from the floor. You would need to pick it up first." : "");
+}
+function worldObjectCardAction(object, action, event) {
+    const button = event && event.currentTarget;
+    if (!button || !button.isConnected || button.disabled || !button.getClientRects().length || G.activeItemModal !== object) return { status: "blocked" };
+    closeItemModal();
+    return action.run();
+}
+
+// Object-on-object effects: intent selects an approach; native physics and
+// dice resolve it. Saved relations contain IDs/coordinates, never live refs.
+let worldToolExecution = null;
+function worldToolCondition(object) {
+    if (!object || object.ruined || object.wrecked || object.destroyed || object.burntOut || object.broken || object.armorBroken) return 0;
+    const d = object.durability;
+    return d && Number.isFinite(d.hp) && Number.isFinite(d.max) && d.max > 0 ? Math.max(0, Math.min(1, d.hp / d.max)) : 1;
+}
+function worldToolDoorExists(room, dir, destination) {
+    if (!room || !room.exits || room.exits[dir] !== destination || typeof getExitDoor !== "function" || getExitDoor(room, dir) !== "door") return false;
+    if (typeof isPortalExit === "function" && isPortalExit(room, dir) || typeof isExitCollapsed === "function" && isExitCollapsed(room, dir)) return false;
+    const lock = room.locks && room.locks[dir];
+    return !(lock && (lock.burnt || lock.shattered || lock.forced || lock.fx && lock.fx.hp <= 0));
+}
+function worldActiveWedges(room) {
+    return (room && Array.isArray(room.objectRelations) ? room.objectRelations : []).map(function (relation) {
+        if (!relation || relation.kind !== "wedged" || !worldToolDoorExists(room, relation.dir, relation.destination)) return null;
+        const objects = (room.structural || []).concat(room.items || []).filter(function (object) { return object && object._uid === relation.toolUid && worldToolCondition(object) > 0 && (!object.durability || object.durability.hp > 0); });
+        return objects.length === 1 ? { owner: room, relation: relation, object: objects[0] } : null;
+    }).filter(Boolean);
+}
+function getDoorObstruction(room, direction) {
+    const dir = typeof normalizeDirection === "function" ? normalizeDirection(direction) : direction;
+    if (!room || !room.exits || !room.exits[dir]) return null;
+    const own = worldActiveWedges(room).find(function (entry) { return entry.relation.dir === dir; });
+    if (own) return own;
+    const other = G.roomMap && G.roomMap[room.exits[dir]], back = typeof oppositeDirection === "function" ? oppositeDirection(dir) : null;
+    return other && back && other.exits && other.exits[back] === room.coords ? worldActiveWedges(other).find(function (entry) { return entry.relation.dir === back && entry.relation.destination === room.coords; }) || null : null;
+}
+function worldObjectRelation(object, room) {
+    return object && worldActiveWedges(room || G.activeRoom).find(function (entry) { return entry.object === object; }) || null;
+}
+function clearDoorObstruction(room, dir) {
+    const destination = room && room.exits && room.exits[dir], other = G.roomMap && G.roomMap[destination], back = typeof oppositeDirection === "function" ? oppositeDirection(dir) : null;
+    let changed = false;
+    [{ room: room, dir: dir, destination: destination }, { room: other, dir: back, destination: room && room.coords }].forEach(function (side) {
+        if (!side.room || !Array.isArray(side.room.objectRelations)) return;
+        const rows = side.room.objectRelations.filter(function (row) { return !(row.kind === "wedged" && row.dir === side.dir && row.destination === side.destination); });
+        if (rows.length !== side.room.objectRelations.length) { side.room.objectRelations = rows; changed = true; }
+    });
+    return changed;
+}
+function worldToolDoors() {
+    const room = G.activeRoom;
+    if (!room) return [];
+    return Object.keys(room.exits || {}).filter(function (dir) { return worldToolDoorExists(room, dir, room.exits[dir]); }).map(function (dir) {
+        const name = (typeof COLLAPSE_DIR_WORDS !== "undefined" && COLLAPSE_DIR_WORDS[dir] || dir) + " door";
+        const entry = { kind: "door", room: room, list: room.exits, dir: dir, destination: room.exits[dir], object: null, name: name, label: name };
+        entry.stamp = worldToolTargetStamp(entry);
+        return entry;
+    });
+}
+function worldToolTargetStamp(entry) {
+    if (entry.kind !== "door") return worldObjectStamp(entry.object);
+    const obstruction = getDoorObstruction(entry.room, entry.dir);
+    return JSON.stringify([entry.room.exits && entry.room.exits[entry.dir], entry.room.doors && entry.room.doors[entry.dir], entry.room.locks && entry.room.locks[entry.dir],
+        obstruction && obstruction.relation, obstruction && worldObjectStamp(obstruction.object)]);
+}
+function worldToolTargets() {
+    return worldToolDoors().concat(worldObjectEntries().filter(function (entry) { return entry.kind === "fixture" && entry.object.pryable === true; }).map(function (entry) {
+        return { kind: "fixture", room: entry.room, object: entry.object, objectRef: entry, name: entry.object.name, label: entry.label, stamp: worldToolTargetStamp(entry) };
+    }));
+}
+function worldToolFreshTarget(entry, exact) {
+    return entry && worldToolTargets().find(function (now) { return now.room === entry.room && now.kind === entry.kind && now.object === entry.object && now.dir === entry.dir && now.destination === entry.destination && now.list === entry.list && (!entry.objectRef || now.objectRef.list === entry.objectRef.list) && (!exact || now.stamp === entry.stamp); });
+}
+function worldToolProfile(entry) {
+    const definition = entry && worldObjectDefinition(entry.object, entry.kind), physical = definition && calculateWorldObjectPhysics(definition);
+    if (!physical) return null;
+    const material = WORLD_MATERIAL_RULES[physical.material], dims = physical.dimensionsCm.slice().sort(function (a,b) { return b-a; });
+    const condition = worldToolCondition(entry.object);
+    return { physical: physical, material: material, condition: condition,
+        lever: condition >= 0.25 && !material.flexible && !material.brittle && material.hardness >= 2 && dims[0] >= 25 && dims[0] / Math.max(1, dims[1]) >= 4,
+        brace: condition >= 0.25 && !material.flexible && material.hardness >= 1 && /^(chair|stool|bench|plank|bar|block)$/.test(physical.template) && dims[0] >= 15 && dims[0] <= 200,
+        leverage: Math.min(5, Math.max(1, Math.floor(dims[0] / 30))) };
+}
+function worldToolSceneBlock() {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot do that while incapacitated.";
+    if (G.activeNPC || G.combatEncounter || G.activeNPCMode && G.activeNPCMode !== "door" || G.activeObject || G.activeItemModal) return "Finish the current interaction first.";
+    if (typeof roomHasActiveHostile === "function" && roomHasActiveHostile(room)) return "You cannot safely work on that with a threat bearing down on you.";
+    if (typeof isPlayerJailed === "function" && isPlayerJailed()) return "The cell's fittings are beyond your reach or built to hold you.";
+    if (typeof isRoomCollapsed === "function" && isRoomCollapsed(room)) return "Rubble prevents you from reaching it.";
+    if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Settle the party's loot decision first.";
+    return "";
+}
+function worldBraceResistance(obstruction) {
+    if (!obstruction) return 12;
+    const kind = (obstruction.owner.structural || []).indexOf(obstruction.object) >= 0 ? "fixture" : "item";
+    const profile = worldToolProfile({ object: obstruction.object, kind: kind });
+    const current = profile ? 8 + profile.material.hardness * 2 * profile.condition + worldObjectMass(obstruction.object, kind) / 10 : 8;
+    return Math.max(6, Math.min(obstruction.relation.strength, Math.round(current)));
+}
+function worldToolSpec(action, target, tool) {
+    let reason = worldToolSceneBlock(), dc = 10, stat = "physicalProwess", cost = action === "unwedge" ? 0 : action === "force" ? 2 : 1;
+    const obstruction = target && target.kind === "door" ? getDoorObstruction(target.room, target.dir) : null;
+    const profile = tool && worldToolProfile(tool);
+    if (!reason && !worldToolFreshTarget(target, false)) reason = "That target is no longer available.";
+    if (!reason && target.kind === "door") {
+        const lock = target.room.locks && target.room.locks[target.dir];
+        if (lock && lock.fx && lock.fx.burn && lock.fx.burn.turnsLeft > 0) reason = "Flames prevent you from safely working at that doorway.";
+    }
+    if (!reason && !/^(pry|wedge|unwedge|force)$/.test(action)) reason = "That physical approach is unavailable.";
+    if (!reason && /^(pry|wedge)$/.test(action)) {
+        if (!tool || !worldObjectFresh(tool, false)) reason = "That tool is no longer within reach.";
+        else if (tool.object === target.object) reason = "You cannot use an object as its own lever.";
+        else if (worldObjectSecured(tool) || worldObjectRelation(tool.object, tool.room)) reason = "That object is already secured or being used to brace something.";
+        else if (tool.object.reachable === false || tool.object.occupied || tool.object.inUse) reason = "You cannot safely get hold of it.";
+        else if (tool.object.fire && tool.object.fire.turnsLeft > 0 || tool.object.chestBurn && tool.object.chestBurn.turnsLeft > 0) reason = "It is burning; you cannot handle it safely.";
+        else if ((typeof getItemQuantity === "function" ? getItemQuantity(tool.object) : tool.object.quantity || 1) !== 1) reason = "Separate a single object before using it as a tool.";
+        else if (!profile || worldObjectMass(tool.object, tool.kind) > worldObjectLimits(G.player).lift) reason = "It is too heavy for you to position unaided.";
+        else if (action === "pry" && !profile.lever) reason = "It is too short, soft, brittle or damaged to serve as a lever.";
+        else if (action === "wedge" && !profile.brace) reason = "Its shape, material or condition will not brace a door securely.";
+    }
+    if (action === "wedge") {
+        stat = "flexibility";
+        if (!reason && target.kind !== "door") reason = "You need an actual hinged doorway to brace.";
+        if (!reason && obstruction) reason = "That doorway is already braced.";
+        if (!reason && tool.location === "equipped") reason = "You would have to remove it before leaving it wedged in the door.";
+        if (!reason && tool.object.stowed && tool.location === "carried" && tool.object.stowed !== "hand" && tool.object.stowed !== "overflow") reason = "Take it out of storage before using it to brace the door.";
+        if (!reason && (typeof isContainerFixture === "function" && isContainerFixture(tool.object) || tool.object.contents || tool.object.container || tool.object.liquid)) reason = "You cannot brace the doorway with those fittings or contents still attached.";
+        dc = profile ? Math.min(22, 9 + Math.ceil(worldObjectMass(tool.object, tool.kind) / 10)) : 10;
+    } else if (action === "unwedge" || action === "force" || action === "pry" && target.kind === "door") {
+        if (!reason && !obstruction) reason = "There is no brace holding that doorway shut.";
+        if (!reason && action === "unwedge" && obstruction.owner !== G.activeRoom) reason = "The brace is on the other side; you cannot reach it from here.";
+        if (!reason && action === "unwedge" && !worldObjectEntries().some(function (entry) { return entry.object === obstruction.object; })) reason = "You cannot reach the brace from here.";
+        dc = action === "unwedge" ? null : Math.max(6, worldBraceResistance(obstruction) - (action === "pry" && profile ? profile.leverage : 0));
+    } else if (action === "pry") {
+        const object = target && target.object;
+        if (!reason && (!object || object.pryable !== true || !/^(nailed|pegged)$/.test(object.attachment || ""))) reason = "There are no exposed nails or pegs here that you can lever free.";
+        if (!reason && (object.occupied || object.inUse || object.reachable === false || worldToolCondition(object) <= 0)) reason = "You cannot safely work under its edge.";
+        if (!reason && (object.fire && object.fire.turnsLeft > 0 || object.chestBurn && object.chestBurn.turnsLeft > 0)) reason = "It is burning; you cannot safely work under its edge.";
+        const definition = object && worldObjectDefinition(object, "fixture"), material = definition && WORLD_MATERIAL_RULES[definition.material];
+        const base = object && Number.isFinite(object.fasteningStrength) ? Math.max(6, Math.min(25, object.fasteningStrength)) : object && object.attachment === "pegged" ? 10 : 12;
+        dc = Math.max(6, Math.min(25, base + (material ? material.hardness : 2) - (profile ? profile.leverage : 0)));
+    }
+    if (!reason && G.player.stamina < cost) reason = "You are too exhausted to make that effort.";
+    return { action: action, target: target, tool: tool || null, reason: reason || "", dc: dc, stat: stat, staminaCost: cost, turns: 1 };
+}
+function worldToolSpecs() {
+    const targets = worldToolTargets(), tools = worldObjectEntries().filter(function (entry) { const p = worldToolProfile(entry); return p && (p.brace || p.lever); }).slice(0, 24), specs = [];
+    targets.forEach(function (target) {
+        if (target.kind === "door" && getDoorObstruction(target.room, target.dir)) {
+            specs.push(worldToolSpec("unwedge", target), worldToolSpec("force", target));
+            tools.forEach(function (tool) { const p = worldToolProfile(tool); if (p.lever) specs.push(worldToolSpec("pry", target, tool)); });
+        } else tools.forEach(function (tool) { const p = worldToolProfile(tool); if (tool.object !== target.object && (target.kind === "door" && p.brace || target.kind !== "door" && /^(nailed|pegged)$/.test(target.object.attachment || "") && p.lever)) specs.push(worldToolSpec(target.kind === "door" ? "wedge" : "pry", target, tool)); });
+    });
+    return specs.slice(0, 80);
+}
+function worldToolAvailable() {
+    return typeof WORLD_MATERIAL_RULES !== "undefined" && !worldToolSceneBlock() && worldToolSpecs().some(function (spec) { return !spec.reason; });
+}
+function worldToolIntentAvailable() {
+    return typeof WORLD_MATERIAL_RULES !== "undefined" && !G.activeNPC && worldToolTargets().length > 0;
+}
+function worldToolCommand(spec) {
+    return spec.action === "wedge" ? "wedge " + spec.tool.object.name + " under " + spec.target.name : spec.action === "pry" ? "pry " + spec.target.name + " with " + spec.tool.object.name : (spec.action === "force" ? "force obstruction " : "unwedge ") + spec.target.name;
+}
+function worldToolNarrativeName(name) {
+    return /^(a|an|the|my|your)\s/i.test(name) ? name : "the " + name;
+}
+function worldToolStamp(spec) {
+    const player = G.player, room = G.activeRoom, mode = G.activeNPCMode, object = G.activeObject, modal = G.activeItemModal, npc = G.activeNPC, epoch = textModeState.epoch;
+    const targetStamp = worldToolTargetStamp(spec.target), toolStamp = spec.tool && worldObjectStamp(spec.tool.object), map = G.roomMap;
+    const actor = typeof choiceEntitySnapshot === "function" ? choiceEntitySnapshot(player) : function () { return true; };
+    const origin = map && map[room.coords], neighbor = map && map[spec.target.destination], hp = player.hp;
+    const stats = JSON.stringify([player.stats, player.statusEffects]);
+    return function () { return G.player === player && G.activeRoom === room && G.roomMap === map && G.activeNPCMode === mode && G.activeObject === object && G.activeItemModal === modal && G.activeNPC === npc && textModeState.epoch === epoch && !worldToolSceneBlock() &&
+        (!map || map[room.coords] === origin && map[spec.target.destination] === neighbor) && player.hp === hp && JSON.stringify([player.stats, player.statusEffects]) === stats && actor() &&
+        !!worldToolFreshTarget(spec.target, false) && worldToolTargetStamp(spec.target) === targetStamp && (!spec.tool || !!worldObjectFresh(spec.tool, false) && worldObjectStamp(spec.tool.object) === toolStamp); };
+}
+function worldToolWitnessReaction(spec, success, lines) {
+    if (typeof getLockWitnesses !== "function") return;
+    getLockWitnesses(G.activeRoom).forEach(function (npc) {
+        if (spec.action !== "unwedge" && typeof nudgeNPCAgainstPlayer === "function") nudgeNPCAgainstPlayer(npc, -2, 5);
+        if (typeof addNPCMemory === "function") addNPCMemory(npc, { text: "The player " + (success ? "completed" : "attempted") + " an action: " + worldToolCommand(spec) + ".", importance: 2, tags: ["world-object"] });
+        if (typeof isVisibleEntity !== "function" || isVisibleEntity(npc)) lines.push((typeof getNPCRoomSightName === "function" ? getNPCRoomSightName(npc) : "Someone nearby") + " watches what you are doing.");
+    });
+}
+function performWorldToolAction(original) {
+    if (worldToolExecution || worldObjectExecution) return worldObjectResult("blocked", "Your previous physical action is still resolving.");
+    const target = worldToolFreshTarget(original.target, true), tool = original.tool && worldObjectFresh(original.tool, true);
+    if (!target || original.tool && !tool) return worldObjectResult("blocked", "The target or tool changed. Look at them again.");
+    let spec = worldToolSpec(original.action, target, tool);
+    if (spec.reason) return worldObjectResult("blocked", spec.reason);
+    if (tool) { ensureWorldObjectPhysics(tool.object, tool.kind); if (typeof ensureDurability === "function") ensureDurability(tool.object, tool.kind); }
+    spec = worldToolSpec(spec.action, worldToolFreshTarget(target, false), tool && worldObjectFresh(tool, false));
+    if (spec.reason) return worldObjectResult("blocked", spec.reason);
+    const current = worldToolStamp(spec), player = G.player, room = G.activeRoom, start = getCurrentStoryTurn(), lines = [];
+    worldToolExecution = spec;
+    try {
+        if (spec.staminaCost) spendEntityStamina(player, spec.staminaCost);
+        advanceNPCAffectTime(1); advanceStoryTurn(1);
+        const result = { action: spec.action, target: target.name, tool: tool ? tool.object.name : null, staminaCost: spec.staminaCost, turns: Math.max(0, getCurrentStoryTurn()-start) };
+        if (!current()) { saveGameState(); return worldObjectResult("interrupted", "You stop as the situation changes.", { toolAction: Object.assign(result, { committed: false }) }); }
+        const check = spec.dc === null ? null : rollStatCheck(player, spec.stat, spec.dc), success = !check || check.success;
+        result.success = success; result.roll = check ? { die: check.roll, bonus: check.bonus, total: check.total, dc: spec.dc, stat: spec.stat } : null;
+        if (!success) lines.push(spec.action === "wedge" ? "You cannot get " + worldToolNarrativeName(tool.object.name) + " seated securely against the door." : "You strain against " + worldToolNarrativeName(target.name) + ", but it holds.");
+        else if (spec.action === "wedge") {
+            const object = tool.object, room = target.room;
+            if (tool.location === "carried" && typeof packContainerContents === "function") packContainerContents(player, object);
+            if (tool.location === "carried") { tool.list.splice(tool.list.indexOf(object), 1); if (!Array.isArray(room.items)) room.items = []; room.items.push(object); delete object.stowed; }
+            const profile = worldToolProfile(tool), strength = Math.max(8, Math.min(24, Math.round(8 + profile.material.hardness * 2 * profile.condition + worldObjectMass(object, tool.kind) / 10)));
+            room.objectRelations = worldActiveWedges(room).map(function (entry) { return entry.relation; });
+            room.objectRelations.push({ kind: "wedged", toolUid: object._uid, dir: target.dir, destination: target.destination, strength: strength });
+            lines.push("You wedge " + worldToolNarrativeName(object.name) + " against " + worldToolNarrativeName(target.name) + ". It holds the door shut.");
+            result.relation = "wedged";
+        } else if (spec.action === "pry" && target.kind !== "door") {
+            const object = target.object;
+            object.physicalState = Object.assign({}, object.physicalState || {}, { detachedFrom: object.attachment, lastAction: "pry", lastTurn: getCurrentStoryTurn() });
+            object.attachment = "free"; object.anchored = false; object.fixed = false; object.movable = true;
+            lines.push("You work " + worldToolNarrativeName(tool.object.name) + " under " + worldToolNarrativeName(target.name) + " until its fastenings pull free.");
+            result.relation = "detached";
+        } else {
+            clearDoorObstruction(target.room, target.dir);
+            lines.push(spec.action === "unwedge" ? "You pull the brace clear of " + worldToolNarrativeName(target.name) + "." : "The brace gives way under the pressure, leaving " + worldToolNarrativeName(target.name) + " free of the obstruction.");
+            result.relation = "released";
+        }
+        if (spec.action === "pry" && tool && typeof damageDurability === "function") {
+            const wear = damageDurability(tool.object, 1, "force", { kind: tool.kind, lines: lines });
+            result.toolWear = wear.lost; if (wear.broke) lines.push("The lever gives out under the strain.");
+        }
+        worldToolWitnessReaction(spec, success, lines);
+        if (typeof renderStats === "function") renderStats();
+        saveGameState();
+        if (G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0 || player.unconscious) return worldObjectResult("interrupted", "The situation changes after your attempt.", { toolAction: Object.assign(result, { committed: true }) });
+        if (!textModeState.enabled && !G.activeNPC && !G.activeObject && !G.activeItemModal) { G.activeNPCMode = null; if (typeof setExitGridVisible === "function") setExitGridVisible(true); }
+        return worldObjectResult(success ? "completed" : "blocked", lines.join(" "), { toolAction: result });
+    } finally { worldToolExecution = null; }
+}
+function parseTextWorldToolCommand(raw) {
+    let match = /^(?:tools|tool use|use objects)(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "tool", args: { action: "menu", target: textCommandUnquote(match[1] || "") } };
+    match = /^(?:pry|lever)\s+(.+?)\s+(?:loose\s+)?(?:with|using)\s+(.+)$/i.exec(raw);
+    if (match) return { verb: "tool", args: { action: "pry", target: textCommandUnquote(match[1].replace(/\s+loose$/i, "")), item: textCommandUnquote(match[2]) } };
+    match = /^(?:wedge|jam)\s+(.+?)\s+(?:under|against|into)\s+(.+)$/i.exec(raw);
+    if (match) return { verb: "tool", args: { action: "wedge", target: textCommandUnquote(match[2]), item: textCommandUnquote(match[1]) } };
+    match = /^brace\s+(.+?)\s+with\s+(.+)$/i.exec(raw);
+    if (match) return { verb: "tool", args: { action: "wedge", target: textCommandUnquote(match[1]), item: textCommandUnquote(match[2]) } };
+    match = /^(?:unwedge|remove (?:the )?wedge from|force obstruction)\s+(.+)$/i.exec(raw);
+    return match ? { verb: "tool", args: { action: /^force/i.test(raw) ? "force" : "unwedge", target: textCommandUnquote(match[1]) } } : null;
+}
+function worldToolTargetMatches(selector) {
+    return textLootMatch(selector, worldToolTargets(), function (entry) { return entry.name; });
+}
+function executeTextWorldToolCommand(action) {
+    const args = action.args || {};
+    if (args.action === "menu") return openWorldToolMenu(args.target || "");
+    if (!/^(pry|wedge|unwedge|force)$/.test(args.action || "")) return textModeResult("blocked", "Use how tools for examples.", { systemOnly: true });
+    const targets = action.toolTargetRef ? [worldToolFreshTarget(action.toolTargetRef, true)].filter(Boolean) : worldToolTargetMatches(args.target || "");
+    if (!targets.length) {
+        if (action.toolTargetRef) return worldObjectResult("blocked", "That target or its fittings changed. Look at it again.");
+        const visible = worldObjectMatches(args.target || "").length || typeof getVisibleRoomFixtures === "function" && textLootMatch(args.target || "", getVisibleRoomFixtures(G.activeRoom), function (object) { return object.name || ""; }).length;
+        return worldObjectResult("blocked", visible ? args.action === "pry" ? "Those fittings do not offer exposed nails or pegs that you can safely lever free." : "That object is not a hinged doorway you can brace or free." : "You cannot find that target within reach.");
+    }
+    if (targets.length > 1) return textModeAsk(action, "worldToolTarget", targets, "Which target do you mean?");
+    action.toolTargetRef = targets[0];
+    if (/^(unwedge|force)$/.test(args.action)) return performWorldToolAction(worldToolSpec(args.action, targets[0]));
+    if (!args.item) return textModeResult("blocked", "Name the object to use, for example pry packing board with iron bar.", { systemOnly: true });
+    const tools = action.toolItemRef ? [worldObjectFresh(action.toolItemRef, true)].filter(Boolean) : worldObjectMatches(args.item);
+    if (!tools.length) return worldObjectResult("blocked", "You cannot find that tool within reach.");
+    if (tools.length > 1) return textModeAsk(action, "worldToolItem", tools, "Which object will you use?");
+    return performWorldToolAction(worldToolSpec(args.action, targets[0], tools[0]));
+}
+function worldToolShow(key) {
+    if (!/^(tools|tool use|pry|wedge|unwedge|brace|force obstruction)(?:\s+.*)?$/.test(key)) return null;
+    const specs = worldToolSpecs();
+    const actions = specs.map(function (spec) { return { action: spec.action, target: spec.target.name, tool: spec.tool ? spec.tool.object.name : null, command: worldToolCommand(spec), staminaCost: spec.staminaCost, turns: spec.turns, blockedReason: spec.reason }; });
+    return textModeResult("completed", "Using objects together:\n" + (actions.length ? actions.map(function (action) { return action.command + " — " + action.staminaCost + " stamina, 1 turn" + (action.blockedReason ? ": " + action.blockedReason : ""); }).join("\n") : "No supported tool-and-target combination is available here.") + "\nUse how tools for examples.", { worldToolActions: actions, systemOnly: true });
+}
+function worldDoorObstructionPublic(room) {
+    if (!room || room !== G.activeRoom) return [];
+    return Object.keys(room.exits || {}).map(function (dir) {
+        const obstruction = getDoorObstruction(room, dir);
+        if (!obstruction) return null;
+        const visible = obstruction.owner === room && worldObjectEntries().some(function (entry) { return entry.object === obstruction.object; });
+        return { direction: dir, blocked: true, brace: visible ? obstruction.object.name : null, reachable: visible };
+    }).filter(Boolean);
+}
+function openWorldToolMenu(selector) {
+    const block = worldToolSceneBlock();
+    if (block) return worldObjectResult("blocked", block);
+    const selected = selector ? worldObjectMatches(selector).map(function (entry) { return entry.object; }) : null;
+    const selectedTargets = selector ? worldToolTargetMatches(selector) : [];
+    const specs = worldToolSpecs().filter(function (spec) { return !selected || selectedTargets.some(function (target) { return target.kind === spec.target.kind && target.dir === spec.target.dir && target.object === spec.target.object; }) || selected.indexOf(spec.target.object) >= 0 || spec.tool && selected.indexOf(spec.tool.object) >= 0; });
+    if (!specs.length) return worldObjectResult("blocked", "You cannot find a suitable combination here.");
+    const el = document.getElementById("chatOptionsEl");
+    if (el) el.innerHTML = "";
+    const menu = beginSharedChoiceMenu("world-tools", null, "Using objects", function () { return openWorldToolMenu(selector); });
+    const valid = menu.valid, guards = specs.map(worldToolStamp), turn = getCurrentStoryTurn();
+    menu.valid = function () { return valid() && getCurrentStoryTurn() === turn && guards.every(function (guard) { return guard(); }); };
+    specs.forEach(function (spec) {
+        const button = createSharedChoiceButton(menu, worldToolCommand(spec) + " — " + spec.staminaCost + " stamina, 1 turn", function () { return performWorldToolAction(spec); }, { disabled: !!spec.reason, title: spec.reason, textChoice: { action: spec.action } });
+        if (el) el.appendChild(button);
+    });
+    const back = createSharedChoiceButton(menu, "Back", function () { if (typeof returnToRoomView === "function" && !textModeState.enabled) returnToRoomView(); return { status: "completed" }; }, { textChoice: { action: "back" } });
+    if (el) el.appendChild(back);
+    publishSharedChoiceMenu(menu, el);
+    if (!textModeState.enabled && typeof setExitGridVisible === "function") setExitGridVisible(false);
+    return { status: "needs_input" };
+}
+
 const TEXT_COMMANDS = [
+    { id: "tool", jobs: true, args: ["action", "target", "item"], aliases: ["tools", "tool use", "pry", "lever", "wedge", "jam", "brace", "unwedge", "force obstruction"], example: "pry packing board with iron pry bar; wedge chair under north door; unwedge north door; force obstruction north door; tools; show tools", description: "Use real objects together. Pry exposed nailed/pegged fittings with a sound rigid lever; wedge suitable furniture or a solid object against a real door. Material, shape, size, condition, reach and stats determine eligibility and dice difficulty. Pry/wedge cost 1 stamina and 1 turn; forcing a brace costs 2 stamina and 1 turn; removing your reachable brace costs 1 turn. Failures spend costs and pause later commands. A brace stays in place, blocks both sides and cannot be picked up until released. Unwedging does not unlock a lock. Show tools lists current combinations; tools opens the same choices as native controls. Options/back/cancel/leave work; explicitly continue older queued commands." },
+    { id: "object", info: false, jobs: true, args: ["action", "target"], aliases: ["objects", "physical objects", "lift", "heave", "drag", "haul", "shift", "move object", "push object", "pull object"], example: "lift bucket; drag bench; shift crate; push object chair; show objects; how lift", description: "Lift an accessible object and set it down, or drag/shift it a short distance within the room. Heave means lift; haul/pull object means drag; push object/move object means shift. The engine checks reach, attachment, occupancy, material, size, contents and physical prowess. Easy lifts succeed without a roll or cost; uncertain lifts and floor moves use a stat-based d20 check, 1 stamina and 1 turn, including failures. Impossible attempts never roll. These actions do not carry objects between rooms or create cover, block exits or spill contents. Take retains pack limits. Show objects lists public properties and current availability." },
     { id: "act", social: true, args: ["action", "target", "family"], aliases: ["act", "emote", "social", "gestures", "interactions", "express", "invite", "contact", "attempt", "try physical", "wave", "bow", "nod", "smile", "salute", "dance"], example: "wave at human; express stretch dramatically; invite human to share a joke; attempt pinch an arm with human; push human; help attempt", description: "Express yourself with express <action>, invite <person> to <action>, or contact <action> with <person>. Familiar gestures: wave, bow, nod, smile, salute, dance. A dance is an invitation. Contact asks permission. Attempt <minor bare-hand action> with <person> uses AI-proposed pain, minor HP damage, a brief condition and an NPC reaction. It needs AI, costs 1 stamina and one story turn outside combat or one combat action, and can provoke retaliation. Push/shove/slap/punch retain native unarmed combat; inferred attacks ask for review. Push/shove do not move someone into another room. Say \"I dance\" is speech." },
     {id:"phrases",info:true,args:["action","phrase"],aliases:["phrases","learned phrases"],example:'phrases; forget phrase "please survey the room"; clear phrases',description:"List successfully learned AI phrases, remove an exact phrase or clear the local dictionary. Learning stores action templates after complete success; targets and costs are checked fresh. These controls are free."},
     { id:"casting", casting:true, args:["action","target"], aliases:["powers","divine gifts","enchantments","cast enchant","ask for enchantment"], example:"powers; power mending touch; cast mending touch on <ally>; cast enchant; enchant recipient yourself; enchant item sword; enchant element fire; ask for enchantment; cast fleet foot; show casting; how casting", description:"Use shared native powers/heal targets, player and companion gear casts and learned travel spells. Final gear element choices spend native costs and 1 turn. Power costs/uses and healing stay native; travel spells keep zero-turn behavior. Answer one step per reply; explicitly continue older batches." },
@@ -708,6 +1442,8 @@ function parseTextCommand(input) {
     if (/^(?:"[\s\S]*"|“[\s\S]*”|'[\s\S]*')$/.test(raw)) return { verb: "say", args: { text: textCommandUnquote(raw) } };
     match = /^(?:say|reply|respond)\s+([\s\S]+)$/i.exec(original);
     if (match) return { verb: "say", args: { text: textCommandUnquote(match[1]) } };
+    const toolCommand = parseTextWorldToolCommand(raw); if (toolCommand) return toolCommand;
+    const objectCommand = parseTextObjectCommand(raw); if (objectCommand) return objectCommand;
     match = /^(?:look\s+at|examine|inspect|x)\s+(?:npc|creature|person)\s+(.+)$/i.exec(raw);
     if (match) return { verb: "examine", args: { item: textCommandUnquote(match[1]), scope: "npc" } };
     const social = parseTextSocialCommand(raw); if (social) return social;
@@ -764,6 +1500,10 @@ function parseTextCommand(input) {
     if (trade) return trade;
     const inventory = parseTextInventoryCommand(raw);
     if (inventory) return inventory;
+    // A descriptive use-of-object sentence needs intent interpretation. Do
+    // not let the generic combat "use <ability>" catch it first.
+    const toolSentence = /^use\s+(.+?)\s+to\s+.+$/i.exec(raw);
+    if (toolSentence && worldObjectMatches(toolSentence[1]).length) return null;
     const combat = parseTextCombatCommand(raw);
     if (combat) return combat;
     match = /^(?:talk\s+to|speak\s+to|talk)(?:\s+(.+))?$/i.exec(raw);
@@ -802,6 +1542,8 @@ function validateTextAIPlan(value) {
         if (Object.keys(action.args).some(function (key) { return fields[action.verb].indexOf(key) < 0 || typeof action.args[key] !== "string" || action.args[key].length > TEXT_INPUT_LIMIT; })) return null;
         if (action.verb === "synergy" && /^(picture|name|confirm|replace)$/.test(action.args.action || "")) return null;
         if (action.verb === "act" && (Object.prototype.hasOwnProperty.call(action.args, "family") ? !interactionRequest(action.args) : !Object.prototype.hasOwnProperty.call(SOCIAL_GESTURES, action.args.action || ""))) return null;
+        if (action.verb === "object" && (!/^(lift|drag|shift|take)$/.test(action.args.action || "") || !String(action.args.target || "").trim())) return null;
+        if (action.verb === "tool" && (!/^(menu|pry|wedge|unwedge|force)$/.test(action.args.action || "") || action.args.action !== "menu" && !String(action.args.target || "").trim() || /^(pry|wedge)$/.test(action.args.action || "") && !String(action.args.item || "").trim())) return null;
         if (action.verb === "say" && !String(action.args.text || "").trim()) return null;
         if (action.verb === "choose" && !/^[1-9]\d*$/.test(action.args.number || "")) return null;
         if (action.verb === "attack" && ((action.args.style && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.styles, action.args.style)) || (action.args.bodyPart && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.parts, action.args.bodyPart)))) return null;
@@ -816,7 +1558,7 @@ function validateTextAIPlan(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases)$/.test(def.id) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases)$/.test(def.id) && (def.id !== "tool" || worldToolIntentAvailable()) && (def.id !== "object" || !G.activeNPC && worldObjectEntries().length > 0) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -824,8 +1566,9 @@ async function interpretTextCommands(input) {
     });
     const schema = shapes.map(function (shape) { return shape.verbs.join("|") + (shape.args ? ":" + shape.args : ""); }).join(";");
     const combatWords = textModeInCombat() ? '\nCOMBAT: styles=' + Object.keys(TEXT_COMBAT_KEYWORDS.styles).join(',') + '; bodyPart=' + Object.keys(TEXT_COMBAT_KEYWORDS.parts).join(',') + '; use ability=' + textCombatActions().map(function (action) { return action.name; }).join(',').slice(0, 1200) : '';
-    const socialWords = shapes.some(function (shape) { return shape.verbs.includes("act"); }) ? "\nact.family=expression(self)|invitation|contact(consent)|assault(strike)|physical(novel hands);action=free phrase." : "";
-    const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\n' + schema + combatWords + socialWords + '\n' + JSON.stringify(input);
+    const socialWords = shapes.some(function (shape) { return shape.verbs.includes("act"); }) ? "\nact.family=expression|invitation|contact(consent)|assault|physical(hands);action=free phrase." : "";
+    const objectWords = (!G.activeNPC && worldObjectEntries().length ? "\nobject.action=lift|drag|shift|take(existing target)." : "") + (worldToolIntentAvailable() ? "\ntool.action=pry|wedge|unwedge|force|menu;item=tool,target=object/door." : "");
+    const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\n' + schema + combatWords + socialWords + objectWords + '\n' + JSON.stringify(input);
     let timer;
     try {
         const result = await Promise.race([
@@ -898,8 +1641,8 @@ function textModePumpStoryTyping() {
     if(line.setAttribute){
         line.classList.add("text-story-typing");line.setAttribute("role","button");line.setAttribute("tabindex","0");line.setAttribute("aria-label","Finish typing this text");
         line.title="";
-        line.onclick=function(){textModeFinishStoryEntry(entry);};
-        line.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();textModeFinishStoryEntry(entry);}};
+        line.onclick=function(){textModeFinishStoryEntry(entry);if(entry.event&&entry.event.eventId)ttsSpeechSkip(entry.event.eventId);};
+        line.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();textModeFinishStoryEntry(entry);if(entry.event&&entry.event.eventId)ttsSpeechSkip(entry.event.eventId);}};
     }
     entry.controller=animateChatBubbleText(line,"left","Narrator",entry.text,{mode:"narration",preserveWhitespace:true,objectNames:entry.objectNames},entry.log);
     if(typeof getChatTextSpeedMs==="function" && getChatTextSpeedMs()<=0){textModeCompleteStoryEntry(entry);return;}
@@ -964,6 +1707,963 @@ function textModeSeparateGuidance(event) {
     event.narration = (event.narration || prose).split(/\n|(?<=[.!?])(?<!\d\.)\s+(?=[A-Z])/).filter(function (line) { return !isHint(line); }).join("\n").trim();
 }
 
+// TTS MODE: SPEECH-READY TEXT (2026-10-21). With the TTS preference on and text
+// mode active, story text is written for listening: what is shown is what is
+// read. Presentation only; game actions, costs and choices are unchanged.
+// Raw event text stays in event.text; the speakable version is event.spoken.
+const ttsModeState = { enabled: false, lastSpoken: null, lastNpcSpoken: null, lastDetails: null, pendingTone: null,
+    systemVoice: true, npcVoices: true, readIntimate: false, narratorVoice: "", accent: "", rate: 1, volume: 1, variety: 1, pause: "normal",
+    urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", thinkingTone: false, thinkingToneUrl: "", cueVolume: 0.5,
+    pronunciations: "", pronunciationMap: {}, speciesVoice: {}, micMode: "handsfree" };
+const TTS_FAILURE_LINES = {
+    unresolved: "I pause, unsure how to put that into action.",
+    "ai-unavailable": "My thoughts won't come together on that right now. I'll have to put it more simply."
+};
+const TTS_REPEAT_WORDS = /^(?:what|huh|sorry|pardon|pardon me|come again|say (?:that|it) again|repeat|repeat that|again)$/i;
+function ttsModeActive() { return !!(ttsModeState.enabled && textModeState.enabled); }
+const TTS_VOICE_TONES = ["neutral", "warm", "angry", "afraid", "sly", "sad", "tired", "excited", "hushed"];
+// The AI's voiceTone for an NPC's next line; consumed by that NPC's next chat line.
+function ttsNoteVoiceTone(npc, tone) {
+    if (npc && TTS_VOICE_TONES.indexOf(String(tone || "")) >= 0) ttsModeState.pendingTone = { npc: npc, tone: String(tone) };
+}
+function ttsTakeVoiceTone(speakerName) {
+    const pending = ttsModeState.pendingTone;
+    if (!pending || !pending.npc) return "";
+    if (String(pending.npc.name || "").trim().toLowerCase() !== String(speakerName || "").trim().toLowerCase()) return "";
+    ttsModeState.pendingTone = null;
+    return pending.tone;
+}
+function ttsNumberWord(n) {
+    const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+    return n >= 0 && n < words.length ? words[n] : String(n);
+}
+function ttsJoinList(items) {
+    const list = items.filter(function (item) { return item && String(item).trim(); });
+    if (list.length <= 1) return list.join("");
+    return list.slice(0, -1).join(", ") + " and " + list[list.length - 1];
+}
+function ttsItemPhrase(raw) {
+    let text = String(raw || "").trim().replace(/\s+[—–-]\s+.*$/, "");
+    let count = 1;
+    const m = /^(.*?)\s*[×x]\s*(\d+)$/i.exec(text);
+    if (m && m[1]) { text = m[1].trim(); count = parseInt(m[2], 10); }
+    if (/^(?:a|an|the|some|\d+)\s/i.test(text)) return text;
+    const lower = /^[A-Z][a-z]/.test(text) && !/^[A-Z][a-z]+\s+[A-Z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+    if (count === 1) return (/^[aeiou]/i.test(lower) ? "an " : "a ") + lower;
+    return ttsNumberWord(count) + " " + ttsPlural(lower);
+}
+function ttsPluralWord(word) {
+    if (/(?:s|x|z|ch|sh)$/i.test(word)) return word + "es";
+    if (/[^aeiou]y$/i.test(word)) return word.slice(0, -1) + "ies";
+    return word + "s";
+}
+// Naive plural of an item name's head noun ("scroll of Firebolt" -> "scrolls of Firebolt").
+function ttsPlural(name) {
+    const text = String(name || "");
+    const of = /^(.*?)(\s+of\s+.*)$/i.exec(text);
+    if (of) return ttsPluralWord(of[1]) + of[2];
+    return text.replace(/(\S+)$/, function (w) { return ttsPluralWord(w); });
+}
+function ttsListToSentence(header, items) {
+    const label = String(header || "").replace(/:\s*$/, "").trim();
+    const phrases = items.map(ttsItemPhrase);
+    const body = ttsJoinList(phrases);
+    if (!label) return body ? body.charAt(0).toUpperCase() + body.slice(1) + "." : "";
+    return label + ": " + body + ".";
+}
+// Turns numbered or bulleted blocks into sentences. Returns the sentence text
+// and the original list lines (kept for display below the input).
+function ttsCollapseLists(text) {
+    const lines = String(text || "").split("\n"), out = [], listed = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const isItem = function (l) { return /^\s*(?:\d+[.)]|[-•*])\s+\S/.test(l || ""); };
+        if (isItem(line)) {
+            const header = out.length && /:\s*$/.test(out[out.length - 1]) ? out.pop() : "";
+            const items = [];
+            while (i < lines.length && isItem(lines[i])) { listed.push(lines[i].trim()); items.push(lines[i].replace(/^\s*(?:\d+[.)]|[-•*])\s+/, "")); i++; }
+            i--;
+            if (header) listed.unshift(header.trim());
+            out.push(ttsListToSentence(header, items));
+        } else out.push(line);
+    }
+    return { text: out.join("\n"), list: listed };
+}
+function ttsPronoun(gender) {
+    const g = String(gender || "").toLowerCase();
+    return g === "female" ? "She" : g === "male" ? "He" : "They";
+}
+// Deterministic clean-up for anything shown in TTS mode. Keeps meaning and
+// numbers; removes marks that read badly aloud.
+function ttsSpeakableText(text, options) {
+    const opts = options || {};
+    let s = String(text || "").replace(/\r/g, "");
+    // Combat attribution prefixes "(Actor) -> (Target) " and number
+    // parentheticals "(8 damage; health 20 -> 12)" are for the eye; `details` keeps them.
+    s = s.replace(/^[ \t]*\([^()\n]{1,60}\)[ \t]*\u2192[ \t]*\([^()\n]{1,60}\)[ \t]*/gm, "");
+    s = s.replace(/[ \t]*\((?=[^()\n]*\b(?:damage|health|HP|hp)\b)[^()\n]*\)/g, "");
+    s = s.replace(/[ \t]*\u2192[ \t]*/g, " to ");
+    s = s.replace(/[“”]/g, "\"").replace(/[‘’]/g, "'");
+    if (!opts.keepSpeechMarks) s = s.replace(/<([^<>]*)>/g, "\"$1\"");
+    s = s.replace(/\*hic\*/gi, ", ");
+    s = s.replace(/(^|[.!?>]\s+|\n)\*([^*\n]+)\*\s*(?=$|\n|[A-Z"<])/g, function (all, lead, act) { return lead + act.charAt(0).toUpperCase() + act.slice(1).replace(/[.!?]*$/, ".") + " "; });
+    s = s.replace(/\*([^*\n]+)\*/g, "$1");
+    s = s.replace(/\s*(?:\.{3,}|…)\s*(?=[A-Z"])/g, ". ").replace(/\s*(?:\.{3,}|…)\s*(?=["'>]?\s*$)/gm, ".").replace(/\s*(?:\.{3,}|…)\s*/g, ", ");
+    s = s.replace(/\s+(?:—|–|--|-)\s+/g, ", ").replace(/—|–/g, ", ");
+    s = s.replace(/\bHP\b/g, "health").replace(/\b(\d+)\s*gp\b/gi, "$1 gold").replace(/\b(\d+)\s*sp\b/gi, "$1 silver").replace(/\b(\d+)\s*cp\b/gi, "$1 copper");
+    s = s.replace(/(\d+)\s*\/\s*(\d+)/g, "$1 of $2").replace(/(\d+)\s*%/g, "$1 percent");
+    s = s.replace(/(^|[\s(])\+(\d)/g, "$1plus $2").replace(/(^|[\s(])-(\d)/g, "$1minus $2");
+    s = s.replace(/\b(\d*)d(4|6|8|10|12|20|100)\b/g, function (all, n, d) { return (n && n !== "1" ? n + " " : "a ") + d + "-sided " + (n && n !== "1" ? "dice" : "die"); });
+    s = s.replace(/\s[×x](\d+)\b/g, function (all, n) { return n === "1" ? "" : ", " + ttsNumberWord(parseInt(n, 10)) + " of them"; });
+    s = s.replace(/[#_~`|\[\]{}]/g, " ").replace(/^\s*>\s*/gm, "");
+    s = s.replace(/[ \t]+,/g, ",").replace(/,(\s*,)+/g, ",").replace(/,\s*([.!?])/g, "$1").replace(/([.!?])\s*,/g, "$1").replace(/^\s*,\s*/gm, "");
+    s = s.replace(/[ \t]{2,}/g, " ").replace(/ *\n */g, "\n").trim();
+    s = s.replace(/(^|[.!?]\s+)([a-z])/g, function (all, lead, ch) { return lead + ch.toUpperCase(); });
+    return s;
+}
+function ttsSpeakableDialogue(text, speakerGender) {
+    const raw = String(text || "");
+    const hic = /\*hic\*/i.test(raw);
+    let s = ttsSpeakableText(raw, { keepSpeechMarks: true });
+    s = s.replace(/<\s*,\s*/g, "<").replace(/,\s*>/g, ">");
+    if (hic && !/hiccup/i.test(s)) s = s.replace(/\s*$/, " " + ttsPronoun(speakerGender) + (ttsPronoun(speakerGender) === "They" ? " hiccup." : " hiccups."));
+    return s;
+}
+// Story text for one event in TTS mode; returns { story, list } where list is
+// the visible numbered detail moved below the input.
+function ttsStoryForEvent(event, story) {
+    let text = String(story || "");
+    let list = [];
+    if (event.kind === "choices" || event.presentation === "decision") {
+        const lines = text.split("\n");
+        const promptLines = [];
+        for (let i = 0; i < lines.length; i++) { if (/^\s*\d+[.)]\s+/.test(lines[i])) list.push(lines[i].trim()); else if (!list.length) promptLines.push(lines[i]); }
+        text = promptLines.join("\n").trim() || "I consider my options.";
+        if (list.length && !/options/i.test(text)) list.push("Say options to hear these again, or say a number.");
+        return { story: ttsSpeakableText(text), list: list };
+    }
+    const collapsed = ttsCollapseLists(text);
+    return { story: ttsSpeakableText(collapsed.text), list: collapsed.list };
+}
+// Adjusts an event before presentation is decided. Fills in the spoken story
+// for moments that are system-only in plain text mode (G1, G2).
+function ttsAdjustEvent(event) {
+    if (event.kind === "command") { ttsModeState.storySinceCommand = false; return; }
+    if (!ttsModeActive()) return;
+    if (event.systemOnly && event.commandFailure && TTS_FAILURE_LINES[event.commandFailure]) {
+        event.guidance = event.guidance || event.text;
+        event.narration = TTS_FAILURE_LINES[event.commandFailure];
+        event.systemOnly = false;
+        return;
+    }
+    if (event.systemOnly && event.ttsNarration && !ttsModeState.storySinceCommand) {
+        event.guidance = event.guidance || event.text;
+        event.narration = event.ttsNarration;
+        event.systemOnly = false;
+    }
+}
+function ttsRemember(event) {
+    if (!event.spoken || event.speakerRole === "player") return;
+    ttsModeState.lastSpoken = { text: event.spoken, speakerRole: event.speakerRole || "narrator", speakerInfo: event.speakerInfo || null, speaker: event.speaker || "" };
+    if (event.speakerRole === "npc") ttsModeState.lastNpcSpoken = ttsModeState.lastSpoken;
+    if (event.kind !== "dialogue") ttsModeState.lastDetails = { text: event.text, kind: event.kind };
+}
+function ttsTalkStartLine(npc) {
+    const name = typeof getNPCRoomSightName === "function" ? getNPCRoomSightName(npc) : npc && npc.name;
+    const who = String(name || "them").replace(/^(?:a|an)\s+/i, "the ");
+    return "You turn to " + who + ".";
+}
+// Loose spoken matching of conversation options in TTS mode (G3): "greeting",
+// "hello" or "say hi" pick "Greet them". Only short inputs, only when exactly
+// one option matches best, and only while talking. Uses the normal choose path.
+const TTS_OPTION_SYNONYMS = { hello: "greet", hi: "greet", hey: "greet", greeting: "greet", greetings: "greet", howdy: "greet", bye: "goodbye", farewell: "goodbye", leave: "goodbye", later: "goodbye", called: "name", who: "name", flatter: "compliment", praise: "compliment", sorry: "apologize", apologise: "apologize", apology: "apologize", work: "job", living: "job", rumor: "rumors", rumour: "rumors", rumours: "rumors", gossip: "rumors", news: "rumors" };
+const TTS_OPTION_STOP = { the: 1, a: 1, an: 1, them: 1, their: 1, they: 1, you: 1, your: 1, to: 1, about: 1, i: 1, me: 1, my: 1, say: 1, ask: 1, tell: 1, please: 1, and: 1, of: 1, for: 1, what: 1, is: 1, are: 1, do: 1, some: 1, with: 1 };
+function ttsOptionWords(text) {
+    return String(text || "").toLowerCase().replace(/[^a-z\s']/g, " ").split(/\s+/).filter(function (w) { return w && !TTS_OPTION_STOP[w]; }).map(function (w) {
+        w = TTS_OPTION_SYNONYMS[w] || w;
+        const stem = w.replace(/(?:ing|ed|es|s)$/, "");
+        return TTS_OPTION_SYNONYMS[stem] || (stem.length >= 3 ? stem : w);
+    });
+}
+// Index of the single best-matching current conversation option, or -1.
+function ttsMatchConversationOption(input, optionsIn) {
+    if (!ttsModeActive() || typeof G === "undefined" || !G.activeNPC || !/^(talk|respond)$/.test(G.activeNPCMode || "")) return -1;
+    const words = ttsOptionWords(input);
+    if (!words.length || String(input).trim().split(/\s+/).length > 6) return -1;
+    const options = optionsIn || getChatOptions(G.activeNPC) || [];
+    let best = -1, bestScore = 0, tie = false;
+    options.forEach(function (option, i) {
+        if (!option || option.disabled) return;
+        const target = ttsOptionWords([option.label, option.id, option.intent].filter(Boolean).join(" ").replace(/-/g, " "));
+        const score = words.filter(function (w) { return target.indexOf(w) >= 0; }).length;
+        if (score > bestScore) { best = i; bestScore = score; tie = false; } else if (score && score === bestScore) tie = true;
+    });
+    return best < 0 || tie ? -1 : best;
+}
+function ttsConversationChoice(input) {
+    if (!ttsModeActive() || !G.activeNPC || !/^(talk|respond)$/.test(G.activeNPCMode || "")) return null;
+    const options = getChatOptions(G.activeNPC) || [];
+    const best = ttsMatchConversationOption(input, options);
+    if (best < 0) return null;
+    textModeState.choices = { scene: textModeScene(), options: options };
+    return { verb: "choose", args: { number: String(best + 1) } };
+}
+// Local voice/TTS control words, handled before the command parser.
+function ttsControlCommand(input) {
+    if (!ttsModeActive()) return false;
+    const t = String(input || "").trim().replace(/[.!?]+$/, "").toLowerCase();
+    if (TTS_REPEAT_WORDS.test(t) || /^repeat (?:npc|them|him|her|that person)$/.test(t)) {
+        const npc = /npc|them|him|her|person/.test(t);
+        const last = npc ? ttsModeState.lastNpcSpoken : ttsModeState.lastSpoken;
+        if (!last) { publishTextModeOutput("narration", "Nothing has been said yet.", { source: "text-mode", ttsRepeat: true }); return true; }
+        if (last.speakerRole === "npc") publishTextModeOutput("dialogue", last.text, { speaker: last.speaker, side: "left", source: "text-mode", ttsRepeat: true });
+        else publishTextModeOutput("narration", last.text, { source: "text-mode", ttsRepeat: true });
+        return true;
+    }
+    if (t === "skip" || t === "skip that") { ttsSpeechSkip(); return true; }
+    if (/^(?:listen|start listening|resume listening|mic on)$/.test(t)) {
+        if (!ttsVoiceInputAvailable()) { publishTextModeOutput("feedback", "Voice input isn't available in this browser. Chrome supports it; on Windows, Win+H types what you say.", { systemOnly: true }); return true; }
+        ttsListen.stopped = false; ttsListen.armed = true; ttsListenEnsureLoop();
+        publishTextModeOutput("feedback", "Listening resumes when the narration ends.", { systemOnly: true });
+        return true;
+    }
+    if (/^(?:quiet|silence|hush|shush|stop talking|stop speaking|be quiet)$/.test(t)) { ttsSpeechStop("quiet"); return true; }
+    if (t === "details" || t === "more detail" || t === "more details" || t === "exact numbers") {
+        const d = ttsModeState.lastDetails;
+        publishTextModeOutput("narration", d && d.text ? d.text : "There are no details to add.", { source: "text-mode", ttsDetails: true });
+        return true;
+    }
+    return false;
+}
+
+// TTS SPEECH QUEUE (2026-10-21). Reads TTS-mode story events aloud with the
+// browser's own speechSynthesis voices. Separate from the game action queue:
+// speech never runs, repeats or cancels a game action. Browser quirks seen in
+// the probe: cancel() may not fire end events and `speaking` may stay true, the
+// voice list can be empty, each separate utterance costs about 1 s with online
+// voices. So the queue keeps its own state and timeouts and speaks whole
+// passages, splitting only where the voice changes.
+const ttsSpeech = { queue: [], current: null, lastText: "", lastScene: "", lastCut: "", audio: null, voicesCache: null, timeoutBase: 5000 };
+const TTS_SPECIES_VOICE = {
+    human: [1, 1], elf: [1.05, 0.95], dwarf: [0.88, 0.97], halfling: [1.12, 1.05], orc: [0.85, 0.93], goblin: [1.15, 1.1],
+    kobold: [1.15, 1.12], lizardfolk: [0.9, 0.92], dragonborn: [0.86, 0.92], catfolk: [1.08, 1.02], wolfkin: [0.9, 1], satyr: [1.05, 1.05], slime: [1, 0.9]
+};
+const TTS_TONE_PRESETS = {
+    neutral: [1, 1, 1], warm: [1.03, 0.97, 1], angry: [0.92, 1.1, 1], afraid: [1.1, 1.12, 0.9], sly: [0.96, 0.94, 0.9],
+    sad: [0.94, 0.86, 0.85], tired: [0.94, 0.85, 0.85], excited: [1.08, 1.1, 1], hushed: [0.97, 0.9, 0.55]
+};
+const TTS_FEMALE_VOICE = /\b(zira|aria|jenny|sonia|libby|maisie|natasha|clara|emma|ava|linda|michelle|samantha|karen|moira|tessa|fiona|victoria|susan|hazel|heera|catherine|female|woman)\b/i;
+const TTS_MALE_VOICE = /\b(david|mark|guy|ryan|william|liam|andrew|brian|richard|daniel|alex|fred|thomas|george|james|christopher|eric|roger|steffan|ravi|male|man)\b/i;
+function ttsSynth() { return typeof window !== "undefined" && window.speechSynthesis && typeof window.SpeechSynthesisUtterance === "function" ? window.speechSynthesis : null; }
+function ttsVoiceGender(voice) { const n = String(voice && voice.name || ""); return TTS_FEMALE_VOICE.test(n) ? "female" : TTS_MALE_VOICE.test(n) ? "male" : ""; }
+function ttsVoiceScore(voice) {
+    const n = String(voice.name || "").toLowerCase(), lang = String(voice.lang || "").replace("_", "-").toLowerCase();
+    let s = 0;
+    if (/natural|neural|online/.test(n)) s += 50;
+    if (/google/.test(n)) s += 35;
+    if (/premium|enhanced|siri/.test(n)) s += 30;
+    if (!voice.localService) s += 5;
+    if (/^en(?:-|$)/.test(lang)) s += 20;
+    if (ttsModeState.accent) { if (lang === String(ttsModeState.accent).toLowerCase()) s += 40; }
+    else if (typeof navigator !== "undefined" && lang === String(navigator.language || "").toLowerCase()) s += 15;
+    if (/multilingual/.test(n)) s -= 3;
+    if (/espeak|compact|novelty|bad news|bells|whisper|zarvox|trinoids|bubbles|albert|jester|organ|cellos/.test(n)) s -= 60;
+    return s;
+}
+// English voices, best first. Never blocks: an empty list means "browser default".
+function ttsVoices() {
+    const synth = ttsSynth();
+    const all = synth && typeof synth.getVoices === "function" ? (synth.getVoices() || []) : [];
+    if (ttsSpeech.voicesCache && ttsSpeech.voicesCache.count === all.length) return ttsSpeech.voicesCache.list;
+    const list = all.filter(function (v) { return /^en(?:[-_]|$)/i.test(v.lang || ""); }).sort(function (a, b) { return ttsVoiceScore(b) - ttsVoiceScore(a); });
+    ttsSpeech.voicesCache = { count: all.length, list: list };
+    return list;
+}
+function ttsFindVoice(name) { const list = ttsVoices(); for (let i = 0; i < list.length; i++) if (list[i].name === name) return list[i]; return null; }
+function ttsNarratorVoice() {
+    const chosen = ttsModeState.narratorVoice ? ttsFindVoice(ttsModeState.narratorVoice) : null;
+    return chosen || ttsVoices()[0] || null;
+}
+function ttsHash(text) { let h = 2166136261; const s = String(text || ""); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function ttsClamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+// Picks (and saves on the NPC) a voice from species and gender. A saved voice
+// missing on this device is replaced by the nearest match for this session only.
+function ttsNpcVoice(npc, noSave) {
+    const voices = ttsVoices(), narrator = ttsNarratorVoice();
+    const gender = String(npc && npc.gender || "").toLowerCase();
+    const pick = function (seed) {
+        let pool = voices.filter(function (v) { return gender && ttsVoiceGender(v) === gender; });
+        if (!pool.length) pool = voices.slice();
+        if (pool.length > 1 && narrator) pool = pool.filter(function (v) { return v.name !== narrator.name; });
+        return pool.length ? pool[ttsHash(seed) % pool.length] : null;
+    };
+    if (!npc) return { voice: narrator, pitch: 1, rate: 1 };
+    const seed = (npc.id || npc.name || "npc") + "|" + (npc.species || "");
+    const variety = typeof ttsModeState.variety === "number" ? ttsModeState.variety : 1;
+    const vary = function (value) { return 1 + ((value || 1) - 1) * variety; };
+    const override = ttsModeState.speciesVoice && ttsModeState.speciesVoice[String(npc.species || "").toLowerCase()];
+    const overrideVoice = override ? ttsFindVoice(override) : null;
+    if (npc.voice && typeof npc.voice === "object") {
+        const saved = npc.voice.name ? ttsFindVoice(npc.voice.name) : null;
+        return { voice: overrideVoice || saved || pick(seed), pitch: vary(npc.voice.pitch), rate: vary(npc.voice.rate) };
+    }
+    const base = TTS_SPECIES_VOICE[String(npc.species || "").toLowerCase()] || [1, 1];
+    const jitter = ((ttsHash(seed + "#") % 9) - 4) / 100;
+    const voice = pick(seed);
+    const spec = { pitch: Math.round(ttsClamp(base[0] + jitter, 0.8, 1.2) * 100) / 100, rate: Math.round(ttsClamp(base[1] - jitter / 2, 0.8, 1.2) * 100) / 100 };
+    if (voice && !noSave) npc.voice = { name: voice.name, lang: voice.lang || "", gender: ttsVoiceGender(voice) || gender, pitch: spec.pitch, rate: spec.rate };
+    return { voice: overrideVoice || voice, pitch: vary(spec.pitch), rate: vary(spec.rate) };
+}
+function ttsNpcTone(npc, event) {
+    if (event && TTS_TONE_PRESETS[event.voiceTone]) return event.voiceTone;
+    if (!npc) return "neutral";
+    if ((npc.hostility || 0) >= 60) return "angry";
+    if (typeof npc.hp === "number" && npc.hpMax && npc.hp / npc.hpMax < 0.4) return "tired";
+    return "neutral";
+}
+function ttsMakeSpec(base, tone, extra) {
+    const t = TTS_TONE_PRESETS[tone] || TTS_TONE_PRESETS.neutral;
+    const e = extra || {};
+    return {
+        voice: base.voice || null,
+        pitch: ttsClamp((base.pitch || 1) * t[0] * (e.pitch || 1), 0.75, 1.3),
+        rate: ttsClamp((base.rate || 1) * t[1] * (e.rate || 1) * (ttsModeState.rate || 1), 0.6, 1.6),
+        volume: ttsClamp(t[2] * (e.volume || 1) * (ttsModeState.volume == null ? 1 : ttsModeState.volume), 0, 1)
+    };
+}
+// Splits long passages at sentence ends so no single utterance is very long.
+function ttsChunks(text, max) {
+    const limit = max || 900, out = [];
+    let rest = String(text || "").trim();
+    while (rest.length > limit) {
+        let cut = -1;
+        const re = /[.!?]["')]?\s+/g; let m;
+        while ((m = re.exec(rest)) && m.index + m[0].length <= limit) cut = m.index + m[0].length;
+        if (cut <= 0) cut = rest.lastIndexOf(" ", limit) > 0 ? rest.lastIndexOf(" ", limit) + 1 : limit;
+        out.push(rest.slice(0, cut).trim()); rest = rest.slice(cut).trim();
+    }
+    if (rest) out.push(rest);
+    return out;
+}
+// Builds the voice segments for one event: NPC speech in quotes uses the NPC
+// voice, everything else the narrator.
+function ttsSegmentsForEvent(event) {
+    const text = String(event.spoken || "").trim();
+    if (!text) return [];
+    const narratorBase = { voice: ttsNarratorVoice(), pitch: 1, rate: 1 };
+    const narratorExtra = {};
+    if (event.kind === "combat") narratorExtra.rate = 1.1;
+    if (event.speakerRole !== "npc" && /^(?:I|I'm|I've|My|Me)\b/.test(text)) { narratorExtra.rate = 0.93; narratorExtra.volume = 0.85; narratorExtra.pitch = 0.98; }
+    const narrator = ttsMakeSpec(narratorBase, "neutral", narratorExtra);
+    if (event.speakerRole !== "npc" || ttsModeState.npcVoices === false) {
+        return ttsChunks(text).map(function (chunk) { return { text: chunk, spec: narrator }; });
+    }
+    const npc = typeof textModeFindSpeaker === "function" ? textModeFindSpeaker(event.speaker) : null;
+    const drunk = npc && typeof getDrunkTier === "function" ? getDrunkTier(npc) : 0;
+    const npcSpec = ttsMakeSpec(ttsNpcVoice(npc), ttsNpcTone(npc, event), { rate: 1 - 0.05 * drunk, pitch: 1 - 0.02 * drunk });
+    const segments = [];
+    const parts = text.split("\"");
+    if (parts.length < 3) return ttsChunks(text).map(function (chunk) { return { text: chunk, spec: npcSpec }; });
+    parts.forEach(function (part, i) {
+        const clean = part.replace(/^[\s,]+|[\s,]+$/g, "");
+        if (!clean || !/[A-Za-z0-9]/.test(clean)) return;
+        const spec = i % 2 === 1 ? npcSpec : narrator;
+        ttsChunks(clean).forEach(function (chunk) { segments.push({ text: chunk, spec: spec }); });
+    });
+    return segments;
+}
+function ttsIntimacyMuted() {
+    return !ttsModeState.readIntimate && typeof G !== "undefined" && G.activeNPCMode === "intimacy";
+}
+function ttsVoiceOn() { return ttsModeActive() && ttsModeState.systemVoice !== false && !!ttsSynth(); }
+// Short built-in cue tones (Web Audio). kind: "urgent" or "turn".
+function ttsPlayCue(kind, force) {
+    if (!force && kind === "urgent" && ttsModeState.urgentCue === false) return;
+    if (!force && kind === "turn" && ttsModeState.turnCue === false) return;
+    const url = kind === "urgent" ? ttsModeState.urgentCueUrl : kind === "turn" ? ttsModeState.turnCueUrl : "";
+    if (url && typeof Audio === "function") {
+        try {
+            const a = new Audio(url);
+            a.volume = ttsClamp(ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume, 0, 1);
+            let fell = false;
+            const fallback = function () { if (fell) return; fell = true; ttsPlayTone(kind); };
+            a.onerror = fallback;
+            const played = a.play();
+            if (played && typeof played.catch === "function") played.catch(fallback);
+            return;
+        } catch (e) {}
+    }
+    ttsPlayTone(kind);
+}
+function ttsPlayTone(kind) {
+    try {
+        const C = typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext);
+        if (!C) return;
+        if (!ttsSpeech.audio) ttsSpeech.audio = new C();
+        const c = ttsSpeech.audio;
+        if (c.state === "suspended" && c.resume) c.resume();
+        const now = c.currentTime, notes = kind === "urgent" ? [880, 660] : [660, 990], vol = 0.25 * (ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume);
+        notes.forEach(function (f, k) {
+            const o = c.createOscillator(), g = c.createGain();
+            o.type = kind === "urgent" ? "square" : "sine"; o.frequency.value = f;
+            g.gain.setValueAtTime(0.0001, now + k * 0.12);
+            g.gain.exponentialRampToValueAtTime(Math.max(0.001, kind === "urgent" ? vol * 0.6 : vol), now + k * 0.12 + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + k * 0.12 + 0.25);
+            o.connect(g); g.connect(c.destination); o.start(now + k * 0.12); o.stop(now + k * 0.12 + 0.3);
+        });
+    } catch (e) {}
+}
+function ttsFinishItem(item) {
+    if (!item || item.done) return;
+    item.done = true;
+    if (item.timer) clearTimeout(item.timer);
+    item.resolve();
+}
+// Stops all speech. Never touches the game action queue.
+function ttsSpeechStop(reason) {
+    const synth = ttsSynth();
+    const current = ttsSpeech.current;
+    if (current && !current.done) ttsSpeech.lastCut = current.event && current.event.spoken || "";
+    ttsSpeech.current = null;
+    const queued = ttsSpeech.queue.splice(0);
+    if (current) ttsFinishItem(current);
+    queued.forEach(ttsFinishItem);
+    if (synth) { try { synth.cancel(); } catch (e) {} }
+    ttsSpeech.reason = reason || "stop";
+}
+// Skips the current line (or one event's speech) and carries on with the queue.
+function ttsSpeechSkip(eventId) {
+    const current = ttsSpeech.current;
+    if (eventId) {
+        ttsSpeech.queue = ttsSpeech.queue.filter(function (item) { if (item.event.eventId === eventId) { ttsFinishItem(item); return false; } return true; });
+        if (!current || current.event.eventId !== eventId) return;
+    }
+    if (!current) return;
+    ttsSpeech.current = null;
+    ttsFinishItem(current);
+    const synth = ttsSynth();
+    if (synth) { try { synth.cancel(); } catch (e) {} }
+    ttsSpeechPump();
+}
+function ttsSpeakSegment(item, index) {
+    const synth = ttsSynth();
+    if (!synth || ttsSpeech.current !== item || item.done) return;
+    if (index >= item.segments.length) {
+        ttsSpeech.current = null; ttsFinishItem(item);
+        if (typeof ttsListen !== "undefined" && !ttsListen.stopped) ttsListen.armed = true;
+        const gap = TTS_PAUSE_MS[ttsModeState.pause] || 0;
+        if (gap) setTimeout(ttsSpeechPump, gap); else ttsSpeechPump();
+        return;
+    }
+    const seg = item.segments[index];
+    const u = new window.SpeechSynthesisUtterance(ttsApplyPronunciations(seg.text));
+    if (seg.spec.voice) { u.voice = seg.spec.voice; u.lang = seg.spec.voice.lang || "en-US"; } else u.lang = "en-US";
+    u.pitch = seg.spec.pitch; u.rate = seg.spec.rate; u.volume = seg.spec.volume;
+    let moved = false;
+    const next = function () { if (moved) return; moved = true; if (item.timer) clearTimeout(item.timer); if (ttsSpeech.current === item && !item.done) ttsSpeakSegment(item, index + 1); };
+    u.onend = next; u.onerror = next;
+    // Safety net for browsers that drop end events: generous estimate per segment.
+    if (item.timer) clearTimeout(item.timer);
+    item.timer = setTimeout(next, ttsSpeech.timeoutBase + seg.text.length * 110 / Math.max(0.6, seg.spec.rate));
+    try { synth.speak(u); } catch (e) { next(); }
+}
+function ttsSpeechPump() {
+    if (ttsSpeech.current || !ttsSpeech.queue.length) return;
+    const item = ttsSpeech.queue.shift();
+    ttsSpeech.current = item;
+    ttsSpeakSegment(item, 0);
+}
+// Called for every published event. Returns a promise that resolves when this
+// event's speech ends (immediately if nothing is spoken).
+function ttsSpeechEnqueue(event) {
+    if (!event || !event.spoken || !ttsVoiceOn()) return null;
+    if (event.presentation !== "story" && event.presentation !== "decision") return null;
+    if (event.speakerRole === "player" || event.kind === "command") return null;
+    if (ttsIntimacyMuted()) return null;
+    const text = String(event.spoken).trim();
+    if (!text) return null;
+    if (!event.ttsRepeat && !event.ttsDetails && text === ttsSpeech.lastText && event.scene === ttsSpeech.lastScene && event.kind === "narration") return null;
+    if (typeof ttsListen !== "undefined" && (ttsListen.listening || ttsListen.starting)) { ttsListen.starting = false; ttsListenAbort("speech"); ttsListen.armed = true; }
+    // Scene changed: drop speech that has not started yet from older scenes.
+    if (event.scene && ttsSpeech.lastScene && event.scene !== ttsSpeech.lastScene) {
+        ttsSpeech.queue = ttsSpeech.queue.filter(function (item) { if (item.event.scene !== event.scene) { ttsFinishItem(item); return false; } return true; });
+    }
+    if (event.urgent && (ttsSpeech.current || ttsSpeech.queue.length)) { ttsSpeechStop("urgent"); ttsPlayCue("urgent"); }
+    else if (event.urgent) ttsPlayCue("urgent");
+    ttsSpeech.lastText = text; ttsSpeech.lastScene = event.scene || "";
+    let resolve;
+    const promise = new Promise(function (r) { resolve = r; });
+    const item = { event: event, segments: ttsSegmentsForEvent(event), resolve: resolve, done: false, timer: null };
+    if (!item.segments.length) { resolve(); return null; }
+    ttsSpeech.queue.push(item);
+    ttsSpeechPump();
+    return promise;
+}
+
+// TTS SETTINGS (2026-10-21). Saved per browser, separately from games.
+const TTS_SETTINGS_KEY = "cyoaftwTTSSettings";
+const TTS_SETTING_DEFAULTS = {
+    systemVoice: true, narratorVoice: "", accent: "", rate: 1, volume: 1, npcVoices: true, variety: 1, pause: "normal",
+    readIntimate: false, urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", thinkingTone: false, thinkingToneUrl: "",
+    cueVolume: 0.5, pronunciations: "", speciesVoice: {}, micMode: "handsfree"
+};
+const TTS_PAUSE_MS = { short: 0, normal: 250, long: 700 };
+// Built-in spoken-only respellings (screen text is not changed).
+const TTS_PRONUNCIATIONS = { kobold: "koh-bold", kobolds: "koh-bolds", satyr: "say-ter", satyrs: "say-ters", lizardfolk: "lizard folk", catfolk: "cat folk", wolfkin: "wolf kin" };
+function ttsCoerceSetting(key, value) {
+    const def = TTS_SETTING_DEFAULTS[key];
+    if (typeof def === "boolean") return value === true || value === "true" || value === "on" || value === 1;
+    if (typeof def === "number") { const n = parseFloat(value); return isFinite(n) ? n : def; }
+    if (key === "speciesVoice") return value && typeof value === "object" ? value : {};
+    if (key === "pause") return TTS_PAUSE_MS.hasOwnProperty(value) ? value : def;
+    if (key === "micMode") return value === "off" || value === "push" || value === "handsfree" ? value : def;
+    if (/Url$/.test(key)) { const url = String(value || "").trim(); return /^(?:https?:|data:audio\/)/i.test(url) ? url.slice(0, 2000) : ""; }
+    return String(value == null ? "" : value).slice(0, key === "pronunciations" ? 6000 : 300);
+}
+function ttsApplySettings(settings) {
+    Object.keys(TTS_SETTING_DEFAULTS).forEach(function (key) {
+        ttsModeState[key] = settings && settings.hasOwnProperty(key) ? ttsCoerceSetting(key, settings[key]) : (key === "speciesVoice" ? {} : TTS_SETTING_DEFAULTS[key]);
+    });
+    ttsModeState.rate = ttsClamp(ttsModeState.rate, 0.6, 1.6);
+    ttsModeState.volume = ttsClamp(ttsModeState.volume, 0, 1);
+    ttsModeState.variety = ttsClamp(ttsModeState.variety, 0, 2);
+    ttsModeState.cueVolume = ttsClamp(ttsModeState.cueVolume, 0, 1);
+    ttsModeState.pronunciationMap = ttsParsePronunciations(ttsModeState.pronunciations);
+    ttsSpeech.voicesCache = null;
+}
+function ttsSettingsSnapshot() {
+    const out = {};
+    Object.keys(TTS_SETTING_DEFAULTS).forEach(function (key) { out[key] = ttsModeState[key]; });
+    return out;
+}
+function ttsLoadSettings() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(TTS_SETTINGS_KEY) || "null"); } catch (e) { saved = null; }
+    ttsApplySettings(saved && typeof saved === "object" ? saved : {});
+}
+function ttsSetSetting(key, value) {
+    if (!TTS_SETTING_DEFAULTS.hasOwnProperty(key)) return;
+    const next = ttsSettingsSnapshot();
+    next[key] = ttsCoerceSetting(key, value);
+    ttsApplySettings(next);
+    try { localStorage.setItem(TTS_SETTINGS_KEY, JSON.stringify(ttsSettingsSnapshot())); } catch (e) {}
+    if (key === "systemVoice" && !ttsModeState.systemVoice) ttsSpeechStop("setting");
+    if (key === "micMode") { if (ttsModeState.micMode === "off") ttsListenAbort("setting"); else { ttsListen.stopped = false; ttsListen.armed = true; } ttsSetMicButton(); }
+    if (typeof ttsRenderSettings === "function") ttsRenderSettings();
+}
+function ttsSetSpeciesVoice(species, name) {
+    const map = Object.assign({}, ttsModeState.speciesVoice || {});
+    if (name) map[species] = String(name); else delete map[species];
+    ttsSetSetting("speciesVoice", map);
+}
+// "word = how to say it" per line; # starts a comment.
+function ttsParsePronunciations(text) {
+    const map = {};
+    String(text || "").split(/\n/).forEach(function (line) {
+        const m = /^\s*([^=#]+?)\s*=\s*([^#]+?)\s*$/.exec(line);
+        if (m && m[1].length <= 60 && m[2].length <= 80) map[m[1].toLowerCase()] = m[2];
+    });
+    return map;
+}
+function ttsEscapeRegExp(text) { return String(text).replace(/[\\^$.*+?()[\]{}|]/g, "\\$&"); }
+// Applies built-in and player respellings to spoken text only.
+function ttsApplyPronunciations(text) {
+    const map = Object.assign({}, TTS_PRONUNCIATIONS, ttsModeState.pronunciationMap || {});
+    const words = Object.keys(map).sort(function (a, b) { return b.length - a.length; });
+    if (!words.length) return text;
+    const re = new RegExp("(^|[^\\p{L}\\p{N}_])(" + words.map(ttsEscapeRegExp).join("|") + ")(?![\\p{L}\\p{N}_])", "giu");
+    return String(text || "").replace(re, function (all, lead, word) { return lead + (map[word.toLowerCase()] || word); });
+}
+// Clears saved NPC voices in the current world so they are chosen again.
+function ttsResetNpcVoices() {
+    let count = 0;
+    const seen = typeof WeakSet === "function" ? new WeakSet() : null;
+    const clear = function (npc) { if (npc && typeof npc === "object" && npc.voice && (!seen || !seen.has(npc))) { if (seen) seen.add(npc); delete npc.voice; count++; } };
+    if (typeof G !== "undefined") {
+        const map = G.roomMap || {};
+        Object.keys(map).forEach(function (key) { const room = map[key]; if (room && Array.isArray(room.creatures)) room.creatures.forEach(clear); });
+        (G.partyMembers || []).forEach(clear); (G.sessionFollowers || []).forEach(clear);
+        if (G.activeRoom && Array.isArray(G.activeRoom.creatures)) G.activeRoom.creatures.forEach(clear);
+    }
+    return count;
+}
+// Speaks a sample outside the queue (Preferences test buttons).
+function ttsTestVoice(kind) {
+    const synth = ttsSynth();
+    if (!synth) return false;
+    try { synth.cancel(); } catch (e) {}
+    const sampleNpc = { id: "tts-sample", name: "a dwarf", species: "dwarf", gender: kind === "npc-female" ? "female" : "male" };
+    const base = kind === "narrator" ? { voice: ttsNarratorVoice(), pitch: 1, rate: 1 } : ttsNpcVoice(sampleNpc, true);
+    const spec = ttsMakeSpec(base, "neutral");
+    const text = kind === "narrator" ? "The tavern door groans as you step inside. Smoke curls along the rafters." : "Welcome, traveller. Mind the step, it's older than I am.";
+    const u = new window.SpeechSynthesisUtterance(ttsApplyPronunciations(text));
+    if (spec.voice) { u.voice = spec.voice; u.lang = spec.voice.lang || "en-US"; }
+    u.pitch = spec.pitch; u.rate = spec.rate; u.volume = spec.volume;
+    synth.speak(u);
+    return true;
+}
+
+// TTS VOICE INPUT (2026-10-21). Hands-free loop: when the game is idle and
+// speech has finished, a turn chime plays, the microphone opens (browser
+// SpeechRecognition) and the words go through the same path as typed input.
+// Half-duplex: the mic never listens while the game is speaking. Spoken actions
+// run straight away (no read-back). Works where the browser has a recognition
+// service (Chrome; not Opera/Firefox); otherwise players type or use their OS
+// dictation (Windows: Win+H).
+const ttsListen = { rec: null, listening: false, starting: false, armed: true, stopped: false, idleSince: 0, timer: null,
+    networkErrors: 0, silentEnds: 0, heardSound: false, screenOnly: "", screenOnlyLog: {}, thinking: null, gotResult: false, unsupportedNoted: false, aborting: false };
+const TTS_SCREEN_ONLY_LINE = "That needs a steadier hand. You'll have to do it on the screen.";
+function ttsRecognitionCtor() { return typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition || null) : null; }
+// Opera and Brave expose SpeechRecognition but have no recognition service
+// behind it (probe 2026-10-21): treat them as unsupported.
+function ttsVoiceInputAvailable() {
+    if (!ttsRecognitionCtor()) return false;
+    const ua = typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "";
+    if (/\bOPR\/|\bOpera\b/.test(ua)) return false;
+    if (typeof navigator !== "undefined" && navigator.brave) return false;
+    return true;
+}
+function ttsNoteVoiceInputSupport() {
+    if (!ttsModeActive() || ttsMicMode() === "off" || ttsVoiceInputAvailable() || ttsListen.unsupportedNoted) return;
+    ttsListen.unsupportedNoted = true;
+    textModeGuidanceOutput("Voice input isn't available in this browser, so type your commands. Chrome supports voice input; on Windows, Win+H types what you say.");
+}
+function ttsMicMode() { return ttsModeState.micMode === "off" || ttsModeState.micMode === "push" ? ttsModeState.micMode : "handsfree"; }
+function ttsRecognitionLang() {
+    if (ttsModeState.accent) return ttsModeState.accent;
+    const nav = typeof navigator !== "undefined" ? String(navigator.language || "") : "";
+    return /^en(?:-|$)/i.test(nav) ? nav : "en-US";
+}
+// Something on screen that text and voice cannot drive right now. Returns
+// "" (none), "silent" (pause the mic quietly) or a reason key (speak once).
+function ttsScreenOnlyReason() {
+    if (typeof document !== "undefined" && typeof document.getElementById === "function") {
+        const prefs = document.getElementById("preferencesModal");
+        if (prefs && prefs.classList && prefs.classList.contains("active")) return "silent";
+    }
+    if (typeof G !== "undefined" && G.activeItemModal) return "item-window";
+    if (typeof document === "undefined" || typeof document.querySelector !== "function") return "";
+    const open = document.querySelector('[id$="Modal"].active');
+    if (open && open.id !== "preferencesModal") return "window:" + open.id;
+    return "";
+}
+function ttsGameIdle() {
+    if (!textModeState.enabled || textModeState.busy || textModeState.parsing) return false;
+    if (typeof textStoryTyping !== "undefined" && textStoryTyping.queue && textStoryTyping.queue.length) return false;
+    if (ttsSpeech.current || ttsSpeech.queue.length) return false;
+    return true;
+}
+function ttsSetMicButton() {
+    if (typeof document === "undefined") return;
+    const btn = document.getElementById("textModeMicBtn");
+    if (!btn) return;
+    const show = ttsModeActive() && ttsVoiceInputAvailable() && ttsMicMode() !== "off";
+    btn.hidden = !show;
+    if (btn.classList) btn.classList.toggle("listening", !!ttsListen.listening);
+    btn.setAttribute("aria-pressed", ttsListen.listening ? "true" : "false");
+    btn.title = ttsListen.listening ? "Listening... click to stop" : ttsListen.stopped ? "Voice input paused. Click to speak" : "Speak a command";
+}
+// Chooses among recognition alternatives: the first one the game understands
+// (a local command, a learned phrase, a voice control word or a conversation
+// option), otherwise the recogniser's top guess.
+function ttsPickAlternative(alternatives) {
+    const list = (alternatives || []).map(function (a) { return String(a || "").trim(); }).filter(Boolean);
+    if (!list.length) return "";
+    for (let i = 0; i < list.length; i++) {
+        const text = list[i];
+        const t = text.replace(/[.!?]+$/, "").toLowerCase();
+        if (TTS_REPEAT_WORDS.test(t) || /^(?:skip|quiet|silence|hush|stop talking|stop listening|pause listening|details|options|stop|cancel|help)\b/.test(t)) return text;
+        if (typeof parseTextCommandBatch === "function") {
+            try { const parsed = parseTextCommandBatch(text); if (parsed && !parsed.error && !parsed.unresolved && parsed.actions && parsed.actions.length) return text; } catch (e) {}
+        }
+        if (typeof textPhraseLookup === "function") { try { if (textPhraseLookup(text)) return text; } catch (e) {} }
+        if (ttsMatchConversationOption(text) >= 0) return text;
+    }
+    return list[0];
+}
+function ttsListenAbort(reason) {
+    if (!ttsListen.rec) return;
+    ttsListen.aborting = true;
+    try { ttsListen.rec.abort(); } catch (e) {}
+    ttsListen.rec = null; ttsListen.listening = false; ttsListen.starting = false;
+    if (reason !== "speech") ttsListen.armed = false;
+    if (typeof document !== "undefined") { const input = document.getElementById("textModeInputEl"); if (input && input.dataset && input.dataset.ttsInterim === "1") { input.value = ""; input.dataset.ttsInterim = ""; } }
+    ttsSetMicButton();
+}
+const TTS_SPOKEN_NUMBERS = { one: 1, won: 1, first: 1, two: 2, to: 2, too: 2, second: 2, three: 3, third: 3, four: 4, for: 4, fourth: 4, five: 5, fifth: 5, six: 6, sixth: 6, seven: 7, seventh: 7, eight: 8, eighth: 8, nine: 9, ninth: 9, ten: 10, tenth: 10, eleven: 11, eleventh: 11, twelve: 12, twelfth: 12 };
+// Spoken choice answers: "two", "number three", "the second one", "choose four" -> digits.
+function ttsNormalizeSpoken(text) {
+    let raw = String(text || "").trim().replace(/\.+$/, "");
+    const m = /^(?:(choose|pick|select|option|number|choice)\s+)?(?:the\s+)?(?:number\s+)?([a-z]+|\d+)(?:\s+(?:one|option|choice))?$/i.exec(raw);
+    if (m) {
+        const word = m[2].toLowerCase();
+        const n = /^\d+$/.test(word) ? parseInt(word, 10) : TTS_SPOKEN_NUMBERS[word];
+        const loneHomophone = !m[1] && /^(?:to|too|for|won)$/.test(word);
+        if (n && !loneHomophone) return m[1] && /^(choose|pick|select)$/i.test(m[1]) ? "choose " + n : String(n);
+    }
+    return raw;
+}
+// The opening prologue card (shown before play) is read aloud in TTS mode and
+// any spoken answer presses its Begin button.
+function ttsOpeningCard() {
+    if (typeof document === "undefined" || typeof document.getElementById !== "function") return null;
+    const card = document.getElementById("openingCard");
+    return card && card.classList && card.classList.contains("active") ? card : null;
+}
+function ttsReadOpeningCard(card) {
+    const part = function (id) { const el = document.getElementById(id); return el ? String(el.textContent || "").trim() : ""; };
+    const body = document.getElementById("openingBodyEl");
+    const paras = body && body.children ? Array.prototype.map.call(body.children, function (p) { return String(p.textContent || "").trim(); }).filter(Boolean) : [];
+    const head = [part("openingTitleEl"), part("openingSubEl").replace(/\s*·\s*/g, ", ")].filter(Boolean).join(". ");
+    const text = [head ? head + "." : "", paras.join("\n\n"), "Say begin when you are ready."].filter(Boolean).join("\n\n");
+    publishTextModeOutput("narration", text, { source: "text-mode", ttsOpening: true });
+}
+function ttsSubmitSpoken(text) {
+    const raw = ttsNormalizeSpoken(String(text || "").trim().slice(0, TEXT_INPUT_LIMIT));
+    if (!raw) return;
+    const opening = ttsOpeningCard();
+    if (opening) {
+        const btn = document.getElementById("openingBeginBtn");
+        const input = document.getElementById("textModeInputEl");
+        if (input) { input.value = ""; if (input.dataset) input.dataset.ttsInterim = ""; }
+        ttsListen.armed = true;
+        if (btn && typeof btn.click === "function") btn.click();
+        return;
+    }
+    if (typeof document !== "undefined") { const input = document.getElementById("textModeInputEl"); if (input) { input.value = ""; if (input.dataset) input.dataset.ttsInterim = ""; } }
+    const t = raw.replace(/[.!?]+$/, "").toLowerCase();
+    if (/^(?:stop listening|pause listening|stop the microphone|mic off)$/.test(t)) {
+        ttsListen.stopped = true; ttsListen.armed = false; ttsSetMicButton();
+        publishTextModeOutput("feedback", "Voice input paused. Click the microphone button or type listen to resume.", { systemOnly: true });
+        return;
+    }
+    textModeState.history.push(raw);
+    if (textModeState.history.length > 50) textModeState.history.shift();
+    textModeState.historyIndex = textModeState.history.length;
+    ttsListen.armed = true;
+    submitTextModeCommand(raw);
+}
+// Opens the microphone once. auto=true for the hands-free loop (chime first).
+function ttsStartListening(auto) {
+    const Rec = ttsRecognitionCtor();
+    if (!Rec || ttsListen.listening || ttsListen.starting || !ttsModeActive() || ttsMicMode() === "off") return false;
+    if (ttsIntimacyMuted()) return false;
+    ttsListen.starting = true;
+    ttsListen.gotResult = false;
+    const begin = function () {
+        if (!ttsListen.starting || !ttsModeActive()) { ttsListen.starting = false; return; }
+        let r;
+        try { r = new Rec(); } catch (e) { ttsListen.starting = false; return; }
+        ttsListen.rec = r; ttsListen.aborting = false;
+        r.lang = ttsRecognitionLang(); r.interimResults = true; r.continuous = false; r.maxAlternatives = 5;
+        ttsListen.heardSound = false;
+        r.onsoundstart = function () { if (ttsListen.rec === r) { ttsListen.heardSound = true; ttsListen.silentEnds = 0; } };
+        r.onstart = function () { if (ttsListen.rec !== r) return; ttsListen.listening = true; ttsListen.starting = false; ttsSetMicButton(); };
+        r.onresult = function (ev) {
+            if (ttsListen.rec !== r) return;
+            const results = ev.results, res = results[results.length - 1];
+            if (!res || !res[0]) return;
+            const input = typeof document !== "undefined" ? document.getElementById("textModeInputEl") : null;
+            if (!res.isFinal) { if (input) { input.value = res[0].transcript; if (input.dataset) input.dataset.ttsInterim = "1"; } return; }
+            const alts = []; for (let k = 0; k < res.length; k++) alts.push(res[k].transcript);
+            ttsListen.gotResult = true; ttsListen.networkErrors = 0;
+            ttsListen.lastAlternatives = alts.slice();
+            const chosen = ttsPickAlternative(alts);
+            ttsListen.rec = null; ttsListen.listening = false; ttsSetMicButton();
+            try { r.abort(); } catch (e) {}
+            ttsSubmitSpoken(chosen);
+        };
+        r.onerror = function (ev) {
+            if (ttsListen.rec !== r && !ttsListen.aborting) return;
+            const why = ev && ev.error || "error";
+            if (why === "aborted" || ttsListen.aborting) return;
+            ttsListen.armed = false;
+            if (why === "not-allowed" || why === "service-not-allowed") {
+                ttsListen.stopped = true;
+                publishTextModeOutput("narration", "I can't hear you. The microphone is blocked for this page.", { source: "text-mode", ttsMic: why });
+                textModeGuidanceOutput("Allow the microphone for this site in the browser, or set Voice input to Off in Preferences > TTS.");
+            } else if (why === "network") {
+                ttsListen.networkErrors++;
+                if (ttsListen.networkErrors >= 2) {
+                    ttsListen.stopped = true;
+                    publishTextModeOutput("narration", "My ears are failing me. Voice input can't reach the browser's speech service right now.", { source: "text-mode", ttsMic: why });
+                    textModeGuidanceOutput("Speech recognition needs the browser's online service (Chrome works best). Click the microphone button to try again, or type.");
+                }
+            } else if (why === "audio-capture") {
+                ttsListen.stopped = true;
+                textModeGuidanceOutput("No microphone was found. Check Preferences > TTS > Check microphone.");
+            }
+        };
+        r.onend = function () {
+            if (ttsListen.rec === r) {
+                ttsListen.rec = null; ttsListen.listening = false; ttsListen.starting = false;
+                if (!ttsListen.gotResult) {
+                    ttsListen.armed = false;
+                    if (!ttsListen.heardSound && !ttsListen.aborting) {
+                        ttsListen.silentEnds++;
+                        if (ttsListen.silentEnds >= 3 && !ttsListen.stopped) {
+                            ttsListen.stopped = true;
+                            textModeGuidanceOutput("Voice input paused: the microphone heard nothing three times. Check Preferences > TTS > Check microphone, then click the microphone button or type listen.");
+                        }
+                    }
+                }
+            }
+            const input = typeof document !== "undefined" ? document.getElementById("textModeInputEl") : null;
+            if (input && input.dataset && input.dataset.ttsInterim === "1" && !ttsListen.gotResult) { input.value = ""; input.dataset.ttsInterim = ""; }
+            ttsSetMicButton();
+        };
+        try { r.start(); } catch (e) { ttsListen.rec = null; ttsListen.starting = false; ttsSetMicButton(); }
+    };
+    if (auto) { ttsPlayCue("turn"); setTimeout(begin, 350); } else begin();
+    return true;
+}
+// Thinking tone while an AI command interpretation or reply is loading.
+function ttsThinkingActive() {
+    if (!ttsModeState.thinkingTone || !ttsModeActive()) return false;
+    return !!(textModeState.parsing || (typeof document !== "undefined" && document.getElementById("typingMsg")));
+}
+function ttsUpdateThinkingTone() {
+    const want = ttsThinkingActive();
+    const t = ttsListen.thinking;
+    if (want && !t) {
+        const state = { audio: null, timer: null };
+        if (ttsModeState.thinkingToneUrl && typeof Audio === "function") {
+            try {
+                const a = new Audio(ttsModeState.thinkingToneUrl); a.loop = true;
+                a.volume = ttsClamp(0.6 * (ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume), 0, 1);
+                const p = a.play(); state.audio = a;
+                if (p && typeof p.catch === "function") p.catch(function () { state.audio = null; });
+            } catch (e) { state.audio = null; }
+        }
+        if (!state.audio) {
+            const pulse = function () { ttsPlayThinkingPulse(); state.timer = setTimeout(pulse, 1400); };
+            pulse();
+        }
+        ttsListen.thinking = state;
+    } else if (!want && t) {
+        if (t.timer) clearTimeout(t.timer);
+        if (t.audio) { try { t.audio.pause(); } catch (e) {} }
+        ttsListen.thinking = null;
+    }
+}
+function ttsPlayThinkingPulse() {
+    try {
+        const C = typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext);
+        if (!C) return;
+        if (!ttsSpeech.audio) ttsSpeech.audio = new C();
+        const c = ttsSpeech.audio, now = c.currentTime, o = c.createOscillator(), g = c.createGain();
+        o.type = "sine"; o.frequency.value = 330;
+        const vol = 0.06 * (ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume);
+        g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(Math.max(0.0005, vol), now + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+        o.connect(g); g.connect(c.destination); o.start(now); o.stop(now + 0.75);
+    } catch (e) {}
+}
+// One step of the hands-free loop; also handles screen-only areas and the
+// thinking tone. Called on a short timer while TTS mode is active.
+function ttsListenTick() {
+    ttsUpdateThinkingTone();
+    ttsSetMicButton();
+    if (!ttsModeActive()) { if (ttsListen.rec) ttsListenAbort("mode"); return; }
+    const opening = ttsOpeningCard();
+    if (opening && !ttsListen.openingRead && ttsGameIdle()) { ttsListen.openingRead = true; ttsListen.armed = true; ttsReadOpeningCard(opening); return; }
+    if (!opening) ttsListen.openingRead = false;
+    if (!ttsVoiceInputAvailable() || ttsMicMode() === "off") return;
+    if (typeof document !== "undefined" && document.hidden) { if (ttsListen.listening) ttsListenAbort("hidden"); return; }
+    const screen = ttsScreenOnlyReason();
+    if (screen) {
+        if (ttsListen.listening) ttsListenAbort("screen");
+        if (screen !== "silent" && ttsListen.screenOnly !== screen && ttsGameIdle()) {
+            ttsListen.screenOnly = screen;
+            ttsListen.screenOnlyLog[screen] = (ttsListen.screenOnlyLog[screen] || 0) + 1;
+            if (typeof console !== "undefined" && console.info) console.info("[TTS] Screen-only area reached:", screen, ttsListen.screenOnlyLog[screen]);
+            publishTextModeOutput("narration", TTS_SCREEN_ONLY_LINE, { source: "text-mode", ttsScreenOnly: screen });
+        }
+        ttsListen.idleSince = 0;
+        return;
+    }
+    if (ttsListen.screenOnly) { ttsListen.screenOnly = ""; ttsListen.armed = true; }
+    if (ttsMicMode() !== "handsfree" || ttsListen.stopped || !ttsListen.armed || ttsListen.listening || ttsListen.starting || ttsIntimacyMuted()) { ttsListen.idleSince = 0; return; }
+    if (!ttsGameIdle()) { ttsListen.idleSince = 0; return; }
+    const now = Date.now();
+    if (!ttsListen.idleSince) { ttsListen.idleSince = now; return; }
+    if (now - ttsListen.idleSince < 350) return;
+    ttsListen.idleSince = 0;
+    ttsStartListening(true);
+}
+// Keeps the tick running while TTS mode is active in a real page.
+function ttsListenEnsureLoop() {
+    if (ttsListen.timer || typeof document === "undefined" || !document.body) return;
+    const step = function () {
+        ttsListen.timer = null;
+        try { ttsListenTick(); } catch (e) {}
+        if (ttsModeActive()) { ttsListen.timer = setTimeout(step, 400); }
+        else { ttsUpdateThinkingTone(); ttsSetMicButton(); }
+    };
+    ttsListen.timer = setTimeout(step, 400);
+}
+// Mic button in the text-mode dock, and typed "listen".
+function ttsMicButton() {
+    if (ttsListen.listening || ttsListen.starting) { ttsListenAbort("button"); return; }
+    ttsListen.stopped = false; ttsListen.armed = true;
+    if (ttsSpeech.current || ttsSpeech.queue.length) ttsSpeechStop("mic");
+    ttsStartListening(false);
+    ttsListenEnsureLoop();
+}
+
+// TTS OUTPUT PLUMBING (2026-10-21). Adds ordering, scene and speaker metadata to
+// cyoa:output events for the future speech layer. Presentation only: no game
+// state is read beyond public scene identity, and nothing here changes rules.
+// - eventId/seq: session-only ordering (not durable, not entity IDs).
+// - scene: opaque token that changes on load/new game, room change and
+//   combat start/end, so stale speech can be dropped.
+// - urgent: reason string on the first story/decision event after an urgent
+//   game moment (combat-start, player-hurt, player-down, companion-down).
+// - speakerRole/speakerInfo: narrator/npc/player, and public species/gender
+//   plus a session voice key for NPC dialogue.
+const textModeOutputMeta = { seq: 0, urgent: null, gens: typeof WeakMap === "function" ? new WeakMap() : null, nextGen: 0 };
+function textModeObjectGen(obj) {
+    if (!obj || typeof obj !== "object" || !textModeOutputMeta.gens) return 0;
+    let gen = textModeOutputMeta.gens.get(obj);
+    if (!gen) { gen = ++textModeOutputMeta.nextGen; textModeOutputMeta.gens.set(obj, gen); }
+    return gen;
+}
+function textModeSceneToken() {
+    const player = typeof G !== "undefined" ? G.player : null;
+    const combat = typeof G !== "undefined" ? G.combatEncounter : null;
+    return "p" + textModeObjectGen(player) + ".m" + (player && player.moveSeq || 0) + ".c" + (combat && !combat.ended ? textModeObjectGen(combat) : 0);
+}
+function markTextModeUrgent(reason) {
+    if (!textModeOutputMeta.urgent) textModeOutputMeta.urgent = String(reason || "urgent");
+}
+function textModeFindSpeaker(name) {
+    if (typeof G === "undefined" || !name) return null;
+    const key = String(name).trim().toLowerCase();
+    const pool = [G.activeNPC].concat(G.activeRoom && Array.isArray(G.activeRoom.creatures) ? G.activeRoom.creatures : [], Array.isArray(G.partyMembers) ? G.partyMembers : [], Array.isArray(G.sessionFollowers) ? G.sessionFollowers : []);
+    for (let i = 0; i < pool.length; i++) {
+        const npc = pool[i];
+        if (npc && typeof npc === "object" && String(npc.name || "").trim().toLowerCase() === key) return npc;
+    }
+    return null;
+}
+function textModeAnnotateOutput(event) {
+    event.seq = ++textModeOutputMeta.seq;
+    event.eventId = "o" + event.seq;
+    event.scene = textModeSceneToken();
+    if (event.kind === "command") textModeOutputMeta.urgent = null;
+    else if (textModeOutputMeta.urgent && (event.presentation === "story" || event.presentation === "decision")) {
+        event.urgent = textModeOutputMeta.urgent;
+        textModeOutputMeta.urgent = null;
+    }
+    if (event.kind === "dialogue" || event.kind === "narration") {
+        const speaker = String(event.speaker || "").trim();
+        event.speakerRole = event.side === "player" ? "player" : event.kind === "narration" || !speaker || speaker.toLowerCase() === "narrator" ? "narrator" : "npc";
+        if (event.speakerRole === "npc") {
+            const npc = textModeFindSpeaker(speaker);
+            event.speakerInfo = npc ? { species: String(npc.species || ""), gender: String(npc.gender || ""), voiceKey: "v" + textModeObjectGen(npc) } : { species: "", gender: "", voiceKey: "" };
+        }
+    }
+}
+
 function publishTextModeOutput(kind, text, details, display) {
     const event = Object.assign({ kind: kind, text: String(text || ""), source: "text-mode" }, details || {});
     if (!event.text) return;
@@ -971,21 +2671,32 @@ function publishTextModeOutput(kind, text, details, display) {
     textPhraseObserve(event);
     textModeImmersiveOutput(event);
     textModeSeparateGuidance(event);
+    ttsAdjustEvent(event);
     event.presentation = display === false ? "supplement" : kind === "command" || event.systemOnly ? "system" : kind === "choices" ? "decision" : "story";
+    textModeAnnotateOutput(event);
     textModeState.events.push(event);
     if (textModeState.events.length > 100) textModeState.events.shift();
-    const objectNames=display!==false && textModeState.enabled && !event.systemOnly && kind!=="command" ? textModeObjectNames(event) : [];
-    if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") window.dispatchEvent(new CustomEvent("cyoa:output", { detail: event }));
-    if (display === false || !textModeState.enabled) return;
     const visible = textModeDisplayWords(event.text);
-    if (kind === "command") textModeGuidanceOutput("");
-    if (event.guidance) textModeGuidanceOutput(textModeDisplayWords(event.guidance), textModeState.helpActive);
-    if (/^(command|feedback|choices)$/.test(kind)) textModeSystemOutput(event, textModeState.helpActive ? "Help is shown below the input." : visible);
-    if (kind === "command") return;
     let story = event.narration || visible;
     if (kind === "choices" && !event.narration) {
         story = visible.split("\n").filter(function (line) { return !/^(?:Type|Use|Answer|Choose a number)\b/i.test(line.trim()); }).join("\n");
     }
+    if (ttsModeActive() && display !== false && !event.systemOnly && kind !== "command") {
+        const tts = ttsStoryForEvent(event, story);
+        story = tts.story;
+        event.spoken = tts.story;
+        if (event.speakerRole !== "player") ttsModeState.storySinceCommand = true;
+        if (tts.list.length) event.guidance = [event.guidance, tts.list.join("\n")].filter(Boolean).join("\n");
+        ttsRemember(event);
+    }
+    const objectNames=display!==false && textModeState.enabled && !event.systemOnly && kind!=="command" ? textModeObjectNames(event) : [];
+    if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") window.dispatchEvent(new CustomEvent("cyoa:output", { detail: event }));
+    if (display !== false && event.spoken) { const speech = ttsSpeechEnqueue(event); if (speech) textModeTrackTask(speech); }
+    if (display === false || !textModeState.enabled) return;
+    if (kind === "command") textModeGuidanceOutput("");
+    if (event.guidance) textModeGuidanceOutput(textModeDisplayWords(event.guidance), textModeState.helpActive);
+    if (/^(command|feedback|choices)$/.test(kind)) textModeSystemOutput(event, textModeState.helpActive ? "Help is shown below the input." : visible);
+    if (kind === "command") return;
     if (!event.systemOnly) textModeStoryOutput(event, story, objectNames);
 }
 
@@ -1074,6 +2785,8 @@ function textModeInspectNPC(action) {
 
 function textModeHelpContent(topic, show) {
     let key = textCommandNormalize(topic).replace(/^(?:to|use)\s+/, "");
+    if (show) { const tools = worldToolShow(key); if (tools) return tools; }
+    if (show) { const objects = textWorldObjectShow(key); if (objects) return objects; }
     if (/^(phrases|learned phrases)$/.test(key)) return executeTextPhraseCommand({args:{action:"list"}});
     if (/^(available\s+)?(verbs|actions|commands)$/.test(key)) key = "";
     if (textModeInCombat() && /^(cast|magic)$/.test(key)) return textCombatShow("spells");
@@ -1118,6 +2831,8 @@ function textModeHelpContent(topic, show) {
     const entries = TEXT_COMMANDS.filter(function (def) {
         if (ids.indexOf(def.id) < 0 && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !/^(back|cancel)$/.test(def.id)) return false;
         if (def.social && !socialActionAvailable()) return false;
+        if (def.id === "object" && !worldObjectEntries().length) return false;
+        if (def.id === "tool" && !worldToolAvailable()) return false;
         if (def.casting && !castingAvailable()) return false;
         if (def.synergy && !synergyTextAvailable()) return false;
         if (def.travel && !G.guiding && (!G.activeNPC || travelNPCBlock(G.activeNPC, "directions"))) return false;
@@ -1178,6 +2893,42 @@ function textModeSameScene(scene) {
         scene.foes.length === foes.length && scene.foes.every(function (foe) { return foes.indexOf(foe) >= 0; });
 }
 
+// Text mode: closing exits line for room descriptions, e.g. "You see a door to
+// the south. You see an archway to the west." Text mode has no compass, so the
+// ways out are said in words (and read aloud in TTS mode). Locks are not
+// revealed; collapsed passages are, since the rubble is visible. skipDirs lists
+// directions already described (Look around's wall paragraph).
+const TEXT_EXIT_ORDER = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "U", "D"];
+const TEXT_EXIT_WORDS = { N: "north", NE: "northeast", E: "east", SE: "southeast", S: "south", SW: "southwest", W: "west", NW: "northwest" };
+function textModeExitLine(room, skipDirs) {
+    const exits = room && room.exits || {};
+    const skip = skipDirs || [];
+    const parts = [];
+    // Indoors (building rooms, walled dungeon/ruin chambers) a plain exit is an
+    // opening; outdoors and in caves it is a path.
+    const inBuilding = !!room && (!!room.buildingId || room.isBuildingRoom === true || room.isClusterRoom === true) && room.isEntrance !== true;
+    const indoor = inBuilding || (!!room && typeof isCollapseZone === "function" && isCollapseZone(room));
+    TEXT_EXIT_ORDER.forEach(function (d) {
+        if (!exits[d] || skip.indexOf(d) >= 0) return;
+        const vertical = d === "U" || d === "D";
+        const where = vertical ? (d === "U" ? "leading up" : "leading down") : "to the " + TEXT_EXIT_WORDS[d];
+        const collapsed = typeof isExitCollapsed === "function" && isExitCollapsed(room, d);
+        if (collapsed) { parts.push("You see rubble blocking the way " + (vertical ? (d === "U" ? "up" : "down") : "to the " + TEXT_EXIT_WORDS[d]) + "."); return; }
+        const kind = typeof getExitDoor === "function" ? getExitDoor(room, d) : null;
+        if (kind === "door") parts.push("You see a door " + where + ".");
+        else if (kind === "arch") parts.push("You see an archway " + where + ".");
+        else if (vertical) parts.push("You see a way " + (d === "U" ? "up" : "down") + ".");
+        else parts.push((indoor ? "You see an opening " : "You see a path ") + where + ".");
+    });
+    return parts.join(" ");
+}
+// Appends the exits line to a room description for text mode only.
+function textModeWithExits(text, room, skipDirs) {
+    const line = room ? textModeExitLine(room, skipDirs) : "";
+    const base = String(text || "").replace(/\s+$/, "");
+    return line ? (base ? base + "\n\n" + line : line) : base;
+}
+
 function textModeRoomBlock() {
     if (G.activeNPC) return "You are engaged with someone. Type leave before acting in the room.";
     if (G.activeObject) return "Close the current object interaction before acting in the room.";
@@ -1236,6 +2987,12 @@ async function executeTextCommand(action) {
     if (combatBlock) return textModeResult("blocked", combatBlock);
     const physicalIntent = structuralLegacyIntent(action);
     if (physicalIntent) return executeTextStructuralTool(physicalIntent);
+    if (action.verb === "tool") return executeTextWorldToolCommand(action);
+    if (action.verb === "object") return executeTextObjectCommand(action);
+    if (action.verb === "take" && !args.source && !action.itemRef && !textLootTakeHasSource(action)) {
+        const objects = worldObjectMatches(args.item || "").filter(function (entry) { return entry.kind === "fixture"; });
+        if (objects.length) return executeTextObjectCommand({ verb: "object", args: { action: "take", target: args.item } });
+    }
     if (def.social) return executeTextSocialCommand(action);
     if (def.casting) return executeTextCastingCommand(action);
     if (def.nsfw && action.verb.match(/^(touch|grab|hug|grope)$/)) return executeTextTouchCommand(action);
@@ -1285,6 +3042,7 @@ async function executeTextCommand(action) {
             return textModeAsk(action, "direction", dirs, "Which direction?");
         }
         if (!room.exits || !room.exits[dir]) return textModeResult("blocked", "There is no exit " + dir + " here.");
+        if (getDoorObstruction(room, dir)) return worldObjectResult("blocked", "A brace holds the doorway shut. You cannot pass through it.", { doorObstruction: { direction: dir, blocked: true } });
         if (isExitLocked(room, dir)) return textModeResult("blocked", "The way " + dir + " is locked. Use show doors, unlock, pick or force <direction> door.");
         if (isExitCollapsed(room, dir)) return textModeResult("blocked", "The way " + dir + " is blocked by rubble.");
         if (action.verb === "glance") {
@@ -1321,7 +3079,7 @@ async function executeTextCommand(action) {
         if (G.activeNPC !== npc) selectNPC(npc);
         if (G.activeNPC !== npc || G.activeNPCMode === "combat") return textModeResult("blocked", "You could not start that conversation.");
         chooseNPCAction("talk");
-        textModeResult("completed", 'Talking with ' + textModeNPCLabel(npc) + '. Use say "Hello" to speak, options for topics, or leave to step away.', { systemOnly: true });
+        textModeResult("completed", 'Talking with ' + textModeNPCLabel(npc) + '. Use say "Hello" to speak, options for topics, or leave to step away.', { systemOnly: true, ttsNarration: ttsTalkStartLine(npc) });
         return { status: "completed" };
     }
     if (action.verb === "options") return textModeInCombat() ? textCombatShow("") : G.activeNPCMode === "trade" ? textTradeList("buy") : textModeListOptions();
@@ -1435,6 +3193,8 @@ async function submitTextModeCommand(raw) {
     const input = String(raw || "").trim();
     if (!input || !textModeState.enabled) return;
     publishTextModeOutput("command", "> " + input);
+    if (typeof ttsListen !== "undefined" && !ttsListen.stopped) ttsListen.armed = true;
+    if (ttsControlCommand(input)) return;
     const single = parseTextCommand(input);
     if (single && (single.verb === "stop" || single.verb === "cancel" && (textModeState.busy || textModeState.parsing))) { stopTextCommands(true); return; }
     if (single && /^(help|show)$/.test(single.verb)) { textModeHelp(single.args.topic, single.verb === "show" || /^help(?:\s|$)/i.test(input)); return; }
@@ -1456,6 +3216,9 @@ async function submitTextModeCommand(raw) {
         else if (pending.kind === "ability") pending.action.abilityId = pick.id;
         else if (pending.kind === "abilityTarget") pending.action.targetChoiceId = pick.id;
         else if (pending.kind === "item") pending.action.itemRef = pick;
+        else if (pending.kind === "worldObject") pending.action.objectRef = pick;
+        else if (pending.kind === "worldToolTarget") pending.action.toolTargetRef = pick;
+        else if (pending.kind === "worldToolItem") pending.action.toolItemRef = pick;
         else if (pending.kind === "tradeItem") pending.action.tradeRef = pick;
         else if (pending.kind === "lootSource") pending.action.sourceRef = pick;
         else if (pending.kind === "lootItem") pending.action.lootItemRef = pick;
@@ -1484,7 +3247,9 @@ async function submitTextModeCommand(raw) {
     let learnedFromAI = false;
     const learned = local.unresolved ? textPhraseLookup(input) : null;
     if (learned) actions = learned;
-    if (local.unresolved && !learned) {
+    const ttsChoice = local.unresolved && !learned ? ttsConversationChoice(input) : null;
+    if (ttsChoice) actions = [ttsChoice];
+    if (local.unresolved && !learned && !ttsChoice) {
         if (!aiAvailable()) { textModeResult("blocked", 'That wording is not recognized locally, and AI command help is unavailable. Nothing was attempted. Check Use AI in Preferences and the AI connection, or type help for supported commands.', { systemOnly: true, commandFailure: "ai-unavailable" }); return; }
         textModeState.parsing = true;
         renderTextModeStatus("Interpreting your command...");
@@ -1533,6 +3298,9 @@ function syncTextModeView() {
 }
 
 function setTextMode(enabled) {
+    if (!enabled && typeof ttsSpeechStop === "function") ttsSpeechStop("mode");
+    if (!enabled && typeof ttsListenAbort === "function") ttsListenAbort("mode");
+    if (enabled && typeof ttsListenEnsureLoop === "function") setTimeout(function () { ttsListenEnsureLoop(); ttsNoteVoiceInputSupport(); }, 0);
     if (enabled && (!G.player || !G.activeRoom)) return;
     textModeState.enabled = !!enabled;
     if (enabled) {
@@ -1546,7 +3314,10 @@ function setTextMode(enabled) {
         textModeState.sessionPlayer = G.player;
         syncTextModeView();
         const current = document.getElementById("narrationEl");
-        if (!textModeState.events.length && current && current.textContent.trim()) publishTextModeOutput("narration", current.textContent, { source: "engine", snapshot: true });
+        if (!textModeState.events.length && current && current.textContent.trim()) {
+            const roomView = !G.activeNPC && !G.activeObject && G.activeRoom;
+            publishTextModeOutput("narration", roomView ? textModeWithExits(current.textContent, G.activeRoom) : current.textContent, { source: "engine", snapshot: true, roomView: !!roomView });
+        }
         if (!textModeState.events.length) textModeResult("completed", 'Text mode ready. Type help for assistance. Use say "..." for dialogue.');
         focusTextModeInput();
     } else {
@@ -1586,6 +3357,7 @@ function initializeTextMode() {
     });
     input.addEventListener("keydown", function (event) {
         event.stopPropagation();
+        if (typeof ttsListen !== "undefined" && (ttsListen.listening || ttsListen.starting) && event.key && event.key.length === 1) ttsListenAbort("typing");
         if (event.isComposing && event.key === "Enter") { event.preventDefault(); return; }
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
         event.preventDefault();
@@ -2008,6 +3780,8 @@ async function executeTextInventoryCommand(action) {
     }
     if (action.verb === "equip") {
         if (!getDirectEquipmentSlot(item)) return textModeResult("blocked", name + " cannot be equipped.");
+        const physicalBlock = worldObjectEquipBlock(item, entry.list);
+        if (physicalBlock) return textModeResult("blocked", physicalBlock);
         return textInventoryRefresh(equipPlayerItemFromSource(item, entry.list));
     }
     if (action.verb === "unequip") {
@@ -2026,7 +3800,8 @@ async function executeTextInventoryCommand(action) {
     if (action.verb === "take") {
         // The engine handles coins, wearable packs, overflow refusal and persistence.
         const scene = textModeScene();
-        takeRoomObject(item);
+        const outcome = takeRoomObject(item);
+        if (outcome && outcome.status) return outcome;
         if (scene.room.items.indexOf(item) >= 0) return textModeResult("blocked", "You could not carry " + name + ". Check your pack space.");
         return textModeResult("completed", "You pick up " + name + ".");
     }
@@ -2625,6 +4400,7 @@ function textFixtureActions(fixture) {
     });
     if (typeof environmentFixtureActions === "function") actions.push.apply(actions, environmentFixtureActions(fixture));
     if (typeof materialFixtureActions === "function") actions.push.apply(actions, materialFixtureActions(fixture));
+    if (typeof worldObjectFixtureActions === "function") actions.push.apply(actions, worldObjectFixtureActions(fixture));
     return actions;
 }
 
@@ -2651,7 +4427,7 @@ function textFixtureDescribe(entry) {
     if (noticeIsBoard(fixture)) lines.push("notices at " + entry.label + "; take paper from " + entry.label + "; take pencil from " + entry.label + "; jobs — work postings and bounties");
     if (fixture.id === "job-board") lines.push("jobs — view job postings and bounties");
     if (isAlchemyTableFixture(fixture)) lines.push("alchemy — recipes, preparation and experiments; show ingredients; show bowl");
-    return textModeResult("completed", entry.label + "\n" + description + (lines.length ? "\nActions:\n" + lines.join("\n") : "\nNo typed fixture action is available here yet."), { fixture: { name: entry.label, description: description, actions: actions.map(function (action) { return { verb: action.id, command: textFixtureCommand(action, entry), blockedReason: action.reason, note: action.note || "" }; }) } });
+    return textModeResult("completed", entry.label + "\n" + description + (lines.length ? "\nActions:\n" + lines.join("\n") : "\nNo typed fixture action is available here yet."), { narration: entry.label + "\n" + description, guidance: lines.length ? "Actions:\n" + lines.join("\n") : "No typed fixture action is available here yet.", fixture: { name: entry.label, description: description, actions: actions.map(function (action) { return { verb: action.id, command: textFixtureCommand(action, entry), blockedReason: action.reason, note: action.note || "" }; }) } });
 }
 
 function textExplorationShow(topic) {
@@ -2742,6 +4518,7 @@ async function executeTextExplorationCommand(action) {
     const selected = action.fixtureRoute ? choices.find(function (value) { return value.route && value.route.direction === action.fixtureRoute.route.direction && value.route.target === action.fixtureRoute.route.target; }) : choices[0];
     if (!selected) return textModeResult("blocked", "That route changed. Repeat the command.");
     if (selected.reason) return textModeResult("blocked", selected.reason);
+    if (selected.objectAction) return selected.run();
     if (verb === "fill") {
         const fillable = getFillableEmptyEntries().map(function (value) { return { ...value, label: textInventoryItemName(value.item) }; });
         const matches = action.fillRef ? fillable.filter(function (value) { return value.key === action.fillRef.key && value.item === action.fillRef.item && value.totalQuantity === action.fillRef.totalQuantity; }) : textLootMatch(args.item || "", fillable, function (value) { return value.label; });
@@ -2862,7 +4639,7 @@ function sharedChoiceResult(status, message) {
 }
 
 function showSharedChoiceMenu(menu) {
-    return textModeResult("needs_input", menu.title + "\n" + menu.options.map(function (choice, index) { return (index + 1) + ". " + choice.label + (choice.disabled ? " — unavailable" + (choice.reason ? ": " + choice.reason : "") : ""); }).join("\n") + "\nType choose <number> (or the number alone). Use back or cancel where available. Later commands stay paused.", { menu: { id: menu.id, kind: menu.kind }, choices: menu.options.map(function (choice, index) { return { number: index + 1, label: choice.label, response: "choose " + (index + 1), disabled: choice.disabled }; }) });
+    return textModeResult("needs_input", menu.title + "\n" + menu.options.map(function (choice, index) { return (index + 1) + ". " + choice.label + (choice.disabled ? " — unavailable" + (choice.reason ? ": " + choice.reason : "") : ""); }).join("\n") + "\nType choose <number> (or the number alone). Use back or cancel where available. Later commands stay paused.", { systemOnly: menu.kind === "world-tools", menu: { id: menu.id, kind: menu.kind }, choices: menu.options.map(function (choice, index) { return { number: index + 1, label: choice.label, response: "choose " + (index + 1), disabled: choice.disabled }; }) });
 }
 
 async function runSharedChoice(menu, choice) {
@@ -2871,6 +4648,8 @@ async function runSharedChoice(menu, choice) {
     if (choice.meta.target && (!isVisibleEntity(choice.meta.target) || getLootMembersInRoom(G.activeRoom).indexOf(choice.meta.target) < 0)) return sharedChoiceResult("blocked", "That companion is no longer available. Type options to refresh the choices.");
     clearSharedChoiceMenu(menu); // consume before running: no double allocation
     const result = await choice.run();
+    // Keep an action's published outcome; a queue pause is not a presentation failure.
+    if (result && result.outputPublished) return result;
     if (result && result.status === "needs_input" && (/^(notice|material|shrine)-/.test(menu.kind) || menu.kind === "structure-magic" || menu.kind === "gift" || /^(nectar|travel|synergy|casting)-/.test(menu.kind))) return result;
     if (result && result.status && result.status !== "completed") return sharedChoiceResult(result.status, result.message || "The choice could not finish. Pending commands are paused.");
     if (result && result.accepted === false) return sharedChoiceResult("blocked", "The gift was refused; you keep it. Pending commands are paused.");
@@ -3008,6 +4787,7 @@ function textSharedChoiceCanHandle(input, action) {
     if (menu && /^goods-/.test(menu.kind) && action && action.verb === "leave") return true;
     if (action && action.verb === "options") return !!menu || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot();
     if (!menu) return false;
+    if (menu.kind === "world-tools" && (action && /^(tool|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^casting-/.test(menu.kind) && (action && /^(casting|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^synergy-/.test(menu.kind) && (action && /^(synergy|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^travel-/.test(menu.kind) && (action && /^(travel|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
@@ -3044,6 +4824,12 @@ async function textRunSharedChoice(menu, choice) {
 
 async function textSharedChoiceInput(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && menu.kind === "world-tools" && (action && /^(tool|leave|back|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) {
+        if ((splitTextCommands(input || "").parts || []).length > 1) textModeResult("needs_input", "Answer one tool choice at a time.", { systemOnly: true });
+        else if (action && /^(leave|back|cancel)$/.test(action.verb)) { clearSharedChoiceMenu(menu); G.activeNPCMode = null; setExitGridVisible(true); textModeResult("completed", "You step away from the tools.", { systemOnly: true }); }
+        else showSharedChoiceMenu(menu);
+        return true;
+    }
     if (menu && /^casting-/.test(menu.kind) && (action && /^(casting|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textCastingMenuInput(menu, action, input); return true; }
     if (menu && /^synergy-/.test(menu.kind) && (action && /^(synergy|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textSynergyMenuInput(menu, action, input); return true; }
     if (menu && /^travel-/.test(menu.kind) && (action && /^(travel|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textTravelMenuInput(menu, action, input); return true; }
@@ -6004,9 +7790,12 @@ function runStructuralAction(spec) {
     if (textModeState.enabled && G.player === player && G.activeRoom === room && !G.activeNPC && !G.activeObject && !G.activeItemModal && !G.combatEncounter && !hasPendingPartyLoot() && !sharedChoiceState.menu && !roomHasActiveHostile(room) && typeof renderExits === "function") renderExits(room.exits);
     const result = Object.assign(environmentPublicSpec(spec), { stage: interrupted ? "interrupted" : "result", direction: entry.dir, turns: getCurrentStoryTurn() - start, manaCost: ctx.manaSpent });
     delete result.blockedReason; delete result.openingMayTakeTurn;
-    const text = ctx.lines.join(" ") + (interrupted ? " The situation changed. Spent mana/time and effects already applied are preserved; later commands are paused." : "");
-    publishTextModeOutput("structure", text.trim() || "The structural action resolved.", { structure: result });
-    return { status: interrupted ? "interrupted" : "completed" };
+    const text = ctx.lines.join(" ");
+    publishTextModeOutput("structure", text.trim() || (interrupted ? "Your attempt is cut short." : "The structural action resolved."), {
+        structure: result,
+        guidance: interrupted && textModeState.enabled ? "Pending commands are paused. Spent mana/time and effects already applied are preserved." : ""
+    }, textModeState.enabled);
+    return { status: interrupted ? "interrupted" : "completed", outputPublished: true };
 }
 function structuralSpecs(entry) {
     const out = environmentSpells().map(function (ability) { return structuralSpec("cast", entry, ability); });
@@ -6418,9 +8207,12 @@ function runStructuralTool(spec) {
     }
     const result = Object.assign(structuralToolPublic(spec), { stage: changed ? "interrupted" : "result", staminaCost: ctx.staminaSpent, turns: getCurrentStoryTurn() - start, moved: !!expectedMove });
     delete result.blockedReason;
-    const message = ctx.lines.filter(function (line) { return typeof isCombatDebugLine !== "function" || !isCombatDebugLine(line); }).join(" ") || (changed ? "The structural attempt was interrupted before its remaining effects." : spec.verb === "push" ? moved ? "You pass through the burning doorway." : "You did not pass through the doorway." : "The structural attempt resolved.");
-    publishTextModeOutput("structure", message + (pause ? " Later commands are paused; completed effects and spent costs are preserved." : ""), { structure: result });
-    return { status: changed || expectedMove || decision ? "interrupted" : incomplete ? "blocked" : pause ? "interrupted" : "completed" };
+    const message = ctx.lines.filter(function (line) { return typeof isCombatDebugLine !== "function" || !isCombatDebugLine(line); }).join(" ") || (changed ? "Your attempt is cut short." : spec.verb === "push" ? moved ? "You pass through the burning doorway." : "You did not pass through the doorway." : "The structural attempt resolved.");
+    publishTextModeOutput("structure", message, {
+        structure: result,
+        guidance: pause && textModeState.enabled ? "Pending commands are paused; completed effects and spent costs are preserved." : ""
+    }, textModeState.enabled);
+    return { status: changed || expectedMove || decision ? "interrupted" : incomplete ? "blocked" : pause ? "interrupted" : "completed", outputPublished: true };
 }
 function parseTextStructuralTool(raw) {
     if (/^(?:rescue|pray for (?:rescue|deliverance))$/i.test(raw)) return { verb: "structure", args: { action: "rescue" } };
@@ -7804,8 +9596,15 @@ function textModeObjectParts(text,names) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-19-023
-// Latest: Shared power/heal targets, player and companion gear casts, travel spells and guarded native results.
+// Core Engine Version: 2026-10-21-007
+// Latest: Text-mode exits line says "a path" outdoors and in caves, "an opening" indoors.
+// Previous: Text mode room descriptions end with the ways out ("You see a door to the south. You see an archway to the west.").
+// Previous: TTS voice input: hands-free mic loop (Chrome), push-to-talk button, alternative picking, spoken numbers, stop/listen, prologue read aloud, screen-only lines, thinking tone, mic check; combat attribution removed from spoken text.
+// Previous: Preferences TTS tab: saved voice settings (narrator, accent, speed, volume, NPC voices, variety, pause, intimate scenes, cues with custom URLs, pronunciation list, per-species voices, reset NPC voices).
+// Previous: TTS speech queue and browser voices (narrator + saved NPC voices, tones, urgent cut-in, skip/quiet, intimacy mute); queued actions wait for speech.
+// Previous: TTS mode speech-ready text (preference, clean story text, spoken failures/conversation start, loose spoken option matching, repeat/details, AI read-aloud replies with voiceTone).
+// Previous: TTS plumbing on cyoa:output events (eventId/seq, scene token, urgent marks, speaker role/info). No gameplay change.
+// Previous: Shared power/heal targets, player and companion gear casts, travel spells and guarded native results.
 // Previous: Shared synergy experiment reviews, notebook/naming, memory/replacement and self-technique choices with guarded async completion.
 // Previous: Shared directions, guide questions and paced following, plus guarded weekly rental reviews.
 // Previous: Shared nectar gift choices, native dose results and text coverage audit.
@@ -7846,7 +9645,7 @@ function textModeObjectParts(text,names) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-19-020";
+window.__ENGINE_CORE_VERSION = "2026-10-21-007";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -12361,6 +14160,7 @@ window.advanceStoryTurn = function(steps = 1) {
     if (typeof tickWorldPoison === "function") tickWorldPoison();
     if (typeof tickWorldPotions === "function") tickWorldPotions();
     if (typeof tickWorldBleeding === "function") tickWorldBleeding();
+    if (typeof tickSettlementWatch === "function") tickSettlementWatch();
     if (typeof tickNPCOpportunism === "function") tickNPCOpportunism();
     if (typeof tickAmbientNPCActivity === "function") tickAmbientNPCActivity();
     if (typeof tickNPCScheduleActiveRoom === "function") tickNPCScheduleActiveRoom();
@@ -15457,6 +17257,7 @@ async function resumeSavedGame() {
         repairRoomMapExits();
         if (typeof ensureTownClassTrainers === "function") ensureTownClassTrainers();
         ensureTownPortalRoom();
+        if (typeof ensureSettlementWatch === "function") ensureSettlementWatch();
         G.activeRoom = G.roomMap[G.player.coords] || null;
         syncPortalChamberWaygates(findPortalChamberRoom(G.roomMap));
         G.activeNPC = null;
@@ -15991,6 +17792,7 @@ function assignGeneratedExits(room, zoneName, options) {
 function assignGeneratedNPCs(room, zoneName) {
     if (!room) return [];
     room.creatures = spawnNPCsForRoom(room, zoneName);
+    ensureSettlementGuardPost(room);
     return room.creatures;
 }
 
@@ -16296,6 +18098,7 @@ function populatePlannedRooms(rooms) {
             }
         });
         if (rooms.length && rooms[0].zone === "Town" && typeof ensureTownClassTrainers === "function") ensureTownClassTrainers();
+        ensureSettlementWatch();
     } finally {
         PLANNED_GENERATION_ACTIVE = false;
     }
@@ -18063,6 +19866,7 @@ function setExitLockState(room, direction, state, extra) {
     const dir = normalizeDirection(direction);
     const lock = getExitLock(room, dir);
     if (!lock) return false;
+    if (extra && (extra.forced || extra.burnt || extra.shattered) && typeof clearDoorObstruction === "function") clearDoorObstruction(room, dir);
     lock.state = state;
     if (extra) Object.assign(lock, extra);
     const other = room.exits && G.roomMap ? G.roomMap[room.exits[dir]] : null;
@@ -18731,6 +20535,11 @@ function movePlayer(direction) {
     const dir = normalizeDirection(direction);
     const room = G.activeRoom;
     if (!room || !dir) return;
+    if (typeof getDoorObstruction === "function" && getDoorObstruction(room, dir)) {
+        worldObjectResult("blocked", "A brace holds the doorway shut. You cannot pass through it.", { doorObstruction: { direction: dir, blocked: true } });
+        if (!textModeState.enabled) openWorldToolMenu((typeof COLLAPSE_DIR_WORDS !== "undefined" && COLLAPSE_DIR_WORDS[dir] || dir) + " door");
+        return;
+    }
     const bodyMoveBlock = getBodyMoveBlockReason();
     if (bodyMoveBlock) {
         setNarration(bodyMoveBlock);
@@ -20920,6 +22729,21 @@ function getDrunkTier(entity) {
 
 function getDrunkConversationSig(npc) {
     return getDrunkTier(npc) + "/" + getDrunkTier(G.player);
+}
+
+// Drunk tiers plus TTS mode: replies written for reading are not reused when
+// they must be read aloud, and vice versa (stored as drunkSig on caches).
+function getConversationStyleSig(npc) {
+    return getDrunkConversationSig(npc) + (typeof ttsModeActive === "function" && ttsModeActive() ? "/tts" : "");
+}
+
+// TTS mode: tell the AI the reply will be read aloud, and ask for a voice tone.
+function getTTSSpeechGuideLines() {
+    if (typeof ttsModeActive !== "function" || !ttsModeActive()) return [];
+    return [
+        "READ ALOUD: this reply will be spoken by a text-to-speech voice. Keep the angle-bracket speech format. Do not use ellipses, asterisks, emoji, dashes for pauses, or symbols; use commas and full stops for pauses. Write any action as one short plain sentence outside the brackets. If you slur or hiccup, write the hiccup as a plain action sentence (for example 'She hiccups.').",
+        "Also include a 'voiceTone' string field with the tone of your spoken words: one of neutral, warm, angry, afraid, sly, sad, tired, excited, hushed."
+    ];
 }
 
 function getDrunkSpeechGuideLines(npc) {
@@ -23375,6 +25199,7 @@ function moveScheduledNPC(npc, fromRoom, destCoords, target) {
 // Returns "moved" (took a step), "stay" (on target, or waiting for its turn:
 // do not wander), or null (no schedule applies: fall back to the old wander).
 function stepNPCSchedule(npc, room) {
+    if (npc && npc._guardDuty) return "stay";
     if (!canNPCFollowSchedule(npc)) return null;
     const target = getNPCScheduleTarget(npc, room);
     if (!target) return null;
@@ -23930,6 +25755,13 @@ function stepNPCAutonomy(npc, room) {
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
     clearNPCAmbientAction(npc);
 
+    // The watch has one shared movement step for both partners per story turn.
+    if (npc._guardDuty) {
+        healNPCOverTime(npc);
+        if (typeof tickNPCCrimeStep === "function") tickNPCCrimeStep(npc, room);
+        return;
+    }
+
     // A fleer already mid-run keeps running before anything else.
     if (npc._fleeRun && continueNPCFleeRun(npc, room)) return;
 
@@ -24057,6 +25889,7 @@ function npcHoldsKeyFor(npc, room, lock) {
 
 // Can this NPC get through the door in direction dir? { ok, how, rank }.
 function npcLockAccess(npc, room, dir) {
+    if (typeof getDoorObstruction === "function" && getDoorObstruction(room, dir)) return { ok: false, how: "braced" };
     if (isExitCollapsed(room, dir)) return { ok: false, how: "collapsed" };
     if (!isExitLocked(room, dir)) return { ok: true, how: "open" };
     const lock = getExitLock(room, dir);
@@ -24106,6 +25939,9 @@ function relocateNPCBetweenRooms(npc, fromRoom, toCoords, options) {
     // and dragged bodies - or when a caller opts out explicitly.
     const isEscortedMove = npc._inParty || npc._prisoner || npc.isUnconsciousBody ||
         (Array.isArray(G.sessionFollowers) && G.sessionFollowers.indexOf(npc) >= 0);
+    if (npc._guardDuty && !isEscortedMove && !(options && options.settlementWatchPair)) {
+        return moveSettlementGuardPair(npc, fromRoom, toCoords, true);
+    }
     if (!isEscortedMove && !(options && options.ignoreDrunkStumble)) {
         const drunkCrowdNames = (Array.isArray(fromRoom.creatures) ? fromRoom.creatures : [])
             .filter(creature => creature && creature !== npc && !creature.dead && !creature.unconscious)
@@ -25248,7 +27084,7 @@ function buildConversationBundleKey(npc, options, room, ctx) {
         interactionCount: ctx && typeof ctx.interactionCount === "number" ? ctx.interactionCount : 0,
         sessionInteractionCount: ctx && typeof ctx.sessionInteractionCount === "number" ? ctx.sessionInteractionCount : 0,
         lastOptionId: ctx && ctx.lastOptionId || "",
-        drunk: typeof getDrunkConversationSig === "function" ? getDrunkConversationSig(npc) : "",
+        drunk: typeof getConversationStyleSig === "function" ? getConversationStyleSig(npc) : "",
         recent: buildRecentConversationDigest(npc),
         options: relevantOptions.map(option => ({
             id: option.id || "",
@@ -25282,7 +27118,7 @@ function getCachedConversationReply(npc, choice) {
     
     // A reply prefetched before anyone had a drink (or after they sobered up)
     // does not fit the current state: skip caches whose drunkSig differs.
-    const drunkNow = typeof getDrunkConversationSig === "function" ? getDrunkConversationSig(npc) : "0/0";
+    const drunkNow = typeof getConversationStyleSig === "function" ? getConversationStyleSig(npc) : "0/0";
     const drunkOk = function (reply) { return !reply || typeof reply !== "object" || (reply.drunkSig || "0/0") === drunkNow; };
 
     // Check NPC's persistent cache first
@@ -25322,12 +27158,13 @@ function storeCachedConversationReply(npc, option, reply) {
     
     // Build reply object to cache
     const cachedReply = { text: normalized };
-    if (typeof getDrunkConversationSig === "function") cachedReply.drunkSig = getDrunkConversationSig(npc);
+    if (typeof getConversationStyleSig === "function") cachedReply.drunkSig = getConversationStyleSig(npc);
     if (affirmative !== undefined) cachedReply.affirmative = affirmative;
     if (replyExtras.responseNeeded !== undefined) cachedReply.responseNeeded = replyExtras.responseNeeded;
     if (replyExtras.replyOptions) cachedReply.replyOptions = replyExtras.replyOptions;
     if (replyExtras.playerTone) cachedReply.playerTone = replyExtras.playerTone;
     if (replyExtras.receptivity) cachedReply.receptivity = replyExtras.receptivity;
+    if (replyExtras.voiceTone) cachedReply.voiceTone = replyExtras.voiceTone;
     
     // Store in NPC's persistent cache
     if (npc && npc.memory && optionId) {
@@ -25560,6 +27397,7 @@ function getNPCConversationReplyBaseLines(npc, room) {
         "For each reply, you MUST include an 'affirmative' boolean field inside the JSON object. Set true if the NPC's response is positive or agreeable, false if negative or rejecting. For neutral responses, use true if leaning positive, false if leaning negative. Example: {\"id\":\"greet-known\",\"text\":\"\\u003cHello there.\\u003e\",\"affirmative\":true}",
         ...getResponseNeededGuideLines(),
         ...(typeof getDrunkSpeechGuideLines === "function" ? getDrunkSpeechGuideLines(npc) : []),
+        ...(typeof getTTSSpeechGuideLines === "function" ? getTTSSpeechGuideLines() : []),
         isRomanceEligibleNPC(npc) ? `Romantic tension level: ${Math.floor(npc.memory.lust || 0)}/100 (lust), ${npc.memory.attraction || 0}/100 (attraction). Adjust tone based on these values - higher values mean more receptive to romantic advances.` : "",
         "If there is romantic tension, keep it non-explicit but genuine - clear interest, warmth, or disinterest are all fine.",
         ...getNPCCuriosityLines(npc)
@@ -25843,6 +27681,9 @@ function extractReplyExtras(src) {
     // getReceptivityGuideLines). Only encounter-starting replies carry it.
     const receptivity = String(src.receptivity || "").toLowerCase().trim();
     if (["welcome", "lukewarm", "refuse"].indexOf(receptivity) >= 0) extras.receptivity = receptivity;
+    // TTS mode: the tone of the NPC's own spoken words (see getTTSSpeechGuideLines).
+    const voiceTone = String(src.voiceTone || "").toLowerCase().trim();
+    if (typeof TTS_VOICE_TONES !== "undefined" && TTS_VOICE_TONES.indexOf(voiceTone) >= 0) extras.voiceTone = voiceTone;
     return extras;
 }
 
@@ -27161,6 +29002,7 @@ async function npcRespond(npc, interaction) {
         replyOptions = responseObj.replyOptions;
         playerTone = responseObj.playerTone;
         receptivity = responseObj.receptivity;
+        if (responseObj.voiceTone && typeof ttsNoteVoiceTone === "function") ttsNoteVoiceTone(npc, responseObj.voiceTone);
 
         // Debug: Log NPC response with affirmative
         console.log("[DEBUG] NPC Response:", {
@@ -27213,6 +29055,7 @@ async function npcRespond(npc, interaction) {
             if (responseText.replyOptions) replyOptions = responseText.replyOptions;
             if (responseText.playerTone) playerTone = responseText.playerTone;
             if (responseText.receptivity !== undefined) receptivity = responseText.receptivity;
+            if (responseText.voiceTone && typeof ttsNoteVoiceTone === "function") ttsNoteVoiceTone(npc, responseText.voiceTone);
             responseText = responseText.text || "";
         }
     }
@@ -27732,6 +29575,7 @@ function findRoomRoute(fromRoom, toKey, opts) {
             if (!dir || isPortalExit(room, dir)) continue;
             if (npc && isVerticalDirection(dir)) continue;      // NPCs do not use stairs on their own
             if (isExitCollapsed(room, dir)) continue;
+            if (typeof getDoorObstruction === "function" && getDoorObstruction(room, dir)) continue;
             if (npc) { if (!npcLockAccess(npc, room, dir).ok) continue; }
             else if (isExitLocked(room, dir)) continue;
             const nextKey = room.exits[dirKeys[i]];
@@ -29420,7 +31264,7 @@ function createEmptyContainer(emptyId) {
 }
 
 function isEmptyFillableItem(item) {
-    return !!(item && item.container && item.container.fillable && /^empty-/.test(String(item.stackKey || item.id || "")));
+    return !!(item && item.container && item.container.fillable && (item.physicalDefinition && !item.container.emptyId ? !item.liquid || item.liquid.volume <= 0 : /^empty-/.test(String(item.stackKey || item.id || ""))));
 }
 
 // Which empty container an item leaves behind once emptied (id, or "").
@@ -30384,6 +32228,7 @@ function wearRucksack(item) {
 function fillContainerAtFixture(fixture, stackKey) {
     const entry = getFillableEmptyEntries().find(function (e) { return e.key === stackKey; });
     if (!entry) { setNarration("You no longer have that."); return; }
+    if (entry.item.physicalDefinition && !entry.item.container.emptyId && typeof fillWorldObjectAtFixture === "function") return fillWorldObjectAtFixture(fixture, entry);
     const taken = takeInventoryEntryAmount(G.player, stackKey, 1);
     if (!taken) return;
     const filled = createFilledWaterContainer(taken.stackKey || stackKey);
@@ -30489,6 +32334,7 @@ function cloneItemForStackAmount(item, quantity) {
 
 function getInventoryStackKey(item) {
     if (!item || typeof item !== "object") return "";
+    if (item.physicalDefinition && item._uid) return "world-object:" + item._uid;
     // Containers and pocketed garments keep their own identity and contents.
     if (isCarryContainerItem(item)) return "container:" + ensureContainerKey(item);
     if (typeof isNectarItem === "function" && isNectarItem(item)) return "nectar:" + getItemName(item).toLowerCase() + ":" + getNectarCapacityDrops(item) + ":" + getNectarDrops(item);
@@ -31514,6 +33360,10 @@ function equipPlayerItemFromSource(item, list, fixture) {
     const room = G.activeRoom;
     const inFixture = fixture && room && (room.structural || []).includes(fixture) && fixture.opened && !fixture.concealed && ensureContainerContents(fixture).items === list;
     if (!accessible && !inFixture) return "That item is no longer available.";
+    if (typeof worldObjectEquipBlock === "function") {
+        const physicalBlock = worldObjectEquipBlock(item, list);
+        if (physicalBlock) return physicalBlock;
+    }
     ensurePlayerEquipmentState(player);
     const unit = splitOneUnit(list, item);
     delete unit.stowed;
@@ -34226,6 +36076,7 @@ function applyCombatDamage(entity, amount, targetKey, options = {}) {
     entity.hp = Math.max(0, hpBeforeHit - damage);
     // Keep wound/impact damage intact; narration separately reports HP removed.
     const hpLost = Math.max(0, hpBeforeHit - entity.hp);
+    if (typeof G !== "undefined" && entity === G.player && hpLost > 0 && typeof markTextModeUrgent === "function") markTextModeUrgent(entity.hp <= 0 ? "player-down" : "player-hurt");
     wearPlayerGearFromHit(entity, damage, damageType);
     state.lastHitTurn = typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : 0;
 
@@ -39691,22 +41542,29 @@ function summonPeerReinforcement(enemy, room, lines) {
 // enemy) or "npc" (guard sides against the player for attacking a civilized
 // humanoid).
 function summonGuardAssist(enemy, room, lines, side) {
-    const found = findReinforcementCandidate(room, candidate =>
+    const local = (room.creatures || []).find(candidate =>
+        candidate !== enemy && isGuardNPC(candidate) && isEligibleReinforcement(candidate)
+    );
+    const found = local ? { npc: local, room: room } : findReinforcementCandidate(room, candidate =>
         candidate !== enemy &&
         Array.isArray(GUARD_CHECKPOINT_ROLES) &&
         GUARD_CHECKPOINT_ROLES.includes(candidate.role) &&
+        (!candidate._guardDuty || candidate._guardDuty.kind === "patrol") &&
         isEligibleReinforcement(candidate)
     );
     if (!found) return false;
 
-    if (!relocateNPCBetweenRooms(found.npc, found.room, room.coords)) return false;
+    if (found.room !== room && !relocateNPCBetweenRooms(found.npc, found.room, room.coords)) return false;
     const guardName = found.npc.name || "A guard";
 
     if (side === "npc") {
-        found.npc.hostility = Math.max(found.npc.hostility || 0, 85);
-        lines.push(`${guardName} hears the fighting and storms in - "Stand down!" - moving to defend ${enemy.name || "the townsfolk"}.`);
+        const defenders = found.npc._guardDuty ? settlementGuardPair(found.npc, room) : [found.npc];
+        defenders.forEach(function (guard) { guard.hostility = Math.max(guard.hostility || 0, 85); });
+        lines.push(found.room === room
+            ? `${guardName} moves to defend ${enemy.name || "the townsfolk"}. "Stand down!"`
+            : `${guardName} hears the fighting and storms in - "Stand down!" - moving to defend ${enemy.name || "the townsfolk"}.`);
     } else {
-        lines.push(`${guardName} hears the fighting and storms in to help you!`);
+        lines.push(found.room === room ? `${guardName} moves to help you!` : `${guardName} hears the fighting and storms in to help you!`);
         reinforcementOpeningStrike(found.npc, enemy, lines);
     }
     return true;
@@ -39814,6 +41672,7 @@ function isPlayerCompanion(npc) {
 // Takes a companion out of whichever list(s) they were in, remembering which,
 // so a revived companion comes back the same way they left.
 function dismissCompanionForDowned(npc) {
+    if (typeof markTextModeUrgent === "function") markTextModeUrgent("companion-down");
     npc._wasFollower = (G.sessionFollowers || []).indexOf(npc) >= 0 && (G.partyMembers || []).indexOf(npc) < 0;
     if ((G.sessionFollowers || []).indexOf(npc) >= 0) removeSessionFollower(npc);
     if ((G.partyMembers || []).indexOf(npc) >= 0) removeFromParty(npc);
@@ -40289,6 +42148,7 @@ function beginEncounter(primary, initiator, lines, opts) {
         ended: false
     };
     G.combatEncounter = enc;
+    if (typeof markTextModeUrgent === "function") markTextModeUrgent("combat-start");
     try {
         encAddCombatant(enc, G.player, "party", lines, false);
         encAddCombatant(enc, primary, "foe", lines, false);
@@ -41225,6 +43085,7 @@ function encounterPlayerDown(lines, options) {
 
     enc.playerDown = true;
     enc.downedBy = (options && options.defeatedBy) || null;
+    if (typeof markTextModeUrgent === "function") markTextModeUrgent("player-down");
     clearPlayerCombatStance();
     if (!(options && options.narrated)) lines.push("You go down hard.");
     lines.push("Your companions close ranks over you and fight on.");
@@ -43171,6 +45032,10 @@ function guessDurabilityMaterial(thing) {
 
 function getDurabilityScale(thing, kind) {
     if (kind === "wall") return DURABILITY_WALL_FACTOR;
+    if (thing && thing.physicalDefinition && thing.physicalDefinitionOrigin !== "inferred" && typeof calculateWorldObjectPhysics === "function") {
+        const physical = calculateWorldObjectPhysics(thing.physicalDefinition);
+        if (physical) return Math.max(0.25, Math.min(8, Math.pow(physical.scale, 2))) * (kind === "fixture" ? DURABILITY_FIXTURE_FACTOR : 1);
+    }
     if (kind === "fixture") return DURABILITY_FIXTURE_FACTOR;
     let value = 0;
     try { value = typeof getItemValue === "function" ? getItemValue(thing) : 0; } catch (e) { value = 0; }
@@ -43709,13 +45574,13 @@ const WALL_DIR_ADJECTIVES = { N: "northern", NE: "northeastern", E: "eastern", S
 // archways, since their shape is not implied.
 const WALL_LOOK_DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const WALL_CARDINAL_DIRS = ["N", "E", "S", "W"];
-function appendRoomStructureObservation(parent, room) {
-    if (!parent || !room) return;
+// Directions the Look around wall paragraph mentions (walls and listed doors).
+function getRoomStructureDirs(room) {
+    if (!room) return [];
     const exits = room.exits || {};
     const collapseZone = isCollapseZone(room);
     // The street-facing entrance room of a building (isEntrance) is part of the street, not a boxed room.
     const isBuilding = (!!room.buildingId || room.isBuildingRoom === true || room.isClusterRoom === true) && room.isEntrance !== true;
-    const wallZone = collapseZone || isBuilding;
     const dirs = WALL_LOOK_DIRS.filter(function (d) {
         if (isBuilding) return WALL_CARDINAL_DIRS.indexOf(d) >= 0 || !!exits[d];
         if (collapseZone) return true;
@@ -43726,6 +45591,16 @@ function appendRoomStructureObservation(parent, room) {
     ["U", "D"].forEach(function (d) {
         if (exits[d] && (getExitDoor(room, d) === "door" || getExitDoor(room, d) === "arch")) dirs.push(d);
     });
+    return dirs;
+}
+function appendRoomStructureObservation(parent, room) {
+    if (!parent || !room) return;
+    const exits = room.exits || {};
+    const collapseZone = isCollapseZone(room);
+    // The street-facing entrance room of a building (isEntrance) is part of the street, not a boxed room.
+    const isBuilding = (!!room.buildingId || room.isBuildingRoom === true || room.isClusterRoom === true) && room.isEntrance !== true;
+    const wallZone = collapseZone || isBuilding;
+    const dirs = getRoomStructureDirs(room);
     if (!dirs.length) return;
     appendObservationSeparator(parent, false);
     dirs.forEach(function (d, index) {
@@ -43791,6 +45666,7 @@ function openWallFromLook(room, dir) {
 // one offers to lock it with a key or a lockpick.
 function openDoorWallMenu(room, dir) {
     if (!room || !dir || getExitDoor(room, dir) !== "door" || !room.exits || !room.exits[dir]) { renderRoom(); return; }
+    if (typeof getDoorObstruction === "function" && getDoorObstruction(room, dir)) return openWorldToolMenu((typeof COLLAPSE_DIR_WORDS !== "undefined" && COLLAPSE_DIR_WORDS[dir] || dir) + " door");
     if (isExitLocked(room, dir)) { openLockedDoorMenu(room, dir); return; }
     G.activeNPC = null;
     G.activeObject = null;
@@ -47556,7 +49432,7 @@ function renderNarrationWithRoomObservations(room, leadText, layout, deferOutput
     const turnNotes = takeTurnNotes();
     appendNarrationText(el, ensureSentence(leadText) + (turnNotes ? " " + turnNotes : ""));
     renderRoomObservations(el, room, layout);
-    if (!deferOutput && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", el.textContent, { source: "engine" });
+    if (!deferOutput && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", textModeWithExits(el.textContent, room), { source: "engine", roomView: true });
 }
 
 function renderRoomNarration(room, mode, direction) {
@@ -47854,7 +49730,17 @@ function addNarratorMessage(text, options = {}) {
 }
 
 function addChatMessage(side, speaker, text, options = {}) {
-    if (typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput(String(speaker || "").toLowerCase() === "narrator" ? "narration" : "dialogue", text, { speaker: speaker, side: side, source: "engine", renderedInChat: String(speaker || "").trim().toLowerCase() !== "narrator" });
+    if (side !== "player" && String(speaker || "").trim().toLowerCase() !== "narrator" && typeof ttsModeActive === "function" && ttsModeActive()) {
+        const ttsSpeaker = typeof textModeFindSpeaker === "function" ? textModeFindSpeaker(speaker) : null;
+        text = ttsSpeakableDialogue(text, ttsSpeaker ? ttsSpeaker.gender : "");
+    } else if (String(speaker || "").trim().toLowerCase() === "narrator" && typeof ttsModeActive === "function" && ttsModeActive()) {
+        text = ttsSpeakableText(text);
+    }
+    if (typeof textModeState !== "undefined" && textModeState.enabled) {
+        const chatDetails = { speaker: speaker, side: side, source: "engine", renderedInChat: String(speaker || "").trim().toLowerCase() !== "narrator" };
+        if (side !== "player" && typeof ttsModeActive === "function" && ttsModeActive()) { const voiceTone = ttsTakeVoiceTone(speaker); if (voiceTone) chatDetails.voiceTone = voiceTone; }
+        publishTextModeOutput(String(speaker || "").toLowerCase() === "narrator" ? "narration" : "dialogue", text, chatDetails);
+    }
     if (String(speaker || "").trim().toLowerCase() === "narrator") {
         addNarratorMessage(text, options);
         return;
@@ -48525,10 +50411,11 @@ function renderExits(exits) {
             const door = getExitDoor(G.activeRoom, dir);
             const locked = isExitLocked(G.activeRoom, dir);
             const collapsed = isExitCollapsed(G.activeRoom, dir);
+            const braced = typeof getDoorObstruction === "function" && !!getDoorObstruction(G.activeRoom, dir);
             // A visible door (or archway) marks a boundary: a building's
             // edge, a private room, someone's home. A lock is shown on top.
-            el.textContent = collapsed ? `${label} \u2715` : locked ? `${label} \u{1F512}` : door === "door" ? `${label} \u{1F6AA}` : door === "arch" ? `${label} \u2229` : label;
-            el.title       = collapsed ? "Blocked by a collapse" : locked ? "A locked door" : door === "door" ? "A door" : door === "arch" ? "An archway" : "";
+            el.textContent = collapsed || braced ? `${label} \u2715` : locked ? `${label} \u{1F512}` : door === "door" ? `${label} \u{1F6AA}` : door === "arch" ? `${label} \u2229` : label;
+            el.title       = collapsed ? "Blocked by a collapse" : braced ? "A braced door" : locked ? "A locked door" : door === "door" ? "A door" : door === "arch" ? "An archway" : "";
             el.disabled    = false;
             el.onclick     = () => movePlayer(dir);
         } else {
@@ -49774,6 +51661,7 @@ function reportCrime(room, kind, lines, opts) {
     recordDeed(room, kind, lines, { force: !!opts.force });
     let amount = typeof opts.amount === "number" ? opts.amount : (BOUNTY_AMOUNTS[kind] || 0);
     if (witnesses.some(isGuardNPC)) amount = Math.round(amount * 1.5);
+    if (typeof alertSettlementWatchToCrime === "function") alertSettlementWatchToCrime(room, kind);
     return addBounty(room.zone, amount, lines, kind);
 }
 
@@ -51963,6 +53851,8 @@ function getPickpocketDC(npc) {
     const now = getCurrentStoryTurn();
     let dc = ROGUE_PICKPOCKET_BASE_DC;
     if (npc && GUARD_CHECKPOINT_ROLES.includes(npc.role)) dc += 3;
+    if (typeof settlementVendorPresent === "function" && settlementVendorPresent(G.activeRoom) &&
+        G.activeRoom.creatures.indexOf(npc) >= 0) dc += Math.min(4, settlementWatchWitnesses(G.activeRoom).length * 2);
     dc += Math.floor(hostility / 25);
     if (npc && typeof npc._pickedTurn === "number" && now - npc._pickedTurn < ROGUE_PICKPOCKET_REPEAT_TURNS) dc += ROGUE_PICKPOCKET_REPEAT_DC;
     if (isPlayerHidden()) dc -= 3;
@@ -53147,6 +55037,247 @@ const NPC_GUARD_FIGHT_RANGE = 2;
 const NPC_GUARD_PURSUIT_RANGE = 3;
 const NPC_GUARD_RETURN_CHANCE = 0.5;
 
+// SETTLEMENT WATCH: persistent pairs, fixed gate posts and a public-space patrol.
+function isSettlementWatchRoom(room) {
+    return !!(room && (room.zone === "Town" || room.zone === "Underground City") &&
+        !room.isNPCHome && !(room.zoneTransitionStep > 0));
+}
+
+function isSettlementPatrolRoom(room) {
+    if (!isSettlementWatchRoom(room) || guardRoomIsPost(room)) return false;
+    if (settlementVendorPresent(room)) return true;
+    if (room.isBuildingRoom) return false;
+    return ["Gate", "Square", "Street", "Avenue", "Alleyway", "Market",
+        "Underground Gate", "Market Cavern", "Lantern Hall", "Underground Hallway", "Cavern"].indexOf(room.type) >= 0;
+}
+
+function isSettlementGate(room) {
+    return isSettlementWatchRoom(room) && (room.type === "Gate" || room.type === "Underground Gate");
+}
+
+function settlementVendorPresent(room) {
+    if (!isSettlementWatchRoom(room) || guardRoomIsPost(room) || room.isBuildingRoom && !room.isEntrance) return false;
+    return (room.creatures || []).some(function (npc) {
+        return npc && npc.isHumanoid !== false && npc.hp > 0 && !npc.unconscious && !npc.isUnconsciousBody &&
+            !npc.hidden && !npc.isHidden && !(npc.currentState && npc.currentState.sleeping) &&
+            !npc._prisoner && !npc.bound && !isCompanionNPC(npc) &&
+            isMerchantRole(npc.role) && (typeof isNPCOffDuty !== "function" || !isNPCOffDuty(npc, room));
+    });
+}
+
+function settlementWatchWitnesses(room) {
+    if (!isSettlementWatchRoom(room)) return [];
+    return (room.creatures || []).filter(function (npc) {
+        return isGuardNPC(npc) && isAwakeHumanoidNPC(npc) && !npc._prisoner && !npc.bound &&
+            !isCompanionNPC(npc) && !(npc.currentState && npc.currentState.sleeping);
+    });
+}
+
+function settlementTheftDeterrence(room) {
+    return settlementWatchWitnesses(room).length >= 2 ? 0.95 : NPC_THIEF_GUARD_WARY;
+}
+
+function settlementWatchRoutes(guard, room, maxSteps, responding) {
+    const frontier = [{ room: room, path: [] }], seen = new Set([room.coords]);
+    for (let i = 0; i < frontier.length; i++) {
+        const node = frontier[i];
+        if (node.path.length >= maxSteps) continue;
+        getNPCExitCoords(node.room, guard).forEach(function (key) {
+            const next = G.roomMap[key], dir = getNPCExitDirTo(node.room, key);
+            if (seen.has(key) || !isSettlementPatrolRoom(next) || next.zone !== guard._guardDuty.zone ||
+                !responding && isExitLocked(node.room, dir)) return;
+            seen.add(key); frontier.push({ room: next, path: node.path.concat([key]) });
+        });
+    }
+    return frontier.slice(1);
+}
+
+function settlementWatchAlarm(room) {
+    const alarm = room && room._settlementGuardAlarm;
+    return !!(alarm && alarm.turn <= getCurrentStoryTurn() && getCurrentStoryTurn() - alarm.turn <= 6);
+}
+
+function alertSettlementWatchToCrime(room, kind) {
+    if (!isSettlementPatrolRoom(room) || ["pickpocket", "theft", "assault", "backstab", "murder", "attackGuard"].indexOf(kind) < 0) return;
+    // Called only after native witness validation. No unseen crime is revealed.
+    room._settlementGuardAlarm = { turn: getCurrentStoryTurn(), kind: kind };
+    let best = null;
+    const seen = new Set();
+    Object.keys(G.roomMap || {}).forEach(function (key) {
+        const source = G.roomMap[key];
+        (source.creatures || []).forEach(function (guard) {
+            const duty = guard && guard._guardDuty;
+            if (!duty || duty.kind !== "patrol" || seen.has(duty.pairId) || source === room || source.skirmish) return;
+            seen.add(duty.pairId);
+            const pair = settlementGuardPair(guard, source);
+            if (pair.length !== 2 || pair.some(function (npc) { return !settlementGuardCanMove(npc) || npc._guardDuty.lastMoveTurn === getCurrentStoryTurn(); })) return;
+            const route = settlementWatchRoutes(guard, source, NPC_GUARD_PURSUIT_RANGE, true).find(function (node) { return node.room === room; });
+            if (route && (!best || route.path.length < best.path.length)) best = { guard: guard, room: source, path: route.path };
+        });
+    });
+    if (best) moveSettlementGuardPair(best.guard, best.room, best.path[0], true);
+}
+
+function createSettlementGuard(room) {
+    const zone = getZoneTemplate(room.zone);
+    if (!zone) return null;
+    const pool = (room.npcSpecies || zone.allowedSpecies || []).filter(function (species) {
+        return getSpeciesIsCivilized(species) && getSpeciesHumanoidFlag(species) === true;
+    });
+    if (!pool.length) return null;
+    const npc = createNPC(rand(pool), room, zone, {
+        forceRole: room.zone === "Underground City" ? "Stone Guard" : "Town Guard", skipHome: true
+    });
+    if (npc) {
+        // Starting watch members keep the same safe hostility cap as hub residents.
+        if (typeof room.hostilityCap === "number") npc.hostility = Math.min(npc.hostility, room.hostilityCap);
+        room.creatures.push(npc);
+    }
+    return npc;
+}
+
+function assignSettlementGuardPair(room, members, kind) {
+    const pairId = "watch:" + room.coords + ":" + members[0].id;
+    members.forEach(function (npc) {
+        npc._guardDuty = { pairId: pairId, kind: kind, postCoords: room.coords, zone: room.zone };
+        npc._onCall = false;
+        npc.action = kind === "patrol" ? "patrolling with a fellow guard" : "standing watch with a fellow guard";
+        if (npc.currentState) npc.currentState.gesture = npc.action;
+    });
+}
+
+function ensureSettlementGuardPost(room) {
+    if (!isSettlementWatchRoom(room) || room._settlementWatchReady) return;
+    room.creatures = Array.isArray(room.creatures) ? room.creatures : [];
+    const guards = room.creatures.filter(function (npc) {
+        return isGuardNPC(npc) && npc.hp > 0 && !npc.boss && !npc._guardDuty && !npc._prisoner && !isCompanionNPC(npc);
+    });
+    const minimum = isSettlementGate(room) ? 2 : 0;
+    while (guards.length < minimum || guards.length % 2) {
+        const npc = createSettlementGuard(room);
+        if (!npc) return;
+        guards.push(npc);
+    }
+    for (let i = 0; i < guards.length; i += 2) assignSettlementGuardPair(room, guards.slice(i, i + 2), "post");
+    room._settlementWatchReady = true;
+}
+
+function ensureSettlementWatch() {
+    const map = G.roomMap || {}, seen = new Set();
+    Object.keys(map).forEach(function (coords) { ensureSettlementGuardPost(map[coords]); });
+    // Each connected network of settlement streets gets its own patrol. The
+    // marker survives casualties, recruiting and saves; checks never respawn it.
+    Object.keys(map).forEach(function (coords) {
+        const start = map[coords];
+        if (!isSettlementPatrolRoom(start) || seen.has(coords)) return;
+        const rooms = [start]; seen.add(coords);
+        for (let i = 0; i < rooms.length; i++) {
+            const room = rooms[i];
+            Object.keys(room.exits || {}).forEach(function (dir) {
+                const key = room.exits[dir], next = map[key];
+                if (isVerticalDirection(dir) || seen.has(key) || !isSettlementPatrolRoom(next) || next.zone !== start.zone) return;
+                seen.add(key); rooms.push(next);
+            });
+        }
+        if (!rooms.some(isSettlementGate) || rooms.some(function (room) { return room._settlementPatrolCreated; })) return;
+        const post = rooms.find(function (room) { return room.type === "Square" || room.type === "Market Cavern"; }) || start;
+        const members = [];
+        for (let i = 0; i < 2; i++) {
+            const npc = createSettlementGuard(post);
+            if (npc) members.push(npc);
+        }
+        if (members.length !== 2) {
+            post.creatures = post.creatures.filter(function (npc) { return members.indexOf(npc) < 0; });
+            return;
+        }
+        assignSettlementGuardPair(post, members, "patrol");
+        post._settlementPatrolCreated = true;
+    });
+}
+
+function settlementGuardPair(guard, room) {
+    const duty = guard && guard._guardDuty;
+    if (!duty || !room || !Array.isArray(room.creatures)) return [];
+    return room.creatures.filter(function (npc) {
+        return npc && npc._guardDuty && npc._guardDuty.pairId === duty.pairId;
+    });
+}
+
+function settlementGuardCanMove(npc) {
+    return isAwakeHumanoidNPC(npc) && !npc.dead && !npc.bound && !npc._prisoner &&
+        !npc._inSkirmish && !npc._fleeRun && !npc._drunkBlackout && !npc.isUnconsciousBody &&
+        !isCompanionNPC(npc) && G.activeNPC !== npc && ((npc.hostility || 0) < 70 || npc._bountyHostile) &&
+        !(npc.currentState && npc.currentState.sleeping) &&
+        !(Array.isArray(G.sessionFollowers) && G.sessionFollowers.indexOf(npc) >= 0);
+}
+
+function moveSettlementGuardPair(guard, room, dest, responding) {
+    const pair = settlementGuardPair(guard, room), target = G.roomMap[dest], now = getCurrentStoryTurn();
+    if (pair.length !== 2 || guard._guardDuty.kind !== "patrol" || room.skirmish ||
+        !isSettlementPatrolRoom(target) || target.zone !== guard._guardDuty.zone ||
+        pair.some(function (npc) { return !settlementGuardCanMove(npc) || npc._guardDuty.lastMoveTurn === now; })) return false;
+    const dir = getNPCExitDirTo(room, dest);
+    if (!dir || isVerticalDirection(dir) || pair.some(function (npc) { return !npcLockAccess(npc, room, dir).ok; })) return false;
+    if (!responding && isExitLocked(room, dir)) return false;
+    // Both pass the same actual doorway before either is transferred. No solo
+    // movement or drunk stumble can split an otherwise eligible pair.
+    if (!pair.every(function (npc) { return npcPassExit(npc, room, dir); })) return false;
+    pair.forEach(function (npc) {
+        relocateNPCBetweenRooms(npc, room, dest, { ignoreLocks: true, ignoreDrunkStumble: true, settlementWatchPair: true });
+        npc._guardDuty.lastMoveTurn = now;
+        npc._guardDuty.previousCoords = room.coords;
+    });
+    const leader = pair[0]._guardDuty;
+    leader.visits = leader.visits || {};
+    leader.visits[dest] = (leader.visits[dest] || 0) + 1;
+    if (pair.some(function (npc) { return !isVisibleEntity(npc); })) return true;
+    const names = pair.map(function (npc) { return npc.name || "a guard"; }).join(" and ");
+    if (room === G.activeRoom) guardNote(room, names + (responding ? " head out together to investigate nearby trouble." : " continue their patrol together."));
+    else if (target === G.activeRoom) guardNote(target, names + (responding ? " arrive together, looking for trouble." : " arrive together on patrol."));
+    return true;
+}
+
+function tickSettlementWatch() {
+    if (!G.player || G.activeNPCMode === "combat" || G.activeObject || isPlayerJailed()) return;
+    ensureSettlementWatch();
+    const seen = new Set(), now = getCurrentStoryTurn(), map = G.roomMap || {};
+    Object.keys(map).forEach(function (coords) {
+        const room = map[coords];
+        (room.creatures || []).slice().forEach(function (guard) {
+            const duty = guard && guard._guardDuty;
+            if (!duty || duty.kind !== "patrol" || seen.has(duty.pairId)) return;
+            seen.add(duty.pairId);
+            const pair = settlementGuardPair(guard, room);
+            if (pair.length !== 2 || pair.some(function (npc) { return !settlementGuardCanMove(npc); })) return;
+            if (settlementWatchAlarm(room) || roomHasWantedThief(room) || room.skirmish || roomHasActiveHostile(room)) return;
+            if (duty.lastStepTurn === now) return;
+            pair.forEach(function (npc) { npc._guardDuty.lastStepTurn = now; });
+            // Shops are part of the beat. Witnessed alarms and theft fights take priority.
+            const call = settlementWatchRoutes(guard, room, NPC_GUARD_PURSUIT_RANGE, true).find(function (node) {
+                return settlementWatchAlarm(node.room) || roomHasWantedThief(node.room) ||
+                    node.path.length <= NPC_GUARD_FIGHT_RANGE && skirmishAttractsGuards(node.room);
+            });
+            if (call) { moveSettlementGuardPair(guard, room, call.path[0], true); return; }
+            if (now % 3 !== 0) return;
+            const visits = duty.visits || {};
+            const shops = settlementWatchRoutes(guard, room, Object.keys(map).length, false).filter(function (node) {
+                return settlementVendorPresent(node.room);
+            });
+            shops.sort(function (a, b) {
+                return (visits[a.room.coords] || 0) - (visits[b.room.coords] || 0) || a.path.length - b.path.length;
+            });
+            if (shops.length) { moveSettlementGuardPair(guard, room, shops[0].path[0], false); return; }
+            let options = getNPCExitCoords(room, guard).filter(function (key) {
+                return isSettlementPatrolRoom(map[key]) && map[key].zone === duty.zone;
+            });
+            if (options.length > 1) options = options.filter(function (key) { return key !== duty.previousCoords; });
+            options.sort(function (a, b) { return (visits[a] || 0) - (visits[b] || 0); });
+            if (options.length) moveSettlementGuardPair(guard, room, options[0], false);
+        });
+    });
+}
+// END SETTLEMENT WATCH
+
 function guardRoomIsPost(room) {
     return !!room && (room.isJailCell || /jail/i.test(String(room.type || "")));
 }
@@ -53235,6 +55366,7 @@ function guardNote(room, text) {
 
 function guardStepAlong(guard, room, path) {
     const dest = path && path[0];
+    if (guard._guardDuty) return moveSettlementGuardPair(guard, room, dest, true);
     if (!dest || !relocateNPCBetweenRooms(guard, room, dest)) return false;
     const toRoom = G.roomMap[dest];
     guard._onCall = true;
@@ -53254,11 +55386,14 @@ function guardRespondToTrouble(guard, room) {
         }
         return false;
     }
+    // Gate and building posts remain staffed; the separate patrol answers calls.
+    if (guard._guardDuty && guard._guardDuty.kind === "post") return false;
     const target = findNearestRoomFrom(room, NPC_GUARD_PURSUIT_RANGE, function (r, depth) {
         if (depth <= NPC_GUARD_FIGHT_RANGE && skirmishAttractsGuards(r)) return true;
         return roomHasWantedThief(r);
     }, guard);
     if (target && guardStepAlong(guard, room, target.path)) return true;
+    if (guard._guardDuty) return false;
     // Nothing to answer: wander back to the post.
     if (guard._onCall) {
         const home = guard._homeCoords && G.roomMap[guard._homeCoords];
@@ -53542,7 +55677,7 @@ function tickNPCCrimeStep(npc, room) {
     if (npc._loot && thiefSeekFence(npc, room)) return true;
     if (!isOpportunistThief(npc) || (npc.hostility || 0) >= 50) return false;
     if (isNPCWanted(npc)) return false;
-    if (roomHasGuard(room) && Math.random() < NPC_THIEF_GUARD_WARY) return false;
+    if (roomHasGuard(room) && Math.random() < settlementTheftDeterrence(room)) return false;
     const now = getCurrentStoryTurn();
     if (typeof npc._theftTurn === "number" && now - npc._theftTurn < NPC_THEFT_COOLDOWN) return false;
     if (Math.random() >= NPC_NPC_THEFT_CHANCE) return false;
@@ -53622,7 +55757,7 @@ function tickNPCOpportunism() {
         if (!isOpportunistThief(npc) || (npc.hostility || 0) >= 50) continue;
         if (isNPCWanted(npc)) continue;
         if (typeof npc._theftTurn === "number" && now - npc._theftTurn < NPC_THEFT_COOLDOWN) continue;
-        if (guardPresent && Math.random() < NPC_THIEF_GUARD_WARY) continue;
+        if (guardPresent && Math.random() < settlementTheftDeterrence(room)) continue;
         let chance = NPC_THEFT_BASE_CHANCE;
         if (coins >= 100) chance += NPC_THEFT_VERY_RICH_BONUS;
         else if (coins >= 30) chance += NPC_THEFT_RICH_BONUS;
@@ -54967,6 +57102,7 @@ function finishLiquidAction(room, type, lines) {
 // Item name/id -> liquid and how much a unit of it spills.
 function getItemLiquid(item) {
     if (!item || isPotionItem(item)) return null;
+    if (item.physicalDefinition && item.liquid) return Number.isFinite(item.liquid.volume) && item.liquid.volume > 0 && /^(water|oil|spirits|ale|blood)$/.test(item.liquid.type) ? item.liquid : null;
     const text = (String(item.id || "") + " " + String(item.name || "")).toLowerCase();
     if (/poison|antitoxin|venom/.test(text)) return null;
     if (/(^|[^a-z])(oil flask|lamp oil|oil-flask|lamp-oil)([^a-z]|$)/.test(text)) return { type: "oil", volume: /lamp/.test(text) ? 4 : 3 };
@@ -54985,15 +57121,18 @@ function pourOutInventoryItem(item) {
     const liq = getItemLiquid(item);
     if (!room || !liq) return "";
     const name = getItemName(item);
-    if (!consumeOneFromInventory(item)) return "";
-    const keptEmpty = giveBackEmptyContainer(item);
+    const retained = !!(item.physicalDefinition && item.container && item.liquid);
+    const volume = liq.volume, type = liq.type;
+    if (retained) item.liquid = { type: type, volume: 0 };
+    else if (!consumeOneFromInventory(item)) return "";
+    const keptEmpty = retained ? "You keep the empty vessel." : giveBackEmptyContainer(item);
     materialCheckpoint();
     advanceStoryTurn(1);
     if (!materialCurrent()) return materialInterrupted();
-    const extra = addRoomLiquid(room, liq.type, liq.volume) + (keptEmpty ? " " + keptEmpty : "");
+    const extra = addRoomLiquid(room, type, volume) + (keptEmpty ? " " + keptEmpty : "");
     saveGameState();
     const f = (room.structural || []).find(function (x) { return x && x.liquidType === liq.type; });
-    return "You pour out " + withIndefiniteArticle(name) + ". It spreads into " + describeLiquidCoverage(room, liq.type) + " in the " + getRoomSizeClass(room) + " room." + extra;
+    return (retained ? "You pour out the contents of " + name : "You pour out " + withIndefiniteArticle(name)) + ". It spreads into " + describeLiquidCoverage(room, liq.type) + " in the " + getRoomSizeClass(room) + " room." + extra;
 }
 
 const FIXTURE_LIQUID_BY_ID = { "water-barrel": "water", "oil-barrel": "oil", "lamp-oil-barrel": "oil", "spirits-cask": "spirits", "rain-barrel": "water", "ale-barrels": "ale" };
@@ -56097,6 +58236,7 @@ function renderSynergyReplaceMenu(room,id) {
 
 
 const INTERACT_MENU_ACTIONS = [
+    { id: "tools", label: "Use objects", group: "act", visible: function () { return worldToolAvailable(); }, disabledReason: worldToolSceneBlock, title: "Use objects as levers or door braces.", run: function () { return openWorldToolMenu(""); } },
     {
         id: "putdown",
         label: "Put down",
@@ -60369,7 +62509,7 @@ function examineCurrentRoom() {
         appendObservationSeparator(narrationEl, false);
         appendNarrationText(narrationEl, trailFindings.join(" "));
     }
-    if (narrationEl && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", narrationEl.textContent, { source: "engine" });
+    if (narrationEl && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", textModeWithExits(narrationEl.textContent, room, getRoomStructureDirs(room)), { source: "engine", roomView: true });
     saveGameState();
 }
 
@@ -67566,6 +69706,11 @@ function openFixtureCard(fixture, cardOptions) {
         const fxDur = getDurabilityExamineLine(fixture, "fixture");
         if (fxDur) statBits.push(fxDur);
     }
+    if (typeof worldObjectFixtureActions === "function") {
+        worldObjectFixtureActions(fixture).forEach(function (action) {
+            addAction(action.label, function (event) { return worldObjectCardAction(fixture, action, event); }, { keepOpen: true, disabledReason: action.reason, title: action.note });
+        });
+    }
     statsEl.textContent = statBits.join("  ·  ");
     statsEl.style.display = statBits.length ? "block" : "none";
 
@@ -67688,6 +69833,7 @@ function renderContainerStoreCard(fixture, cardOpts) {
 // washable.
 function isRoomItemTakeable(item) {
     if (!item) return false;
+    if (typeof worldObjectRelation === "function" && worldObjectRelation(item, G.activeRoom)) return false;
     if (item.fixed === true || item.takeable === false) return false;
     if (isWashableRoomObject(item)) return false;
     return true;
@@ -67810,6 +69956,14 @@ function openItemModal(item) {
         actionsEl.appendChild(searchBtn);
     }
     actionsEl.appendChild(takeBtn);
+    if (typeof worldObjectFixtureActions === "function") {
+        worldObjectFixtureActions(item, "item").filter(function (action) { return action.id !== "take"; }).forEach(function (action) {
+            const button = document.createElement("button");
+            button.type = "button"; button.textContent = action.label; button.disabled = !!action.reason; button.title = action.reason || action.note;
+            button.onclick = function (event) { return worldObjectCardAction(item, action, event); };
+            actionsEl.appendChild(button);
+        });
+    }
     if (getDirectEquipmentSlot(item) && isRoomItemTakeable(item)) {
         const equipBtn = document.createElement("button");
         equipBtn.type = "button";
@@ -68311,6 +70465,11 @@ function collectBodyLoot(item, options) {
 
 function takeRoomObject(item) {
     if (!item || item.objectType === "body") return;
+    if (typeof performWorldObjectAction === "function" && typeof inferWorldObjectDefinition === "function" && !worldObjectExecution) {
+        const entry = worldObjectEntries().find(function (entry) { return entry.object === item && entry.location === "floor"; });
+        if (!entry) return worldObjectResult("blocked", "That object is no longer within reach.");
+        return performWorldObjectAction(entry, "take");
+    }
 
     const room = G.activeRoom || getRoom(G.player && G.player.coords);
     if (!room) return;
@@ -68326,6 +70485,7 @@ function takeRoomObject(item) {
     if (itemTypes.includes("coin")) {
         adjustCoins(G.player, getItemValue(item));
     } else if (item.container && item.container.wearable === "back" && G.player.rucksack === null) {
+        if (typeof worldObjectExecution !== "undefined" && worldObjectExecution) { wearRucksack(item); return; }
         resetNpcPanel();
         refreshInventoryUi(wearRucksack(item));
         return;
@@ -68333,12 +70493,14 @@ function takeRoomObject(item) {
         const packed = addToPlayerPack(item);
         if (packed.refused) {
             room.items.splice(Math.min(itemIndex, room.items.length), 0, packed.refused);
+            if (typeof worldObjectExecution !== "undefined" && worldObjectExecution) return;
             resetNpcPanel();
             refreshInventoryUi(packFullText([packed.refused]));
             return;
         }
     }
 
+    if (typeof worldObjectExecution !== "undefined" && worldObjectExecution) return;
     resetNpcPanel();
     refreshInventoryUi(`You pick up ${withIndefiniteArticle(name)}.`);
 }
@@ -69139,7 +71301,20 @@ function openPreferences() {
     const m = document.getElementById("preferencesModal");
     if (m) m.classList.add("active");
     syncPlayerPortraitPromptEditor();
+    if (typeof ttsRenderSettings === "function") ttsRenderSettings();
 }
+// Preferences tabs: General and TTS.
+function showPreferencesTab(name) {
+    const tts = name === "tts";
+    const general = document.getElementById("prefsPanelGeneral"), panel = document.getElementById("prefsPanelTTS");
+    if (general) general.hidden = tts;
+    if (panel) panel.hidden = !tts;
+    const a = document.getElementById("prefsTabGeneral"), b = document.getElementById("prefsTabTTS");
+    if (a) a.setAttribute("aria-selected", tts ? "false" : "true");
+    if (b) b.setAttribute("aria-selected", tts ? "true" : "false");
+    if (tts && typeof ttsRenderSettings === "function") ttsRenderSettings();
+}
+window.showPreferencesTab = showPreferencesTab;
 function closePreferences() {
     const m = document.getElementById("preferencesModal");
     if (m) m.classList.remove("active");
@@ -69156,6 +71331,10 @@ function applyShowTextModePreference(on) {
     const box = document.getElementById("showTextModeToggleInput");
     if (box) box.checked = !!on;
     if (!on && textModeState.enabled) setTextMode(false);
+    const tts = document.getElementById("ttsModeToggleInput");
+    if (tts) tts.disabled = !on;
+    const ttsLabel = document.getElementById("ttsModeToggleEl");
+    if (ttsLabel) ttsLabel.classList.toggle("is-disabled", !on);
 }
 function setShowTextMode(on) {
     try { localStorage.setItem(SHOW_TEXT_MODE_PREF_KEY, on ? "on" : "off"); } catch (e) {}
@@ -69166,6 +71345,169 @@ window.setShowTextMode = setShowTextMode;
     let on = false;
     try { on = localStorage.getItem(SHOW_TEXT_MODE_PREF_KEY) === "on"; } catch (e) {}
     applyShowTextModePreference(on);
+})();
+
+// TTS preference (2026-10-21): speech-ready story text while text mode is
+// active. Saved separately from the adventure; default off. Only usable when
+// Show text mode (beta) is on; the checkbox is greyed out otherwise.
+const TTS_MODE_PREF_KEY = "cyoaftwTTSMode";
+function applyTTSModePreference(on) {
+    if (!on && typeof ttsSpeechStop === "function") ttsSpeechStop("mode");
+    ttsModeState.enabled = !!on;
+    document.body.classList.toggle("tts-mode", !!on);
+    const box = document.getElementById("ttsModeToggleInput");
+    if (box) { box.checked = !!on; box.disabled = !document.body.classList.contains("show-text-mode"); }
+    const label = document.getElementById("ttsModeToggleEl");
+    if (label) label.classList.toggle("is-disabled", !document.body.classList.contains("show-text-mode"));
+    if (typeof ttsRenderSettings === "function" && document.getElementById("ttsStatusNote")) ttsRenderSettings();
+    if (on && typeof ttsListenEnsureLoop === "function") ttsListenEnsureLoop();
+    if (!on && typeof ttsListenAbort === "function") ttsListenAbort("mode");
+    if (typeof ttsSetMicButton === "function") ttsSetMicButton();
+}
+function setTTSMode(on) {
+    try { localStorage.setItem(TTS_MODE_PREF_KEY, on ? "on" : "off"); } catch (e) {}
+    applyTTSModePreference(on);
+}
+window.setTTSMode = setTTSMode;
+// TTS tab: reflects ttsModeState in the Preferences controls.
+function ttsSetControl(id, prop, value) { const el = document.getElementById(id); if (el && el[prop] !== value) el[prop] = value; }
+function ttsFillVoiceSelect(select, current, emptyLabel) {
+    if (!select) return;
+    const voices = ttsVoices();
+    const names = voices.map(function (v) { return v.name; });
+    const sig = names.join("|") + "#" + emptyLabel;
+    if (select.dataset.voiceSig !== sig) {
+        select.innerHTML = "";
+        const first = document.createElement("option"); first.value = ""; first.textContent = emptyLabel; select.appendChild(first);
+        voices.forEach(function (v) {
+            const o = document.createElement("option");
+            o.value = v.name;
+            o.textContent = ttsVoiceLabel(v.name);
+            select.appendChild(o);
+        });
+        select.dataset.voiceSig = sig;
+    }
+    select.value = current && names.indexOf(current) >= 0 ? current : "";
+}
+// Short readable voice names: "Microsoft Sonia Online (Natural) - English (United Kingdom)" -> "Sonia (Natural) · UK".
+function ttsVoiceLabel(name) {
+    const regions = { "United States": "US", "United Kingdom": "UK", "Canada": "CA", "Australia": "AU", "Ireland": "IE", "India": "IN", "New Zealand": "NZ", "South Africa": "ZA", "Hong Kong": "HK", "Singapore": "SG", "Philippines": "PH", "Kenya": "KE", "Nigeria": "NG", "Tanzania": "TZ" };
+    return String(name || "").replace(/^Microsoft\s+/, "").replace(/\s+Online(?=\s*\()/, "").replace(/\s+-\s+English\s*\(([^)]+)\)\s*$/, function (all, region) { return " \u00b7 " + (regions[region] || region); });
+}
+function ttsRenderSettings() {
+    const st = ttsModeState;
+    ttsSetControl("ttsSystemVoiceInput", "checked", !!st.systemVoice);
+    ttsFillVoiceSelect(document.getElementById("ttsNarratorVoiceSelect"), st.narratorVoice, "Best available");
+    ttsSetControl("ttsAccentSelect", "value", st.accent || "");
+    ttsSetControl("ttsRateInput", "value", String(st.rate));
+    ttsSetControl("ttsRateValue", "textContent", Math.round(st.rate * 100) + "%");
+    ttsSetControl("ttsVolumeInput", "value", String(st.volume));
+    ttsSetControl("ttsVolumeValue", "textContent", Math.round(st.volume * 100) + "%");
+    ttsSetControl("ttsNpcVoicesInput", "checked", !!st.npcVoices);
+    ttsSetControl("ttsVarietyInput", "value", String(st.variety));
+    ttsSetControl("ttsVarietyValue", "textContent", st.variety === 0 ? "none" : st.variety < 1 ? "low" : st.variety > 1 ? "high" : "normal");
+    ttsSetControl("ttsPauseSelect", "value", st.pause);
+    ttsSetControl("ttsReadIntimateInput", "checked", !!st.readIntimate);
+    ttsSetControl("ttsMicModeSelect", "value", ttsMicMode());
+    const micNote = document.getElementById("ttsMicNote");
+    if (micNote) micNote.textContent = ttsVoiceInputAvailable()
+        ? "Speak your commands. Hands-free opens the microphone after each narration; push to talk uses the microphone button. Uses your browser's selected microphone and its online speech service."
+        : "Voice input isn't available in this browser (Opera, Brave and Firefox have no speech service). Chrome supports it. On Windows, Win+H types what you say into the command box.";
+    ttsSetControl("ttsTurnCueInput", "checked", !!st.turnCue);
+    ttsSetControl("ttsUrgentCueInput", "checked", !!st.urgentCue);
+    ttsSetControl("ttsThinkingToneInput", "checked", !!st.thinkingTone);
+    ["turnCueUrl", "urgentCueUrl", "thinkingToneUrl"].forEach(function (key) {
+        const el = document.getElementById("tts" + key.charAt(0).toUpperCase() + key.slice(1) + "Input");
+        if (el && document.activeElement !== el) el.value = st[key] || "";
+    });
+    ttsSetControl("ttsCueVolumeInput", "value", String(st.cueVolume));
+    ttsSetControl("ttsCueVolumeValue", "textContent", Math.round(st.cueVolume * 100) + "%");
+    const pron = document.getElementById("ttsPronunciationsInput");
+    if (pron && document.activeElement !== pron) pron.value = st.pronunciations || "";
+    const list = document.getElementById("ttsSpeciesVoiceList");
+    if (list) {
+        Object.keys(TTS_SPECIES_VOICE).forEach(function (species) {
+            let row = list.querySelector('[data-species="' + species + '"]');
+            if (!row) {
+                row = document.createElement("label"); row.className = "tts-species-row"; row.setAttribute("data-species", species);
+                const name = document.createElement("span"); name.textContent = species.charAt(0).toUpperCase() + species.slice(1);
+                const select = document.createElement("select");
+                select.onchange = function () { ttsSetSpeciesVoice(species, select.value); };
+                row.appendChild(name); row.appendChild(select); list.appendChild(row);
+            }
+            ttsFillVoiceSelect(row.querySelector("select"), (st.speciesVoice || {})[species], "Automatic");
+        });
+    }
+    const note = document.getElementById("ttsStatusNote");
+    if (note) {
+        const voices = ttsVoices().length;
+        note.textContent = !ttsSynth() ? "This browser has no built-in voice. You can still use TTS (beta) with your own screen reader."
+            : !document.body.classList.contains("show-text-mode") || !st.enabled ? "Turn on Show text mode and TTS (beta) on the General tab, then open text mode. Voices come from your browser and device."
+            : !voices ? "No English voices were found yet. The browser default voice will be used."
+            : voices + " English voice" + (voices === 1 ? "" : "s") + " available. " + (ttsVoices().some(function (v) { return /natural|neural|online|google/i.test(v.name); }) ? "" : "Tip: Microsoft Edge offers more natural voices.");
+    }
+}
+// Five-second microphone level check with the device name (the page cannot
+// choose the recognition microphone; the browser's selected one is used).
+function ttsCheckMicrophone() {
+    const out = document.getElementById("ttsMicResult"), bar = document.getElementById("ttsMicLevelFill");
+    const say = function (text) { if (out) out.textContent = text; };
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { say("This browser cannot open the microphone."); return; }
+    say("Listening for 5 seconds. Say something...");
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        const C = window.AudioContext || window.webkitAudioContext;
+        if (!C) { stream.getTracks().forEach(function (t) { t.stop(); }); say("Microphone opened, but levels cannot be measured here."); return; }
+        if (!ttsSpeech.audio) ttsSpeech.audio = new C();
+        const c = ttsSpeech.audio; if (c.state === "suspended" && c.resume) c.resume();
+        const src = c.createMediaStreamSource(stream), an = c.createAnalyser(); an.fftSize = 1024; src.connect(an);
+        const buf = new Float32Array(an.fftSize), start = Date.now();
+        const track = stream.getAudioTracks()[0], label = track && track.label ? track.label : "your microphone";
+        let peak = 0;
+        const step = function () {
+            an.getFloatTimeDomainData(buf);
+            let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+            const rms = Math.sqrt(sum / buf.length); peak = Math.max(peak, rms);
+            if (bar) bar.style.width = Math.min(100, Math.round(rms * 400)) + "%";
+            if (Date.now() - start < 5000) { requestAnimationFrame(step); return; }
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            try { src.disconnect(); } catch (e) {}
+            if (bar) bar.style.width = "0%";
+            say(peak < 0.01 ? "Silent: no sound reached the browser from " + label + ". Check that it is not muted, that Windows allows apps to use it, and pick the right microphone in the browser's site settings."
+                : peak < 0.05 ? "Very quiet on " + label + ". Move closer or raise the microphone level."
+                : "Sound OK on " + label + ".");
+        };
+        step();
+    }, function (e) { say("The microphone was not allowed (" + (e && e.name || "error") + "). Allow it for this site in the browser."); });
+}
+window.ttsCheckMicrophone = ttsCheckMicrophone;
+window.ttsMicButton = ttsMicButton;
+function ttsTestPronunciation() {
+    const el = document.getElementById("ttsPronounceTestInput");
+    const word = el ? el.value.trim() : "";
+    const synth = ttsSynth();
+    if (!word || !synth) return;
+    try { synth.cancel(); } catch (e) {}
+    const u = new window.SpeechSynthesisUtterance(ttsApplyPronunciations(word));
+    const v = ttsNarratorVoice(); if (v) { u.voice = v; u.lang = v.lang || "en-US"; }
+    u.rate = ttsModeState.rate || 1; u.volume = ttsModeState.volume == null ? 1 : ttsModeState.volume;
+    synth.speak(u);
+}
+function ttsResetNpcVoicesFromPrefs() {
+    const n = ttsResetNpcVoices();
+    const el = document.getElementById("ttsResetStatus");
+    if (el) el.textContent = n ? n + " NPC voice" + (n === 1 ? "" : "s") + " reset." : "No saved NPC voices yet.";
+}
+window.ttsSetSetting = ttsSetSetting; window.ttsTestVoice = ttsTestVoice; window.ttsPlayCue = ttsPlayCue;
+window.ttsTestPronunciation = ttsTestPronunciation; window.ttsResetNpcVoicesFromPrefs = ttsResetNpcVoicesFromPrefs;
+(function () {
+    ttsLoadSettings();
+    let on = false;
+    try { on = localStorage.getItem(TTS_MODE_PREF_KEY) === "on"; } catch (e) {}
+    applyTTSModePreference(on);
+    const synth = ttsSynth();
+    const refresh = function () { ttsSpeech.voicesCache = null; const m = document.getElementById("preferencesModal"); if (m && m.classList.contains("active")) ttsRenderSettings(); };
+    if (synth && typeof synth.addEventListener === "function") synth.addEventListener("voiceschanged", refresh);
+    else if (synth) synth.onvoiceschanged = refresh;
 })();
 
 // Pure presentation preference, saved separately from the adventure.
@@ -69197,10 +71539,15 @@ const GAME_FONT_FAMILIES = {
     mono: "Consolas, 'Courier New', monospace"
 };
 function setGameFontSize(px) {
+    const index = ['14px', '16px', '18px', '20px'].indexOf(px);
+    if (index < 0) return;
     try { localStorage.setItem(FONT_SIZE_PREF_KEY, px); } catch (e) {}
     document.body.style.fontSize = px;
+    document.body.style.setProperty('--game-font-increase', (index * 2) + 'px');
     const sel = document.getElementById("fontSizeSelect");
     if (sel) sel.value = px;
+    const btn = document.getElementById("fontSizeBtn");
+    if (btn) btn.textContent = 'A' + (index > 0 ? '+' + index : '') + ' Text';
 }
 function setGameFontStyle(key) {
     try { localStorage.setItem(FONT_STYLE_PREF_KEY, key); } catch (e) {}
@@ -69216,7 +71563,7 @@ window.setGameFontStyle = setGameFontStyle;
     try {
         const size = localStorage.getItem(FONT_SIZE_PREF_KEY);
         const styleKey = localStorage.getItem(FONT_STYLE_PREF_KEY) || "default";
-        if (size) document.body.style.fontSize = size;
+        setGameFontSize(['14px', '16px', '18px', '20px'].includes(size) ? size : '14px');
         document.body.style.fontFamily = GAME_FONT_FAMILIES[styleKey] || "";
         const sizeSel = document.getElementById("fontSizeSelect");
         if (sizeSel) sizeSel.value = size || "14px";
@@ -71518,24 +73865,54 @@ function renderIntimacyActionMenu(npc) {
         // (happens on first action when there's no lastAction), add one now.
         // When penetration is active, use pull_out_generic (withdraws with
         // proper narration). Otherwise use step_away (stops the action).
+        // After Pull Away was used and there are no engaged acts, show End session instead.
         if (!actionBtnContainer.querySelector(".end-btn") &&
             npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active) {
-            const pullAwayBtn = document.createElement("button");
-            pullAwayBtn.className = "chat-option-btn intimacy-action-btn end-btn";
-            var isPenetrating = npc.intimacy.penetration && npc.intimacy.penetration.active;
-            pullAwayBtn.textContent = isPenetrating ? "Pull Out" : "Pull Away";
-            pullAwayBtn.title = isPenetrating ? "Withdraw from current penetration" : "Pull away from current action";
-            pullAwayBtn.style.whiteSpace = "nowrap";
-            pullAwayBtn.onclick = () => {
-                if (typeof chooseIntimacyAction === "function") {
-                    if (isPenetrating) {
-                        chooseIntimacyAction(npc, "pull_out_generic");
-                    } else {
-                        chooseIntimacyAction(npc, "pull_away_acts");
+            const engagedActIds = (typeof window.getEngagedActIds === "function") 
+                ? window.getEngagedActIds(npc) 
+                : [];
+            const hasEngagedActs = engagedActIds && engagedActIds.length > 0;
+            const isPenetrating = npc.intimacy.penetration && npc.intimacy.penetration.active;
+            
+            // If there are no engaged acts, show End session instead of Pull Away
+            if (!hasEngagedActs && !isPenetrating) {
+                const endSessionBtn = document.createElement("button");
+                endSessionBtn.className = "chat-option-btn intimacy-action-btn end-btn";
+                endSessionBtn.textContent = "End session";
+                endSessionBtn.title = "End the intimacy session and clear chat";
+                endSessionBtn.style.whiteSpace = "nowrap";
+                endSessionBtn.onclick = () => {
+                    if (typeof endIntimacyEncounter === "function") {
+                        endIntimacyEncounter(npc);
+                        // Clear chat log
+                        const chatLog = document.getElementById("chatLogEl");
+                        if (chatLog) {
+                            chatLog.innerHTML = "";
+                        }
+                        // Refresh room view
+                        if (typeof resetRoomViewAfterIntimacy === "function") {
+                            resetRoomViewAfterIntimacy(npc);
+                        }
                     }
-                }
-            };
-            actionBtnContainer.appendChild(pullAwayBtn);
+                };
+                actionBtnContainer.appendChild(endSessionBtn);
+            } else {
+                const pullAwayBtn = document.createElement("button");
+                pullAwayBtn.className = "chat-option-btn intimacy-action-btn end-btn";
+                pullAwayBtn.textContent = isPenetrating ? "Pull Out" : "Pull Away";
+                pullAwayBtn.title = isPenetrating ? "Withdraw from current penetration" : "Pull away from current action";
+                pullAwayBtn.style.whiteSpace = "nowrap";
+                pullAwayBtn.onclick = () => {
+                    if (typeof chooseIntimacyAction === "function") {
+                        if (isPenetrating) {
+                            chooseIntimacyAction(npc, "pull_out_generic");
+                        } else {
+                            chooseIntimacyAction(npc, "pull_away_acts");
+                        }
+                    }
+                };
+                actionBtnContainer.appendChild(pullAwayBtn);
+            }
         }
 
         returnBtn.onclick = () => {
@@ -72563,6 +74940,10 @@ function getExamineScore(stats) {
 
 function buildEquipmentExamineLines(item, slot) {
     const lines = [];
+    if (item.physicalDefinition && typeof calculateWorldObjectPhysics === "function") {
+        const physical = calculateWorldObjectPhysics(item.physicalDefinition);
+        if (physical) lines.push("Material: " + physical.material + ". Empty weight: " + physical.dryMassKg + " kg. Dimensions: " + physical.dimensionsCm.join(" × ") + " cm.");
+    }
     if (slot) lines.push("Slot: " + getEquipmentSlotMeta(slot).label);
     lines.push("Size when carried: " + getItemUnitSize(item) + " units. Equipped items use no storage space.");
     if (item.qualityName) lines.push("Quality: " + item.qualityName);
