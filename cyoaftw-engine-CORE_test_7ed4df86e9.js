@@ -74729,6 +74729,15 @@ function renderIntimacyActionMenu(npc) {
     
     el.innerHTML = "";
     
+    // Create tab container for body zones (single row, wraps as needed)
+    const tabContainer = document.createElement("div");
+    tabContainer.className = "intimacy-tab-container";
+    tabContainer.style.marginBottom = "8px";
+    tabContainer.style.display = "flex";
+    tabContainer.style.flexWrap = "wrap";
+    tabContainer.style.gap = "4px";
+    el.parentNode.insertBefore(tabContainer, el);
+    
     // Create separate position container (fixed at top)
     let positionContainer = document.getElementById("intimacyPositionContainer");
     if (!positionContainer) {
@@ -74911,15 +74920,91 @@ function renderIntimacyActionMenu(npc) {
             ? window.getEngagedActIds(npc) : [];
         const engagedActSet = new Set(engagedActIds);
         
+        // Build tabs: Clothing + anatomy-based zones + Climax + Requests
+        const sectionItems = menuItems.filter(item => item.type === "section");
+        
+        // Tab order: Clothing first, then anatomy-based zones, then Climax, then Requests
+        const tabOrder = ["Clothing"];
+        
+        // Add anatomy-based zones (only those with actions)
+        const anatomyZones = ["Mouth & Lips", "Hair", "Breasts", "Cock", "Pussy", "Anus", "Cloaca", "Lower Body", "Tail", "Body"];
+        anatomyZones.forEach(zone => {
+            const hasActions = sectionItems.some(item => item.label === zone && item.actions && item.actions.length > 0);
+            if (hasActions) tabOrder.push(zone);
+        });
+        
+        // Add special tabs
+        if (sectionItems.some(item => item.label === "Climax" && item.actions && item.actions.length > 0)) {
+            tabOrder.push("Climax");
+        }
+        if (sectionItems.some(item => item.label === "Receive" && item.actions && item.actions.length > 0)) {
+            tabOrder.push("Requests"); // Renamed from Receive to Requests
+        }
+        
+        // Create all tabs
+        let firstTab = true;
+        tabOrder.forEach(label => {
+            const zoneItem = sectionItems.find(item => item.label === label || (label === "Requests" && item.label === "Receive"));
+            if (zoneItem && zoneItem.actions && zoneItem.actions.length > 0) {
+                const actualSection = label === "Requests" ? "Receive" : label;
+                const tab = document.createElement("button");
+                tab.className = "intimacy-tab-btn" + (firstTab ? " active" : "");
+                tab.textContent = label;
+                tab.dataset.section = actualSection;
+                tab.onclick = () => showIntimacyTab(actualSection);
+                tabContainer.appendChild(tab);
+                firstTab = false;
+            }
+        });
+        
+        // Helper to show tab content
+        function showIntimacyTab(sectionLabel) {
+            const allTabs = document.querySelectorAll(".intimacy-tab-btn");
+            allTabs.forEach(tab => tab.classList.remove("active"));
+            
+            const activeTab = Array.from(allTabs).find(tab => tab.dataset.section === sectionLabel);
+            if (activeTab) activeTab.classList.add("active");
+            
+            // Hide all sections
+            const allSections = document.querySelectorAll(".intimacy-section-content");
+            allSections.forEach(s => s.style.display = "none");
+            
+            // Show selected section
+            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + sectionLabel + "\"]");
+            if (targetSection) targetSection.style.display = "";
+        }
+        
         // Render each menu item
         for (const item of menuItems) {
             // Skip separator elements
             if (item.type === "separator") continue;
 
-            // Flat action item — legacy format kept for compatibility.
-            // getMenuActions now emits grouped sections (Undress, Foreplay,
-            // Penetration, Other) which render in the section branch below.
+            // Flat action item — put into appropriate section
             if (item.type === "action") {
+                // Determine which section this flat action belongs to
+                let targetSection = "Foreplay"; // default
+                const act = typeof getAct === "function" ? getAct(item.id) : null;
+                if (act) {
+                    // Use string type checks (ACT_TYPES may not be available in engine scope)
+                    if (act.triggersClimax) targetSection = "Climax";
+                    if (act.type === "clothing" || act.type === 4) targetSection = "Clothing";
+                    if (act.type === "impact" || act.type === 5) targetSection = "Impact";
+                    if (act.type === "watersport" || act.type === 6) targetSection = "Watersports";
+                    if (act.type === "penetrate" || act.type === "continue" || act.type === 2 || act.type === 3) {
+                        targetSection = act.target === "vagina" || act.target === "pussy" ? "Pussy" : "Anus";
+                    }
+                }
+                
+                // Get or create section container
+                let sectionContainer = document.querySelector(".intimacy-section-content[data-section=\"" + targetSection + "\"]");
+                if (!sectionContainer) {
+                    sectionContainer = document.createElement("div");
+                    sectionContainer.className = "intimacy-section-content";
+                    sectionContainer.dataset.section = targetSection;
+                    sectionContainer.style.display = "none";
+                    el.appendChild(sectionContainer);
+                }
+                
                 const btn = document.createElement("button");
                 btn.className = "chat-option-btn intimacy-action-btn";
                 btn.textContent = item.label;
@@ -74941,12 +75026,18 @@ function renderIntimacyActionMenu(npc) {
                 } else {
                     btn.onclick = () => chooseIntimacyAction(npc, item.id);
                 }
-                el.appendChild(btn);
+                sectionContainer.appendChild(btn);
                 continue;
             }
 
-            // Handle continue button (special single action at top)
+            // Handle continue button (special single action at top) - put in first body zone
             if (item.type === "continue") {
+                // Put continue button in the first available body zone section
+                let firstSection = document.querySelector(".intimacy-section-content");
+                if (!firstSection) {
+                    firstSection = el;
+                }
+                
                 const btn = document.createElement("button");
                 btn.className = "chat-option-btn intimacy-action-btn continue-btn";
                 btn.textContent = item.label;
@@ -74962,12 +75053,6 @@ function renderIntimacyActionMenu(npc) {
                     const engagedIds = (typeof window.getEngagedActIds === "function" && npc.intimacy)
                         ? window.getEngagedActIds(npc) : [];
                     if (item.continueAll && engagedIds.length > 1) {
-                        // Multi-act Continue: one continuous beat. The legacy
-                        // path ran every engaged act through the full
-                        // chooseIntimacyAction pipeline on a 300ms stagger,
-                        // which narrated each act as its own beat (with
-                        // act-to-act transition narration like "You pull
-                        // back…") instead of a single ongoing motion.
                         if (typeof continueAllEngagedActs === "function" &&
                             continueAllEngagedActs(npc, engagedIds)) {
                             return;
@@ -74980,17 +75065,16 @@ function renderIntimacyActionMenu(npc) {
                         });
                         return;
                     }
-                    // Set flag to indicate this is a continue action
                     if (npc.intimacy) {
                         npc.intimacy.isContinueAction = true;
                     }
                     chooseIntimacyAction(npc, item.actionId);
                 };
-                actionBtnContainer.appendChild(btn);
+                firstSection.insertBefore(btn, firstSection.firstChild);
                 continue;
             }
             
-            // Handle pull-out/pull-away buttons (special end actions)
+            // Handle pull-out/pull-away buttons (special end actions) - keep in actionBtnContainer
             if (item.type === "end" && item.actionId) {
                 const btn = document.createElement("button");
                 btn.className = "chat-option-btn intimacy-action-btn end-btn";
@@ -75017,11 +75101,28 @@ function renderIntimacyActionMenu(npc) {
             // Skip category if no visible actions
             if (!visibleActions.length) continue;
             
+            // Create section content div for tabbed display
+            const sectionName = item.label === "Receive" ? "Requests" : item.label;
+            let sectionContainer = document.querySelector(".intimacy-section-content[data-section=\"" + sectionName + "\"]");
+            if (!sectionContainer) {
+                sectionContainer = document.createElement("div");
+                sectionContainer.className = "intimacy-section-content";
+                sectionContainer.dataset.section = sectionName;
+                sectionContainer.style.display = "none";
+                el.appendChild(sectionContainer);
+            }
+            
+            // Show first section by default
+            if (firstTab) {
+                sectionContainer.style.display = "";
+                firstTab = false;
+            }
+            
             // Category header
             const categoryEl = document.createElement("div");
             categoryEl.className = "chat-option-category" + (item.label === "Receive" ? " receive-category" : "");
             categoryEl.textContent = item.label;
-            el.appendChild(categoryEl);
+            sectionContainer.appendChild(categoryEl);
             
             // Actions
             for (const action of item.actions) {

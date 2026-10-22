@@ -1968,14 +1968,17 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     // willingness. Intercourse needs BOTH: a freshly stripped NPC cannot
     // be penetrated seconds later no matter how much skin is showing.
     // Her arousal is built by the consent-hint beats and foreplay acts.
+    // Consent gate: vaginal penetration requires NPC arousal
+    // Anal penetration only requires lube (not arousal)
     if (!act.playerIsBottom && act.type === ACT_TYPES.PENETRATE) {
         var _cgTarget = String(act.target || "").toLowerCase();
-        if (_cgTarget === "vagina" || _cgTarget === "pussy" || _cgTarget === "anus" || _cgTarget === "ass") {
+        if (_cgTarget === "vagina" || _cgTarget === "pussy") {
             var _cgArousal = (npc && npc.intimacy && npc.intimacy.arousal) ? npc.intimacy.arousal.npc : 0;
             if (_cgArousal < NPC_CONSENT_AROUSAL) {
                 return { valid: false, reason: "not aroused enough" };
             }
         }
+        // Note: anus/ass penetration is NOT gated by arousal - only by lube
     }
 
     // ── PENETRATION GATING ───────────────────────────────────────
@@ -4922,12 +4925,22 @@ function buildIntimacyPrompt(context) {
     } else if (npc.species && npc.species !== "Human") {
         _speciesContext = "\nSPECIES NOTE: This NPC is a " + npc.species + ". Keep their reactions consistent with their species characteristics if apparent.";
     }
-    // Add anatomy type note for reptilian species
+    // Add anatomy type note for reptilian and mixed species
     var _anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
     if (_anatomyType === "reptilian") {
         _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\" in descriptions, not \"vagina\" or \"anus\". The opening is smooth-scaled and muscular, not mammalian.";
-    } else if (_anatomyType === "mixed") {
-        _speciesContext += "\nANATOMY NOTE: This species has mixed anatomy — humanoid genitals but with scaly texture. Mention scales in descriptions.";
+    } else if (_anatomyType === "mixed" || _anatomyType === "furry" || _anatomyType === "scaled") {
+        // Get surface description
+        var surfaceDesc = "";
+        var anatomy = npc.anatomy || {};
+        var surfaceType = (anatomy.surfaceType || npc.surfaceType || "").toLowerCase();
+        if (surfaceType === "fur" || _anatomyType === "furry") surfaceDesc = "fur";
+        else if (surfaceType === "scales" || _anatomyType === "scaled") surfaceDesc = "scales";
+        else if (surfaceType === "feathers") surfaceDesc = "feathers";
+        else if (surfaceType) surfaceDesc = surfaceType;
+        else surfaceDesc = "non-skin texture";
+        
+        _speciesContext += "\nANATOMY NOTE: This species has " + _anatomyType + " anatomy — HUMANOID GENITALS (separate vagina and anus, NOT a cloaca or vent) with " + surfaceDesc + " texture. Use standard body part names (vagina/pussy, anus/ass) and mention the " + surfaceDesc + " surface in descriptions. NEVER use 'vent' or 'cloaca' for this species.";
     }
     // Add tail note if applicable
     if (typeof hasNPCTail === "function" && hasNPCTail(npc)) {
@@ -5090,9 +5103,19 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
     }
     var _anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
     if (_anatomyType === "reptilian") {
-        _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\", not \"vagina\" or \"anus\".";
-    } else if (_anatomyType === "mixed") {
-        _speciesContext += "\nANATOMY NOTE: This species has mixed anatomy — humanoid genitals with scaly texture. Mention scales in descriptions.";
+        _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\" in descriptions, not \"vagina\" or \"anus\".";
+    } else if (_anatomyType === "mixed" || _anatomyType === "furry" || _anatomyType === "scaled") {
+        // Get surface description
+        var surfaceDesc = "";
+        var anatomy = npc.anatomy || {};
+        var surfaceType = (anatomy.surfaceType || npc.surfaceType || "").toLowerCase();
+        if (surfaceType === "fur" || _anatomyType === "furry") surfaceDesc = "fur";
+        else if (surfaceType === "scales" || _anatomyType === "scaled") surfaceDesc = "scales";
+        else if (surfaceType === "feathers") surfaceDesc = "feathers";
+        else if (surfaceType) surfaceDesc = surfaceType;
+        else surfaceDesc = "non-skin texture";
+        
+        _speciesContext += "\nANATOMY NOTE: This species has " + _anatomyType + " anatomy — HUMANOID GENITALS (separate vagina and anus, NOT a cloaca or vent) with " + surfaceDesc + " texture. Use standard body part names (vagina/pussy, anus/ass) and mention the " + surfaceDesc + " surface in descriptions. NEVER use 'vent' or 'cloaca' for this species.";
     }
     if (typeof hasNPCTail === "function" && hasNPCTail(npc)) {
         _speciesContext += "\nThis NPC has a tail. Mention it in descriptions when relevant (brushing, curling, twitching).";
@@ -8342,29 +8365,89 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         return String(a.label).localeCompare(String(b.label));
     });
 
-    // Section grouping — differentiate undressing from foreplay from
-    // penetration, with undressing first so the natural flow reads top to
-    // bottom: get clothes out of the way, warm up, then escalate.
-    const MENU_SECTIONS = ["Undress", "Foreplay", "Penetration", "Climax", "Other"];
-    const getMenuSection = function (entry) {
+    // Section grouping by body zone for clarity
+    // First row: Clothing (always first)
+    // Second row: Body zones
+    // Only show categories that have applicable actions
+    
+    // Define body zone order - Clothing first, then body zones top to bottom
+    const BODY_ZONE_SECTIONS = ["Clothing", "Mouth & Lips", "Hair", "Breasts", "Cock", "Pussy", "Anus", "Cloaca", "Lower Body", "Tail", "Body", "Receive", "Climax", "Impact", "Watersports", "Other"];
+    
+    // Get menu section using body-zone categorization
+    const getMenuSection = function (entry, npc) {
         const act = getAct(entry.id) || {};
         const actType = act.type || entry.type;
+        
+        // Explicit menuSection override takes precedence
         if (act.menuSection) return act.menuSection;
-        if (actType === ACT_TYPES.CLOTHING) return "Undress";
+        
+        // Clothing actions go first
+        if (actType === ACT_TYPES.CLOTHING) return "Clothing";
+        
+        // Use body-zone category from getActionCategory
+        if (typeof getActionCategory === "function") {
+            const bodyZone = getActionCategory(entry.id, npc);
+            // Map some categories to cleaner labels
+            if (bodyZone === "Mouth & Lips") return "Mouth & Lips";
+            if (bodyZone === "Breasts") return "Breasts";
+            if (bodyZone === "Pussy") return "Pussy";
+            if (bodyZone === "Cock") return "Cock";
+            if (bodyZone === "Anus") return "Anus";
+            if (bodyZone === "Cloaca") return "Cloaca";
+            if (bodyZone === "Lower Body") return "Lower Body";
+            if (bodyZone === "Tail") return "Tail";
+            if (bodyZone === "Body") return "Body";
+            if (bodyZone === "Hair") return "Hair";
+            if (bodyZone === "Mouth & Lips") return "Mouth & Lips";
+        }
+        
+        // Fallback to action-type categories
+        if (actType === ACT_TYPES.IMPACT) return "Impact";
+        if (actType === ACT_TYPES.WATERSPORT) return "Watersports";
         if (act.triggersClimax) return "Climax";
-        if (actType === ACT_TYPES.PENETRATE || actType === ACT_TYPES.CONTINUE) return "Penetration";
-        if (actType === ACT_TYPES.END || actType === ACT_TYPES.WATERSPORT) return "Other";
+        if (actType === ACT_TYPES.PENETRATE || actType === ACT_TYPES.CONTINUE) {
+            // Penetration acts should be in their body zone (Pussy/Anus/Cloaca), but fallback here
+            if (act.target === "vagina" || act.target === "pussy" || act.target === "clitoris") return "Pussy";
+            if (act.target === "anus" || act.target === "butt" || act.target === "buttocks") return "Anus";
+            if (act.target === "cloaca") return "Cloaca";
+            return "Penetration";
+        }
+        if (actType === ACT_TYPES.END) return "Other";
+        
+        // Receive actions (NPC servicing player)
+        if (act.playerIsBottom === true) return "Receive";
+        
         return "Foreplay";
     };
 
     const sectionedActions = {};
     for (const entry of flatActions) {
-        const section = getMenuSection(entry);
+        const section = getMenuSection(entry, npc);
         if (!sectionedActions[section]) sectionedActions[section] = [];
         sectionedActions[section].push(entry);
     }
 
-    for (const section of MENU_SECTIONS) {
+    // Separate Clothing (first row) from body zones (second row)
+    const clothingSection = sectionedActions["Clothing"];
+    const bodyZoneSections = BODY_ZONE_SECTIONS.filter(s => s !== "Clothing");
+    
+    // Add Clothing first if it exists
+    if (clothingSection && clothingSection.length > 0) {
+        menu.push({
+            type: "section",
+            label: "Clothing",
+            actions: clothingSection.map(entry => ({
+                id: entry.id,
+                label: entry.label,
+                description: entry.description,
+                disabled: entry.disabled,
+                disabledHint: entry.disabledHint
+            }))
+        });
+    }
+    
+    // Add body zone sections (only those with actions)
+    for (const section of bodyZoneSections) {
         const actions = sectionedActions[section];
         if (!actions || !actions.length) continue;
         menu.push({
