@@ -1468,6 +1468,11 @@ function endIntimacyEncounter(npc) {
     // typeof-guarded no-op when the engine doesn't provide it).
     if (typeof window.hideIntimacyPortrait === "function") window.hideIntimacyPortrait();
     
+    // Restore left panel to normal state
+    if (typeof window.restoreLeftPanelAfterIntimacy === "function") {
+        window.restoreLeftPanelAfterIntimacy();
+    }
+    
     // Stop any NPC-led pleasure loop (engine-side oral/stroke loop)
     if (npc.intimacy.npcPleasureLoop) npc.intimacy.npcPleasureLoop = null;
     
@@ -1812,6 +1817,11 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     // the Tail category heading never surfaces for tailless NPCs.
     if (act.requiresNpcTail && !hasNPCTail(npc)) {
         return { valid: false, reason: "no tail", hidden: true };
+    }
+
+    // Cloaca-specific acts require NPC to have cloaca
+    if (act.requiresNpcCloaca && !npcHasCloacaFlag(npc)) {
+        return { valid: false, reason: "no cloaca", hidden: true };
     }
 
     // Cloaca-bearing NPCs have a single cloacal vent instead of separate
@@ -4136,6 +4146,9 @@ function handleLubeFromAction(npc, act) {
         const targetPart = ejaculationActions[act.id];
         addLube(npc, targetPart, 80);
     }
+    
+    // Add natural lubrication based on arousal and stimulation
+    handleNaturalLubrication(npc, act);
 }
 
 /**
@@ -5981,6 +5994,51 @@ var PLAYER_ORGASM_SAMPLES = {
     }
 };
 
+// Male player climax samples - context-aware like PLAYER_ORGASM_SAMPLES
+// Keyed by what the player's cock is doing at the moment of climax
+var PLAYER_MALE_CLIMAX_SAMPLES = {
+    // Inside NPC's mouth (fellatio)
+    oral: [
+        "Your cock swells and you cannot hold back any longer. With a groan you bury yourself deep in {npcp} throat and come, thick spurts of cum flooding {npcp} mouth. {npcS} gurgles around your shaft, swallowing as you pulse, {npcp} tongue working the underside of your cock to draw out every last drop as you climax intensely.",
+        "The pressure crests and you push deep, seating yourself to the root in {npcp} mouth. Your orgasm tears through you as you empty yourself down {npcp} throat, {npcs} lips sealed tight around the base of your shaft. You climax with a broken groan, hips jerking as {npcs} continues to suck you through each wave.",
+        "You feel the heat building in your balls with every stroke of {npcp} tongue, and then it breaks. You thrust deep and come hard, filling {npcp} mouth with your release. {npcS} moans around your cock, {npcp} throat working as you climax, {npcp} hands gripping your hips to keep you buried deep.",
+        "With a sharp cry you climax, driving your cock into {npcp} mouth as the first wave hits. {npcS} doesn't pull back — {npcs} takes it all, {npcp} lips pressed against your skin, {npcp} tongue massaging your shaft as you spill your cum in hot pulses.",
+        "The pleasure coils tighter and tighter until it snaps. You groan and thrust deep into {npcp} mouth, coming hard as {npcs} swallows around you. Your climax rolls through you in waves, {npcp} hands holding your hips steady as you empty yourself between {npcp} lips."
+    ],
+    // Inside NPC's vagina
+    vaginal: [
+        "The pressure that has been building with every stroke finally peaks, and you slam home one last time. You climax deep inside {npcp} pussy, your cock pulsing as you fill {npcp} with your cum. {npcS} cries out at the sudden heat flooding {npcp}, {npcp} inner walls clamping down on your shaft as you ride out the last waves of your orgasm.",
+        "You drive in hard and the dam breaks. With a guttural groan you bury yourself to the hilt and come, your release flooding {npcp} depths. {npcS} gasps and clenches around you, {npcp} body milking your cock as you climax, the tight grip drawing out every last spurt.",
+        "The pleasure climbs with every thrust until it crests all at once. You press deep and let go, spilling your seed into {npcp} welcoming heat. {npcS} moans beneath you, {npcp} hips lifting to take you deeper as you climax, {npcp} body shuddering around your pulsing cock.",
+        "One final, desperate thrust and you're over the edge. You climax with a roar, emptying yourself deep inside {npcp}, the slick walls of {npcp} pussy gripping your shaft as you pulse. {npcS} wraps {npcp} legs around you, holding you tight as the last aftershocks ripple through you.",
+        "The tension snaps and you slam into {npcp} with a final, deep thrust. Your orgasm tears through you as you come inside {npcp}, the hot flood of your release filling {npcp} completely. {npcS} whimpers and clings to you, {npcp} body trembling around your cock as you finish."
+    ],
+    // Inside NPC's anus
+    anal: [
+        "The tight heat of {npcp} ass finally pushes you over the edge. You thrust deep and come hard, filling {npcp} bowels with your release. {npcS} cries out at the sudden fullness, {npcp} ring clamping down on your shaft as you climax, {npcp} body struggling to contain your thick load.",
+        "The pressure builds until it's unbearable, and you drive in deep one last time. You climax in {npcp} tight ass, your cock pulsing as you spill your cum inside {npcO}. {npcS} gasps and clenches around you, {npcp} body gripping your shaft as you ride out the waves of pleasure.",
+        "With a groan you bottom out in {npcp} ass and let go. Your release floods {npcp} depths, the tight channel milking every drop from your cock. {npcS} moans and pushes back against you, {npcp} hips grinding as you climax together, the intense pressure drawing out your orgasm.",
+        "The pleasure crashes over you and you bury yourself to the root. You come hard in {npcp} ass, thick spurts of cum filling {npcp} tight passage. {npcS} whimpers and bears down, {npcp} body taking your release as you pulse deep inside {npcO}.",
+        "You can't hold back any longer. You thrust deep into {npcp} ass and climax with a shout, your cock jerking as you spill your seed. {npcS} groans beneath you, {npcp} tight heat clenching around your shaft as you finish, drawing out the last of your orgasm."
+    ],
+    // On NPC's body (external finish)
+    external: [
+        "The pleasure finally crests and you pull back, stroking yourself as the first wave hits. You climax hard, painting {npcp} {target} with thick ropes of cum. {npcS} watches with dark, satisfied eyes as you spend yourself across {npcp} skin, {npcp} breath catching as the hot streaks land.",
+        "With a groan you pull out at the last moment and come, thick spurts of cum splattering across {npcp} {target}. {npcS} gasps as the warm fluid hits {npcp} skin, {npcp} fingers reaching out to catch some of your release as you climax, your cock jerking in your hand.",
+        "The pressure peaks and you cannot hold it back. You pull away and climax, your cum arcing through the air to land on {npcp} {target}. {npcS} moans at the sight, {npcp} tongue darting out to taste the droplets that land on {npcp} lips as you finish with a shudder.",
+        "The tension finally snaps and you withdraw, your cock throbbing in your grip. You climax with a cry, thick jets of cum painting {npcp} {target} in warm streaks. {npcS} shivers as the fluid touches {npcp} skin, {npcp} eyes locked on your cock as you spend yourself.",
+        "You feel the orgasm building and pull back just in time. You come hard, your release splashing across {npcp} {target} in messy ropes. {npcS} watches avidly as you climax, {npcp} hand reaching out to catch some of your cum as it lands, spreading it across {npcp} skin with a hungry smile."
+    ],
+    // Hands or general stimulation (no specific target)
+    general: [
+        "The pressure finally breaks and you groan, your cock throbbing in your grip. You climax hard, thick spurts of cum splattering across your hand and the space between you. {npcS} watches with intense focus as you spend yourself, {npcp} breath catching at the sight of your release.",
+        "With a shout you come, your body tensing as the orgasm rolls through you. Your cock jerks violently, cum shooting across the space between you. {npcS} gasps and leans in, {npcp} tongue catching a droplet of your release as you finish with a shudder.",
+        "The pleasure builds until it's unbearable, and then it breaks. You climax with a broken cry, your cock pulsing as you spill your cum. {npcS} watches every second, {npcp} eyes dark with arousal as {npcs} takes in the sight of your release.",
+        "Your balls draw up tight and you know it's coming. With a groan you climax, thick ropes of cum painting the air between you. {npcS} reaches out, {npcp} fingers catching some of your release and bringing it to {npcp} mouth, {npcp} tongue tasting your cum as you finish.",
+        "The tension snaps and you come hard, your cock jerking in your hand as thick spurts of cum spray out. {npcS} moans at the sight, {npcp} hand joining yours on your shaft, helping you milk out the last drops as you climax together."
+    ]
+};
+
 /**
  * True while the NPC's mouth is working the player's pussy — the climax
  * context for the female receive-oral acts. They never set penetration
@@ -6014,6 +6072,50 @@ function buildPlayerOrgasmNarration(npc, player, act, intimacy) {
     var beats = squirt ? pool.squirt : pool.plain;
     if (!beats || !beats.length) beats = PLAYER_ORGASM_SAMPLES.general.plain;
     return applyNPCPronouns(npc, pickUnique(beats, intimacy, "player-orgasm-" + ctx + (squirt ? "-squirt" : "-plain")));
+}
+
+/**
+ * Build male player climax narration
+ * Determines context based on where the player's cock is at the moment of climax:
+ * - oral: NPC's mouth on player's cock (fellatio)
+ * - vaginal: player's cock inside NPC's vagina
+ * - anal: player's cock inside NPC's anus
+ * - external: finishing on NPC's body (target specified)
+ * - general: other/unknown context
+ * Returns a descriptive climax narration with NPC reaction
+ */
+function buildMaleClimaxNarration(npc, player, act, intimacy) {
+    var pen = intimacy && intimacy.penetration;
+    var target = act ? (act.target || (act.consequence === "internal_semen" ? "vagina" : "")) : "";
+    var ctx = "general";
+    
+    // Determine context based on penetration state and action
+    if (pen && pen.active && pen.tool === "penis") {
+        if (pen.target === "mouth" || pen.target === "lips") {
+            ctx = "oral";
+        } else if (pen.target === "vagina" || pen.target === "pussy" || pen.target === "clitoris" || pen.target === "clit") {
+            ctx = "vaginal";
+        } else if (pen.target === "anus" || pen.target === "ass" || pen.target === "buttocks" || pen.target === "butt") {
+            ctx = "anal";
+        }
+    } else if (act && act.consequence === "internal_semen") {
+        // Internal ejaculation climax action
+        if (target === "vagina" || target === "pussy") ctx = "vaginal";
+        else if (target === "anus" || target === "ass") ctx = "anal";
+        else if (target === "mouth") ctx = "oral";
+    } else if (act && act.consequence === "external_semen") {
+        // External finish - use the target or default to general
+        ctx = "external";
+    }
+    
+    var pool = PLAYER_MALE_CLIMAX_SAMPLES[ctx] || PLAYER_MALE_CLIMAX_SAMPLES.general;
+    var beats = pool;
+    if (!beats || !beats.length) beats = PLAYER_MALE_CLIMAX_SAMPLES.general;
+    
+    // Pick a unique beat and apply NPC pronouns
+    var beat = pickUnique(beats, intimacy, "player-male-climax-" + ctx);
+    if (!beat) beat = pickRandom(beats);
+    return applyNPCPronouns(npc, beat);
 }
 
 function buildIntimacyResponse(npc, player, act, intimacy) {
@@ -8603,6 +8705,83 @@ function useLube(npc, bodyPart = "general", amount = 10) {
     
     console.log(`[Intimacy] Used lube from ${bodyPart}. Level: ${part.level}`);
     return true;
+}
+
+/**
+ * Handle natural lubrication accumulation
+ * Adds lube based on arousal levels and direct stimulation:
+ * - Vaginal: Self-lubrication from arousal (precum mechanics) and direct stimulation
+ * - Anal: Does NOT self-lubricate (per user requirement)
+ * - Mouth: Always considered lubricated (saliva)
+ * 
+ * Natural lube thresholds:
+ * - Vagina: Starts at 30% arousal, increases with arousal level
+ * - Direct vaginal stimulation: Adds extra lube faster
+ */
+function handleNaturalLubrication(npc, act) {
+    if (!npc || !npc.intimacy || !npc.intimacy.arousal) return;
+    
+    const intimacy = npc.intimacy;
+    const npcArousal = intimacy.arousal.npc || 0;
+    
+    // Mouth is always lubricated (saliva) - no need to track
+    // Mark it as having lube if not already set
+    if (!intimacy.lube.mouth.hasLube) {
+        addLube(npc, "mouth", 100);
+    }
+    
+    // VAGINAL NATURAL LUBRICATION
+    // Self-lube from arousal (precum mechanics)
+    // Starts at 30% of orgasm threshold (240/800)
+    const VAGINAL_LUBE_THRESHOLD = 240;  // 30% of 800
+    const MAX_NATURAL_VAGINAL_LUBE = 80; // Can accumulate up to 80 from arousal alone
+    
+    // Check if vaginal lube needs updating based on arousal
+    if (!intimacy.lube.vagina.hasLube || intimacy.lube.vagina.level < MAX_NATURAL_VAGINAL_LUBE) {
+        if (npcArousal >= VAGINAL_LUBE_THRESHOLD) {
+            // Calculate lube amount based on arousal level
+            // 240-400: 20-40 lube
+            // 400-600: 40-60 lube  
+            // 600-800: 60-80 lube
+            let naturalLube = 0;
+            if (npcArousal >= 600) {
+                naturalLube = 80;
+            } else if (npcArousal >= 400) {
+                naturalLube = 40 + Math.floor((npcArousal - 400) / 200 * 40);
+            } else if (npcArousal >= 240) {
+                naturalLube = Math.floor((npcArousal - 240) / 160 * 40);
+            }
+            
+            // Only update if we have more lube to add
+            if (naturalLube > intimacy.lube.vagina.level) {
+                addLube(npc, "vagina", naturalLube - intimacy.lube.vagina.level);
+            }
+        }
+    }
+    
+    // DIRECT VAGINAL STIMULATION - adds extra lube faster
+    // Teasing/fingering/rubbing the vagina/pussy/clitoris adds lube
+    if (act && !act.playerIsBottom) { // Player is the actor
+        const target = (act.target || "").toLowerCase();
+        const isVaginalStimulation = target === "vagina" || target === "pussy" || 
+                                     target === "clitoris" || target === "clit";
+        
+        // Don't add for penetration acts (they consume lube, don't add it)
+        const isPenetration = act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE;
+        
+        if (isVaginalStimulation && !isPenetration) {
+            // Add lube based on action intensity
+            const arousalGain = (act.arousal && act.arousal.n) || 0;
+            // More intimate actions add more lube
+            let lubeToAdd = Math.floor(arousalGain / 5); // 5 arousal = 1 lube
+            if (lubeToAdd > 0) {
+                addLube(npc, "vagina", lubeToAdd);
+            }
+        }
+    }
+    
+    // ANAL DOES NOT SELF-LUBRICATE per user requirement
+    // Anal lube must come from explicit actions (licking, spitting, etc.)
 }
 
 /**
@@ -14079,12 +14258,29 @@ function isCivilizedSpecies(species) {
 }
 
 /**
- * Get the anatomy type for an NPC based on species template.
- * Returns "humanoid" (standard genitals), "reptilian" (cloaca), or "mixed"
- * (humanoid genitals with scaly texture).
+ * Get the anatomy type for an NPC based on species template or override.
+ * Returns "humanoid" (standard genitals), "reptilian" (cloaca), "mixed"
+ * (humanoid genitals with scaly texture), "furry", or "scaled".
+ * 
+ * Priority:
+ * 1. Explicit override on npc.nsfwTraits.anatomyType
+ * 2. Explicit override on npc.anatomyType
+ * 3. Template anatomyType
+ * 4. Surface type mapping (fur -> furry, scales -> scaled)
+ * 5. Default: humanoid
  */
 function getNPCAnatomyType(npc) {
     if (!npc || !npc.species) return "humanoid";
+    
+    // Check for explicit overrides first (NSFW overrides SFW)
+    if (npc.nsfwTraits && npc.nsfwTraits.anatomyType) {
+        return npc.nsfwTraits.anatomyType;
+    }
+    if (npc.anatomyType) {
+        return npc.anatomyType;
+    }
+    
+    // Get template anatomyType
     var template = null;
     if (typeof getSpeciesTemplate === "function") {
         template = getSpeciesTemplate(npc.species);
@@ -14092,6 +14288,19 @@ function getNPCAnatomyType(npc) {
         template = window.getSpeciesTemplate(npc.species);
     }
     if (template && template.anatomyType) return template.anatomyType;
+    
+    // Map surfaceType to anatomy descriptor
+    const anatomy = npc.anatomy || {};
+    const surfaceType = anatomy.surfaceType || (npc.surfaceType) || "";
+    const surfaceToAnatomy = {
+        "fur": "furry",
+        "scales": "scaled",
+        "feathers": "furry"
+    };
+    if (surfaceToAnatomy[surfaceType.toLowerCase()]) {
+        return surfaceToAnatomy[surfaceType.toLowerCase()];
+    }
+    
     return "humanoid";
 }
 

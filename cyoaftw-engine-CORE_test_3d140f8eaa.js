@@ -73792,6 +73792,8 @@ window.hideIntimacyPortrait = function () {
     setIntimacyPortraitVisible(false);
     updateIntimacyPortraitUI(null);
 };
+// Restore left panel after intimacy encounter ends
+window.restoreLeftPanelAfterIntimacy = restoreLeftPanelAfterIntimacy;
 
 // Test button: allows player to overwrite the intimacy portrait prompt for testing
 window.showIntimacyPromptTest = function () {
@@ -74345,6 +74347,326 @@ function resetRoomViewAfterIntimacy(npc, delayMs = 1500) {
 }
 
 /**
+ * Render NPC intimacy state indicators (arousal, anatomy) below roomNameEl
+ * Called during intimacy mode to show compact state bars
+ */
+function renderNPCIntimacyStateIndicators(npc) {
+    if (!npc || !npc.intimacy) return;
+    
+    const nameEl = document.getElementById("roomNameEl");
+    if (!nameEl) return;
+    
+    // Remove existing indicators if present
+    const existingIndicator = document.getElementById("npcIntimacyStateBar");
+    if (existingIndicator) existingIndicator.remove();
+    
+    // Create state bar container
+    const stateBar = document.createElement("div");
+    stateBar.id = "npcIntimacyStateBar";
+    stateBar.style.marginTop = "4px";
+    stateBar.style.display = "flex";
+    stateBar.style.gap = "8px";
+    stateBar.style.flexWrap = "wrap";
+    
+    const intimacy = npc.intimacy;
+    
+    // 1. Anatomy indicator (shows anatomy type)
+    const anatomyType = (typeof getNPCAnatomyType === "function") 
+        ? getNPCAnatomyType(npc) 
+        : "humanoid";
+    const anatomyLabel = {
+        "humanoid": "Humanoid",
+        "reptilian": "Cloaca",
+        "mixed": "Mixed",
+        "amorphous": "Amorphous",
+        "furry": "Furry",
+        "scaled": "Scaled"
+    }[anatomyType] || anatomyType;
+    
+    const anatomyIndicator = document.createElement("span");
+    anatomyIndicator.className = "intimacy-state-indicator";
+    anatomyIndicator.style.fontSize = "10px";
+    anatomyIndicator.style.padding = "2px 6px";
+    anatomyIndicator.style.backgroundColor = "#4a1d4a";
+    anatomyIndicator.style.borderRadius = "3px";
+    anatomyIndicator.style.color = "#ffd4ff";
+    anatomyIndicator.textContent = `Anatomy: ${anatomyLabel}`;
+    stateBar.appendChild(anatomyIndicator);
+    
+    // 2. Arousal bar
+    const npcArousal = intimacy.arousal && intimacy.arousal.npc ? intimacy.arousal.npc : 0;
+    const orgasmThreshold = window.AROUSAL_CONFIG ? window.AROUSAL_CONFIG.ORGASM_THRESHOLD : 800;
+    const arousalPercent = Math.min(100, Math.floor((npcArousal / orgasmThreshold) * 100));
+    
+    const arousalBar = document.createElement("div");
+    arousalBar.className = "intimacy-state-bar";
+    arousalBar.style.display = "flex";
+    arousalBar.style.alignItems = "center";
+    arousalBar.style.gap = "4px";
+    arousalBar.style.fontSize = "10px";
+    
+    const arousalLabel = document.createElement("span");
+    arousalLabel.textContent = "Arousal:";
+    arousalLabel.style.color = "#ccc";
+    arousalBar.appendChild(arousalLabel);
+    
+    const arousalMeter = document.createElement("div");
+    arousalMeter.style.width = "80px";
+    arousalMeter.style.height = "8px";
+    arousalMeter.style.backgroundColor = "#333";
+    arousalMeter.style.borderRadius = "4px";
+    arousalMeter.style.overflow = "hidden";
+    arousalMeter.style.position = "relative";
+    
+    const arousalFill = document.createElement("div");
+    arousalFill.style.position = "absolute";
+    arousalFill.style.left = "0";
+    arousalFill.style.top = "0";
+    arousalFill.style.bottom = "0";
+    arousalFill.style.width = `${arousalPercent}%`;
+    arousalFill.style.background = `linear-gradient(90deg, #884488, #cc66cc, #ff99ff)`;
+    arousalFill.style.borderRadius = "4px";
+    arousalFill.style.transition = "width 0.3s ease";
+    arousalMeter.appendChild(arousalFill);
+    arousalBar.appendChild(arousalMeter);
+    
+    const arousalText = document.createElement("span");
+    arousalText.textContent = `${arousalPercent}%`;
+    arousalText.style.color = "#ffccff";
+    arousalText.style.fontWeight = "bold";
+    arousalBar.appendChild(arousalText);
+    stateBar.appendChild(arousalBar);
+    
+    // 3. Lube indicators (vagina, anus, mouth)
+    if (intimacy.lube) {
+        const lubeParts = ["vagina", "anus", "mouth"];
+        lubeParts.forEach(part => {
+            const lube = intimacy.lube[part];
+            if (lube && lube.level > 0) {
+                const lubeBar = document.createElement("div");
+                lubeBar.className = "intimacy-state-bar";
+                lubeBar.style.display = "flex";
+                lubeBar.style.alignItems = "center";
+                lubeBar.style.gap = "4px";
+                lubeBar.style.fontSize = "10px";
+                
+                const lubeLabel = document.createElement("span");
+                lubeLabel.textContent = `${part}:`;
+                lubeLabel.style.color = "#aaa";
+                lubeBar.appendChild(lubeLabel);
+                
+                const lubeMeter = document.createElement("div");
+                lubeMeter.style.width = "60px";
+                lubeMeter.style.height = "6px";
+                lubeMeter.style.backgroundColor = "#222";
+                lubeMeter.style.borderRadius = "3px";
+                lubeMeter.style.overflow = "hidden";
+                lubeMeter.style.position = "relative";
+                
+                const lubeFill = document.createElement("div");
+                lubeFill.style.position = "absolute";
+                lubeFill.style.left = "0";
+                lubeFill.style.top = "0";
+                lubeFill.style.bottom = "0";
+                lubeFill.style.width = `${Math.min(100, lube.level)}%`;
+                lubeFill.style.backgroundColor = "#4488ff";
+                lubeFill.style.borderRadius = "3px";
+                lubeMeter.appendChild(lubeFill);
+                lubeBar.appendChild(lubeMeter);
+                
+                const lubeText = document.createElement("span");
+                lubeText.textContent = `${lube.level}%`;
+                lubeText.style.color = "#88cfff";
+                lubeBar.appendChild(lubeText);
+                stateBar.appendChild(lubeBar);
+            }
+        });
+    }
+    
+    // 4. Penetration state indicator
+    if (intimacy.penetration && intimacy.penetration.active) {
+        const pen = intimacy.penetration;
+        const penIndicator = document.createElement("span");
+        penIndicator.className = "intimacy-state-indicator";
+        penIndicator.style.fontSize = "10px";
+        penIndicator.style.padding = "2px 6px";
+        penIndicator.style.backgroundColor = "#2d4a2d";
+        penIndicator.style.borderRadius = "3px";
+        penIndicator.style.color = "#88ff88";
+        penIndicator.textContent = `Penetrating: ${pen.tool || "?"} -> ${pen.target || "?"}`;
+        stateBar.appendChild(penIndicator);
+    }
+    
+    // Insert after roomNameEl
+    if (nameEl.nextSibling) {
+        nameEl.parentNode.insertBefore(stateBar, nameEl.nextSibling);
+    } else {
+        nameEl.parentNode.appendChild(stateBar);
+    }
+}
+
+/**
+ * Render player intimacy state indicators in left panel during intimacy
+ * Replaces the normal interact buttons with player's state
+ */
+function renderPlayerIntimacyStateIndicators() {
+    const leftEl = document.getElementById("interactLeftEl");
+    if (!leftEl) return;
+    
+    // Save existing content to restore later
+    if (!leftEl._intimacyBackup) {
+        leftEl._intimacyBackup = leftEl.innerHTML;
+    }
+    
+    // Clear and create player state indicators
+    leftEl.innerHTML = "";
+    
+    const player = G.player;
+    if (!player || !player.intimacy) {
+        // No player intimacy data, show nothing or restore backup
+        return;
+    }
+    
+    const playerIntimacy = player.intimacy;
+    
+    // Create container for player state
+    const container = document.createElement("div");
+    container.id = "playerIntimacyStateContainer";
+    container.style.display = "flex";
+    container.style.flexDirection = "column";
+    container.style.gap = "6px";
+    container.style.padding = "4px";
+    
+    // Heading
+    const heading = document.createElement("div");
+    heading.className = "interact-side-heading";
+    heading.textContent = "Your State";
+    heading.style.color = "#ffccff";
+    container.appendChild(heading);
+    
+    // Player arousal bar
+    const playerArousal = playerIntimacy.arousal ? playerIntimacy.arousal.player : 0;
+    const orgasmThreshold = window.AROUSAL_CONFIG ? window.AROUSAL_CONFIG.ORGASM_THRESHOLD : 800;
+    const playerArousalPercent = Math.min(100, Math.floor((playerArousal / orgasmThreshold) * 100));
+    
+    const playerArousalBar = document.createElement("div");
+    playerArousalBar.className = "intimacy-state-bar";
+    playerArousalBar.style.display = "flex";
+    playerArousalBar.style.alignItems = "center";
+    playerArousalBar.style.gap = "4px";
+    playerArousalBar.style.fontSize = "10px";
+    
+    const playerArousalLabel = document.createElement("span");
+    playerArousalLabel.textContent = "Arousal:";
+    playerArousalLabel.style.color = "#ccc";
+    playerArousalBar.appendChild(playerArousalLabel);
+    
+    const playerArousalMeter = document.createElement("div");
+    playerArousalMeter.style.width = "80px";
+    playerArousalMeter.style.height = "8px";
+    playerArousalMeter.style.backgroundColor = "#333";
+    playerArousalMeter.style.borderRadius = "4px";
+    playerArousalMeter.style.overflow = "hidden";
+    playerArousalMeter.style.position = "relative";
+    
+    const playerArousalFill = document.createElement("div");
+    playerArousalFill.style.position = "absolute";
+    playerArousalFill.style.left = "0";
+    playerArousalFill.style.top = "0";
+    playerArousalFill.style.bottom = "0";
+    playerArousalFill.style.width = `${playerArousalPercent}%`;
+    playerArousalFill.style.background = `linear-gradient(90deg, #4488ff, #66aaff, #88cfff)`;
+    playerArousalFill.style.borderRadius = "4px";
+    playerArousalFill.style.transition = "width 0.3s ease";
+    playerArousalMeter.appendChild(playerArousalFill);
+    playerArousalBar.appendChild(playerArousalMeter);
+    
+    const playerArousalText = document.createElement("span");
+    playerArousalText.textContent = `${playerArousalPercent}%`;
+    playerArousalText.style.color = "#88cfff";
+    playerArousalText.style.fontWeight = "bold";
+    playerArousalBar.appendChild(playerArousalText);
+    container.appendChild(playerArousalBar);
+    
+    // Flaccidity/hardness indicator (if male)
+    if (player.gender === "male" || player.gender === "non-binary") {
+        const flaccidity = playerIntimacy.flaccidity !== undefined ? playerIntimacy.flaccidity : 100;
+        const hardnessPercent = 100 - flaccidity;
+        
+        const hardnessBar = document.createElement("div");
+        hardnessBar.className = "intimacy-state-bar";
+        hardnessBar.style.display = "flex";
+        hardnessBar.style.alignItems = "center";
+        hardnessBar.style.gap = "4px";
+        hardnessBar.style.fontSize = "10px";
+        
+        const hardnessLabel = document.createElement("span");
+        hardnessLabel.textContent = "Hardness:";
+        hardnessLabel.style.color = "#ccc";
+        hardnessBar.appendChild(hardnessLabel);
+        
+        const hardnessMeter = document.createElement("div");
+        hardnessMeter.style.width = "80px";
+        hardnessMeter.style.height = "8px";
+        hardnessMeter.style.backgroundColor = "#333";
+        hardnessMeter.style.borderRadius = "4px";
+        hardnessMeter.style.overflow = "hidden";
+        hardnessMeter.style.position = "relative";
+        
+        const hardnessFill = document.createElement("div");
+        hardnessFill.style.position = "absolute";
+        hardnessFill.style.left = "0";
+        hardnessFill.style.top = "0";
+        hardnessFill.style.bottom = "0";
+        hardnessFill.style.width = `${hardnessPercent}%`;
+        hardnessFill.style.background = `linear-gradient(90deg, #884488, #cc66cc, #ff99ff)`;
+        hardnessFill.style.borderRadius = "4px";
+        hardnessFill.style.transition = "width 0.3s ease";
+        hardnessMeter.appendChild(hardnessFill);
+        hardnessBar.appendChild(hardnessMeter);
+        
+        const hardnessText = document.createElement("span");
+        hardnessText.textContent = `${hardnessPercent}%`;
+        hardnessText.style.color = "#ffccff";
+        hardnessText.style.fontWeight = "bold";
+        hardnessBar.appendChild(hardnessText);
+        container.appendChild(hardnessBar);
+    }
+    
+    // Player penetration state
+    if (playerIntimacy.penetration && playerIntimacy.penetration.active) {
+        const pen = playerIntimacy.penetration;
+        const penIndicator = document.createElement("div");
+        penIndicator.className = "intimacy-state-indicator";
+        penIndicator.style.fontSize = "10px";
+        penIndicator.style.padding = "2px 6px";
+        penIndicator.style.backgroundColor = "#1d4a2d";
+        penIndicator.style.borderRadius = "3px";
+        penIndicator.style.color = "#88ff88";
+        penIndicator.textContent = `Inside: ${pen.target || "?"}`;
+        container.appendChild(penIndicator);
+    }
+    
+    leftEl.appendChild(container);
+}
+
+/**
+ * Restore the left panel to its normal state (remove player intimacy indicators)
+ * Called when exiting intimacy mode
+ */
+function restoreLeftPanelAfterIntimacy() {
+    const leftEl = document.getElementById("interactLeftEl");
+    if (leftEl && leftEl._intimacyBackup) {
+        leftEl.innerHTML = leftEl._intimacyBackup;
+        leftEl._intimacyBackup = null;
+    }
+    
+    // Also remove NPC state indicators
+    const npcStateBar = document.getElementById("npcIntimacyStateBar");
+    if (npcStateBar) npcStateBar.remove();
+}
+
+/**
  * Render the intimacy action menu (Phase 3)
  */
 function renderIntimacyActionMenu(npc) {
@@ -74368,6 +74690,9 @@ function renderIntimacyActionMenu(npc) {
     if (roomDescEl) roomDescEl.style.display = "none";
     const narrationEl = document.getElementById("narrationEl");
     if (narrationEl) narrationEl.style.display = "none";
+    
+    // Render NPC state indicators below the name
+    renderNPCIntimacyStateIndicators(npc);
     
     // Clear chat log only if we're just entering intimacy from non-intimacy mode
     if (G.activeNPCMode !== "intimacy") {
@@ -74395,6 +74720,9 @@ function renderIntimacyActionMenu(npc) {
                 `Position: ${positionLabel} | ${npc.behavior || ""}`;
         }
     }
+    
+    // Update left panel with player state indicators during intimacy
+    renderPlayerIntimacyStateIndicators();
     
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;

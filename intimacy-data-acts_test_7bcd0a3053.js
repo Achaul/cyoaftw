@@ -598,6 +598,12 @@ var SEX_ACTS = {
     // Male climax inside (anal)
     ejaculate_in_anus: { id: "ejaculate_in_anus", tool: "penis", target: "anus", verb: "ejaculate", type: ACT_TYPES.CONTINUE, label: "Ejaculate inside anus", desc: "Release inside their anus", arousal: { p: 50, n: 100 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Against Wall From Behind"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, triggersClimax: true, maleOnly: true, consequence: "internal_semen" },
     
+    // Male climax inside (cloaca) - for reptilian/amorphous species
+    ejaculate_in_cloaca: { id: "ejaculate_in_cloaca", tool: "penis", target: "cloaca", verb: "ejaculate", type: ACT_TYPES.CONTINUE, label: "Ejaculate inside cloaca", desc: "Release inside their vent", arousal: { p: 50, n: 100 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Against Wall From Behind"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, triggersClimax: true, maleOnly: true, requiresNpcCloaca: true, consequence: "internal_semen" },
+    
+    // Male climax on cloaca (external)
+    ejaculate_on_cloaca: { id: "ejaculate_on_cloaca", tool: "penis", target: "cloaca", verb: "ejaculate on", type: ACT_TYPES.CONTINUE, label: "Ejaculate on vent", desc: "Release on their cloaca", arousal: { p: 35, n: 70 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Against Wall From Behind"], reqCloth: CLOTHING_REQUIREMENTS.NUDE, triggersClimax: true, maleOnly: true, requiresNpcCloaca: true, consequence: "external_semen" },
+    
     // Male climax inside (mouth)
     ejaculate_in_mouth: { id: "ejaculate_in_mouth", tool: "penis", target: "mouth", verb: "ejaculate", type: ACT_TYPES.CONTINUE, label: "Ejaculate in mouth", desc: "Release in their mouth", arousal: { p: 40, n: 80 }, pos: ["Perched", "Missionary", "Astride Lap", "Kneeling", "Oral Service", "Kneeling By Face", "Squatting Before", "Mounted On X-Cross Oral Service", "Kneeling Over", "Sixty-Nine", "Prone Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, triggersClimax: true, maleOnly: true, consequence: "oral_semen" },
     
