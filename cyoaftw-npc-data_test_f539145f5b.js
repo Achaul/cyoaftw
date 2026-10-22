@@ -5722,7 +5722,7 @@ function getNPCInspectionDetail(npc) {
     if (accessories.length) paragraphs.push(accessories.join(" "));
 
     const taste = getPlayerTasteForNPC(npc);
-    if (taste.label) paragraphs.push("You find " + p.object + " " + (Math.abs(taste.score) < 3 ? "mildly " : "") + taste.label + ".");
+    if (taste.label) paragraphs.push(describePlayerTasteSentence(npc, taste, p));
     return paragraphs.join("\n\n");
 }
 
@@ -6775,7 +6775,51 @@ function _npcPenisSize(npc) {
     return size;
 }
 
+// Fur and scale tastes match colour FAMILIES (a liked "grey" coat matches
+// silver-grey, timber-grey, ashen grey...). Read from the same surface and
+// colour the look description shows, so the taste agrees with the text.
+var NPC_FUR_COLOR_FAMILIES = [
+    ["patterned", ["tabby", "calico", "tortoiseshell", "mottled", "brindle", "spotted", "striped", "dappled"]],
+    ["black", ["black", "charcoal", "jet"]],
+    ["white", ["white", "cream", "snow", "ivory"]],
+    ["grey", ["grey", "gray", "silver", "smoky", "ashen", "slate"]],
+    ["red", ["ginger", "russet", "red", "rust", "auburn", "copper"]],
+    ["golden", ["golden", "gold", "tawny", "honey", "sandy", "fawn"]],
+    ["brown", ["brown", "chestnut", "umber", "chocolate"]]
+];
+var NPC_SCALE_COLOR_FAMILIES = [
+    ["green", ["green", "emerald", "moss", "olive", "jade"]],
+    ["blue", ["blue", "frost", "azure", "teal"]],
+    ["gold", ["gold", "bronze", "copper", "brass"]],
+    ["red", ["red", "crimson", "rust", "orange", "scarlet"]],
+    ["black", ["black", "jet", "obsidian"]],
+    ["brown", ["brown", "tan", "umber"]],
+    ["grey", ["grey", "gray", "slate", "stone", "silver"]],
+    ["purple", ["purple", "violet", "plum"]]
+];
+function _npcColorFamily(colour, families) {
+    var text = String(colour || "").toLowerCase();
+    if (!text) return "";
+    for (var i = 0; i < families.length; i++) {
+        var words = families[i][1];
+        for (var j = 0; j < words.length; j++) if (text.indexOf(words[j]) !== -1) return families[i][0];
+    }
+    return "";
+}
+// { surface: "fur" | "scales" | "skin" | ..., colour } as the look text shows it.
+function _npcSurfaceLook(npc) {
+    var body = npc && npc.anatomy && npc.anatomy.body || {};
+    var surface = String(body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.scaleColor ? "scales" : "")).toLowerCase();
+    var colour = String(body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.scaleColor || "").toLowerCase();
+    return { surface: surface, colour: colour };
+}
+
 function _npcTasteValue(npc, axis) {
+    if (axis === "furColor" || axis === "scaleColor") {
+        var look = _npcSurfaceLook(npc);
+        if (axis === "furColor") return look.surface === "fur" ? _npcColorFamily(look.colour, NPC_FUR_COLOR_FAMILIES) : "";
+        return look.surface === "scales" ? _npcColorFamily(look.colour, NPC_SCALE_COLOR_FAMILIES) : "";
+    }
     if (axis === "penis") return _npcPenisSize(npc);
     if (axis === "gender") return String(npc.gender || "").toLowerCase();
     if (axis === "looks") return String(npc.looks || NPC_LOOKS_BY_GENDER[String(npc.gender || "").toLowerCase()] || "").toLowerCase();
@@ -6806,14 +6850,16 @@ function getPlayerTasteForNPC(npc) {
     });
 
     var raw = 0;
+    result.liked = [];
+    result.disliked = [];
     likes.forEach(function (p) {
         if (!speciesOpen) return;
         var v = _npcTasteValue(npc, p.axis);
-        if (v && v === String(p.value).toLowerCase()) raw += 1;
+        if (v && v === String(p.value).toLowerCase()) { raw += 1; result.liked.push({ axis: p.axis, value: v }); }
     });
     dislikes.forEach(function (p) {
         var v = _npcTasteValue(npc, p.axis);
-        if (v && v === String(p.value).toLowerCase()) raw -= 1;
+        if (v && v === String(p.value).toLowerCase()) { raw -= 1; result.disliked.push({ axis: p.axis, value: v }); }
     });
     result.raw = raw;
     if (!raw) return result;
@@ -6825,7 +6871,58 @@ function getPlayerTasteForNPC(npc) {
     result.score = raw * scale;
     if (result.score >= PLAYER_TASTE_THRESHOLD) result.label = "attractive";
     else if (result.score <= -PLAYER_TASTE_THRESHOLD) result.label = "unattractive";
+    // What stands out most: visible features first, broad traits last.
+    // Gender and penis size are never named.
+    var source = result.label === "attractive" ? result.liked : (result.label === "unattractive" ? result.disliked : []);
+    result.focus = source.filter(function (m) { return PLAYER_TASTE_FOCUS_ORDER.indexOf(m.axis) >= 0; })
+        .sort(function (a, b) { return PLAYER_TASTE_FOCUS_ORDER.indexOf(a.axis) - PLAYER_TASTE_FOCUS_ORDER.indexOf(b.axis); })
+        .slice(0, 2);
     return result;
+}
+
+var PLAYER_TASTE_FOCUS_ORDER = ["eyeColor", "furColor", "scaleColor", "hairColor", "hairStyle", "build", "looks", "chest", "butt", "age", "species"];
+
+// "her green eyes", "his golden tabby coat", "their catfolk features"...
+function describePlayerTasteFocus(npc, match, possessive) {
+    if (!npc || !match) return "";
+    var pre = possessive === "" ? "" : (possessive || "their") + " ";
+    var look = _npcSurfaceLook(npc);
+    switch (match.axis) {
+        case "eyeColor": { var eyes = typeof getNPCVisibleEyeColor === "function" ? getNPCVisibleEyeColor(npc) : npc.eyeColor; return eyes ? pre + eyes + " eyes" : ""; }
+        case "furColor": return look.colour ? pre + look.colour + " coat" : pre + "coat";
+        case "scaleColor": return look.colour ? pre + look.colour + " scales" : pre + "scales";
+        case "hairColor": return npc.hairColor ? pre + npc.hairColor + " hair" : "";
+        case "hairStyle": return pre + match.value + " hair";
+        case "build": return pre + match.value + " build";
+        case "looks": return pre + match.value + " looks";
+        case "chest":
+        case "butt": return pre + "figure";
+        case "age": return pre + ({ "young": "youthful look", "middle-aged": "mature look", "old": "seasoned look" }[match.value] || "age");
+        case "species": return pre + String(npc.species || "").toLowerCase() + " features";
+    }
+    return "";
+}
+
+// The final line of the look text: "You find her attractive, especially her
+// green eyes." Without a nameable focus it stays "You find her attractive."
+function describePlayerTasteSentence(npc, taste, pronouns) {
+    if (!taste || !taste.label) return "";
+    var p = pronouns || _npcInspectionPronouns(npc);
+    var phrases = [];
+    (taste.focus || []).forEach(function (m) {
+        var phrase = describePlayerTasteFocus(npc, m, p.possessive);
+        if (phrase && phrases.indexOf(phrase) < 0) phrases.push(phrase); // chest + butt are both "her figure"
+    });
+    if (phrases.length === 2 && phrases[0].split(" ")[0] === phrases[1].split(" ")[0]) {
+        phrases[1] = phrases[1].split(" ").slice(1).join(" "); // "her green eyes and auburn hair"
+    }
+    var base = "You find " + p.object + " " + (Math.abs(taste.score) < 3 ? "mildly " : "") + taste.label;
+    if (!phrases.length) return base + ".";
+    return base + (taste.label === "attractive" ? ", especially " : ", mostly because of ") + phrases.join(" and ") + ".";
+}
+if (typeof window !== "undefined") {
+    window.describePlayerTasteSentence = describePlayerTasteSentence;
+    window.describePlayerTasteFocus = describePlayerTasteFocus;
 }
 
 // -- FIRST IMPRESSION + TYPE-ALIGNED ACTIONS -----------------------------------
