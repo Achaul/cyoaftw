@@ -75526,6 +75526,14 @@ function renderIntimacyActionMenu(npc) {
         // Build tabs from actual sections returned by getMenuActions
         const sectionItems = menuItems.filter(item => item.type === "section");
         
+        // Get NPC gender and anatomy to filter sections
+        const npcGender = npc.gender || "";
+        const npcAnatomy = npc.anatomy || {};
+        const hasCock = npcGender.toLowerCase().includes("male") || npcAnatomy.cock || npcAnatomy.penis;
+        const hasPussy = npcGender.toLowerCase().includes("female") || npcAnatomy.vagina || npcAnatomy.pussy;
+        const hasCloaca = npcAnatomy.cloaca || (npc.species && npc.species.toLowerCase().includes("avian"));
+        const hasBreasts = npcAnatomy.breasts || npcGender.toLowerCase().includes("female") || npcGender.toLowerCase().includes("non-binary");
+        
         // Define tab order priority
         const tabPriority = {
             "Clothing": 0,
@@ -75565,9 +75573,18 @@ function renderIntimacyActionMenu(npc) {
             return sectionLabel;
         }
         
-        // Collect all section labels with actions
+        // Filter sections based on NPC anatomy - only show tabs for body parts the NPC actually has
+        function shouldShowSection(sectionLabel) {
+            if (sectionLabel === "Cock" && !hasCock) return false;
+            if (sectionLabel === "Pussy" && !hasPussy) return false;
+            if (sectionLabel === "Cloaca" && !hasCloaca) return false;
+            if (sectionLabel === "Breasts" && !hasBreasts) return false;
+            return true;
+        }
+        
+        // Collect all section labels with actions and valid anatomy
         const sectionsWithActions = sectionItems
-            .filter(item => item.actions && item.actions.length > 0)
+            .filter(item => item.actions && item.actions.length > 0 && shouldShowSection(item.label))
             .map(item => item.label);
         
         // Sort by priority, then alphabetically
@@ -75679,6 +75696,9 @@ function renderIntimacyActionMenu(npc) {
             
             // Handle category/section elements
             if (!item.actions || !item.actions.length) continue;
+            
+            // Skip sections for body parts the NPC doesn't have
+            if (!shouldShowSection(item.label)) continue;
             
             // Get show all state - defaults to false
             const showAllActions = npc.intimacy && npc.intimacy.showAllActions;
