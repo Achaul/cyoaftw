@@ -347,12 +347,18 @@ function isRecentNPCLine(line, now, turnNow) {
 // pick once the tag selector is wired in.
 function buildNPCMemoryBlock(npc, wantedTags, maxNotable = 4, maxTold = 6) {
     if (!npc || !npc.memory || !Array.isArray(npc.memory.memoryEntries) || !npc.memory.memoryEntries.length) return "";
+    // Settled facts (fights, surrender, mercy): always shown, newest last.
+    const facts = npc.memory.memoryEntries.filter(e => e && e.text && (e.tags || []).indexOf("fact") >= 0).slice(-6);
     const told = typeof getNPCToldMemories === "function" ? getNPCToldMemories(npc, maxTold) : [];
-    const notable = typeof getNPCRelevantMemories === "function"
-        ? getNPCRelevantMemories(npc, wantedTags || [], { max: maxNotable, minImportance: wantedTags && wantedTags.length ? 3 : 4 })
-        : [];
-    if (!told.length && !notable.length) return "";
+    const notable = (typeof getNPCRelevantMemories === "function"
+        ? getNPCRelevantMemories(npc, wantedTags || [], { max: maxNotable + facts.length, minImportance: wantedTags && wantedTags.length ? 3 : 4 })
+        : []).filter(e => facts.indexOf(e) < 0).slice(0, maxNotable);
+    if (!facts.length && !told.length && !notable.length) return "";
     const lines = ["WHAT YOU REMEMBER ABOUT THE PLAYER:"];
+    if (facts.length) {
+        lines.push("- These things happened between you. Never deny, forget or contradict them: " +
+            facts.map(e => e.text.replace(/[.!]+$/, "") + (e.count > 1 ? " (" + e.count + " times)" : "")).join("; ") + ".");
+    }
     if (told.length) {
         lines.push("- Already told them (do not repeat these as if new): " + told.map(e => e.text.replace(/[.!]+$/, "")).join("; "));
     }

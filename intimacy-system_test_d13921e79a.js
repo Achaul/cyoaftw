@@ -3760,7 +3760,12 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
             const playerGender = getPlayerGenderForGates(player);
             if (playerGender === "male" || playerGender.includes("male")) {
                 if (!response.responseText.includes("You climax") && !response.responseText.includes("you climax")) {
-                    response.responseText = (response.responseText || '') + " You climax intensely.";
+                    var _maleClimaxBeat = buildMaleClimaxNarration(npc, player, act, intimacy);
+                    if (_maleClimaxBeat) {
+                        response.responseText = (response.responseText || '') + ' ' + _maleClimaxBeat;
+                    } else {
+                        response.responseText = (response.responseText || '') + " You climax intensely.";
+                    }
                 }
             } else {
                 // Female player: her organic climax (arousal crossing

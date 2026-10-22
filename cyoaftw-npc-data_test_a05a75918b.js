@@ -1610,7 +1610,7 @@ function recordNPCConversationMemory(npc, choice) {
         ? spec.text
         : "The player " + phrase + ": \"" + _npcMemoryClip(label, 80) + "\"";
     return addNPCMemory(npc, {
-        id: "did-" + optionId,
+        id: "did-" + (typeof spec.id === "string" && spec.id ? spec.id : optionId),
         tags: [intent || "talk"].concat(Array.isArray(spec.tags) ? spec.tags : [], getNPCOptionTags(optionId), NPC_INTENT_MEMORY_KINDS[intent] || []),
         text: text,
         importance: typeof spec.importance === "number" ? spec.importance : _npcMemoryImportanceFromImpact(choice.relationshipImpact)
@@ -2999,6 +2999,17 @@ const NPC_CONVERSATION_CATALOGUE = [
         contextNote: (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? t.note : ""; },
         // Cached replies for this option are dropped when this changes.
         cacheSig: (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? t.sig : ""; },
+        // Remember each event talked about, so a later reply stays consistent.
+        memory: (npc, ctx) => {
+            const t = _npcEventTopic(npc, ctx);
+            if (!t || !t.event) return undefined;
+            return {
+                id: "ask-event-" + t.sig,
+                importance: 6,
+                tags: ["event", "told"],
+                text: "You talked with the player about this (keep your account the same): " + String(t.event.text || "").slice(0, 160)
+            };
+        },
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-event" },
         replaces: ["ask-seen"],
@@ -4499,8 +4510,9 @@ function buildConversationOption(entry, npc, ctx) {
         guideParty: entry.guideParty,
         guideAnswer: entry.guideAnswer,
         socialFact: entry.socialFact,
-        // Optional memory hints: { importance, tags, text, skip } (see recordNPCConversationMemory).
-        memory: entry.memory
+        // Optional memory hints: { id, importance, tags, text, skip } (see recordNPCConversationMemory).
+        // May be a function (npc, ctx) like other catalogue fields.
+        memory: _npcResolveConversationValue(entry.memory, npc, ctx)
     };
 }
 

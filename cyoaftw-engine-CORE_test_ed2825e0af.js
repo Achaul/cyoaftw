@@ -682,6 +682,8 @@ async function executeTextInteractionCommand(action) {
     const matches = action.targetRef ? candidates.filter(function (npc) { return npc === action.targetRef; })
         : !request.target && G.activeNPC ? [G.activeNPC]
         : !request.target && request.family === "expression" ? [] : resolveTextNPCTarget(request.target, candidates).matches;
+    if (!matches.length && !action.targetRef && /^(assault|physical)$/.test(request.family) && request.target && !textModeInCombat() && adjudicationObjectOnly(request.target))
+        return executeTextAdjudication({ verb: "adjudicate", args: { action: request.action, target: request.target }, rulingPromise: action.rulingPromise });
     if (!matches.length && (request.target || request.family !== "expression" || action.targetRef)) return textModeResult("blocked", "No visible person matches that description.");
     if (matches.length > 1) return textModeAsk(action, "target", matches, "Who do you mean?");
     const npc = matches[0] || null;
@@ -1295,6 +1297,9 @@ function openWorldToolMenu(selector) {
 const TEXT_COMMANDS = [
     { id: "tool", jobs: true, args: ["action", "target", "item"], aliases: ["tools", "tool use", "pry", "lever", "wedge", "jam", "brace", "unwedge", "force obstruction"], example: "pry packing board with iron pry bar; wedge chair under north door; unwedge north door; force obstruction north door; tools; show tools", description: "Use real objects together. Pry exposed nailed/pegged fittings with a sound rigid lever; wedge suitable furniture or a solid object against a real door. Material, shape, size, condition, reach and stats determine eligibility and dice difficulty. Pry/wedge cost 1 stamina and 1 turn; forcing a brace costs 2 stamina and 1 turn; removing your reachable brace costs 1 turn. Failures spend costs and pause later commands. A brace stays in place, blocks both sides and cannot be picked up until released. Unwedging does not unlock a lock. Show tools lists current combinations; tools opens the same choices as native controls. Options/back/cancel/leave work; explicitly continue older queued commands." },
     { id: "object", info: false, jobs: true, args: ["action", "target"], aliases: ["objects", "physical objects", "lift", "heave", "drag", "haul", "shift", "move object", "push object", "pull object"], example: "lift bucket; drag bench; shift crate; push object chair; show objects; how lift", description: "Lift an accessible object and set it down, or drag/shift it a short distance within the room. Heave means lift; haul/pull object means drag; push object/move object means shift. The engine checks reach, attachment, occupancy, material, size, contents and physical prowess. Easy lifts succeed without a roll or cost; uncertain lifts and floor moves use a stat-based d20 check, 1 stamina and 1 turn, including failures. Impossible attempts never roll. These actions do not carry objects between rooms or create cover, block exits or spill contents. Take retains pack limits. Show objects lists public properties and current availability." },
+    { id: "fire", fire: true, args: ["action", "target", "item"], aliases: ["light", "ignite", "set fire", "douse", "extinguish", "put out"], example: "light cart with torch; set fire to the bench; light the shelf from the hearth; douse cart with waterskin; put out the fire", description: "Set a flammable fixture alight with a carried torch or a nearby flame (hearth, brazier, wall torch, another fire), or douse a burning one with carried water or a well, fountain or water barrel. One turn, no roll and no mana. Fire spreads and burns out by the same rules as fire spells, and setting fires in front of people is arson. Doused water containers are emptied; you keep the container." },
+    { id: "adjudicate", adjudicate: true, args: ["action", "target"], aliases: [], example: "kick lamppost; climb the lamppost; rock the merchant cart; attempt shake on cart", description: "Try any physical action on a visible object (not a person) that no other command covers. The game master judges it once from the world rules (material, weight, how it is fixed, your stats): possible or not, which stat and difficulty a d20 roll needs, the stamina and time it takes, and a small effect for success or failure (wear or breakage, a lasting visible state such as dented, a bruise for you, noise onlookers notice). The ruling is saved, so repeating it is resolved by the game and only narrated by AI. New actions need AI; saved ones also work offline. Type rulings to see saved ones." },
+    { id: "rulings", info: true, args: ["action", "phrase"], aliases: ["rulings", "action rulings"], example: "rulings; forget ruling kick lamppost; clear rulings", description: "List the saved game-master rulings for actions on objects, forget one so it is judged again, or clear them all. Free; stored in this browser only." },
     { id: "act", social: true, args: ["action", "target", "family"], aliases: ["act", "emote", "social", "gestures", "interactions", "express", "invite", "contact", "attempt", "try physical", "wave", "bow", "nod", "smile", "salute", "dance"], example: "wave at human; express stretch dramatically; invite human to share a joke; attempt pinch an arm with human; push human; help attempt", description: "Express yourself with express <action>, invite <person> to <action>, or contact <action> with <person>. Familiar gestures: wave, bow, nod, smile, salute, dance. A dance is an invitation. Contact asks permission. Attempt <minor bare-hand action> with <person> uses AI-proposed pain, minor HP damage, a brief condition and an NPC reaction. It needs AI, costs 1 stamina and one story turn outside combat or one combat action, and can provoke retaliation. Push/shove/slap/punch retain native unarmed combat; inferred attacks ask for review. Push/shove do not move someone into another room. Say \"I dance\" is speech." },
     {id:"phrases",info:true,args:["action","phrase"],aliases:["phrases","learned phrases"],example:'phrases; forget phrase "please survey the room"; clear phrases',description:"List successfully learned AI phrases, remove an exact phrase or clear the local dictionary. Learning stores action templates after complete success; targets and costs are checked fresh. These controls are free."},
     { id:"casting", casting:true, args:["action","target"], aliases:["powers","divine gifts","enchantments","cast enchant","ask for enchantment"], example:"powers; power mending touch; cast mending touch on <ally>; cast enchant; enchant recipient yourself; enchant item sword; enchant element fire; ask for enchantment; cast fleet foot; show casting; how casting", description:"Use shared native powers/heal targets, player and companion gear casts and learned travel spells. Final gear element choices spend native costs and 1 turn. Power costs/uses and healing stay native; travel spells keep zero-turn behavior. Answer one step per reply; explicitly continue older batches." },
@@ -1433,6 +1438,7 @@ function parseTextCommand(input) {
     const raw = original.replace(/[.!?]+$/, "").trim();
     const key = textCommandNormalize(raw);
     const phrase = parseTextPhraseCommand(raw); if (phrase) return phrase;
+    const rulings = parseTextRulingsCommand(raw); if (rulings) return rulings;
     let match = /^(?:how(?:\s+(?:do|can)\s+i)?|help)(?:\s+(?:to\s+)?(.+))?$/i.exec(raw);
     if (match) return { verb: "help", args: { topic: match[1] || "" } };
     match = /^show(?:\s+(?:me\s+)?(.+))?$/i.exec(raw);
@@ -1444,12 +1450,13 @@ function parseTextCommand(input) {
     if (match) return { verb: "say", args: { text: textCommandUnquote(match[1]) } };
     const toolCommand = parseTextWorldToolCommand(raw); if (toolCommand) return toolCommand;
     const objectCommand = parseTextObjectCommand(raw); if (objectCommand) return objectCommand;
+    const fireCommand = parseTextFireCommand(raw); if (fireCommand) return fireCommand;
     match = /^(?:look\s+at|examine|inspect|x)\s+(?:npc|creature|person)\s+(.+)$/i.exec(raw);
     if (match) return { verb: "examine", args: { item: textCommandUnquote(match[1]), scope: "npc" } };
     const social = parseTextSocialCommand(raw); if (social) return social;
     const touch = parseTextTouchCommand(raw); if (touch) return touch;
     const interaction = parseTextInteractionCommand(raw); if (interaction) return interaction;
-    if (/^I\s+/i.test(raw)) return null;
+    if (/^I\s+/i.test(raw)) return parseTextAdjudicationFallback(raw);
     const casting = parseTextCastingCommand(raw); if (casting) return casting;
     const synergy = parseTextSynergyCommand(raw); if (synergy) return synergy;
     const shrineService = typeof parseTextShrineService === "function" ? parseTextShrineService(raw) : null;
@@ -1515,7 +1522,7 @@ function parseTextCommand(input) {
     const direction = textCommandDirection(raw);
     if (direction) return { verb: "move", args: { direction: direction } };
     const entry = TEXT_COMMANDS.find(function (def) { return key === (def.primary || def.id) || def.aliases.indexOf(key) >= 0; });
-    return entry ? { verb: entry.id, args: {} } : null;
+    return entry ? { verb: entry.id, args: {} } : parseTextAdjudicationFallback(raw);
 }
 
 function parseTextCommandBatch(input) {
@@ -1533,7 +1540,7 @@ function parseTextCommandBatch(input) {
 function validateTextAIPlan(value) {
     if (!value || !Array.isArray(value.actions) || !value.actions.length || value.actions.length > TEXT_COMMAND_LIMIT) return null;
     const fields = Object.create(null);
-    TEXT_COMMANDS.forEach(function (def) { if (!/^(stop|continue|phrases)$/.test(def.id)) fields[def.id] = def.args || []; });
+    TEXT_COMMANDS.forEach(function (def) { if (!/^(stop|continue|phrases|rulings)$/.test(def.id)) fields[def.id] = def.args || []; });
     const actions = [];
     for (let i = 0; i < value.actions.length; i++) {
         const action = value.actions[i];
@@ -1542,8 +1549,12 @@ function validateTextAIPlan(value) {
         if (Object.keys(action.args).some(function (key) { return fields[action.verb].indexOf(key) < 0 || typeof action.args[key] !== "string" || action.args[key].length > TEXT_INPUT_LIMIT; })) return null;
         if (action.verb === "synergy" && /^(picture|name|confirm|replace)$/.test(action.args.action || "")) return null;
         if (action.verb === "act" && (Object.prototype.hasOwnProperty.call(action.args, "family") ? !interactionRequest(action.args) : !Object.prototype.hasOwnProperty.call(SOCIAL_GESTURES, action.args.action || ""))) return null;
-        if (action.verb === "object" && (!/^(lift|drag|shift|take)$/.test(action.args.action || "") || !String(action.args.target || "").trim())) return null;
+        if (action.verb === "object" && (!String(action.args.action || "").trim() || action.args.action.length > 120 || !String(action.args.target || "").trim())) return null;
+        if (action.verb === "object" && !/^(lift|drag|shift|take)$/.test(action.args.action) && /^(?:spawn|create|summon|conjure|make|craft|duplicate|copy|generate)\b/i.test(action.args.action.trim())) return null;
+        if (action.verb === "object" && !/^(lift|drag|shift|take)$/.test(action.args.action)) { actions.push({ verb: "adjudicate", args: { action: action.args.action.trim(), target: action.args.target.trim() } }); continue; }
         if (action.verb === "tool" && (!/^(menu|pry|wedge|unwedge|force)$/.test(action.args.action || "") || action.args.action !== "menu" && !String(action.args.target || "").trim() || /^(pry|wedge)$/.test(action.args.action || "") && !String(action.args.item || "").trim())) return null;
+        if (action.verb === "fire" && (!/^(ignite|douse)$/.test(action.args.action || "") || !String(action.args.target || "").trim())) return null;
+        if (action.verb === "adjudicate" && (!String(action.args.action || "").trim() || !String(action.args.target || "").trim() || action.args.action.length > 120)) return null;
         if (action.verb === "say" && !String(action.args.text || "").trim()) return null;
         if (action.verb === "choose" && !/^[1-9]\d*$/.test(action.args.number || "")) return null;
         if (action.verb === "attack" && ((action.args.style && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.styles, action.args.style)) || (action.args.bodyPart && !Object.prototype.hasOwnProperty.call(TEXT_COMBAT_KEYWORDS.parts, action.args.bodyPart)))) return null;
@@ -1558,7 +1569,7 @@ function validateTextAIPlan(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases)$/.test(def.id) && (def.id !== "tool" || worldToolIntentAvailable()) && (def.id !== "object" || !G.activeNPC && worldObjectEntries().length > 0) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -1567,15 +1578,13 @@ async function interpretTextCommands(input) {
     const schema = shapes.map(function (shape) { return shape.verbs.join("|") + (shape.args ? ":" + shape.args : ""); }).join(";");
     const combatWords = textModeInCombat() ? '\nCOMBAT: styles=' + Object.keys(TEXT_COMBAT_KEYWORDS.styles).join(',') + '; bodyPart=' + Object.keys(TEXT_COMBAT_KEYWORDS.parts).join(',') + '; use ability=' + textCombatActions().map(function (action) { return action.name; }).join(',').slice(0, 1200) : '';
     const socialWords = shapes.some(function (shape) { return shape.verbs.includes("act"); }) ? "\nact.family=expression|invitation|contact(consent)|assault|physical(hands);action=free phrase." : "";
-    const objectWords = (!G.activeNPC && worldObjectEntries().length ? "\nobject.action=lift|drag|shift|take(existing target)." : "") + (worldToolIntentAvailable() ? "\ntool.action=pry|wedge|unwedge|force|menu;item=tool,target=object/door." : "");
+    // Any other physical act on an object becomes a game-master ruling (adjudicate).
+    // The router inside that ruling finds the owning system (fire, spells...),
+    // so those systems need no space in this compact prompt.
+    const objectWords = (!G.activeNPC && textObjectIntentAvailable() ? "\nobject.action=lift|drag|shift|take|other act(existing target)." : "") + (worldToolIntentAvailable() ? "\ntool.action=pry|wedge|unwedge|force|menu;item=tool,target=object/door." : "");
     const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\n' + schema + combatWords + socialWords + objectWords + '\n' + JSON.stringify(input);
-    let timer;
     try {
-        const result = await Promise.race([
-            callAI({ instruction: instruction, endButtons: "none" }),
-            new Promise(function (resolve) { timer = setTimeout(function () { resolve(null); }, 12000); })
-        ]);
-        const raw = typeof result === "string" ? result : result && result.text;
+        const raw = await textModeAIRequest(instruction, 12000);
         if (!raw) return null;
         const clean = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
         const plan = validateTextAIPlan(JSON.parse(clean));
@@ -1583,7 +1592,7 @@ async function interpretTextCommands(input) {
     } catch (err) {
         console.warn("[Text commands] Interpretation unavailable", err);
         return null;
-    } finally { clearTimeout(timer); }
+    }
 }
 
 // Semantic output events are independent of the on-screen renderer. A future
@@ -2989,6 +2998,18 @@ async function executeTextCommand(action) {
     if (physicalIntent) return executeTextStructuralTool(physicalIntent);
     if (action.verb === "tool") return executeTextWorldToolCommand(action);
     if (action.verb === "object") return executeTextObjectCommand(action);
+    if (action.verb === "adjudicate") return executeTextAdjudication(action);
+    if (action.verb === "fire") return executeTextFireCommand(action);
+    // "burn the cart (with my torch)": a fixture, not a carried item to burn at a hearth.
+    if (action.verb === "burn" && args.item && !args.fixture && !action.materialItem) {
+        const split = /^(.+?)\s+(?:with|using)\s+(.+)$/i.exec(args.item), name = split ? split[1] : args.item;
+        if (!materialItemMatches(name, "burn").length && fireTargetEntries(name, "ignite").length) return executeTextFireCommand({ verb: "fire", args: { action: "ignite", target: name, item: split ? split[2] : "" } });
+    }
+    if (action.verb === "rulings") return executeTextRulingsCommand(action);
+    // Container/loot and touch verbs aimed at a plain object go to the game master.
+    if (/^(open|search|loot|contents)$/.test(action.verb) && args.source && !action.sourceRef && !textLootMatch(args.source, textLootSources(), function (entry) { return entry.label + (entry.kind === "body" ? " body" : " container"); }).length && !/^(?:the\s+)?(?:room|around|surroundings)$/i.test(args.source) && adjudicationObjectOnly(args.source))
+        return executeTextAdjudication({ verb: "adjudicate", args: { action: action.verb, target: args.source }, rulingPromise: action.rulingPromise });
+    if (def.nsfw && /^(touch|grab|hug|grope)$/.test(action.verb) && !action.targetRef && adjudicationObjectOnly(args.target)) return executeTextAdjudication({ verb: "adjudicate", args: { action: action.verb, target: args.target } });
     if (action.verb === "take" && !args.source && !action.itemRef && !textLootTakeHasSource(action)) {
         const objects = worldObjectMatches(args.item || "").filter(function (entry) { return entry.kind === "fixture"; });
         if (objects.length) return executeTextObjectCommand({ verb: "object", args: { action: "take", target: args.item } });
@@ -3202,6 +3223,7 @@ async function submitTextModeCommand(raw) {
     if (textModeState.busy || textModeState.parsing) { textModeResult("blocked", "An action is still finishing. You can type show, how, or stop while you wait."); return; }
     if (typeof textSharedChoiceCanHandle === "function" && textSharedChoiceCanHandle(input, single) && await textSharedChoiceInput(input, single)) return;
     if (single && single.verb === "phrases") { executeTextPhraseCommand(single); return; }
+    if (single && single.verb === "rulings") { executeTextRulingsCommand(single); return; }
     if (single && single.verb === "continue") {
         if (textModeState.pending) { textModeResult("needs_input", "Answer the numbered question first, or type stop."); return; }
         if (!textModeState.queue.length) { textModeResult("completed", "There are no pending commands."); return; }
@@ -3217,6 +3239,8 @@ async function submitTextModeCommand(raw) {
         else if (pending.kind === "abilityTarget") pending.action.targetChoiceId = pick.id;
         else if (pending.kind === "item") pending.action.itemRef = pick;
         else if (pending.kind === "worldObject") pending.action.objectRef = pick;
+        else if (pending.kind === "adjudicateTarget") pending.action.adjudicateRef = pick;
+        else if (pending.kind === "fireTarget") pending.action.fireRef = pick;
         else if (pending.kind === "worldToolTarget") pending.action.toolTargetRef = pick;
         else if (pending.kind === "worldToolItem") pending.action.toolItemRef = pick;
         else if (pending.kind === "tradeItem") pending.action.tradeRef = pick;
@@ -3262,6 +3286,7 @@ async function submitTextModeCommand(raw) {
     // A batch is interpreted in full before any action is allowed to run.
     if (learnedFromAI) textPhrasePrepare(input, actions, phraseContext);
     if (learnedFromAI || learned) actions.forEach(function (action) { if (action.verb === "attack") action.inferredAttack = true; });
+    prefetchTextAdjudications(actions);
     textModeState.queue = actions;
     return runTextCommandQueue();
 }
@@ -4341,7 +4366,9 @@ function parseTextExplorationCommand(raw) {
     if (match) {
         const word = match[1].toLowerCase();
         const verb = /^(forage|harvest)$/.test(word) ? "gather" : /^warm/.test(word) ? "warm" : /^wash/.test(word) ? "wash" : word === "climb" ? "enter" : word;
-        return { verb: verb, args: { fixture: textCommandUnquote((match[2] || "").replace(/^(?:at|from|to|on)\s+/i, "")) } };
+        const parsed = { verb: verb, args: { fixture: textCommandUnquote((match[2] || "").replace(/^(?:at|from|to|on)\s+/i, "")) } };
+        Object.defineProperty(parsed, "rawWord", { value: word, enumerable: false });
+        return parsed;
     }
     if (/^(?:case|case\s+(?:the\s+)?(?:place|room))$/i.test(raw)) return { verb: "case", args: {} };
     if (/^(?:sneak|hide|sneak\s+(?:around|into\s+the\s+shadows))$/i.test(raw)) return { verb: "sneak", args: {} };
@@ -4419,7 +4446,8 @@ function textFixtureCommand(action, entry) {
 
 function textFixtureDescribe(entry) {
     const fixture = entry.fixture, actions = textFixtureActions(fixture);
-    const description = getBoardFixtureDescription(fixture) || fixture.examineText || fixture.description || "You take a closer look at " + entry.label + ".";
+    const baseDescription = getBoardFixtureDescription(fixture) || fixture.examineText || fixture.description || "You take a closer look at " + entry.label + ".";
+    const stateLine = adjudicationStateLine(fixture), description = stateLine ? baseDescription + " " + stateLine : baseDescription;
     const lines = actions.map(function (action) { return textFixtureCommand(action, entry) + (action.route ? " — " + action.label : "") + (action.note ? " — " + action.note : "") + (action.reason ? " — unavailable: " + action.reason : ""); });
     if (isContainerFixture(fixture)) lines.push("open " + entry.label + "; search " + entry.label + "; contents " + entry.label);
     if (isTrainingDummyFixture(fixture)) lines.push("train " + entry.label + "; drill " + entry.label + "; cast <damaging spell> at " + entry.label);
@@ -4500,6 +4528,7 @@ async function executeTextExplorationCommand(action) {
     const verb = action.verb === "interact" ? textCommandNormalize(args.action || "examine") : action.verb;
     const all = textExplorationFixtures();
     let entries = action.fixtureRef ? [textExplorationFresh(action.fixtureRef)].filter(Boolean) : args.fixture ? textLootMatch(args.fixture, all, function (entry) { return entry.label; }) : all.filter(function (entry) { return textFixtureActions(entry.fixture).some(function (value) { return value.id === verb; }); });
+    if (!entries.length && !action.fixtureRef && args.fixture && action.verb !== "interact" && adjudicationObjectOnly(args.fixture)) return executeTextAdjudication({ verb: "adjudicate", args: { action: action.rawWord || action.verb, target: args.fixture } });
     if (!entries.length) return textModeResult("blocked", action.fixtureRef ? "That fixture moved, disappeared or became hidden. Repeat the command." : "No visible fixture matches. Type show fixtures for names.");
     if (entries.length > 1) return textModeAsk(action, "fixture", entries, "Which fixture do you mean?");
     const entry = entries[0], fixture = entry.fixture;
@@ -4513,6 +4542,7 @@ async function executeTextExplorationCommand(action) {
     if (verb === "examine") return textFixtureDescribe(entry);
     if (/^(hone|anvil)$/.test(verb) && /^(grindstone|anvil)$/.test(fixture.id)) return executeTextWorkbenchCommand({ verb: "bench", args: { action: verb }, fixtureRef: entry });
     const choices = textFixtureActions(fixture).filter(function (value) { return value.id === verb; });
+    if (!choices.length && action.verb !== "interact" && action.verb !== "read") return executeTextAdjudication({ verb: "adjudicate", args: { action: action.rawWord || verb, target: entry.label }, adjudicateRef: adjudicationTargets().find(function (t) { return t.object === fixture; }) });
     if (!choices.length) return textModeResult("blocked", "That action is not available on this fixture. Use interact with " + entry.label + " for its actions.");
     if (choices.length > 1 && !action.fixtureRoute) return textModeAsk(action, "fixtureRoute", choices, "Which route?");
     const selected = action.fixtureRoute ? choices.find(function (value) { return value.route && value.route.direction === action.fixtureRoute.route.direction && value.route.target === action.fixtureRoute.route.target; }) : choices[0];
@@ -4609,7 +4639,7 @@ function createSharedChoiceButton(menu, label, run, options) {
             if (textModeState.busy || textModeState.parsing) return sharedChoiceResult("blocked", "An action is still finishing. Wait before choosing again.");
             return textRunSharedChoice(menu, choice);
         }
-        return runSharedChoice(menu, choice);
+        return runSharedChoice(menu, choice, { fromButton: true });
     }, opts);
 }
 
@@ -4642,8 +4672,23 @@ function showSharedChoiceMenu(menu) {
     return textModeResult("needs_input", menu.title + "\n" + menu.options.map(function (choice, index) { return (index + 1) + ". " + choice.label + (choice.disabled ? " — unavailable" + (choice.reason ? ": " + choice.reason : "") : ""); }).join("\n") + "\nType choose <number> (or the number alone). Use back or cancel where available. Later commands stay paused.", { systemOnly: menu.kind === "world-tools", menu: { id: menu.id, kind: menu.kind }, choices: menu.options.map(function (choice, index) { return { number: index + 1, label: choice.label, response: "choose " + (index + 1), disabled: choice.disabled }; }) });
 }
 
-async function runSharedChoice(menu, choice) {
-    if (sharedChoiceState.menu !== menu || !menu.valid()) return sharedChoiceResult("blocked", "That choice changed or is no longer available. Type options for the current choices.");
+async function runSharedChoice(menu, choice, how) {
+    if (sharedChoiceState.menu !== menu || !menu.valid()) {
+        const textMode = typeof textModeState !== "undefined" && textModeState.enabled;
+        if (!textMode && how && how.fromButton) {
+            // Menu mode: a visible Back/Leave/Cancel button always works. It only
+            // closes the view, so a stale snapshot is no reason to trap the player.
+            const p = G.player, leaving = choice && /^(back|cancel|leave)$/.test(choice.meta && choice.meta.action || "");
+            if (leaving && menu.ownsView() && p && !p.dead && p.hp > 0 && G.activeNPCMode !== "combat") {
+                clearSharedChoiceMenu(menu);
+                await choice.run();
+                return { status: "completed" };
+            }
+            if (typeof menu.refresh === "function" && menu.ownsView()) { try { menu.refresh(); } catch (err) { console.warn("[Choices] refresh failed", err); } }
+            return sharedChoiceResult("blocked", "That option is no longer available.");
+        }
+        return sharedChoiceResult("blocked", "That choice changed or is no longer available. Type options for the current choices.");
+    }
     if (!choice || menu.options.indexOf(choice) < 0 || choice.disabled) return sharedChoiceResult("blocked", choice && choice.reason || "Choose an available option from the list.");
     if (choice.meta.target && (!isVisibleEntity(choice.meta.target) || getLootMembersInRoom(G.activeRoom).indexOf(choice.meta.target) < 0)) return sharedChoiceResult("blocked", "That companion is no longer available. Type options to refresh the choices.");
     clearSharedChoiceMenu(menu); // consume before running: no double allocation
@@ -9592,12 +9637,669 @@ function textModeObjectParts(text,names) {
     return parts.length?parts:[{text:source,className:"narration-text"}];
 }
 
+// ── DM ADJUDICATOR AND RULING CATALOGUE (2026-10-21) ───────────────────────
+// Free-form actions on objects (not people) that no built-in verb covers.
+// The AI judges them like a tabletop DM from the world rules: whether they
+// are possible, which stat and task DC (d20) apply, and a small capped effect
+// for success and for failure. The engine pays costs, rolls the die, applies
+// the effect and saves the ruling. A repeat of the same action on the same
+// kind of object reuses the saved ruling: the engine resolves it and the AI
+// only narrates. AI never writes HP, items or world state directly.
+const ADJUDICATION_VERSION = 1;
+const ADJUDICATION_STORAGE = "cyoaLearnedActionRulings";
+const ADJUDICATION_LIMIT = 150;
+const ADJUDICATION_STATS = ["physicalProwess", "flexibility", "willpower", "endurance", "charisma"];
+const ADJUDICATION_CONDITIONS = ["none", "sore", "distracted"];
+const adjudicationState = { loaded: false, entries: [], running: null };
+
+// Text mode may have at most two AI requests in flight; extra ones wait.
+const TEXT_AI_SLOTS = 2;
+const textAISlotState = { active: 0, waiting: [] };
+function textAIRelease() {
+    const next = textAISlotState.waiting.shift();
+    if (next) next(); else textAISlotState.active = Math.max(0, textAISlotState.active - 1);
+}
+// One bounded AI request: returns the raw reply text, or null on failure/timeout.
+// A free slot starts the call immediately (same tick); otherwise it waits its turn.
+function textModeAIRequest(instruction, timeoutMs) {
+    if (!aiAvailable()) return Promise.resolve(null);
+    const run = function () {
+        let timer;
+        let call;
+        try { call = Promise.resolve(callAI({ instruction: instruction, endButtons: "none" })); } catch (err) { call = Promise.reject(err); }
+        return Promise.race([call, new Promise(function (resolve) { timer = setTimeout(function () { resolve(null); }, timeoutMs || 12000); })])
+            .then(function (result) { const raw = typeof result === "string" ? result : result && result.text; return raw ? String(raw) : null; },
+                function (err) { console.warn("[Text commands] AI request failed", err); return null; })
+            .then(function (value) { clearTimeout(timer); textAIRelease(); return value; });
+    };
+    if (textAISlotState.active < TEXT_AI_SLOTS) { textAISlotState.active++; return run(); }
+    return new Promise(function (resolve) { textAISlotState.waiting.push(function () { resolve(run()); }); });
+}
+function adjudicationParseJSON(raw) {
+    if (!raw) return null;
+    try {
+        const clean = String(raw).trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+        const start = clean.indexOf("{"), end = clean.lastIndexOf("}");
+        return start >= 0 && end > start ? JSON.parse(clean.slice(start, end + 1)) : null;
+    } catch (_) { return null; }
+}
+
+// ── Targets: visible fixtures, floor items and carried items (never people or bodies).
+function adjudicationTargets() {
+    const room = G.activeRoom, player = G.player, out = [], seen = new Set();
+    if (!room || !player) return out;
+    const add = function (object, list, kind, location) {
+        if (!object || typeof object !== "object" || seen.has(object) || object.objectType === "body" || object.hidden || object.isHidden || object.visible === false || object.concealed && !object.revealed) return;
+        seen.add(object);
+        out.push({ object: object, list: list, kind: kind, location: location, room: room, player: player, label: String((typeof getEntityName === "function" ? getEntityName(object) : "") || object.name || "object") });
+    };
+    (typeof getVisibleRoomFixtures === "function" ? getVisibleRoomFixtures(room) : (room.structural || []).filter(function (f) { return f && (!f.concealed || f.revealed); })).forEach(function (f) { add(f, room.structural, "fixture", "fixture"); });
+    (room.items || []).forEach(function (item) { add(item, room.items, "item", "floor"); });
+    (player.inventory || []).forEach(function (item) { add(item, player.inventory, "item", "carried"); });
+    return out;
+}
+function adjudicationMatch(selector) {
+    const text = String(selector || "").trim();
+    if (!text) return [];
+    return textLootMatch(text, adjudicationTargets(), function (entry) { return entry.label + " " + String(entry.object.name || "") + " " + String(entry.object.id || "").replace(/-/g, " "); });
+}
+function adjudicationFresh(ref) {
+    return ref && adjudicationTargets().find(function (entry) { return entry.object === ref.object && entry.list === ref.list && entry.location === ref.location && entry.room === ref.room && entry.player === ref.player; });
+}
+// True when the words name a visible object and no visible person.
+function adjudicationObjectOnly(selector) {
+    if (!String(selector || "").trim() || !adjudicationMatch(selector).length) return false;
+    return !resolveTextNPCTarget(selector).matches.length;
+}
+
+// ── Public rules digest for the judge (no hidden contents, motives or IDs).
+function adjudicationObjectFacts(entry) {
+    const object = entry.object;
+    if (typeof ensureWorldObjectPhysics === "function") ensureWorldObjectPhysics(object, entry.kind);
+    const def = typeof worldObjectDefinition === "function" ? worldObjectDefinition(object, entry.kind) : null;
+    const physics = def && typeof calculateWorldObjectPhysics === "function" ? calculateWorldObjectPhysics(def) : null;
+    const material = object.material || (typeof guessDurabilityMaterial === "function" ? guessDurabilityMaterial(object) : "misc");
+    const rule = typeof WORLD_MATERIAL_RULES !== "undefined" && WORLD_MATERIAL_RULES[material] || null;
+    const facts = { name: entry.label, where: entry.location, material: material,
+        hardness: rule ? rule.hardness : null, brittle: rule ? rule.brittle : null, flexible: rule ? rule.flexible : null,
+        tags: Array.isArray(object.tags) ? object.tags.slice(0, 6) : [] };
+    if (physics && physics.template !== "item") { facts.massKg = Math.round(physics.dryMassKg); facts.sizeCm = physics.dimensionsCm.map(Math.round); }
+    const secured = entry.kind === "fixture" ? (typeof worldObjectSecured === "function" && def ? worldObjectSecured({ object: object, kind: entry.kind, room: entry.room }) : true) : false;
+    facts.secured = !!secured;
+    const condition = typeof getDurabilityLabel === "function" && object.durability ? getDurabilityLabel(object, entry.kind) : "";
+    if (condition) facts.condition = condition;
+    const state = adjudicationStateFlags(object);
+    if (state.length) facts.state = state;
+    if (entry.kind === "fixture" && typeof textFixtureActions === "function") try {
+        facts.builtInActions = textFixtureActions(object).filter(function (a) { return !a.reason && !a.objectAction && !a.route; }).map(function (a) { return a.id; }).filter(function (id, i, all) { return all.indexOf(id) === i; }).slice(0, 8);
+    } catch (_) {}
+    return facts;
+}
+function adjudicationActorFacts() {
+    const p = G.player, stats = {};
+    ADJUDICATION_STATS.forEach(function (key) { stats[key] = getEntityStatValue(p, key, 3); });
+    const limits = typeof worldObjectLimits === "function" ? worldObjectLimits(p) : null;
+    return { species: String(p.species || ""), size: typeof getPlayerSpeciesSize === "function" ? getPlayerSpeciesSize(p) : "medium", stats: stats,
+        hp: p.hp + "/" + p.hpMax, stamina: p.stamina + "/" + p.staminaMax,
+        carryKg: limits ? { easy: Math.round(limits.easy), lift: Math.round(limits.lift), drag: Math.round(limits.drag) } : null };
+}
+function adjudicationSceneFacts() {
+    const room = G.activeRoom;
+    const witnesses = typeof getLockWitnesses === "function" ? getLockWitnesses(room).filter(function (npc) { return isVisibleEntity(npc); }).length : 0;
+    return { place: String(room.displayName || room.name || room.type || "room").slice(0, 80), zone: String(room.zone || "").slice(0, 40), onlookers: witnesses };
+}
+
+// ── Ruling schema. Outcomes are bounded engine vocabulary, never free effects.
+function adjudicationOutcome(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const keys = ["objectDamage", "selfDamage", "selfCondition", "flag", "clearFlag", "noise", "line"];
+    if (Object.keys(value).some(function (key) { return keys.indexOf(key) < 0; })) return null;
+    const int = function (v, min, max) { return v === undefined ? min : Number.isInteger(v) && v >= min && v <= max ? v : null; };
+    const out = { objectDamage: int(value.objectDamage, 0, 10), selfDamage: int(value.selfDamage, 0, 3), noise: int(value.noise, 0, 3) };
+    if (out.objectDamage === null || out.selfDamage === null || out.noise === null) return null;
+    out.selfCondition = value.selfCondition === undefined ? "none" : value.selfCondition;
+    if (ADJUDICATION_CONDITIONS.indexOf(out.selfCondition) < 0) return null;
+    out.flag = adjudicationFlagWord(value.flag); out.clearFlag = adjudicationFlagWord(value.clearFlag);
+    if (out.flag === null || out.clearFlag === null) return null;
+    const line = String(value.line || "").trim();
+    if (!line || line.length > 220 || /[\r\n<>*]/.test(line)) return null;
+    out.line = line;
+    return out;
+}
+function adjudicationFlagWord(value) {
+    if (value === undefined || value === null || value === "") return "";
+    const word = String(value).trim().toLowerCase();
+    return /^[a-z][a-z ]{1,22}[a-z]$/.test(word) ? word : null;
+}
+function validateAdjudicationRuling(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.possible !== "boolean") return null;
+    if (value.route !== undefined) return validateAdjudicationRoute(value);
+    const verb = String(value.verb || "").trim().toLowerCase();
+    if (verb && !/^[a-z](?:[a-z' -]{0,38}[a-z])?$/.test(verb)) return null;
+    if (!value.possible) {
+        const keys = ["possible", "verb", "reason", "native"];
+        if (Object.keys(value).some(function (key) { return keys.indexOf(key) < 0; })) return null;
+        const reason = String(value.reason || "").trim();
+        if (!reason || reason.length > 200 || /[\r\n<>*]/.test(reason)) return null;
+        const native = value.native === undefined || value.native === "" ? "" : String(value.native).trim().toLowerCase();
+        if (native && !/^[a-z]{2,20}$/.test(native)) return null;
+        return { possible: false, verb: verb, reason: reason, native: native };
+    }
+    const keys = ["possible", "verb", "stat", "dc", "stamina", "turns", "success", "failure"];
+    if (Object.keys(value).some(function (key) { return keys.indexOf(key) < 0; })) return null;
+    const stat = value.stat === "none" || value.stat === undefined ? "none" : value.stat;
+    if (stat !== "none" && ADJUDICATION_STATS.indexOf(stat) < 0) return null;
+    const dc = stat === "none" ? 0 : value.dc;
+    if (stat !== "none" && (!Number.isInteger(dc) || dc < 5 || dc > 25)) return null;
+    if (!Number.isInteger(value.stamina) || value.stamina < 0 || value.stamina > 2 || !Number.isInteger(value.turns) || value.turns < 0 || value.turns > 2) return null;
+    const success = adjudicationOutcome(value.success), failure = stat === "none" ? (value.failure ? adjudicationOutcome(value.failure) : success) : adjudicationOutcome(value.failure);
+    if (!success || !failure) return null;
+    return { possible: true, verb: verb, stat: stat, dc: dc, stamina: value.stamina, turns: value.turns, success: success, failure: failure };
+}
+async function judgeAdjudication(entry, actionText) {
+    const commands = adjudicationCommandsFor(entry);
+    const instruction = 'You are the tabletop game master for a fantasy RPG. Rule on ONE SFW action the player attempts on an OBJECT (never a person). Judge by real-world physics and these facts. JSON only.\n' +
+        'FIRST: if one of the listed commands is what the player means (the game has real rules for it), return {"possible":true,"route":"command","verb":"base verb","command":"that command copied exactly, keeping {target}"}.\n' +
+        'Impossible, needs a person, needs unsupported mechanics (magic, crafting, creating or removing items, travel), or a listed builtIn action fits better: {"possible":false,"verb":"base verb","reason":"one plain in-world sentence, second person","native":"builtIn action id or empty"}.\n' +
+        'Otherwise: {"possible":true,"verb":"base verb 1-3 words","stat":"physicalProwess|flexibility|willpower|endurance|charisma|none","dc":5-25,"stamina":0-2,"turns":0-2,"success":OUTCOME,"failure":OUTCOME}.\n' +
+        'OUTCOME={"objectDamage":0-10,"selfDamage":0-3,"selfCondition":"none|sore|distracted","flag":"short visible state word or empty","clearFlag":"state to remove or empty","noise":0-3,"line":"one or two plain sentences, second person, present tense, describing this outcome generically for this kind of object; no numbers, no asterisks, no new objects, items or people"}.\n' +
+        'DC is the task difficulty itself (the engine adds the character bonus): 5 trivial, 10 easy, 15 hard, 20 very hard, 25 near impossible. Use stat none and dc 0 for things anyone simply does. ' +
+        'Bare hands against hard material (hardness 5+) do almost no damage but can hurt the player. Secured objects do not move. Respect massKg against carryKg. Flags describe lasting visible changes only (dented, toppled, scratched, wobbling); most outcomes need none. Noise 2+ draws onlookers\' attention.\n' +
+        JSON.stringify({ action: String(actionText).slice(0, 120), object: adjudicationObjectFacts(entry), commands: commands, actor: adjudicationActorFacts(), scene: adjudicationSceneFacts() });
+    const ruling = validateAdjudicationRuling(adjudicationParseJSON(await textModeAIRequest(instruction, 14000)));
+    // A route must be one of the commands offered; the AI cannot invent one.
+    return ruling && ruling.route && commands.indexOf(ruling.command) < 0 ? null : ruling;
+}
+
+// ── Catalogue (local browser storage, like learned phrases).
+function adjudicationVerbKey(text) {
+    return textCommandNormalize(text).replace(/\b(?:a|an|the|my|this|that|it|at|on|to|with|please|try|trying|attempt|attempting|i)\b/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+}
+function adjudicationClassKey(entry) {
+    const object = entry.object;
+    const def = typeof worldObjectDefinition === "function" ? worldObjectDefinition(object, entry.kind) : null;
+    const material = object.material || (typeof guessDurabilityMaterial === "function" ? guessDurabilityMaterial(object) : "misc");
+    const base = def && def.template !== "item" ? def.template : textCommandNormalize(String(object.id || object.name || "object")).replace(/\d+/g, "").trim().slice(0, 40);
+    const size = typeof getPlayerSpeciesSize === "function" ? getPlayerSpeciesSize(G.player) : "medium";
+    return [entry.kind, base, material, size].join("/");
+}
+function adjudicationLoad() {
+    if (adjudicationState.loaded) return;
+    adjudicationState.loaded = true;
+    try {
+        const raw = localStorage.getItem(ADJUDICATION_STORAGE);
+        if (!raw || raw.length > 300000) return;
+        const saved = JSON.parse(raw);
+        if (!saved || saved.version !== ADJUDICATION_VERSION || !Array.isArray(saved.entries)) return;
+        saved.entries.slice(-ADJUDICATION_LIMIT).forEach(function (e) {
+            if (!e || typeof e.key !== "string" || e.key.length > 160 || typeof e.label !== "string" || e.label.length > 120) return;
+            const ruling = validateAdjudicationRuling(e.ruling);
+            if (ruling) adjudicationState.entries.push({ key: e.key, label: e.label, ruling: ruling, uses: Number.isInteger(e.uses) ? e.uses : 0 });
+        });
+    } catch (_) {}
+}
+function adjudicationSave() {
+    while (adjudicationState.entries.length > ADJUDICATION_LIMIT) adjudicationState.entries.shift();
+    try { localStorage.setItem(ADJUDICATION_STORAGE, JSON.stringify({ version: ADJUDICATION_VERSION, entries: adjudicationState.entries })); } catch (_) {}
+}
+function adjudicationLookup(keys) {
+    adjudicationLoad();
+    for (let i = 0; i < keys.length; i++) {
+        const hit = adjudicationState.entries.find(function (e) { return e.key === keys[i]; });
+        if (hit) return hit;
+    }
+    return null;
+}
+function adjudicationRemember(keys, label, ruling) {
+    adjudicationLoad();
+    keys = keys.filter(function (k, i) { return k && keys.indexOf(k) === i; });
+    adjudicationState.entries = adjudicationState.entries.filter(function (e) { return keys.indexOf(e.key) < 0; });
+    keys.forEach(function (key) { adjudicationState.entries.push({ key: key, label: label, ruling: ruling, uses: 0 }); });
+    adjudicationSave();
+}
+function adjudicationKeys(entry, actionText, ruling) {
+    const cls = adjudicationClassKey(entry), keys = [adjudicationVerbKey(actionText) + "|" + cls];
+    if (ruling && ruling.verb) keys.push(adjudicationVerbKey(ruling.verb) + "|" + cls);
+    return keys;
+}
+
+// ── Lasting visible state on the object (saved with the room).
+function adjudicationStateFlags(object) {
+    return object && object.worldState && Array.isArray(object.worldState.flags) ? object.worldState.flags.slice(0, 4) : [];
+}
+function adjudicationApplyFlags(object, outcome) {
+    let flags = adjudicationStateFlags(object);
+    if (outcome.clearFlag) flags = flags.filter(function (f) { return f !== outcome.clearFlag; });
+    if (outcome.flag && flags.indexOf(outcome.flag) < 0) flags.push(outcome.flag);
+    flags = flags.slice(-4);
+    if (flags.length || object.worldState) object.worldState = Object.assign({}, object.worldState || {}, { flags: flags });
+}
+function adjudicationStateLine(object) {
+    const flags = adjudicationStateFlags(object);
+    if (!flags.length) return "";
+    const list = flags.length === 1 ? flags[0] : flags.slice(0, -1).join(", ") + " and " + flags[flags.length - 1];
+    return "It looks " + list + ".";
+}
+// Bare-hand damage caps by material hardness; brittle things give a little more.
+function adjudicationDamageCap(entry) {
+    const material = entry.object.material || (typeof guessDurabilityMaterial === "function" ? guessDurabilityMaterial(entry.object) : "misc");
+    const rule = typeof WORLD_MATERIAL_RULES !== "undefined" && WORLD_MATERIAL_RULES[material] || { hardness: 1, brittle: false };
+    return (rule.hardness >= 5 ? 1 : rule.hardness >= 3 ? 3 : 6) + (rule.brittle ? 2 : 0);
+}
+
+function adjudicationBlock(entry) {
+    const p = G.player;
+    if (!p || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot do that while incapacitated.";
+    if (textModeInCombat() || typeof roomHasActiveHostile === "function" && roomHasActiveHostile(G.activeRoom)) return "There is no time for that with a threat bearing down on you.";
+    if (typeof isRoomCollapsed === "function" && isRoomCollapsed(G.activeRoom)) return "Everything here is buried under rubble.";
+    if (G.activeNPC) return "You are still engaged with someone. Leave the conversation first.";
+    if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "The party's loot decision needs settling first.";
+    if (adjudicationState.running || typeof worldObjectExecution !== "undefined" && worldObjectExecution) return "Your previous action is still resolving.";
+    if (entry && (entry.object.fire && entry.object.fire.turnsLeft > 0)) return "It is burning. You keep your hands away from it.";
+    return "";
+}
+
+async function adjudicationNarrate(result, fallback) {
+    if (!aiAvailable()) return fallback;
+    const value = adjudicationParseJSON(await textModeAIRequest('Narrate this already-resolved game result for the player in one or two vivid sentences, second person, present tense. Stay faithful: no new effects, objects, people, numbers or dice. Plain text only. JSON only:{"text":""}\n' + JSON.stringify(result), 8000));
+    const text = value && typeof value.text === "string" ? value.text.trim() : "";
+    return text && text.length <= 320 && !/[\r\n<>*]/.test(text) ? text : fallback;
+}
+
+// Start judging early (batches judge all their new actions up front, two at a time).
+// Which actions will reach the game master: explicit rulings, plus strikes,
+// container verbs and fixture verbs aimed at a plain object.
+function textAdjudicationCandidate(action) {
+    if (!action || !action.args) return null;
+    const a = action.args;
+    if (action.verb === "adjudicate") return { action: a.action, target: a.target };
+    if (action.verb === "act" && /^(assault|physical)$/.test(a.family || "") && a.target && adjudicationObjectOnly(a.target)) return { action: a.action, target: a.target };
+    if (/^(open|search|loot|contents)$/.test(action.verb) && a.source && adjudicationObjectOnly(a.source) && !textLootMatch(a.source, textLootSources(), function (e) { return e.label; }).length) return { action: action.verb, target: a.source };
+    return null;
+}
+function prefetchTextAdjudications(actions) {
+    if (!Array.isArray(actions) || !actions.length) return;
+    let candidates;
+    try { candidates = actions.map(function (a) { return a && !a.rulingPromise && !textModeInCombat() ? textAdjudicationCandidate(a) : null; }); } catch (_) { return; }
+    if (!candidates.some(Boolean) || !aiAvailable()) return;
+    const started = {};
+    actions.forEach(function (action, index) {
+        const candidate = candidates[index];
+        if (!candidate) return;
+        const matches = action.adjudicateRef ? [adjudicationFresh(action.adjudicateRef)].filter(Boolean) : adjudicationMatch(candidate.target);
+        if (matches.length !== 1) return;
+        const text = String(candidate.action || "").trim();
+        const keys = adjudicationKeys(matches[0], text);
+        if (!text || adjudicationLookup(keys)) return;
+        if (!started[keys[0]]) started[keys[0]] = judgeAdjudication(matches[0], text);
+        action.rulingPromise = started[keys[0]];
+    });
+}
+
+async function executeTextAdjudication(action) {
+    const args = action.args || {};
+    const actionText = String(args.action || "").trim().replace(/[.!?]+$/, "");
+    if (!actionText || actionText.length > 120) return textModeResult("blocked", "Say what you try to do, then the object. For example: kick lamppost.", { systemOnly: true });
+    const matches = action.adjudicateRef ? [adjudicationFresh(action.adjudicateRef)].filter(Boolean) : adjudicationMatch(args.target);
+    if (!matches.length) return textModeResult("blocked", action.adjudicateRef ? "That object is no longer within reach." : "I look around, but can't find that here.", { narration: "I look around, but can't find that here." });
+    if (matches.length > 1) return textModeAsk(action, "adjudicateTarget", matches, "Which do you mean?");
+    let entry = matches[0];
+    action.adjudicateRef = entry;
+    if (adjudicationState.routing) return textModeResult("blocked", "I can't see how to make that work.");
+    const block = adjudicationBlock(entry);
+    if (block) return textModeResult("blocked", block);
+    const scene = textModeScene(), epoch = textModeState.epoch;
+    let keys = adjudicationKeys(entry, actionText), saved = adjudicationLookup(keys), ruling = saved ? saved.ruling : null, source = saved ? "catalogue" : "ai";
+    if (!ruling) {
+        if (!aiAvailable() && !action.rulingPromise) return textModeResult("blocked", "I'm not sure how that would go. Without AI the game can only resolve actions it already knows.", { systemOnly: true, commandFailure: "ai-unavailable" });
+        renderTextModeStatus("Weighing your attempt...");
+        ruling = await (action.rulingPromise || judgeAdjudication(entry, actionText));
+        renderTextModeStatus();
+        if (!textModeSameScene(scene) || epoch !== textModeState.epoch) return textModeResult("interrupted", "The moment passed while you considered it.", { systemOnly: true });
+        entry = adjudicationFresh(entry);
+        if (!entry) return textModeResult("interrupted", "That object is no longer within reach.");
+        if (!ruling) return textModeResult("blocked", "I can't see how to make that work.", { systemOnly: false, commandFailure: "unresolved" });
+        keys = adjudicationKeys(entry, actionText, ruling);
+        adjudicationRemember(keys, actionText + " " + entry.label, ruling);
+    } else saved.uses = (saved.uses || 0) + 1;
+    if (ruling.route === "command") return executeAdjudicationRoute(entry, actionText, ruling, source);
+    if (!ruling.possible) {
+        if (ruling.native && entry.kind === "fixture" && textFixtureActions(entry.object).some(function (a) { return a.id === ruling.native && !a.reason; }))
+            return executeTextExplorationCommand({ verb: "interact", args: { fixture: entry.label, action: ruling.native }, fixtureRef: { fixture: entry.object, room: entry.room, list: entry.list, label: entry.label } });
+        return textModeResult("blocked", ruling.reason, { adjudication: { action: actionText, target: entry.label, possible: false, source: source } });
+    }
+    return performAdjudicatedAction(entry, actionText, ruling, source);
+}
+
+async function performAdjudicatedAction(entry, actionText, ruling, source) {
+    const player = G.player, object = entry.object;
+    const block = adjudicationBlock(entry);
+    if (block) return textModeResult("blocked", block);
+    if (ruling.stamina && (typeof player.stamina !== "number" || player.stamina < ruling.stamina)) return textModeResult("blocked", "You are too tired to try that right now.");
+    const scene = textModeScene(), epoch = textModeState.epoch, start = getCurrentStoryTurn();
+    adjudicationState.running = { entry: entry };
+    try {
+        if (ruling.stamina) spendEntityStamina(player, ruling.stamina);
+        if (ruling.turns) { advanceNPCAffectTime(ruling.turns); advanceStoryTurn(ruling.turns); }
+        const result = { action: actionText, verb: ruling.verb, target: entry.label, source: source, staminaCost: ruling.stamina, turns: Math.max(0, getCurrentStoryTurn() - start) };
+        if (!textModeSameScene(scene) || epoch !== textModeState.epoch || !adjudicationFresh(entry) || player.dead || player.hp <= 0 || roomHasActiveHostile(G.activeRoom)) {
+            saveGameState();
+            return textModeResult("interrupted", "You break off as the situation changes. The time and effort are spent.", { adjudication: Object.assign(result, { committed: false }) });
+        }
+        const check = ruling.stat === "none" ? null : rollStatCheck(player, ruling.stat, ruling.dc);
+        const success = !check || check.success, outcome = success ? ruling.success : ruling.failure;
+        result.success = success;
+        result.roll = check ? { die: check.roll, bonus: check.bonus, total: check.total, dc: ruling.dc, stat: ruling.stat } : null;
+        const lines = [];
+        // Object damage goes through native durability; a broken fixture is wrecked.
+        let objectDamage = Math.min(outcome.objectDamage, adjudicationDamageCap(entry)), broke = false;
+        if (objectDamage > 0 && typeof damageDurability === "function") {
+            if (typeof ensureWorldObjectPhysics === "function") ensureWorldObjectPhysics(object, entry.kind);
+            const hit = damageDurability(object, objectDamage, "force", { kind: entry.kind, lines: lines });
+            objectDamage = hit.lost; broke = hit.broke;
+        } else objectDamage = 0;
+        adjudicationApplyFlags(object, broke ? Object.assign({}, outcome, { flag: "broken" }) : outcome);
+        // Self-inflicted strain never drops the player below 1 HP.
+        const hpBefore = player.hp;
+        if (outcome.selfDamage > 0) player.hp = Math.max(Math.min(player.hp, 1), player.hp - outcome.selfDamage);
+        result.selfDamage = Math.max(0, hpBefore - player.hp);
+        if (result.selfDamage && typeof markTextModeUrgent === "function") markTextModeUrgent("player-hurt");
+        if (outcome.selfCondition !== "none" && typeof applyStatusEffect === "function") {
+            const note = applyStatusEffect(player, outcome.selfCondition, "you", { durationTurns: 2 });
+            result.condition = outcome.selfCondition;
+            if (note) lines.push(note);
+        }
+        // Onlookers notice noise and damage to property.
+        const witnesses = (outcome.noise >= 2 || objectDamage > 0) && typeof getLockWitnesses === "function" ? getLockWitnesses(G.activeRoom).filter(function (npc) { return isVisibleEntity(npc); }) : [];
+        witnesses.slice(0, 3).forEach(function (npc) {
+            if (objectDamage > 0 && typeof nudgeNPCAgainstPlayer === "function") nudgeNPCAgainstPlayer(npc, -2, 3);
+            if (typeof addNPCMemory === "function") addNPCMemory(npc, { text: "The player tried to " + actionText + " the " + entry.label + (objectDamage > 0 ? ", damaging it." : "."), importance: objectDamage > 0 ? 3 : 1, tags: ["world-object"] });
+        });
+        result.objectDamage = objectDamage; result.broke = broke; result.state = adjudicationStateFlags(object); result.noise = outcome.noise;
+        result.noticedBy = witnesses.length ? witnesses.slice(0, 3).map(function (npc) { return getNPCRoomSightName(npc); }) : [];
+        let text = outcome.line;
+        if (source === "catalogue") text = await adjudicationNarrate({ attempted: actionText, object: entry.label, material: object.material || "", success: success, objectDamaged: objectDamage > 0, objectBroke: broke, objectState: result.state, playerHurt: result.selfDamage > 0, loud: outcome.noise >= 2, guideLine: outcome.line }, outcome.line);
+        if (broke) lines.push("The " + entry.label + " gives way.");
+        if (result.noticedBy.length) lines.push(result.noticedBy[0] + (result.noticedBy.length > 1 ? " and others look" : " looks") + " your way.");
+        if (typeof rememberStoryEvent === "function") rememberStoryEvent("interaction", "You tried to " + actionText + " the " + entry.label + (success ? " and managed it." : " without success."), 2);
+        renderStats(); saveGameState();
+        const story = [text].concat(lines).join(" ");
+        return textModeResult("completed", story, { narration: story, adjudication: result });
+    } finally { adjudicationState.running = null; }
+}
+
+function textObjectIntentAvailable() {
+    try { return worldObjectEntries().length > 0 || !textModeInCombat() && adjudicationTargets().length > 0; } catch (_) { return false; }
+}
+// Local fallback for unrecognised wording that names a visible object and no person:
+// "climb the lamppost" -> adjudicate {action:"climb", target:"lamppost"}.
+// Only plain bodily verbs resolve locally; magic, tools and anything else go
+// through the AI interpreter first (it can still choose a game-master ruling).
+const ADJUDICATION_LOCAL_VERBS = /^(?:kick|stomp|stamp|hit|punch|slap|smack|bang|knock|tap|rap|thump|pound|shake|rock|wobble|jiggle|rattle|lean|sit|stand|lie|lay|climb|scale|hug|kiss|lick|sniff|smell|bite|poke|prod|rub|pat|stroke|scratch|polish|wipe|clean|dust|spin|twist|turn|tip|topple|tilt|hang|swing|jump|hop|vault|headbutt|elbow|shove|push|pull|yank|tug|grab|squeeze|listen|peer|feel|nudge|bump|wiggle|kneel|hide|crawl|step)\b/i;
+function parseTextAdjudicationFallback(raw) {
+    const text = String(raw || "").trim().replace(/[.!?]+$/, "").replace(/^(?:I\s+|please\s+)/i, "").replace(/^(?:try|attempt)\s+to\s+/i, "");
+    if (!ADJUDICATION_LOCAL_VERBS.test(text)) return null;
+    if (!text || text.length > 140 || /["“”]/.test(text) || !G.activeRoom || !G.player || G.activeNPC || textModeInCombat()) return null;
+    const words = textCommandNormalize(text).split(" ");
+    if (words.length < 2) return null;
+    let best = null;
+    const named = [];
+    adjudicationTargets().forEach(function (entry) {
+        const nameWords = textCommandNormalize(entry.label).split(" ");
+        let found = null;
+        for (let len = nameWords.length; len >= 1 && !found; len--) {
+            const tail = nameWords.slice(nameWords.length - len);
+            for (let i = 1; i + len <= words.length && !found; i++) {
+                if (tail.every(function (w, j) { return words[i + j] === w; })) found = { entry: entry, start: i, len: len };
+            }
+        }
+        if (!found) return;
+        if (named.indexOf(textCommandNormalize(entry.label)) < 0) named.push(textCommandNormalize(entry.label));
+        if (!best || found.len > best.len) best = found;
+    });
+    // One object only; sentences about two objects go to the AI interpreter.
+    if (!best || named.length > 1) return null;
+    const target = words.slice(best.start, best.start + best.len).join(" ");
+    if (!adjudicationMatch(target).length || resolveTextNPCTarget(target).matches.length) return null;
+    const npcWord = words.some(function (w) { return w.length > 2 && resolveTextNPCTarget(w).matches.length; });
+    if (npcWord) return null;
+    const action = words.slice(0, best.start).concat(words.slice(best.start + best.len)).join(" ").replace(/\b(?:the|a|an|my)\s*$/, "").replace(/\s+(?:the|a|an|my)\b(?=\s|$)/g, " ").replace(/\s+/g, " ").trim();
+    if (!action || action.length > 80) return null;
+    return { verb: "adjudicate", args: { action: action, target: target } };
+}
+
+// Rulings maintenance: free, local, never sent to AI.
+function executeTextRulingsCommand(action) {
+    adjudicationLoad();
+    const a = action.args || {};
+    if (a.action === "clear") { adjudicationState.entries = []; adjudicationSave(); return textModeResult("completed", "Saved action rulings cleared.", { systemOnly: true }); }
+    if (a.action === "forget") {
+        const key = adjudicationVerbKey(a.phrase || "");
+        const before = adjudicationState.entries.length;
+        adjudicationState.entries = adjudicationState.entries.filter(function (e) { return adjudicationVerbKey(e.label) !== key && e.key.split("|")[0] !== key; });
+        adjudicationSave();
+        return textModeResult("completed", before === adjudicationState.entries.length ? "No saved ruling matches that." : "Ruling forgotten. The next attempt is judged afresh.", { systemOnly: true });
+    }
+    const seen = {}, rows = [];
+    adjudicationState.entries.forEach(function (e) { if (seen[e.label]) return; seen[e.label] = true; rows.push(e.label + " — " + (e.ruling.route ? "uses: " + e.ruling.command.split("{target}").join("<object>") : e.ruling.possible ? (e.ruling.stat === "none" ? "automatic" : e.ruling.stat + " DC " + e.ruling.dc) : "not possible")); });
+    return textModeResult("completed", rows.length ? "Saved action rulings:\n" + rows.slice(-30).join("\n") + "\nforget ruling <action> <object>; clear rulings" : "No saved action rulings yet. New actions on objects are judged once, then reused.", { systemOnly: true });
+}
+function parseTextRulingsCommand(raw) {
+    if (/^(?:rulings|action rulings|saved rulings)$/i.test(raw)) return { verb: "rulings", args: { action: "list" } };
+    if (/^clear\s+rulings$/i.test(raw)) return { verb: "rulings", args: { action: "clear" } };
+    const match = /^forget\s+ruling\s+(.+)$/i.exec(raw);
+    return match ? { verb: "rulings", args: { action: "forget", phrase: textCommandUnquote(match[1]) } } : null;
+}
+
+// ── FIRE AND WATER BY HAND (2026-10-21) ────────────────────────────────────
+// Light a flammable fixture with a held torch or a nearby flame, or douse a
+// burning one with carried water or a water source. Same fire state, spread,
+// burn-out and arson reactions as fire spells (igniteFixture / settle /
+// fixtureFireReactions); no mana, 1 story turn, no roll. Text commands and
+// fixture-card buttons share performFireAction.
+function fireHandSourceFixture(fixture) {
+    if (!fixture || fixture.burntOut || fixture.destroyed) return false;
+    if (typeof isFixtureBurning === "function" && isFixtureBurning(fixture)) return true;
+    const text = String(fixture.id || "") + " " + String(fixture.name || "");
+    return (typeof isWarmthFixture === "function" && isWarmthFixture(fixture)) || /torch|brazier|hearth|forge|campfire|fire ?pit|fireplace|lantern|candle|sconce/i.test(text);
+}
+function fireSources(exclude) {
+    const out = [];
+    const torch = typeof findPlayerTorch === "function" ? findPlayerTorch() : null;
+    if (torch) out.push({ kind: "torch", item: torch, label: getItemName(torch) });
+    textExplorationFixtures().forEach(function (entry) {
+        if (entry.fixture !== exclude && fireHandSourceFixture(entry.fixture)) out.push({ kind: "fixture", fixture: entry.fixture, label: entry.label });
+    });
+    return out;
+}
+function fireWaterFixture(fixture) {
+    if (!fixture || fixture.burntOut) return false;
+    if (typeof isDrinkableFixture === "function" && isDrinkableFixture(fixture)) return true;
+    return !!(fixture.liquid && fixture.liquid.type === "water" && fixture.liquid.volume > 0);
+}
+function waterSources() {
+    const out = [];
+    (G.player.inventory || []).forEach(function (item) {
+        const liquid = typeof getItemLiquid === "function" ? getItemLiquid(item) : null;
+        if (liquid && liquid.type === "water" && liquid.volume > 0 && (typeof isLootItemVisible !== "function" || isLootItemVisible(item))) out.push({ kind: "item", item: item, label: getItemName(item) });
+    });
+    textExplorationFixtures().forEach(function (entry) { if (fireWaterFixture(entry.fixture)) out.push({ kind: "fixture", fixture: entry.fixture, label: entry.label }); });
+    return out;
+}
+function fireBlock() {
+    const p = G.player;
+    if (!p || !G.activeRoom || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot do that right now.";
+    if (textModeInCombat() || G.activeNPCMode === "combat") return "There is no time for that in the middle of a fight.";
+    if (G.activeNPC) return "Leave the conversation first.";
+    return textExplorationBlock();
+}
+function fireSpec(action, fixture, source) {
+    const room = G.activeRoom, name = getEntityName(fixture);
+    let reason = fireBlock();
+    if (!reason && action === "ignite") {
+        if (fixture.burntOut) reason = "The " + name + " is already charred.";
+        else if (isFixtureBurning(fixture)) reason = "The " + name + " is already burning.";
+        else if (!isFlammableFixture(fixture, room)) reason = "The " + name + " won't catch. There is nothing on it that burns.";
+        else if (!source) reason = "You have no flame to set it alight. A torch, or a fire nearby, would do.";
+    } else if (!reason && action === "douse") {
+        if (!isFixtureBurning(fixture)) reason = "The " + name + " isn't burning.";
+        else if (!source) reason = "You have nothing to put the fire out with. Carried water or a well nearby would do.";
+    } else if (!reason) reason = "Light it or douse it.";
+    return { action: action, fixture: fixture, source: source, reason: reason, turns: 1 };
+}
+function fireSourceLabel(spec) {
+    const s = spec.source;
+    if (spec.action === "ignite") return s.kind === "torch" ? "your " + s.label.toLowerCase() : "a burning brand from the " + s.label;
+    return s.kind === "item" ? "your " + s.label.toLowerCase() : "water from the " + s.label;
+}
+function fireCardActions(fixture) {
+    const room = G.activeRoom;
+    if (!fixture || !room) return [];
+    if (isFixtureBurning(fixture)) {
+        const water = waterSources()[0];
+        const spec = fireSpec("douse", fixture, water);
+        return [{ label: water ? "Douse it with " + (water.kind === "item" ? water.label : "water from the " + water.label) + " (1 turn)" : "Douse it (no water)", reason: spec.reason, run: function () { return performFireAction(fireSpec("douse", fixture, water)); } }];
+    }
+    if (!isFlammableFixture(fixture, room)) return [];
+    const flame = fireSources(fixture)[0];
+    const spec = fireSpec("ignite", fixture, flame);
+    return [{ label: flame ? "Set it alight with " + (flame.kind === "torch" ? "your " + flame.label.toLowerCase() : "a brand from the " + flame.label) + " (1 turn)" : "Set it alight (no flame)", reason: spec.reason, run: function () { return performFireAction(fireSpec("ignite", fixture, flame)); } }];
+}
+function performFireAction(spec) {
+    if (spec.reason) { if (textModeState.enabled) return textModeResult("blocked", spec.reason); setNarration(spec.reason); return { status: "blocked" }; }
+    const fixture = spec.fixture, room = G.activeRoom, player = G.player, name = getEntityName(fixture), turn = getCurrentStoryTurn();
+    const lines = [];
+    if (typeof settleFixtureFire === "function") lines.push.apply(lines, settleFixtureFire(room, fixture));
+    if (spec.action === "ignite" && isFixtureBurning(fixture)) return textModeState.enabled ? textModeResult("completed", lines.concat(["The " + name + " is already burning."]).join(" ")) : { status: "completed" };
+    if (spec.action === "douse") {
+        const s = spec.source;
+        if (s.kind === "item") {
+            const item = s.item;
+            if (item.physicalDefinition && item.container && item.liquid) item.liquid = { type: "water", volume: 0 };
+            else if (typeof consumeOneFromInventory === "function" && consumeOneFromInventory(item)) { const kept = typeof giveBackEmptyContainer === "function" ? giveBackEmptyContainer(item) : ""; if (kept) lines.push(kept); }
+        }
+        fixture.fire = null;
+    } else {
+        igniteFixture(fixture);
+        fixture.fire.lastTurn = turn + 1; // lighting it takes this turn
+    }
+    advanceNPCAffectTime(1);
+    advanceStoryTurn(1);
+    const result = { action: spec.action, target: name, source: spec.source.label, sourceKind: spec.source.kind, turns: Math.max(0, getCurrentStoryTurn() - turn) };
+    if (G.player !== player || G.activeRoom !== room || (room.structural || []).indexOf(fixture) < 0) {
+        saveGameState();
+        return textModeState.enabled ? textModeResult("interrupted", "The situation changed. The time is spent, and the fire does what fire does.", { fireAction: Object.assign(result, { committed: true }) }) : { status: "interrupted" };
+    }
+    if (spec.action === "douse") lines.unshift("You throw " + fireSourceLabel(spec) + " over the " + name + ". The flames hiss and die. It is scorched, but it will burn no further.");
+    else {
+        lines.unshift("You set " + fireSourceLabel(spec) + " to the " + name + ". Flames catch and begin to climb it. It will burn down in a few turns, and anything on it will burn too.");
+        if (typeof fixtureFireReactions === "function") fixtureFireReactions(room, lines);
+    }
+    if (typeof rememberStoryEvent === "function") rememberStoryEvent("interaction", spec.action === "douse" ? "You put out the fire on the " + name + "." : "You set the " + name + " alight.", spec.action === "douse" ? 2 : 4);
+    const text = lines.filter(Boolean).join(" ");
+    if (textModeState.enabled) { renderStats(); saveGameState(); return textModeResult("completed", text, { narration: text, fireAction: result }); }
+    if (typeof finishFixtureFireAction === "function") finishFixtureFireAction(fixture, lines); else { renderStats(); saveGameState(); setNarration(text); }
+    return { status: "completed" };
+}
+function fireTargetEntries(selector, action) {
+    const all = textExplorationFixtures();
+    const word = textCommandNormalize(selector).replace(/^(?:the|a|an)\s+/, "");
+    if (/^(?:fire|flames?|blaze|burning(?: \w+)?)$/.test(word)) return all.filter(function (entry) { return isFixtureBurning(entry.fixture); });
+    const named = word.replace(/^(?:fire|flames?)\s+(?:on|in)\s+(?:the\s+)?/, "").replace(/^burning\s+/, "");
+    return textLootMatch(named, all, function (entry) { return entry.label + " " + String(entry.fixture.id || "").replace(/-/g, " "); });
+}
+function parseTextFireCommand(raw) {
+    if (textModeInCombat()) return null;
+    const text = String(raw || "").trim().replace(/[.!?]+$/, "").replace(/^I\s+/i, "");
+    let action = "", rest = "";
+    let m = /^(?:light|ignite|kindle|torch)\s+(.+)$/i.exec(text);
+    if (m) { action = "ignite"; rest = m[1]; }
+    if (!m && (m = /^set\s+fire\s+to\s+(.+)$/i.exec(text))) { action = "ignite"; rest = m[1]; }
+    if (!m && (m = /^set\s+(.+?)\s+(?:on\s+fire|alight|ablaze|aflame)((?:\s+(?:with|using|from)\s+.+)?)$/i.exec(text))) { action = "ignite"; rest = m[1] + m[2]; }
+    if (!m && (m = /^(?:douse|extinguish|quench|smother|put\s+out)\s+(.+)$/i.exec(text))) { action = "douse"; rest = m[1]; }
+    if (!m) return null;
+    const tool = /^(.+?)\s+(?:with|using|from)\s+(.+)$/i.exec(rest);
+    const target = textCommandUnquote(tool ? tool[1] : rest), item = tool ? textCommandUnquote(tool[2]) : "";
+    if (!G.activeRoom || !fireTargetEntries(target, action).length) return null;
+    return { verb: "fire", args: { action: action, target: target, item: item } };
+}
+function executeTextFireCommand(action) {
+    const args = action.args || {}, verb = args.action === "douse" ? "douse" : args.action === "ignite" ? "ignite" : "";
+    if (!verb) return textModeResult("blocked", "Use light <thing> or douse <thing>.", { systemOnly: true });
+    const block = fireBlock();
+    if (block) return textModeResult("blocked", block);
+    const entries = action.fireRef ? [textExplorationFresh(action.fireRef)].filter(Boolean) : fireTargetEntries(args.target || "", verb);
+    if (!entries.length) return textModeResult("blocked", verb === "douse" ? "Nothing like that is burning here." : "I look around, but can't find that here.");
+    if (entries.length > 1) return textModeAsk(action, "fireTarget", entries, "Which do you mean?");
+    const fixture = entries[0].fixture;
+    action.fireRef = entries[0];
+    const pool = verb === "douse" ? waterSources() : fireSources(fixture);
+    let source = pool[0] || null;
+    if (args.item) {
+        const picked = textLootMatch(String(args.item).replace(/^(?:my|your)\s+/i, ""), pool, function (s) { return s.label; });
+        if (!picked.length) return textModeResult("blocked", verb === "douse" ? "That won't put out a fire, or you don't have it." : "That won't light anything, or it isn't here.");
+        source = picked[0];
+    }
+    return performFireAction(fireSpec(verb, fixture, source));
+}
+
+// ── Router: the game master hands an action to the system that owns it ──
+// The judge sees the real commands available for this object (fire, spells,
+// burn/dip, lift/drag, tools, built-in fixture actions). When one of them is
+// what the player means, it returns that command and the owning system runs
+// it with its own rules. Saved like any ruling, with {target} as a placeholder.
+const ADJUDICATION_ROUTE_VERBS = ["fire", "cast", "burn", "dip", "pour", "object", "tool", "interact", "gather", "mine", "scavenge", "warm", "wash", "disarm", "break", "pray", "offer", "enter", "read", "fill", "drink", "examine", "take", "open", "search", "contents", "loot", "tip", "watch", "unlock", "pick", "force", "bench"];
+function adjudicationCommandsFor(entry) {
+    const o = entry.object, T = "{target}", out = [], room = G.activeRoom;
+    const add = function (command) { if (command && out.indexOf(command) < 0 && out.length < 16) out.push(command); };
+    try {
+        if (entry.kind === "fixture") {
+            if (isFixtureBurning(o)) { waterSources().forEach(function (s) { add("douse " + T + " with " + s.label); }); add("watch " + T); }
+            else if (isFlammableFixture(o, room)) fireSources(o).forEach(function (s) { add("light " + T + (s.kind === "torch" ? " with " : " from ") + s.label); });
+            if (typeof textFixtureActions === "function") textFixtureActions(o).forEach(function (a) { if (!a.reason && !a.route && !a.objectAction && !a.material && !a.environment && /^[a-z]+$/.test(a.id)) add(a.id + " " + T); });
+            if (typeof isWarmthFixture === "function" && isWarmthFixture(o) && typeof materialItems === "function") materialItems("burn").slice(0, 3).forEach(function (e) { add("burn " + getItemName(e.item) + " at " + T); });
+            if (typeof isCauldronFixture === "function" && isCauldronFixture(o) && typeof materialItems === "function") materialItems("dip").slice(0, 3).forEach(function (e) { add("dip " + getItemName(e.item) + " in " + T); });
+            if (typeof isContainerFixture === "function" && isContainerFixture(o)) add("open " + T);
+        } else if (entry.location === "carried" && typeof getItemLiquid === "function" && getItemLiquid(o)) add("pour " + T);
+        if (typeof environmentSpells === "function") environmentSpells().forEach(function (s) { add("cast " + s.name + " at " + T); });
+        if (typeof worldObjectEntries === "function" && worldObjectEntries().some(function (e) { return e.object === o; })) ["lift", "drag", "shift"].forEach(function (v) { add(v + " " + T); });
+        if (typeof worldToolSpecs === "function" && worldToolSpecs().some(function (s) { return s.target && s.target.object === o; })) add("tools " + T);
+    } catch (err) { console.warn("[Adjudicator] command list", err); }
+    add("examine " + T);
+    return out;
+}
+function validateAdjudicationRoute(value) {
+    const keys = ["possible", "route", "verb", "command"];
+    if (!value || value.route !== "command" || value.possible !== true || Object.keys(value).some(function (k) { return keys.indexOf(k) < 0; })) return null;
+    const command = String(value.command || "").trim(), verb = String(value.verb || "").trim().toLowerCase();
+    if (!command || command.length > 120 || command.indexOf("{target}") < 0 || /[\r\n<>"“”;*]|\bthen\b/i.test(command)) return null;
+    if (verb && !/^[a-z](?:[a-z' -]{0,38}[a-z])?$/.test(verb)) return null;
+    return { possible: true, route: "command", verb: verb, command: command };
+}
+async function executeAdjudicationRoute(entry, actionText, ruling, source) {
+    const command = ruling.command.split("{target}").join(entry.label);
+    const parsed = parseTextCommand(command);
+    if (!parsed || ADJUDICATION_ROUTE_VERBS.indexOf(parsed.verb) < 0) return textModeResult("blocked", "I can't see how to make that work.", { adjudication: { action: actionText, target: entry.label, route: command, source: source, possible: false } });
+    publishTextModeOutput("adjudication", command, { presentation: "supplement", adjudication: { action: actionText, target: entry.label, route: command, routedVerb: parsed.verb, source: source } }, false);
+    adjudicationState.routing = true;
+    try { return await executeTextCommand(parsed); } finally { adjudicationState.routing = false; }
+}
+
 // END TEXT COMMANDS
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-21-007
-// Latest: Text-mode exits line says "a path" outdoors and in caves, "an opening" indoors.
+// Core Engine Version: 2026-10-21-016
+// Latest: Combat memory: NPCs keep pinned "fact" memories of each fight (who attacked first, joining in, how it ended, surrender accepted/refused, release); the prompt lists them as settled facts; asking about a recent event is remembered per event.
+// Previous: Moonbloom flowers (loot flower and foraged herb) count as a 1-drop nectar treat when given to a slime.
+// Previous: Moonbloom nectar cake is edible (any food-typed item is); slimes absorb things made with nectar (cake, "infused with nectar" items, item.nectarInfusion) and it counts toward taming like a few drops.
+// Previous: Party standing: companions, followers and tamed slimes are never drawn into NPC-vs-NPC fights (cross-species, pile-ons, guard break-ups) unless wanted for their own crime; skirmish hostility is undone when a fight ends; companions never count as room threats (fixes dead companion/gift/loot menus and broken slime taming); old saves repaired once.
+// Previous: Text mode is opt-in again: Preferences > "Show text mode" (default off) shows the compass entry; TTS stays greyed out until it is on.
+// Previous: Game-master router: the judge sees the real commands for the object and hands matching actions to their system (fire, spells, burn/dip, lift/drag, tools, fixture actions), saved as reusable routes; new fire-by-hand system (light with a torch or nearby flame, douse with carried water or a well; text + fixture-card buttons; arson rules shared with fire spells); carts are flammable.
+// Previous: Locked-door menu no longer goes stale on open (loose keys are bound before the choice snapshot); in menu mode a visible Back/Leave/Cancel always works and stale choices say "That option is no longer available." without text-mode wording.
+// Previous: Text-mode game-master adjudicator: free-form actions on objects are judged once by AI from world rules (stat, d20 DC, costs, capped effects), rolled and applied by the engine, saved as reusable rulings (repeats only narrated); kick/open/touch/break on plain objects route there; street fixtures get physical templates; text-mode AI capped at 2 parallel requests.
+// Previous: Text mode shown by default ("Hide text mode" preference); TTS on turns the compass keyboard into a voice icon (text mode + speech).
+// Previous: Text-mode exits line says "a path" outdoors and in caves, "an opening" indoors.
 // Previous: Text mode room descriptions end with the ways out ("You see a door to the south. You see an archway to the west.").
 // Previous: TTS voice input: hands-free mic loop (Chrome), push-to-talk button, alternative picking, spoken numbers, stop/listen, prologue read aloud, screen-only lines, thinking tone, mic check; combat attribution removed from spoken text.
 // Previous: Preferences TTS tab: saved voice settings (narrator, accent, speed, volume, NPC voices, variety, pause, intimate scenes, cues with custom URLs, pronunciation list, per-species voices, reset NPC voices).
@@ -11851,9 +12553,9 @@ const NPC_MISC_LOOT = [
     { id: "woad-blue", name: "Woad blue pigment", value: 3, type: ["misc", "pigment"], pigmentColor: "blue", description: "A small wax-sealed pot of woad-blue pigment. A smith can work it into metal or cloth at the forge." },
     { id: "ochre-yellow", name: "Yellow ochre pigment", value: 2, type: ["misc", "pigment"], pigmentColor: "yellow", description: "A small wax-sealed pot of yellow ochre pigment. A smith can work it into metal or cloth at the forge." },
     { id: "chalk-white", name: "Chalk white pigment", value: 2, type: ["misc", "pigment"], pigmentColor: "white", description: "A small wax-sealed pot of chalk-white pigment. A smith can work it into metal or cloth at the forge." },
-    { id: "moonbloom", name: "Moonbloom flower", value: 4, type: ["misc", "flora"], description: "A pale, luminous flower that glows faintly in darkness. Its petals secrete sweet nectar that slimes find irresistible." },
+    { id: "moonbloom", name: "Moonbloom flower", value: 4, type: ["misc", "flora"], nectarInfusion: 1, description: "A pale, luminous flower that glows faintly in darkness. Its petals secrete sweet nectar that slimes find irresistible." },
     { id: "moonbloom-nectar", name: "Vial of moonbloom nectar", value: 10, type: ["misc", "supply", "consumable"], container: { maxUnitCapacity: 1, emptyId: "empty-vial", liquid: true }, description: "A small stoppered vial of sweet, golden nectar harvested from moonbloom flowers. The liquid shimmers slightly and has an intense floral sweetness. Bakers use it to flavor pastries, and slimes will follow its scent from rooms away." },
-    { id: "nectar-cake", name: "Moonbloom nectar cake", value: 8, type: ["misc", "food", "supply"], description: "A dense, moist cake infused with moonbloom nectar. The sweetness is rich but not overwhelming, with delicate floral notes. Eating it restores a small amount of stamina." },
+    { id: "nectar-cake", name: "Moonbloom nectar cake", value: 8, type: ["misc", "food", "supply"], consume: { verb: "Eat", stamina: 3 }, nectarInfusion: 5, description: "A dense, moist cake infused with moonbloom nectar. The sweetness is rich but not overwhelming, with delicate floral notes. Eating it restores a small amount of stamina." },
     { id: "nectar-syrup", name: "Nectar syrup", value: 5, type: ["misc", "supply"], description: "A thick, golden syrup reduced from moonbloom nectar. Used by bakers and confectioners to add a distinct floral sweetness to treats. A single drop makes any pastry extraordinary." },
     { id: "nectar-glaze", name: "Nectar glaze", value: 6, type: ["misc", "supply"], description: "A glossy, translucent glaze made from moonbloom nectar and sugar. When brushed on pastries, it dries to a beautiful sheen and fills the air with a subtle, sweet fragrance." }
 ];
@@ -17292,6 +17994,7 @@ async function resumeSavedGame() {
         }
         G.activeNPCMode = savedNPCMode;
         restorePartyMembers();
+        repairSkirmishHostilityOnLoad();
         restoreSlimeFollowers();
     });
 
@@ -20060,6 +20763,54 @@ function isCompanionNPC(npc) {
     return false;
 }
 
+// -- PARTY STANDING ----------------------------------------------------------
+// Companions (party, followers, a slime trailing you) and a slime you are
+// taming share the player's standing: NPC-vs-NPC fights never pull them in,
+// unless they are wanted for a crime themselves (arrest / theft chase).
+function isPartyAlignedCreature(npc) {
+    if (!npc) return false;
+    if (isCompanionNPC(npc)) return true;
+    const bond = npc._slimeBond;
+    return !!(bond && typeof bond === "object" && !bond.dismissed && (bond.following || (Number(bond.totalDrops) || 0) > 0));
+}
+
+function canNPCConflictInvolve(npc, reason) {
+    if (!isPartyAlignedCreature(npc)) return true;
+    return (reason === "arrest" || reason === "theft") && typeof isNPCWanted === "function" && isNPCWanted(npc);
+}
+
+// Skirmishers are pushed to hostility 70 so they fight each other. That
+// number is also hostility toward the PLAYER, so once the fight ends undo
+// our own bump (anything the player did since then still counts).
+function raiseSkirmishHostility(npc) {
+    if (!npc) return;
+    if (!npc._skirmishHostility || typeof npc._skirmishHostility !== "object") npc._skirmishHostility = { before: npc.hostility || 0 };
+    npc.hostility = Math.max(npc.hostility || 0, 70);
+    npc._skirmishHostility.set = npc.hostility;
+}
+
+function releaseSkirmishHostility(npc) {
+    if (!npc || npc._inSkirmish || !npc._skirmishHostility) return;
+    const mark = npc._skirmishHostility;
+    delete npc._skirmishHostility;
+    const before = Number(mark.before) || 0;
+    if ((npc.hostility || 0) <= (Number(mark.set) || 70)) npc.hostility = Math.min(npc.hostility || 0, before);
+}
+
+// Saves made before this fix: companions and tamed slimes left at exactly 70
+// by an old skirmish are calmed once.
+function repairSkirmishHostilityOnLoad() {
+    if (!G.story || !G.story.flags || G.story.flags["skirmish-hostility-repair-v1"]) return;
+    G.story.flags["skirmish-hostility-repair-v1"] = true;
+    Object.values(G.roomMap || {}).forEach(function (room) {
+        (room && room.creatures || []).forEach(function (npc) {
+            if (!npc || npc._inSkirmish || npc.refusesSurrender || npc._skirmishHostility || (npc.hostility || 0) !== 70) return;
+            if (isCompanionNPC(npc)) npc.hostility = 10;
+            else if (npc._slimeBond && !npc._slimeBond.dismissed && (Number(npc._slimeBond.totalDrops) || 0) > 0) npc.hostility = 30;
+        });
+    });
+}
+
 function getLockOccupants(room, direction) {
     const dir = normalizeDirection(direction);
     const beyond = room && room.exits ? G.roomMap[room.exits[dir]] : null;
@@ -20115,13 +20866,16 @@ function renderLockedDoorMenu(room, dir) {
     const lock = getExitLock(room, dir);
     if (!lock || lock.state !== "locked") { closeLockedDoorMenu(); return; }
 
+    // Bind loose keys BEFORE the choice menu snapshots the inventory: binding
+    // replaces player.inventory, which made every button of this menu stale
+    // ("That choice changed or is no longer available", even Leave it).
+    if (lock.keyId) bindPendingWorldKeys(true);
     const structureMenu = beginStructuralMenu(room, dir, "door");
     const buttons = [];
     if (lock.freeOpen) {
         buttons.push(structuralToolMenuButton(structureMenu, "Open it from this side", "unlock", room, dir));
     }
     if (lock.keyId) {
-        bindPendingWorldKeys(true);
         const key = findKeyForLock(lock);
         const occupied = lock.keyId === "room-token" && getLockOccupants(room, dir).length > 0;
         buttons.push(structuralToolMenuButton(structureMenu,
@@ -26650,7 +27404,8 @@ function checkForCrossSpeciesConflict(room) {
     if (!room || room.skirmish || !Array.isArray(room.creatures)) return;
 
     const eligible = room.creatures.filter(npc =>
-        npc && npc.hp > 0 && !npc.unconscious && !npc.isHidden && !getSpeciesIsCivilized(npc.species)
+        npc && npc.hp > 0 && !npc.unconscious && !npc.isHidden && !getSpeciesIsCivilized(npc.species) &&
+        !isPartyAlignedCreature(npc)
     );
     if (eligible.length < 2) return;
 
@@ -26669,8 +27424,8 @@ function checkForCrossSpeciesConflict(room) {
     room.skirmish = { aId: a.id, bId: b.id };
     a._inSkirmish = true;
     b._inSkirmish = true;
-    a.hostility = Math.max(a.hostility || 0, 70);
-    b.hostility = Math.max(b.hostility || 0, 70);
+    raiseSkirmishHostility(a);
+    raiseSkirmishHostility(b);
 }
 
 // One round of mutual strikes (see reinforcementOpeningStrike - same
@@ -26690,7 +27445,7 @@ function maybeSkirmishPileOn(room, a, b, lines) {
     const spent = isEntityExhausted(a) ? a : (isEntityExhausted(b) ? b : null);
     if (!spent) return;
     const attacker = (room.creatures || []).find(function (c) {
-        return c && c !== a && c !== b &&
+        return c && c !== a && c !== b && !isPartyAlignedCreature(c) &&
             c.hp > 0 && !c.unconscious && !c.isHidden && !c.hidden &&
             !getSpeciesIsCivilized(c.species) &&
             String(c.species || "").toLowerCase() !== String(spent.species || "").toLowerCase() &&
@@ -26713,8 +27468,8 @@ function resolveSkirmishRound(room, lines) {
     const b = room.creatures.find(c => c && c.id === room.skirmish.bId);
 
     if (!a || !b || a.hp <= 0 || b.hp <= 0 || a.unconscious || b.unconscious) {
-        if (a) { a._inSkirmish = false; a._versusReason = null; }
-        if (b) { b._inSkirmish = false; b._versusReason = null; }
+        if (a) { a._inSkirmish = false; a._versusReason = null; releaseSkirmishHostility(a); }
+        if (b) { b._inSkirmish = false; b._versusReason = null; releaseSkirmishHostility(b); }
         delete room.skirmish;
         return;
     }
@@ -26731,6 +27486,8 @@ function resolveSkirmishRound(room, lines) {
         const winner = loser === a ? b : a;
         loser._inSkirmish = false;
         winner._inSkirmish = false;
+        releaseSkirmishHostility(loser);
+        releaseSkirmishHostility(winner);
         roundLines.push(`${winner.name || "The victor"} has won the fight.`);
         const skirmishOutcome = loser._skirmishOutcome || determineCombatDefeatOutcome({ lethal: Math.random() < getVersusLethality(winner) });
         delete loser._skirmishOutcome;
@@ -26762,6 +27519,8 @@ function resolveSkirmishRound(room, lines) {
         b._inSkirmish = false;
         a._versusReason = null;
         b._versusReason = null;
+        releaseSkirmishHostility(a);
+        releaseSkirmishHostility(b);
         delete room.skirmish;
     }
 }
@@ -26797,7 +27556,7 @@ function playerJoinSkirmish(room) {
     const pair = getSkirmishCombatants(room);
     const companion = isPlayerCompanion(pair.a) ? pair.a : pair.b;
 
-    [pair.a, pair.b].forEach(function (c) { c._inSkirmish = false; c._versusReason = null; });
+    [pair.a, pair.b].forEach(function (c) { c._inSkirmish = false; c._versusReason = null; releaseSkirmishHostility(c); });
     delete room.skirmish;
     clearSkirmishLine();
     if (typeof isPlayerHidden === "function" && isPlayerHidden()) breakPlayerHidden(null);
@@ -26837,7 +27596,7 @@ function dissolveSkirmishInvolving(npc) {
     if (room.skirmish.aId !== npc.id && room.skirmish.bId !== npc.id) return false;
     [room.skirmish.aId, room.skirmish.bId].forEach(function (id) {
         const c = room.creatures && room.creatures.find(function (x) { return x && x.id === id; });
-        if (c) { c._inSkirmish = false; c._versusReason = null; }
+        if (c) { c._inSkirmish = false; c._versusReason = null; releaseSkirmishHostility(c); }
     });
     delete room.skirmish;
     clearSkirmishLine();
@@ -31301,6 +32060,7 @@ function getSupplyUse(item) {
     const text = (String(item.id || "") + " " + String(item.name || "")).toLowerCase();
     if (types.indexOf("potion") >= 0 || types.indexOf("alcohol") >= 0 || types.indexOf("herb") >= 0) return null;
     if (/(^|[^a-z])ration([^a-z]|$)/.test(text)) return { verb: "Eat", stamina: 4, heal: 0 };
+    if (types.indexOf("food") >= 0) return { verb: "Eat", stamina: 3, heal: 0 };
     if (types.indexOf("supply") < 0) return null;
     if (/cider/.test(text)) return { verb: "Drink", stamina: 3, heal: 0 };
     if (/fish|jerky|bread|cheese|twist|biscuit|meat/.test(text)) return { verb: "Eat", stamina: 3, heal: 0 };
@@ -34462,7 +35222,8 @@ function renderCombatActionMenu(npc) {
     getCombatActionGroups(npc).forEach(function (group) {
         appendCombatGroup(el, group.name, group.actions.map(createCombatActionButton));
     });
-    const textButton = createCombatButton("Text mode", function () { setTextMode(true); }, { className: "combat-text-toggle", title: "Type combat commands" });
+    const voiceEntry = !!(typeof ttsModeState !== "undefined" && ttsModeState.enabled);
+    const textButton = createCombatButton(voiceEntry ? "Voice mode" : "Text mode", function () { setTextMode(true); }, { className: "combat-text-toggle", title: voiceEntry ? "Speak or type combat commands" : "Type combat commands" });
     textButton.id = "combatTextModeBtn";
     el.appendChild(textButton);
     el.classList.add("text-combat-menu");
@@ -37331,13 +38092,25 @@ function openSlimeNectarMenu(npc, stackKey) {
     return shared ? publishNectarMenu(shared, el) : { status: "needs_input" };
 }
 
-function feedNectarToSlime(npc, stackKey, drops) {
-    if (!isActiveSlime(npc) || !G.activeRoom || !(G.activeRoom.creatures || []).includes(npc)) return;
-    if (G.activeNPCMode === "combat" || (typeof getActiveEncounter === "function" && getActiveEncounter())) return;
-    const nectarContext = typeof captureNectarDose === "function" ? captureNectarDose(npc, stackKey) : null;
-    if (nectarContext && nectarContext.error) return nectarContext.error;
-    const dose = takeNectarDose(stackKey, drops);
-    if (!dose) { if (nectarContext) openSlimeNectarMenu(npc, stackKey); setNarration("Choose a whole number of drops available in that container."); return { status: "blocked" }; }
+// Things MADE with nectar (a nectar cake, anything "infused with" nectar)
+// are not nectar liquid, but a slime still tastes it: each counts as a few
+// drops toward taming. item.nectarInfusion overrides the guess.
+const SLIME_NECTAR_INFUSED_DEFAULT_DROPS = 3;
+function getSlimeNectarInfusionDrops(item) {
+    if (!item || isNectarItem(item)) return 0;
+    const set = Number(item.nectarInfusion);
+    if (Number.isFinite(set)) return Math.max(0, Math.floor(set));
+    if (String(item.id || "").toLowerCase() === "nectar-cake") return 5;
+    // A raw moonbloom (loot flower or foraged herb) carries a little nectar.
+    if (String(item.id || "").toLowerCase() === "moonbloom" || (typeof getHerbKey === "function" && getHerbKey(item) === "moonbloom")) return 1;
+    const name = String(item.name || "").toLowerCase();
+    const desc = String(item.description || "").toLowerCase();
+    if (/\bnectar\b/.test(name) || /\b(?:infused|made|baked|sweetened|glazed|brewed) with (?:moonbloom )?nectar\b/.test(desc)) return SLIME_NECTAR_INFUSED_DEFAULT_DROPS;
+    return 0;
+}
+
+// The taming effect of a nectar offering, shared by drops and infused food.
+function applySlimeNectarBond(npc, drops) {
     const bond = getSlimeBond(npc);
     bond.totalDrops += drops;
     bond.reserve = Math.min(SLIME_TAMING.reserveMax, bond.reserve + drops * SLIME_TAMING.reservePerDrop);
@@ -37348,7 +38121,45 @@ function feedNectarToSlime(npc, stackKey, drops) {
     npc.hostility = Math.max(0, (npc.hostility || 0) - 4 - drops);
     npc.memory.metPlayer = true;
     npc.memory.lastMood = npc.hostility >= 60 ? "wary" : (npc.memory.favorability >= SLIME_TAMING.happyFavor ? "happy" : "content");
-    const following = maybeStartSlimeFollowing(npc);
+    return { following: maybeStartSlimeFollowing(npc) };
+}
+
+// Hand a nectar-made item to a slime: it is absorbed (not held) and counts
+// toward taming like a small dose.
+function feedInfusedItemToSlime(npc, stackKey, giftContext) {
+    if (!isActiveSlime(npc) || !G.activeRoom || !(G.activeRoom.creatures || []).includes(npc)) return { status: "blocked", message: "That creature is not here." };
+    if (G.activeNPCMode === "combat" || (typeof getActiveEncounter === "function" && getActiveEncounter())) return { status: "blocked", message: "Not during a fight." };
+    if (giftContext && typeof giftContext.valid === "function" && !giftContext.valid()) return { status: "interrupted", message: "The gift target, scene or carried stack changed. Nothing was given." };
+    const entry = buildPlayerInventoryEntries(G.player).find(function (e) { return e.key === stackKey; });
+    const drops = entry ? getSlimeNectarInfusionDrops(entry.item) : 0;
+    if (!entry || drops <= 0) return { status: "blocked", message: "That has no nectar in it." };
+    const name = getItemName(entry.item);
+    const given = takeInventoryEntryAmount(G.player, stackKey, 1);
+    if (!given) return { status: "blocked", message: "You no longer have that." };
+    if (typeof restowPlayerPack === "function") restowPlayerPack(G.player);
+    const result = applySlimeNectarBond(npc, drops);
+    let text = "You offer " + withIndefiniteArticle(name) + " to " + getEntityName(npc) + ". The gel closes over it and the " + name + " softens and dissolves away inside.";
+    text += (npc.hostility || 0) >= 60 ? " Its threatening surges ease a little, though it still keeps a tense, heaving shape." :
+        " A faint glow pulses through its body as it finds the nectar, and it quivers toward you in eager little swells.";
+    if (result.following) text += " When you draw back, it oozes after you and settles close at your side.";
+    advanceStoryTurn(1);
+    G.activeNPCMode = "menu";
+    renderNPCActionMenu(npc);
+    setNarration(text);
+    if (typeof refreshNPCDetailPanel === "function") refreshNPCDetailPanel(npc);
+    if (typeof refreshInventoryUi === "function") refreshInventoryUi();
+    saveGameState();
+    return { status: "completed", accepted: true };
+}
+
+function feedNectarToSlime(npc, stackKey, drops) {
+    if (!isActiveSlime(npc) || !G.activeRoom || !(G.activeRoom.creatures || []).includes(npc)) return;
+    if (G.activeNPCMode === "combat" || (typeof getActiveEncounter === "function" && getActiveEncounter())) return;
+    const nectarContext = typeof captureNectarDose === "function" ? captureNectarDose(npc, stackKey) : null;
+    if (nectarContext && nectarContext.error) return nectarContext.error;
+    const dose = takeNectarDose(stackKey, drops);
+    if (!dose) { if (nectarContext) openSlimeNectarMenu(npc, stackKey); setNarration("Choose a whole number of drops available in that container."); return { status: "blocked" }; }
+    const following = applySlimeNectarBond(npc, drops).following;
     let text = "You drip " + drops + (drops === 1 ? " drop" : " drops") + " of nectar onto " + getEntityName(npc) + ". The sweetness disappears into its gel.";
     text += (npc.hostility || 0) >= 60 ? " Its threatening surges ease a little, though it still keeps a tense, heaving shape." :
         " Light blooms through its body in warm pulses. It quivers toward you, gathering itself into eager little swells before settling close to your hand.";
@@ -37775,7 +38586,7 @@ function openGiveMenu(npc) {
     });
     const buttons = entries.slice(0, 40).map(function (e) {
         return sharedButton("Give: " + formatInventoryItemLabel(e.item, e.totalQuantity), function () { return giveItemToNPC(npc, e.key); },
-            { title: mode === "food" && !getSupplyUse(e.item) ? "They would not know what to do with it." : "Hand over one.", textChoice: { action: "gift", item: e.item, key: e.key } });
+            { title: mode === "food" && !getSupplyUse(e.item) ? "They would not know what to do with it." : (mode === "engulf" && isActiveSlime(npc) && getSlimeNectarInfusionDrops(e.item) > 0 ? "Made with nectar: it will savour this." : "Hand over one."), textChoice: { action: "gift", item: e.item, key: e.key } });
     });
     if (!buttons.length) buttons.push(sharedButton(mode === "engulf" ? "No other items to give" : "You have nothing to give", function () {}, { disabled: true }));
     buttons.push(sharedButton("Back", function () { G.activeNPCMode = "menu"; renderNPCActionMenu(npc); }, { textChoice: { action: "back" } }));
@@ -37879,6 +38690,7 @@ function giveItemToNPC(npc, stackKey) {
     }
     if (mode === "engulf") {
         if (isNectarItem(item)) return openSlimeNectarMenu(npc, stackKey);
+        if (isActiveSlime(npc) && getSlimeNectarInfusionDrops(item) > 0) return feedInfusedItemToSlime(npc, stackKey, giftContext);
         settleSlimeDigestion(npc);
         if (getSlimeHoldRoom(npc, item) < 0) {
             G.activeNPCMode = "menu";
@@ -42037,7 +42849,7 @@ function encAddCombatant(enc, entity, side, lines, announce) {
 
     if (!entry.isPlayer) {
         entity._encId = enc.id;
-        if (side === "foe") enc.foes.push(entity);
+        if (side === "foe") { enc.foes.push(entity); rememberFightStart(enc, entity); }
         else enc.allies.push(entity);
     }
     if (G.combatRollDebugMode && Array.isArray(lines)) {
@@ -42118,6 +42930,43 @@ function encounterEvaluateBystanders(enc, lines, announce) {
 // opts.initMods: room-entry initiative modifiers (see buildEntryInitiativeMods).
 // initiator "entry" = the player walked in on hostiles: no free opening for
 // either side, the initiative order alone decides who acts first.
+// -- COMBAT MEMORY ------------------------------------------------------------
+// A fight is something an NPC must never forget or deny later: who started
+// it, how it ended, surrender and mercy. Stored as pinned, high-importance
+// entries tagged "fact"; the prompt lists them as settled facts (see
+// buildNPCMemoryBlock). The same kind of event merges (with a count).
+function rememberFightFact(npc, key, text, importance) {
+    if (!npc || npc === G.player || typeof addNPCMemory !== "function") return null;
+    try {
+        return addNPCMemory(npc, { id: "fight:" + key, tags: ["combat", "fact"], text: text, importance: importance || 8, pinned: true });
+    } catch (e) { return null; }
+}
+
+function rememberFightStart(enc, npc) {
+    if (!enc || !npc) return;
+    if (enc.beginning && npc === enc.lastFoe) {
+        if (enc.initiator === "player") rememberFightFact(npc, "player-attacked-you", "The player attacked you first and started a fight with you.", 8);
+        else rememberFightFact(npc, "you-attacked-player", "You attacked the player first and started the fight with them.", 8);
+    } else {
+        rememberFightFact(npc, "joined-fight", "You joined a fight against the player.", 7);
+    }
+}
+
+function rememberFightOutcome(enc, result) {
+    (enc && enc.foes || []).forEach(function (npc) {
+        if (!npc || npc.dead || npc.bodyState === "corpse") return;
+        if (result === "defeat") {
+            rememberFightFact(npc, "beat-player", "You (and anyone on your side) beat the player in that fight; they collapsed.", 8);
+        } else if (npc.surrendered) {
+            rememberFightFact(npc, "yielded", "You lost the fight against the player and yielded to them.", 8);
+        } else if (npc.unconscious || npc.isUnconsciousBody || npc.bodyState === "unconscious") {
+            rememberFightFact(npc, "knocked-out", "The player beat you in that fight and knocked you unconscious.", 8);
+        } else if (result === "victory") {
+            rememberFightFact(npc, "lost-fight", "You lost the fight against the player.", 7);
+        }
+    });
+}
+
 function beginEncounter(primary, initiator, lines, opts) {
     const room = G.activeRoom;
     if (!room || !G.player || !primary || !Array.isArray(room.creatures)) return null;
@@ -43006,6 +43855,7 @@ function encounterConclude(enc, lines, result) {
     });
 
     enc.concluding = false;
+    rememberFightOutcome(enc, result);
     encounterDispose(enc, result);
 
     if (result === "defeat") {
@@ -43702,6 +44552,7 @@ function acceptNPCSurrender(npc) {
     recordDeedNote(G.activeRoom, "mercy");
     setNarration(`${npc.name || "The creature"} lowers their guard and yields, waiting on your mercy.`);
     rememberStoryEvent("combat", `${G.player.name} accepted ${npc.name || "an opponent"}'s surrender.`, 6);
+    rememberFightFact(npc, "surrender-accepted", "You surrendered to the player after the fight, and they accepted your surrender and spared you.", 9);
     saveGameState();
 }
 
@@ -43720,6 +44571,7 @@ function refuseNPCSurrender(npc) {
         moodOverride: "desperate",
         actionTag: "mercy-refused"
     });
+    rememberFightFact(npc, "surrender-refused", "You tried to surrender to the player, and they refused your surrender.", 9);
     recordDeedNote(G.activeRoom, "mercyRefused");
     renderCombatActionMenu(npc);
     setNarration(`${npc.name || "The creature"} realizes mercy is not coming.`);
@@ -44247,6 +45099,7 @@ function releaseCaptive(npc) {
     });
     disengageFromNPC(`You let ${npc.name || "the captive"} go. They back away carefully, then make themselves scarce.`);
     rememberStoryEvent("combat", `${G.player.name} released ${npc.name || "a surrendered opponent"} after the fight.`, 5);
+    rememberFightFact(npc, "released", "After you surrendered, the player let you go free.", 8);
     saveGameState();
 }
 
@@ -44775,6 +45628,9 @@ function isEligibleForRoomAmbush(npc) {
     // Mid cross-species skirmish (see CROSS-SPECIES SKIRMISHES) - too busy
     // fighting each other to also jump the player.
     if (npc._inSkirmish) return false;
+    // Party standing: a companion is never a room threat to their own party.
+    if (isCompanionNPC(npc)) return false;
+    releaseSkirmishHostility(npc);
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
 
     const lastMood = String((npc.memory && npc.memory.lastMood) || "").toLowerCase();
@@ -55353,7 +56209,7 @@ function guardBreakUpFight(guard, room) {
     const a = room.creatures.find(function (c) { return c && c.id === room.skirmish.aId; });
     const b = room.creatures.find(function (c) { return c && c.id === room.skirmish.bId; });
     const reason = room.skirmish.reason;
-    [a, b].forEach(function (c) { if (c) { c._inSkirmish = false; c._versusReason = null; } });
+    [a, b].forEach(function (c) { if (c) { c._inSkirmish = false; c._versusReason = null; releaseSkirmishHostility(c); } });
     delete room.skirmish;
     if (reason === "theft") markNPCWanted(aggressor, room, "theft", ((a === aggressor ? b : a) || {}).name);
     if (!startNPCConflict(room, guard, aggressor, reason === "theft" || isNPCWanted(aggressor) ? "arrest" : "fight")) return null;
@@ -55437,13 +56293,14 @@ function getVersusLethality(attacker, defender) {
 
 function startNPCConflict(room, a, b, reason) {
     if (!room || room.skirmish || !a || !b || !a.id || !b.id || a === b) return false;
+    if (!canNPCConflictInvolve(a, reason || "fight") || !canNPCConflictInvolve(b, reason || "fight")) return false;
     room.skirmish = { aId: a.id, bId: b.id, reason: reason || "fight" };
     a._inSkirmish = true;
     b._inSkirmish = true;
     a._versusReason = reason || "fight";
     b._versusReason = reason || "fight";
-    a.hostility = Math.max(a.hostility || 0, 70);
-    b.hostility = Math.max(b.hostility || 0, 70);
+    raiseSkirmishHostility(a);
+    raiseSkirmishHostility(b);
     if (room === G.activeRoom && typeof skirmishNextRoundAt !== "undefined") {
         skirmishNextRoundAt = Date.now() + SKIRMISH_ENTRY_GRACE_MS;
     }
@@ -56365,7 +57222,7 @@ function pushThroughBurningDoor(room, dir) {
 // and burn out as charred remains. Whatever they held rolls the chest fire
 // loss per item; coins survive. Water douses them. Lockable chests have their
 // own rules (see castSpellAtChest).
-const FIXTURE_FLAMMABLE_PATTERN = /(bookshel|bookcase|shelving|shelf|crate|barrel|table|bench|chair|stool|bed\b|cot\b|bunk|tapestry|banner|curtain|rug|hay|straw|bale|wagon|sign|stall|wardrobe|cabinet|desk|lectern|pew|firewood|woodpile|rack|ladder|scaffold|hammock|bedroll|tent)/i;
+const FIXTURE_FLAMMABLE_PATTERN = /(bookshel|bookcase|shelving|shelf|crate|barrel|table|bench|chair|stool|bed\b|cot\b|bunk|tapestry|banner|curtain|rug|hay|straw|bale|wagon|cart|sign|stall|wardrobe|cabinet|desk|lectern|pew|firewood|woodpile|rack|ladder|scaffold|hammock|bedroll|tent)/i;
 const FIXTURE_NONFLAMMABLE_PATTERN = /(stone|iron|metal|steel|anvil|forge|furnace|altar|statue|pillar|rock|bone|well|fountain|chest|(^|[^a-z])ore([^a-z]|$))/i;
 const FIXTURE_FIRE_TURNS = 6;
 const FIXTURE_FIRE_SPREAD_CHANCE = 0.25;
@@ -62657,7 +63514,7 @@ const FIXTURE_LOOT_THEMES = {
         { id: "shipping-manifest", name: "Shipping manifest", value: 4, type: ["misc", "lore"], description: "A damp manifest listing goods and a consignee whose name has been scratched out." },
         { id: "trade-bale", name: "Sealed trade bale", value: 8, type: ["misc", "trade"], description: "A tightly bound bundle of good cloth, still stamped with a merchant's mark." },
         { id: "packing-straw-charm", name: "Straw charm", value: 2, type: ["misc", "trinket"], description: "A little knot of straw tied for the safe passage of whatever it was packed with." },
-        { id: "moonbloom", name: "Moonbloom flower", value: 4, type: ["misc", "flora"], description: "A pale, luminous flower that glows faintly in darkness. Its petals secrete sweet nectar." }
+        { id: "moonbloom", name: "Moonbloom flower", value: 4, type: ["misc", "flora"], nectarInfusion: 1, description: "A pale, luminous flower that glows faintly in darkness. Its petals secrete sweet nectar." }
     ],
     "barrel": [
         { id: "salted-fish-parcel", name: "Salted fish parcel", value: 2, type: ["misc", "supply"], description: "A waxed parcel of salted fish, hard as bark and good for a long road." },
@@ -69545,6 +70402,8 @@ function openFixtureCard(fixture, cardOptions) {
         if (isFixtureBurning(fixture)) {
             addAction("Watch it burn (1 turn)", environmentCardCallback("watch", fixture), { keepOpen: true, disabledReason: hostile ? "Too dangerous right now." : "" });
         }
+        // Torch / nearby flame / water by hand (shared with text mode).
+        if (typeof fireCardActions === "function") fireCardActions(fixture).forEach(function (a) { addAction(a.label, function () { return a.run(); }, { disabledReason: a.reason }); });
         if (playerIsSpellcaster(G.player) && playerUsesMana(G.player)) {
             getCastableSpellIds(G.player).forEach(function (spellId) {
                 const spell = WIZARD_SPELLS[spellId];
@@ -71323,24 +72182,50 @@ function closePreferences() {
 window.openPreferences = openPreferences;
 window.closePreferences = closePreferences;
 
-// ── TEXT MODE BETA PREFERENCE ────────────────────────────────────
-// Discoverability is opt-in and saved separately from game/session state.
+// ── SHOW TEXT MODE PREFERENCE ────────────────────────────────────
+// Text mode is opt-in: Preferences > "Show text mode" (default off, saved
+// separately from games) shows the compass centre button and the combat Text
+// mode button. Body class "show-text-mode" = entry visible.
 const SHOW_TEXT_MODE_PREF_KEY = "cyoaftwShowTextMode";
 function applyShowTextModePreference(on) {
-    document.body.classList.toggle("show-text-mode", !!on);
+    on = !!on;
+    document.body.classList.toggle("show-text-mode", on);
     const box = document.getElementById("showTextModeToggleInput");
-    if (box) box.checked = !!on;
+    if (box) box.checked = on;
     if (!on && textModeState.enabled) setTextMode(false);
     const tts = document.getElementById("ttsModeToggleInput");
     if (tts) tts.disabled = !on;
     const ttsLabel = document.getElementById("ttsModeToggleEl");
     if (ttsLabel) ttsLabel.classList.toggle("is-disabled", !on);
+    syncTextModeEntryButtons();
 }
 function setShowTextMode(on) {
     try { localStorage.setItem(SHOW_TEXT_MODE_PREF_KEY, on ? "on" : "off"); } catch (e) {}
     applyShowTextModePreference(on);
 }
+// Compatibility with the short-lived "Hide text mode" control (true = hidden).
+function setHideTextMode(hidden) { setShowTextMode(!hidden); }
 window.setShowTextMode = setShowTextMode;
+window.setHideTextMode = setHideTextMode;
+// The compass centre button and the combat entry button show a keyboard for
+// plain text mode, or a voice icon when TTS is on (same button, same action:
+// setTextMode(true); ttsModeActive() then adds speech).
+function syncTextModeEntryButtons() {
+    const voice = !!(typeof ttsModeState !== "undefined" && ttsModeState.enabled);
+    const btn = document.getElementById("textModeToggleBtn");
+    if (btn) {
+        btn.innerHTML = voice ? "&#128483;" : "&#9000;";
+        btn.classList.toggle("text-mode-voice-entry", voice);
+        btn.setAttribute("aria-label", voice ? "Enter voice mode (text mode read aloud)" : "Enter text mode");
+        btn.title = voice ? "Voice mode" : "Text mode";
+    }
+    const combat = document.getElementById("combatTextModeBtn");
+    if (combat) {
+        combat.textContent = voice ? "Voice mode" : "Text mode";
+        combat.title = voice ? "Speak or type combat commands" : "Type combat commands";
+    }
+}
+window.syncTextModeEntryButtons = syncTextModeEntryButtons;
 (function () {
     let on = false;
     try { on = localStorage.getItem(SHOW_TEXT_MODE_PREF_KEY) === "on"; } catch (e) {}
@@ -71348,8 +72233,8 @@ window.setShowTextMode = setShowTextMode;
 })();
 
 // TTS preference (2026-10-21): speech-ready story text while text mode is
-// active. Saved separately from the adventure; default off. Only usable when
-// Show text mode (beta) is on; the checkbox is greyed out otherwise.
+// active. Saved separately from the adventure; default off. Greyed out while
+// Show text mode is off. On: the compass keyboard becomes a voice icon.
 const TTS_MODE_PREF_KEY = "cyoaftwTTSMode";
 function applyTTSModePreference(on) {
     if (!on && typeof ttsSpeechStop === "function") ttsSpeechStop("mode");
@@ -71363,6 +72248,7 @@ function applyTTSModePreference(on) {
     if (on && typeof ttsListenEnsureLoop === "function") ttsListenEnsureLoop();
     if (!on && typeof ttsListenAbort === "function") ttsListenAbort("mode");
     if (typeof ttsSetMicButton === "function") ttsSetMicButton();
+    syncTextModeEntryButtons();
 }
 function setTTSMode(on) {
     try { localStorage.setItem(TTS_MODE_PREF_KEY, on ? "on" : "off"); } catch (e) {}
@@ -71442,7 +72328,7 @@ function ttsRenderSettings() {
     if (note) {
         const voices = ttsVoices().length;
         note.textContent = !ttsSynth() ? "This browser has no built-in voice. You can still use TTS (beta) with your own screen reader."
-            : !document.body.classList.contains("show-text-mode") || !st.enabled ? "Turn on Show text mode and TTS (beta) on the General tab, then open text mode. Voices come from your browser and device."
+            : !document.body.classList.contains("show-text-mode") || !st.enabled ? "Turn on Show text mode and TTS (beta) on the General tab, then press the voice icon in the compass. Voices come from your browser and device."
             : !voices ? "No English voices were found yet. The browser default voice will be used."
             : voices + " English voice" + (voices === 1 ? "" : "s") + " available. " + (ttsVoices().some(function (v) { return /natural|neural|online|google/i.test(v.name); }) ? "" : "Tip: Microsoft Edge offers more natural voices.");
     }

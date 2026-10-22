@@ -1,8 +1,8 @@
-// ── cyoaftw-world-data.js v2026-10-17-004 ── Player-led guide check-ins and bounded intro delivery. Previous: Shop name generator uses zone and trade themes, with stable names shared by storefronts and interiors.
+// ── cyoaftw-world-data.js v2026-10-21-001 ── Street fixtures (lamppost, cart, market stall, post) get physical templates. Previous: Player-led guide check-ins and bounded intro delivery. Previous: Shop name generator uses zone and trade themes, with stable names shared by storefronts and interiors.
 // Previous: Commoner debt dialogue identifies the creditor.
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.WORLD_DATA_VERSION = "2026-10-17-004";
+    window.WORLD_DATA_VERSION = "2026-10-21-001";
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
@@ -47,6 +47,12 @@ const WORLD_OBJECT_CATALOGUE = {
     statue: { size: [50,50,170], form: "frame", fill: 0.3, material: "stone", unitSize: 24, secured: true },
     cloth:  { size: [100,100,0.2], form: "solid", fill: 1, material: "cloth", unitSize: 2 },
     rope:   { size: [300,1.5,1.5], form: "frame", fill: 0.78, material: "cloth", unitSize: 2 },
+    // Street fixtures (2026-10-21): hollow iron lamp column, open wooden cart,
+    // fixed market stall, wooden post. Secured ones stay put unless authored.
+    lamppost: { size: [20,20,280], form: "frame", fill: 0.2, material: "iron", unitSize: 24, secured: true },
+    cart:   { size: [180,100,90], form: "frame", fill: 0.05, material: "wood", unitSize: 40 },
+    stall:  { size: [200,120,220], form: "frame", fill: 0.02, material: "wood", unitSize: 40, secured: true },
+    post:   { size: [15,15,200], form: "solid", fill: 1, material: "wood", unitSize: 16, secured: true },
     item:   { size: [10,10,10], form: "solid", fill: 0.3, material: "misc", unitSize: 2 }
 };
 // Native spill-volume units are abstract. This explicit bridge gives them a
@@ -91,7 +97,8 @@ function inferWorldObjectDefinition(object, kind) {
     const name = String(object.name || object.id || "object"), text = name.toLowerCase().replace(/-/g, " ");
     const rules = [[/\bcoins?\b/,"coin"],[/\b(bucket|pail)\b/,"bucket"],[/\b(barrel|cask|keg)\b/,"barrel"],[/\b(chest|trunk)\b/,"chest"],[/\bcrate\b/,"crate"],
         [/\b(bottle|flask|vial)\b/,"bottle"],[/\b(cup|mug|bowl)\b/,"cup"],[/\bstool\b/,"stool"],[/\bchair\b/,"chair"],[/\bbench\b/,"bench"],
-        [/\btable\b/,"table"],[/\b(pallet|bedroll)\b/,"pallet"],[/\banvil\b/,"anvil"],[/\bstatue\b/,"statue"],[/\b(plank|board)\b/,"plank"],[/\b(crowbar|pry bar|iron bar|steel bar)\b/,"bar"],[/\brope\b/,"rope"]];
+        [/\btable\b/,"table"],[/\b(pallet|bedroll)\b/,"pallet"],[/\banvil\b/,"anvil"],[/\bstatue\b/,"statue"],[/\b(plank|board)\b/,"plank"],[/\b(crowbar|pry bar|iron bar|steel bar)\b/,"bar"],[/\brope\b/,"rope"],
+        [/\b(lamppost|lamp post|street ?lamp)\b/,"lamppost"],[/\b(cart|wagon|wheelbarrow|barrow)\b/,"cart"],[/\b(market stall|stall|booth)\b/,"stall"],[/\b(signpost|sign post|hitching post|post)\b/,"post"]];
     const match = rules.find(function (row) { return row[0].test(text); });
     if (!match && kind === "fixture") return null;
     const key = match ? match[1] : "item", template = WORLD_OBJECT_CATALOGUE[key];
