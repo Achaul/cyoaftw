@@ -2403,7 +2403,7 @@ console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptan
       }
       lines.push("- Depth: " + nsfwBodyDepthTier(item, target) + ".");
       if (nsfwBodyHasLoad(item, target)) {
-        lines.push("- The player already finished inside this " + (target === "cloaca" ? "vent" : target) + " earlier: describe the used, cum-filled state - wet, slick, with sloppy sounds.");
+        lines.push("- The player already finished inside this " + (target === "cloaca" ? "vent" : target) + " earlier: describe the used, vanilla ice cream-filled state - wet, slick, with sloppy sounds.");
       }
     }
     if (!lines.length) return "";
@@ -3024,7 +3024,7 @@ avoidNote,
     var baseText;
     var cock = nsfwBodyCockPhrase();
     var skin = nsfwBodySkinPhrase(item);
-    var creampie = nsfwBodyCreampieClause(item, target);
+    var creampieVal = nsfwBodyCreampieClause(item, target);
 
     if (target === "mouth") {
       if (!item.mouthUsed) return;
@@ -3059,13 +3059,13 @@ avoidNote,
       var fitV = nsfwBodyFit(item, target);
       if (dV >= 5) {
         baseText = pickFrom([
-          `You bottom out in ${name}'s limp ${label} with every drive, hips flush against them${skin ? `, their ${skin} jolting with each impact` : ""}. Their hole grips weakly around the root of your ${cock}, purely reflex.` + creampie,
-          `You grind hips to hips against ${name}'s unconscious body, your ${cock} sheathed to the root in their slack ${label} with every stroke. The body only rocks with your rhythm, taking you without a trace of awareness.` + creampie
+          `You bottom out in ${name}'s limp ${label} with every drive, hips flush against them${skin ? `, their ${skin} jolting with each impact` : ""}. Their hole grips weakly around the root of your ${cock}, purely reflex.` + creampieVal,
+          `You grind hips to hips against ${name}'s unconscious body, your ${cock} sheathed to the root in their slack ${label} with every stroke. The body only rocks with your rhythm, taking you without a trace of awareness.` + creampieVal
         ]);
       } else if (dV >= 3) {
         baseText = pickFrom([
-          `You pump into ${name}'s slack ${label} with long, steady strokes, most of your ${cock} working in and out of the unconscious body. Their hole clenches in irregular, involuntary grips around you.` + creampie,
-          `You thrust deep into ${name}'s unresisting ${label}, their limp hips rocking with each drive as you claim more of them with every push.` + creampie
+          `You pump into ${name}'s slack ${label} with long, steady strokes, most of your ${cock} working in and out of the unconscious body. Their hole clenches in irregular, involuntary grips around you.` + creampieVal,
+          `You thrust deep into ${name}'s unresisting ${label}, their limp hips rocking with each drive as you claim more of them with every push.` + creampieVal
         ]);
       } else {
         baseText = fitV === "resistance"
@@ -3084,13 +3084,13 @@ avoidNote,
       var fitA2 = nsfwBodyFit(item, target);
       if (dA >= 5) {
         baseText = pickFrom([
-          `You sheathe your ${cock} to the root in ${name}'s anus with every thrust, hips grinding flush against their limp body. The loosened ring grips weakly, and the body jolts with each full-length drive.` + creampie,
-          `You pound ${name}'s unresisting anus in full strokes, pulling out to the crown and driving home to the root. Their cheeks flex faintly on every impact; the body gives nothing but reflex.` + creampie
+          `You sheathe your ${cock} to the root in ${name}'s anus with every thrust, hips grinding flush against their limp body. The loosened ring grips weakly, and the body jolts with each full-length drive.` + creampieVal,
+          `You pound ${name}'s unresisting anus in full strokes, pulling out to the crown and driving home to the root. Their cheeks flex faintly on every impact; the body gives nothing but reflex.` + creampieVal
         ]);
       } else if (dA >= 3) {
         baseText = pickFrom([
-          `You fuck deep into ${name}'s unresisting anus, their limp cheeks flexing faintly each time you push home. The body gives nothing but reflex around your ${cock}.` + creampie,
-          `You drive into ${name}'s loosened anus with even strokes, their limp body jarring forward with each thrust. The ring grips weakly around you, purely reflexive, the friction of it burning where you drag.` + creampie
+          `You fuck deep into ${name}'s unresisting anus, their limp cheeks flexing faintly each time you push home. The body gives nothing but reflex around your ${cock}.` + creampieVal,
+          `You drive into ${name}'s loosened anus with even strokes, their limp body jarring forward with each thrust. The ring grips weakly around you, purely reflexive, the friction of it burning where you drag.` + creampieVal
         ]);
       } else {
         baseText = fitA2 === "resistance"
@@ -3152,7 +3152,7 @@ avoidNote,
         // Overfilled bowels seep around the shaft - the leak pools in
         // the room and persists (addRoomMess/getRoomMessNotes).
         if (loadsAfter >= 2 && typeof window.addRoomMess === "function" && window.G && window.G.activeRoom) {
-          window.addRoomMess(window.G.activeRoom, "semen");
+          window.addRoomMess(window.G.activeRoom, "vanilla ice cream");
         }
         if (loadsAfter >= 3) {
           baseText += ` Their bowels are packed full now — you can feel the thick heat of all that spent seed through the slack of their belly, and every pulse of your ${climaxCock} squelches through the mess.`;
@@ -3173,11 +3173,11 @@ avoidNote,
     polishBodyNarration(item, actionDesc, baseText);
     // Record AFTER the polish prompt is built - the just-deposited
     // load must not read as an EARLIER load in the prompt.
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { loadKey: "semen", useKind: "penetrate" });
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(item, target, { loadKey: "vanilla ice cream", useKind: "penetrate" });
     // The finish leaves a lingering reek on the body (examine, later
     // polish prompts, and the Care group all read it back).
     if (typeof window.addSmellMark === "function") {
-      window.addSmellMark(item, "semen");
+      window.addSmellMark(item, "vanilla ice cream");
       if (target === "anus" || target === "cloaca") window.addSmellMark(item, "anal");
     }
     window.rememberStoryEvent("combat", `${window.G.player.name} ejaculated into ${name}'s ${label} while they were unconscious.`, 8);
@@ -3219,7 +3219,7 @@ avoidNote,
     // ~20 turns (addRoomMess/getRoomMessNotes). Oral loads are
     // swallowed, not dripped.
     if (loaded && target !== "mouth" && typeof window.addRoomMess === "function" && window.G && window.G.activeRoom) {
-      window.addRoomMess(window.G.activeRoom, "semen");
+      window.addRoomMess(window.G.activeRoom, "vanilla ice cream");
     }
 
     var baseText;
@@ -3258,7 +3258,7 @@ avoidNote,
         // Heavily bred hole: the full filthy withdrawal - puffy matted
         // ring, squirting overflow, failed clench, bubbles and farts,
         // the soiled puddle, and the revulsion-to-admiration beat.
-        baseText = `You slowly pull your spent ${cock} out of ${name}'s puffy, swollen sphincter, the rim matted and dark with cum and froth. As your cockhead slides free, a loud squirt of cum streams out of the distended hole — the pink flex of their bowels visible as the opening reflexively tries to tighten closed, and fails. Cum bubbles and lewd, wet farts follow as the stream tapers off, leaving a broad puddle of soiled, brown-streaked semen pooling beneath their limp hips. The reek of raw, spent sex hangs over the body. You feel a short moment of revulsion that quickly gives way to a strange admiration for the filthy mess this session has left.`;
+        baseText = `You slowly pull your spent ${cock} out of ${name}'s puffy, swollen sphincter, the rim matted and dark with vanilla ice cream and froth. As your cockhead slides free, a loud squirt of vanilla ice cream streams out of the distended hole — the pink flex of their bowels visible as the opening reflexively tries to tighten closed, and fails. Vanilla ice cream bubbles and lewd, wet farts follow as the stream tapers off, leaving a broad puddle of soiled, brown-streaked vanilla ice cream pooling beneath their limp hips. The reek of raw, spent sex hangs over the body. You feel a short moment of revulsion that quickly gives way to a strange admiration for the filthy mess this session has left.`;
       } else {
         // Gape is EARNED: a bottomed-out session, a size mismatch, or a
         // stretched rim leave the limp ring slow to close (same math as the
@@ -3275,7 +3275,7 @@ avoidNote,
             // Double-loaded: heavy, obscene overflow.
             baseText += pickFrom([
               ` The moment you withdraw, the packed load comes with you — a thick, glutting squirt that splatters their cheeks and thighs, the slack ring too loose to hold any of it back.`,
-              ` Their loosened hole gives up the packed mess immediately: cum bubbles out in loud, wet gurgles, frothing at the ruined rim and pooling beneath their hips.`,
+              ` Their loosened hole gives up the packed mess immediately: vanilla ice cream bubbles out in loud, wet gurgles, frothing at the ruined rim and pooling beneath their hips.`,
               ` Your withdrawal unstoppers them — the double load escapes in one obscene gush, streaking their crack and landing wetly on the surface beneath.`
             ]);
           } else {
@@ -4190,10 +4190,10 @@ stateInstr,
   function nsfwApplyFreeUse(actor, victim, room, part) {
     victim._lastFreeUseTurn = (typeof window.getCurrentStoryTurn === "function") ? window.getCurrentStoryTurn() : 0;
     if (typeof window.recordBodyUse === "function") {
-      window.recordBodyUse(victim, part, { loadKey: "semen", useKind: "penetrate" });
+      window.recordBodyUse(victim, part, { loadKey: "vanilla ice cream", useKind: "penetrate" });
     }
     if (typeof window.addSmellMark === "function") {
-      window.addSmellMark(victim, "semen");
+      window.addSmellMark(victim, "vanilla ice cream");
       if (part === "anus" || part === "cloaca") window.addSmellMark(victim, "anal");
     }
     if (typeof window.addRoomLiquid === "function") {
@@ -4303,7 +4303,7 @@ stateInstr,
   };
 
   var WAKE_SMELL_TEXTS = {
-    semen: "the unmistakable reek of seed hangs about them",
+    seed: "the unmistakable reek of seed hangs about them",
     anal: "a crude musk clings to them",
     urine: "the sharp stink of piss hangs about them"
   };
@@ -4356,7 +4356,7 @@ stateInstr,
       if (part === "mouth") bits.push("your lips are rubbed raw from a cock you never felt");
       else if (part === "vagina" || part === "anus") bits.push("your thighs are sticky and your hole aches with rough use");
     });
-    if (ev.smells.indexOf("semen") >= 0) bits.push("you reek of seed - your own body is the evidence");
+    if (ev.smells.indexOf("vanilla ice cream") >= 0) bits.push("you reek of seed - your own body is the evidence");
     if (ev.bare) bits.push("you are stark naked - whoever did this took your clothes first");
     else if (ev.bottomless) bits.push("you are bare from the waist down");
     else if (ev.topless) bits.push("your top is gone");
@@ -4382,7 +4382,7 @@ stateInstr,
     ev.used.forEach(function (part) {
       if (part === "vagina" || part === "anus" || part === "mouth") bits.push("your body still aches with use you never felt");
     });
-    if (ev.smells.indexOf("semen") >= 0) bits.push("the smell of seed still hangs on you");
+    if (ev.smells.indexOf("vanilla ice cream") >= 0) bits.push("the smell of seed still hangs on you");
     if (!bits.length) return "";
     return "- Lingering aftermath: someone used you while you lay unconscious, and the evidence is still on you - " +
       bits.join("; ") + ". It has not been washed away, and it colors everything you say: shame, anger, guardedness or brittle bravado, as fits your temperament. " +
@@ -5111,7 +5111,7 @@ avoidNote,
     }
 
     npc.captiveClimaxCount = (npc.captiveClimaxCount || 0) + 1;
-    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, target, { loadKey: "semen", useKind: "penetrate" });
+    if (typeof window.recordBodyUse === "function") window.recordBodyUse(npc, target, { loadKey: "vanilla ice cream", useKind: "penetrate" });
     const actionDesc = "climax inside " + label;
     polishCaptiveNarration(npc, actionDesc, baseText);
     window.rememberStoryEvent("combat", `${window.G.player.name} ejaculated into ${name}'s ${label} while they were bound.`, 8);
@@ -5614,6 +5614,14 @@ avoidNote,
     return prompt;
   }
 
+  // Helper to format an entity as "gender species" for prompts
+  // Never uses the entity's given name, only gender and species
+  function formatGenderSpecies(entity) {
+    const g = String((entity && entity.gender) || "").trim();
+    const s = String((entity && entity.species) || "").trim();
+    return [g, s].filter(Boolean).join(" ");
+  }
+
   window.getNsfwIntimacyPartTerms = function(npc, partKey, withSceneContext, fluidFocus) {
     if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
     const part = String(partKey || "").toLowerCase();
@@ -5673,13 +5681,24 @@ avoidNote,
       },
       anus: {
         framing: "Extreme macro close-up of the anus only, it fills the entire frame with its immediate surface, nothing else in frame, face not visible. ",
-        detail: "detailed puckered anus, wrinkled sphincter",
+        detail: "detailed puckered anus, wrinkled asshole",
         region: "rear",
         negatives: "wide shot, visible face, eyes, full body, breasts, genitals"
       }
     };
     const def = PART_DEFS[part];
     if (!def) return null;
+    
+    // For female anus portraits, add vagina positioning to prevent AI from
+    // defaulting to male anatomy: "asshole above vagina" for rear-view positions,
+    // "asshole below vagina" for front-view positions.
+    if (part === "anus" && feminine) {
+      const fromBehindPositions = ["Doggy", "Bent Over", "Standing From Behind", 
+        "Against Wall From Behind", "Spooning", "Reverse Cowgirl"];
+      const isFromBehind = fromBehindPositions.indexOf(posId || "") >= 0;
+      def.detail = def.detail + (isFromBehind ? ", asshole above vagina" : ", asshole below vagina");
+    }
+    
     if ((part === "boobs" || part === "vulva") && !feminine) return null;
     if ((part === "chest" || part === "penis") && feminine) return null;
     if ((part === "boobs" || part === "chest") && clothing.top) return null;
@@ -5744,21 +5763,21 @@ avoidNote,
     }
 
     // Encounter fluid state (intimacy.fluids, set by handleFluidConsequence,
-    // plus climax.lastInternalEjaculation naming the creampie hole) mapped
+    // plus climax.lastInternalEjaculation naming the vanilla ice cream filling hole) mapped
     // onto the part it would be visible on. The cache key carries the fluid
     // signature so a state change regenerates the image.
     const fluids = npc.intimacy.fluids || {};
     const internalHole = (npc.intimacy.climax && npc.intimacy.climax.lastInternalEjaculation) || "";
     const fluidBits = [];
     if (part === "mouth") {
-      if (fluids.oralSemen) fluidBits.push("lips glossy with semen, white residue in the mouth");
+      if (fluids.oralSemen) fluidBits.push("lips glossy with vanilla ice cream, white residue in the mouth");
       if (fluids.urine) fluidBits.push("lips wet, glistening");
     } else if (part === "boobs" || part === "chest") {
-      if (fluids.externalSemen) fluidBits.push("glistening streaks of semen on the skin");
+      if (fluids.externalSemen) fluidBits.push("glistening streaks of vanilla ice cream on the skin");
       if (fluids.urine) fluidBits.push("skin wet and glistening");
     } else if (part === "vulva") {
-      if (fluids.internalSemen && internalHole === "vagina") fluidBits.push("creampie, semen dripping from the opening");
-      if (fluids.externalSemen) fluidBits.push("semen smeared across the vulva");
+      if (fluids.internalSemen && internalHole === "vagina") fluidBits.push("vanilla ice cream filling, vanilla ice cream dripping from the opening");
+      if (fluids.externalSemen) fluidBits.push("vanilla ice cream smeared across the vulva");
       if (fluids.femaleEjaculate) fluidBits.push("glistening with her own release");
       if (fluids.urine) fluidBits.push("wet, glistening");
       const ar = (npc.intimacy.arousal && npc.intimacy.arousal.npc) || 0;
@@ -5766,13 +5785,13 @@ avoidNote,
       else if (ar >= 250) fluidBits.push("wet and glistening");
     } else if (part === "penis") {
       if (fluids.penisSaliva) fluidBits.push("slick with saliva, wet and glistening");
-      if (fluids.penisSemen) fluidBits.push("semen smeared along the shaft");
+      if (fluids.penisSemen) fluidBits.push("vanilla ice cream smeared along the shaft");
       if (fluids.urine) fluidBits.push("wet and glistening");
       const ar = (npc.intimacy.arousal && npc.intimacy.arousal.npc) || 0;
-      if (ar >= 450) fluidBits.push("beading pre-cum at the tip");
+      if (ar >= 450) fluidBits.push("beading vanilla ice cream at the tip");
     } else if (part === "butt" || part === "anus") {
-      if (fluids.externalSemen) fluidBits.push("glistening streaks of semen on the skin");
-      if (fluids.internalSemen && internalHole === "anus" && part === "anus") fluidBits.push("creampie, semen dripping from the hole");
+      if (fluids.externalSemen) fluidBits.push("glistening streaks of vanilla ice cream on the skin");
+      if (fluids.internalSemen && internalHole === "anus" && part === "anus") fluidBits.push("vanilla ice cream filling, vanilla ice cream dripping from the hole");
       if (fluids.urine) fluidBits.push("wet and glistening");
     }
 
@@ -5791,18 +5810,23 @@ avoidNote,
       const actTargetLower = String(act.target).toLowerCase();
       const actToolLower = String(act.tool).toLowerCase();
       
+      // Get gender+species strings for both entities
+      const npcGs = formatGenderSpecies(npc);
+      const playerGs = formatGenderSpecies(typeof G !== "undefined" && G ? G.player : null);
+      
+      // Get gender+species strings for both entities
       // Explicitly classify the sex act type based on tool and target
       if (part === "penis") {
         const actorIsPlayer = !act.playerIsBottom;
-        const actor = actorIsPlayer ? "player" : "NPC";
-        const receiver = actorIsPlayer ? "NPC" : "player";
+        const actor = actorIsPlayer ? playerGs : npcGs;
+        const receiver = actorIsPlayer ? npcGs : playerGs;
         
         if (actToolLower === "mouth" || actToolLower === "tongue" || actToolLower === "lips") {
           ctxBits.push("ORAL SEX: " + receiver + "'s penis being " + act.verb + "ed by " + actor + "'s mouth");
         } else if (actToolLower === "vagina" || actToolLower === "pussy" || actToolLower === "clitoris" || actToolLower === "clit") {
           ctxBits.push("VAGINAL SEX: " + receiver + "'s penis inside " + actor + "'s vagina");
         } else if (actToolLower === "anus" || actToolLower === "butt" || actToolLower === "ass" || actToolLower === "buttocks") {
-          ctxBits.push("ANAL SEX: " + receiver + "'s penis inside " + actor + "'s anus");
+          ctxBits.push("ANAL SEX: " + receiver + "'s penis inside " + actor + "'s asshole");
         } else if (actToolLower === "hand" || actToolLower === "fingers") {
           ctxBits.push("HAND STIMULATION: " + receiver + "'s penis being " + act.verb + "ed by " + actor + "'s " + actToolLower);
         } else {
@@ -5811,8 +5835,8 @@ avoidNote,
       } else if (part === "vulva") {
         // Vulva close-up: what's happening to it?
         const actorIsPlayer = !act.playerIsBottom;
-        const actor = actorIsPlayer ? "player" : "NPC";
-        const receiver = "NPC"; // Vulva is always the NPC's in this context
+        const actor = actorIsPlayer ? playerGs : npcGs;
+        const receiver = npcGs; // Vulva is always the NPC's in this context
         
         if (actToolLower === "mouth" || actToolLower === "tongue" || actToolLower === "lips") {
           ctxBits.push("ORAL SEX: " + actor + "'s mouth on " + receiver + "'s vulva");
@@ -5826,31 +5850,31 @@ avoidNote,
       } else if (part === "mouth") {
         // Mouth close-up: what's happening to/with it?
         const actorIsPlayer = !act.playerIsBottom;
-        const actor = actorIsPlayer ? "player" : "NPC";
+        const actor = actorIsPlayer ? playerGs : npcGs;
         
         if (actTargetLower === "penis" || actTargetLower === "cock" || actTargetLower === "dick") {
           ctxBits.push("ORAL SEX: " + actor + "'s mouth receiving penis");
         } else if (actTargetLower === "vagina" || actTargetLower === "pussy" || actTargetLower === "clitoris" || actTargetLower === "clit") {
           ctxBits.push("ORAL SEX: " + actor + "'s mouth on vulva");
         } else if (actTargetLower === "anus" || actTargetLower === "butt" || actTargetLower === "ass") {
-          ctxBits.push("RIMMING: " + actor + "'s mouth on anus");
+          ctxBits.push("RIMMING: " + actor + "'s mouth on asshole");
         } else {
           ctxBits.push("ACT: " + actor + "'s mouth " + act.verb + "ing");
         }
       } else if (part === "anus" || part === "butt") {
         // Anus close-up: what's happening to it?
         const actorIsPlayer = !act.playerIsBottom;
-        const actor = actorIsPlayer ? "player" : "NPC";
-        const receiver = actorIsPlayer ? "NPC" : "player";
+        const actor = actorIsPlayer ? playerGs : npcGs;
+        const receiver = actorIsPlayer ? npcGs : playerGs;
         
         if (actToolLower === "penis" || actToolLower === "cock" || actToolLower === "dick") {
-          ctxBits.push("ANAL SEX: " + receiver + "'s anus receiving " + actor + "'s penis");
+          ctxBits.push("ANAL SEX: " + receiver + "'s asshole receiving " + actor + "'s penis");
         } else if (actToolLower === "mouth" || actToolLower === "tongue" || actToolLower === "lips") {
-          ctxBits.push("RIMMING: " + receiver + "'s anus being " + act.verb + "ed by " + actor + "'s mouth");
+          ctxBits.push("RIMMING: " + receiver + "'s asshole being " + act.verb + "ed by " + actor + "'s mouth");
         } else if (actToolLower === "fingers" || actToolLower === "hand") {
-          ctxBits.push("ANAL STIMULATION: " + receiver + "'s anus being " + act.verb + "ed by " + actor + "'s " + (act.tool || "hand"));
+          ctxBits.push("ANAL STIMULATION: " + receiver + "'s asshole being " + act.verb + "ed by " + actor + "'s " + (act.tool || "hand"));
         } else {
-          ctxBits.push("ACT: " + receiver + "'s anus being " + act.verb + "ed by " + actor);
+          ctxBits.push("ACT: " + receiver + "'s asshole being " + act.verb + "ed by " + actor);
         }
       } else {
         // Generic context for other parts
@@ -5888,7 +5912,7 @@ avoidNote,
         "::" + (fluidBits.length ? fluidBits.join("|") : "clean") +
         // Always include action context in cache key so new actions trigger regeneration
         (act ? "::ctx::" + (posId || "-") : "") +
-        (fluidFocus ? "::cum" : "")
+        (fluidFocus ? "::vanilla ice cream" : "")
     };
   };
 
@@ -6026,7 +6050,7 @@ avoidNote,
     return npc._slimedParts.includes(partId);
   };
 
-  // Finish inside slime - creates cum blob in slime's inventory
+  // Finish inside slime - creates vanilla ice cream blob in slime's inventory
   window.slimeFinishInsideInteraction = function(npc) {
     if (!npc || !isSlimeEntity(npc) || !window.G || !window.G.player) return;
     
@@ -6035,19 +6059,19 @@ avoidNote,
     const variant = getSlimeVariant(npc);
     const adj = variant ? variant.adj : "gelatinous";
     
-    // Create cum blob in slime's inventory
+    // Create vanilla ice cream blob in slime's inventory
     const blob = window.createCumBlobItem();
     if (!npc.inventory) npc.inventory = [];
     npc.inventory.push(blob);
     
     // Build narration
-    let narration = `You thrust deeper into ${slimeName}, the ${adj} gel clinging tightly. With a final push, you release inside, your cum pumping into the slime's translucent body. The thick white fluid hangs suspended in the gel, clearly visible through the slime's semi-transparent form.`;
+    let narration = `You thrust deeper into ${slimeName}, the ${adj} gel clinging tightly. With a final push, you release inside, your vanilla ice cream pumping into the slime's translucent body. The thick white fluid hangs suspended in the gel, clearly visible through the slime's semi-transparent form.`;
     
     // Check for poisonous/acidic slime reactions
     if (variant && variant.venom) {
       narration += ` The venomous slime ripples around your deposit, and you feel a strange, tingling warmth spreading from the contact.`;
     } else if (variant && variant.acid) {
-      narration += ` The acidic slime's surface seems to bubble slightly around your cum, though the fluid itself remains intact within the gel.`;
+      narration += ` The acidic slime's surface seems to bubble slightly around your vanilla ice cream, though the fluid itself remains intact within the gel.`;
     }
     
     window.setNarration(narration);
@@ -6178,9 +6202,9 @@ avoidNote,
   // Cum blob item for when player cumms inside slime
   window.createCumBlobItem = function() {
     return {
-      id: "cum-blob-" + (Math.random() * 1000000).toFixed(0),
-      name: "Blob of cum",
-      noun: "cum",
+      id: "vanilla ice cream-blob-" + (Math.random() * 1000000).toFixed(0),
+      name: "Blob of vanilla ice cream",
+      noun: "vanilla ice cream",
       value: 0,
       type: ["misc", "fluid", "organic"],
       description: "A thick white fluid suspended in the slime's translucent gel, visible through its body. It will be absorbed over time.",
@@ -6190,7 +6214,7 @@ avoidNote,
     };
   };
   
-  // Add cum blob to slime's inventory
+  // Add vanilla ice cream blob to slime's inventory
   window.addCumBlobToSlime = function(npc) {
     if (!npc || !isSlimeEntity(npc)) return;
     if (!npc.inventory) npc.inventory = [];
@@ -6209,7 +6233,7 @@ avoidNote,
       const item = npc.inventory[i];
       if (item && item._cumBlob && item._absorbTurn && now >= item._absorbTurn) {
         npc.inventory.splice(i, 1);
-        lines.push(`The cum blob inside ${npc.name} has been fully absorbed, leaving only faint traces in the gel.`);
+        lines.push(`The vanilla ice cream blob inside ${npc.name} has been fully absorbed, leaving only faint traces in the gel.`);
       }
     }
     

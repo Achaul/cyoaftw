@@ -1690,6 +1690,23 @@ const ROOM_TEMPLATES = [
             { id: "lift-chains", name: "winch chains", tags: ["structural"] }
         ]
     },
+    {
+        type: "Underground Stairs",
+        zone: "Underground City",
+        role: "spine",
+        displayName: "Underground Stairs",
+        baseDescription: "Broad, worn stone steps descend beneath the town gate into a vast cavern. A few pale lanterns mark the balustrade; below, stone streets and houses cluster around dark water, with a waterfall glimmering beyond them.",
+        allowedZones: ["town", "underground city"],
+        parentCluster: [],
+        isConnector: true,
+        noNpcs: true,
+        structural: [
+            { id: "underground-stairway", name: "stone stairway", tags: ["passage"], alwaysShow: true,
+              examineText: "The stone stairway joins the town gate above to a public hallway in the underground city below. Worn treads and a solid balustrade mark the way in both directions." },
+            { id: "stone-balustrade", name: "worn stone balustrade", tags: ["structural"] }
+        ],
+        imageKey: "Underground Stairs"
+    },
 
     // ── BUILDING CONNECTORS ────────────────────────────────────────
     // Hallways, stairs and doorways that tie a building's rooms together
@@ -1885,7 +1902,7 @@ const ROOM_TEMPLATES = [
               examineText: "A tall arch of black stone holds a pane of shimmering air. Through it you glimpse a street you do not know, under a different sky. Brass rings in the floor hum faintly whenever someone stands near, and a plaque beside the arch states the council's fee for passage." },
             { id: "brass-rings", name: "inlaid brass rings", tags: ["landmark"] }
         ],
-        imageKey: "Town Hall"
+        imageKey: "Portal Chamber"
     },
 
     // ── GUILDHALL & CHAPEL ─────────────────────────────────────────
@@ -2243,6 +2260,7 @@ const ROOM_IMAGE_MAP = {
     // ───────── Town Landmarks ─────────
     "Square": "https://iili.io/qFW4FoP.jpg",
     "Gate": "https://iili.io/qFWrByl.jpg",
+    "Portal Chamber": "https://iili.io/nOGrwyN.jpg",
 
     // ───────── Tavern ─────────
     "Tavern": "https://iili.io/qFWVXYg.jpg",
@@ -2251,10 +2269,14 @@ const ROOM_IMAGE_MAP = {
     "Cellar": "https://iili.io/qFWMgmx.jpg",
     "Guest Room": "https://iili.io/qFW2Aw7.jpg",
     "Room": "https://iili.io/qFW2Aw7.jpg",
+    "Cellar Stairs": "https://iili.io/nOGrejt.jpg",
+    "Back Door": "https://iili.io/nOGrX3v.jpg",
 
     // ───────── Inn ─────────
     "Inn": "https://iili.io/qFW3cxt.jpg",
     "Inn Common": "https://iili.io/qFW3cxt.jpg",
+    "Stairs": "https://iili.io/nOGrkZX.jpg",
+    "Upstairs Hallway": "https://iili.io/nOGrhaR.jpg",
     "Brothel": "https://iili.io/qUJX3j1.jpg",
 
     // ───────── Dungeon Spine ─────────
@@ -2280,6 +2302,8 @@ const ROOM_IMAGE_MAP = {
     "Vault": "https://iili.io/qFXoaEB.jpg",
     "Underground Hallway": "https://iili.io/qFXxz6N.jpg",
     "Underground Gate": "https://iili.io/qFXzdxf.jpg",
+    "Underground Stairs": "https://iili.io/nOGrjvp.jpg",
+    "Lift Shaft": "https://iili.io/nOMKN1a.jpg",
 
     // Stand-in art: approximate re-use of the closest existing image until
     // dedicated art exists. Swap a URL here when real art is made.
@@ -2289,7 +2313,6 @@ const ROOM_IMAGE_MAP = {
     "Collapsed Gallery": "https://iili.io/qFW2jMg.jpg",
     "Old Mine Tunnel": "https://iili.io/qFW2jMg.jpg",
     "Stairwell": "https://iili.io/qFVVGi7.jpg",
-    "Lift Shaft": "https://iili.io/qFXxz6N.jpg",
     "Old Road": "https://iili.io/qFWPsNR.jpg",
     "Causeway": "https://iili.io/qFXBghQ.jpg",
     "Borderlands": "https://iili.io/qFXBghQ.jpg",
@@ -2304,9 +2327,6 @@ const ROOM_IMAGE_MAP = {
     "Swamp Camp": "https://iili.io/qFXBghQ.jpg",
     "Submerged Ruin": "https://iili.io/qFWJLss.jpg"
 
-    // Swamp room types (Marsh, Broken Ground, Swamp Camp, Submerged Ruin) have
-    // no art yet - getRoomImage() falls back to null for them, which the
-    // renderer already treats as "no background image" rather than an error.
 };
 
 const ZONE_IMAGE_MAP = {
@@ -2352,6 +2372,22 @@ function isHumanoidSpecies(species) {
 
 function getRoomImage(roomType) {
     return ROOM_IMAGE_MAP[roomType] || null;
+}
+
+// Refresh missing art and these replaced stand-ins when saved rooms are shown.
+// Preserve deliberately assigned/custom images rather than resetting every room.
+function ensureRoomImage(room) {
+    if (!room) return null;
+    const template = getRoomTemplate(room.type);
+    const image = template && getRoomImage(template.imageKey || template.type);
+    const previousImages = {
+        "Portal Chamber": ["https://iili.io/qFVGWL7.jpg"],
+        "Lift Shaft": ["https://iili.io/qFXxz6N.jpg", "https://iili.io/nOGrjvp.jpg"]
+    };
+    if (image && (!room.image || (previousImages[room.type] || []).includes(room.image))) {
+        room.image = image;
+    }
+    return room.image || null;
 }
 
 // ── HELPER: BUILD ROOM INSTANCE ──────────────────────────────────
@@ -2890,7 +2926,8 @@ function planTownLayout(rngIn) {
     const gate = plan.rooms[SPINE_MIN + ",0"];
     gate.exits.W = (SPINE_MIN - 1) + ",0";
     gate.guaranteedLink = "town-to-ruins";
-    gate.anchorFor = ["ruins-to-town"];
+    gate.anchorFor = ["ruins-to-town", "uc-to-town-stairs"];
+    gate.verticalLinks = ["town-to-uc-stairs"];
 
     // Building slots: two columns apart so each has a free column beside it
     // for an alley. Town Hall takes a slot facing the Square.
@@ -2996,7 +3033,7 @@ const ZONE_HUBS = {
             market:  { type: "Market Cavern",        at: [1, 0] },
             hall:    { type: "Lantern Hall",         at: [1, 1] },
             lodge:   { type: "Cavern Lodgings",      at: [1, -1] },
-            hallway: { type: "Underground Hallway",  at: [2, 0] },
+            hallway: { type: "Underground Hallway",  at: [2, 0], anchorFor: ["town-to-uc-stairs"] },
             forge:   { type: "Deep Forge",           at: [0, 1] },
             shrine:  { type: "Deep Well Shrine",     at: [2, 1] },
             shaft:   { type: "Mine Shaft",           at: [3, 0], name: "Old Ore Shaft" },
@@ -3006,7 +3043,7 @@ const ZONE_HUBS = {
         links: [["gate", "market", "arch"], ["market", "hall", "arch"], ["market", "lodge", "door"], ["market", "hallway"], ["gate", "forge"], ["forge", "hall"],
                 ["hall", "shrine", "arch"], ["hallway", "shrine"], ["hallway", "shaft"], ["shaft", "vault", "door", { level: 1, freeFrom: "B" }], ["shaft", "chief", "door", { level: 2, freeFrom: "B" }]],
         frontier: [["gate", "W"], ["shaft", "E"], ["lodge", "S"]],
-        vertical: { gate: ["uc-to-town"] },
+        vertical: { gate: ["uc-to-town"], hallway: ["uc-to-town-stairs"] },
         starts: { "Underground Gate": "gate", "Lantern Hall": "hall", "Market Cavern": "market" }
     },
     "Dungeon": {
@@ -3096,6 +3133,7 @@ function _planHubLayout(zoneName) {
         // name: a themed display name for this hub (a dungeon armory is not
         // "the Armory", a ruined library is a burnt archive).
         if (r.name) { extra.displayName = r.name; extra.name = r.name; }
+        if (r.anchorFor) extra.anchorFor = r.anchorFor.slice();
         // zoneCast rooms (the boss lairs) keep the zone's own species list.
         if (!r.zoneCast) {
             extra.npcSpecies = spec.npcSpecies.slice();
