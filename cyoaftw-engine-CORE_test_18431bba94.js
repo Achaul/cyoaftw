@@ -76538,10 +76538,11 @@ function renderIntimacyActionMenu(npc) {
             console.log(`[DEBUG TAB CLICK] Hiding ${allSections.length} sections`);
             allSections.forEach(s => s.style.display = "none");
             
-            // Show selected section
-            const escapedLabel = sectionLabel.replace(/&/g, "&amp;");
-            console.log(`[DEBUG TAB CLICK] Looking for section with data-section="${escapedLabel}"`);
-            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + escapedLabel + "\"]");
+            // Show selected section - use the raw label directly, no escaping needed
+            // dataset.section already returns the decoded value, and the attribute
+            // selector works with the actual value (not HTML-encoded)
+            console.log(`[DEBUG TAB CLICK] Looking for section with data-section="${sectionLabel}"`);
+            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + sectionLabel + "\"]");
             
             if (targetSection) {
                 console.log(`[DEBUG TAB CLICK] Found target section, showing it`);
@@ -76717,11 +76718,13 @@ function renderIntimacyActionMenu(npc) {
             const allSections = document.querySelectorAll(".intimacy-section-content");
             allSections.forEach(s => s.style.display = "none");
             
-            // Show first section
-            const escapedLabel = sectionLabel.replace(/&/g, "&amp;");
-            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + escapedLabel + "\"]");
+            // Show first section - use raw label, no escaping needed
+            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + sectionLabel + "\"]");
             if (targetSection) {
                 targetSection.style.display = "";
+            } else {
+                console.log(`[DEBUG] First section NOT found for label: ${sectionLabel}`);
+                console.log(`[DEBUG] All section data-section values:`, Array.from(allSections).map(s => s.dataset.section));
             }
         }
         
