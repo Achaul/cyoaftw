@@ -2462,7 +2462,7 @@ function applyStageFiltering(categorizedActions, stage) {
     // Stage 1: Clothed - only external actions
     if (stage === INTIMACY_STAGES.CLOTHED) {
         // Remove penetration and continue actions (now categorized by body area)
-        // These will be in Pussy, Cock, Anus, Mouth & Lips categories
+        // These will be in Pussy, Cock, Anus, Face categories
         delete filtered.Penetration;
         
         // Remove pussy, cock, and anus actions that require nudity
@@ -2475,8 +2475,8 @@ function applyStageFiltering(categorizedActions, stage) {
         if (filtered.Anal) {
             filtered.Anal = filtered.Anal.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
         }
-        if (filtered["Mouth & Lips"]) {
-            filtered["Mouth & Lips"] = filtered["Mouth & Lips"].filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+        if (filtered["Face"]) {
+            filtered["Face"] = filtered["Face"].filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
         }
     }
     
@@ -8371,7 +8371,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     // Only show categories that have applicable actions
     
     // Define body zone order - Clothing first, then body zones top to bottom
-    const BODY_ZONE_SECTIONS = ["Clothing", "Mouth & Lips", "Hair", "Breasts", "Cock", "Pussy", "Anus", "Cloaca", "Lower Body", "Tail", "Body", "Receive", "Climax", "Impact", "Watersports", "Other"];
+    const BODY_ZONE_SECTIONS = ["Clothing", "Face", "Hair", "Breasts", "Cock", "Pussy", "Anus", "Cloaca", "Lower Body", "Tail", "Body", "Receive", "Climax", "Impact", "Watersports", "Other"];
     
     // Get menu section using body-zone categorization
     const getMenuSection = function (entry, npc) {
@@ -8388,7 +8388,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         if (typeof getActionCategory === "function") {
             const bodyZone = getActionCategory(entry.id, npc);
             // Map some categories to cleaner labels
-            if (bodyZone === "Mouth & Lips") return "Mouth & Lips";
+            if (bodyZone === "Mouth & Lips" || bodyZone === "Face") return "Face";
             if (bodyZone === "Breasts") return "Breasts";
             if (bodyZone === "Pussy") return "Pussy";
             if (bodyZone === "Cock") return "Cock";
@@ -8398,7 +8398,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
             if (bodyZone === "Tail") return "Tail";
             if (bodyZone === "Body") return "Body";
             if (bodyZone === "Hair") return "Hair";
-            if (bodyZone === "Mouth & Lips") return "Mouth & Lips";
+            if (bodyZone === "Mouth & Lips") return "Face";
         }
         
         // Fallback to action-type categories

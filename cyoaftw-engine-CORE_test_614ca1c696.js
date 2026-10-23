@@ -76479,6 +76479,30 @@ function renderIntimacyActionMenu(npc) {
         // Build tabs from actual sections returned by getMenuActions
         const sectionItems = menuItems.filter(item => item.type === "section");
         
+        // Extract Pause and Stop from Other section to add to controls-row
+        const otherSection = sectionItems.find(item => item.label === "Other");
+        if (otherSection && otherSection.actions) {
+            const pauseAction = otherSection.actions.find(a => a.id === "pause_intimacy" || (a.label && a.label.toLowerCase().includes("pause")));
+            const stopAction = otherSection.actions.find(a => a.id === "stop_intimacy" || (a.label && a.label.toLowerCase().includes("stop")));
+            
+            if (pauseAction) {
+                const pauseBtn = document.createElement("button");
+                pauseBtn.className = "chat-option-btn intimacy-action-btn";
+                pauseBtn.textContent = "Pause";
+                pauseBtn.title = pauseAction.description || "Pause and take a break";
+                pauseBtn.onclick = () => chooseIntimacyAction(npc, pauseAction.id);
+                actionBtnContainer.appendChild(pauseBtn);
+            }
+            if (stopAction) {
+                const stopBtn = document.createElement("button");
+                stopBtn.className = "chat-option-btn intimacy-action-btn";
+                stopBtn.textContent = "Stop";
+                stopBtn.title = stopAction.description || "Stop intimate actions";
+                stopBtn.onclick = () => chooseIntimacyAction(npc, stopAction.id);
+                actionBtnContainer.appendChild(stopBtn);
+            }
+        }
+        
         // Get NPC gender and anatomy to filter sections
         const npcGender = (npc.gender || "").toString().toLowerCase();
         const npcSpecies = (npc.species || "").toString().toLowerCase();
@@ -76520,7 +76544,7 @@ function renderIntimacyActionMenu(npc) {
         // Define tab order priority
         const tabPriority = {
             "Clothing": 0,
-            "Mouth & Lips": 10,
+            "Face": 10,
             "Hair": 20,
             "Breasts": 30,
             "Cock": 40,
@@ -76581,10 +76605,25 @@ function renderIntimacyActionMenu(npc) {
         }
         
         // Collect all section labels with actions and valid anatomy
+        // Also filter out Pause/Stop from Other section (they go in controls-row)
         console.log(`[DEBUG] sectionItems:`, sectionItems.map(item => ({label: item.label, actionsCount: item.actions ? item.actions.length : 0})));
         
         const sectionsWithActions = sectionItems
-            .filter(item => item.actions && item.actions.length > 0 && shouldShowSection(item.label))
+            .filter(item => {
+                if (!item.actions || item.actions.length === 0) return false;
+                if (!shouldShowSection(item.label)) return false;
+                
+                // For Other section, filter out Pause and Stop actions
+                if (item.label === "Other") {
+                    const filteredActions = item.actions.filter(a => {
+                        return !(a.id === "pause_intimacy" || (a.label && a.label.toLowerCase().includes("pause"))) &&
+                               !(a.id === "stop_intimacy" || (a.label && a.label.toLowerCase().includes("stop")));
+                    });
+                    return filteredActions.length > 0;
+                }
+                
+                return true;
+            })
             .map(item => item.label);
         
         console.log(`[DEBUG] sectionsWithActions (after filtering):`, sectionsWithActions);
@@ -76775,6 +76814,14 @@ function renderIntimacyActionMenu(npc) {
                 // Skip disabled actions if "Show all" is not checked
                 if (action.disabled && !showAllActions) {
                     continue;
+                }
+                
+                // Skip Pause and Stop from Other section - they're in controls-row
+                if (item.label === "Other") {
+                    if ((action.id === "pause_intimacy" || (action.label && action.label.toLowerCase().includes("pause"))) ||
+                        (action.id === "stop_intimacy" || (action.label && action.label.toLowerCase().includes("stop")))) {
+                        continue;
+                    }
                 }
                 
                 const btn = document.createElement("button");
