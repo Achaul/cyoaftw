@@ -1774,7 +1774,11 @@ async function interpretTextCommands(input) {
     // The router inside that ruling finds the owning system (fire, spells...),
     // so those systems need no space in this compact prompt.
     const objectWords = (!G.activeNPC && textObjectIntentAvailable() ? "\nobject.action=lift|drag|shift|take|other act(existing target)." : "") + (worldToolIntentAvailable() ? "\ntool.action=pry|wedge|unwedge|force|menu;item=tool,target=object/door." : "");
-    const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\n' + schema + combatWords + socialWords + objectWords + '\n' + JSON.stringify(input);
+    // Visible people as simple target words, so garbled or stuttered speech
+    // ("talk talk to talk to human") can be mapped to someone actually here.
+    let peopleWords = "";
+    try { const seen = []; textModeVisibleNPCs().forEach(function (npc) { const w = [npc.gender, npc.species].filter(Boolean).join(" ").toLowerCase(); if (w && seen.indexOf(w) < 0) seen.push(w); }); if (seen.length) peopleWords = "\nhere=" + seen.slice(0, 10).join("|"); } catch (e) {}
+    const instruction = 'Dialect/typos/stutter→intents:{"actions":[{"verb":"","args":{}}]};say=raw\n' + schema + combatWords + socialWords + objectWords + peopleWords + '\n' + JSON.stringify(input);
     try {
         const raw = await textModeAIRequest(instruction, 12000);
         if (!raw) return null;
@@ -2709,15 +2713,17 @@ function ttsStageTranscript(results, session) {
     if (!textModeSameScene(session.scene) || session.epoch !== textModeState.epoch || session.token !== textModeSceneToken()) { ttsListenAbort("stale"); return; }
     const input = document.getElementById("textModeInputEl");
     if (!input || input.value.trim() && (!ttsListen.draft || input.value !== ttsListen.draft.text)) { ttsListenAbort("typing"); return; }
-    const parts = []; let final = true;
+    const parts = [];
     for (let i = 0; i < results.length; i++) {
         const res = results[i]; if (!res || !res[0]) continue;
         const alts = []; for (let k = 0; k < res.length; k++) alts.push(res[k].transcript);
-        parts.push(res.isFinal ? ttsPickAlternative(alts) : res[0].transcript);
-        final = final && !!res.isFinal;
+        parts.push({ text: res.isFinal ? ttsPickAlternative(alts) : res[0].transcript, final: !!res.isFinal });
         ttsListen.lastAlternatives = alts.slice();
     }
-    const text = parts.join(" ").trim().slice(0, TEXT_INPUT_LIMIT);
+    const merged = ttsMergeTranscriptParts(parts);
+    let final = merged.length > 0;
+    for (let i = 0; i < merged.length; i++) final = final && merged[i].final;
+    const text = merged.map(function (p) { return p.text; }).join(" ").trim().slice(0, TEXT_INPUT_LIMIT);
     ttsCancelVoiceDraft(true);
     if (!text) return;
     const draft = Object.assign({}, session, { text: text, final: final, sendAt: final ? Date.now() + ttsModeState.autoSubmitWait * 1000 : 0 });
@@ -2733,6 +2739,26 @@ function ttsStageTranscript(results, session) {
         ttsSubmitSpoken(text);
     }, ttsModeState.autoSubmitWait * 1000);
 }
+// Edge (continuous + interim) can add each growing hypothesis as a NEW result
+// instead of replacing the last one: "talk", "talk", "talk to", "talk to human".
+// Joining them all gave "talk talk talk to talk to human". A part that repeats
+// or extends the previous part replaces it; a part already contained at the end
+// of the previous part is dropped. Real separate phrases (Chrome) are kept.
+function ttsMergeTranscriptParts(parts) {
+    const norm = function (s) { return String(s || "").toLowerCase().replace(/[.,!?;:]+/g, " ").replace(/\s+/g, " ").trim(); };
+    const out = [];
+    for (let i = 0; i < parts.length; i++) {
+        const p = parts[i]; const t = norm(p.text);
+        if (!t) continue;
+        const prev = out.length ? out[out.length - 1] : null;
+        const pt = prev ? norm(prev.text) : "";
+        if (prev && t === pt) { if (p.final) out[out.length - 1] = { text: String(p.text).trim(), final: true }; continue; }
+        if (prev && t.indexOf(pt + " ") === 0) { out[out.length - 1] = { text: String(p.text).trim(), final: p.final }; continue; }
+        if (prev && (pt.indexOf(t + " ") === 0 || pt.slice(-(t.length + 1)) === " " + t)) { if (p.final && !prev.final) prev.final = true; continue; }
+        out.push({ text: String(p.text).trim(), final: p.final });
+    }
+    return out;
+}
 // Chooses among recognition alternatives: the first one the game understands
 // (a local command, a learned phrase, a voice control word or a conversation
 // option), otherwise the recogniser's top guess.
@@ -2744,7 +2770,7 @@ function ttsPickAlternative(alternatives) {
         const t = text.replace(/[.!?]+$/, "").toLowerCase();
         if (TTS_REPEAT_WORDS.test(t) || TTS_HELP_WORDS.test(t) || /^(?:skip|quiet|silence|hush|stop talking|stop listening|pause listening|details|options|stop|cancel|help)\b/.test(t)) return text;
         if (typeof parseTextCommandBatch === "function") {
-            try { const parsed = parseTextCommandBatch(text); if (parsed && !parsed.error && !parsed.unresolved && parsed.actions && parsed.actions.length) return text; } catch (e) {}
+            try { const parsed = parseTextCommandBatch(text); if (parsed && !parsed.error && !parsed.unresolved && parsed.actions && parsed.actions.length && !textLocalTargetMiss(parsed.actions)) return text; } catch (e) {}
         }
         if (typeof textPhraseLookup === "function") { try { if (textPhraseLookup(text)) return text; } catch (e) {} }
         if (ttsMatchConversationOption(text) >= 0) return text;
@@ -3237,6 +3263,21 @@ function resolveTextNPCTarget(selector, candidates, extraWords) {
     });
     if (ordinal !== null) return { matches: ordinal > 0 && ordinal <= matches.length ? [matches[ordinal - 1]] : [] };
     return { matches: matches };
+}
+
+// True when a locally parsed action names a person no one visible matches
+// (talk to / wake / examine npc). Lookup only; nothing runs.
+function textLocalTargetMiss(actions) {
+    return (actions || []).some(function (action) {
+        if (!action || action.targetRef) return false;
+        const args = action.args || {};
+        let target = "";
+        if (action.verb === "talk" || action.verb === "wake") target = args.target;
+        else if (action.verb === "examine" && args.scope === "npc") target = args.item;
+        target = String(target || "").trim();
+        if (!target) return false;
+        try { return resolveTextNPCTarget(target, textModeVisibleNPCs()).matches.length === 0; } catch (e) { return false; }
+    });
 }
 
 // Resolve public creature descriptions before falling through to item/fixture
@@ -3742,8 +3783,12 @@ async function submitTextModeCommand(raw) {
         textModeState.queue.unshift(pending.action);
         return runTextCommandQueue();
     }
-    const local = parseTextCommandBatch(input);
+    let local = parseTextCommandBatch(input);
     if (local.error) { textModeResult("blocked", local.error); return; }
+    // A local parse whose person-target matches no one ("talk talk to talk to
+    // human") goes to the AI interpreter to infer intent. If the AI is off or
+    // can't help, the local action still runs and gives its usual message.
+    if (local.actions && textLocalTargetMiss(local.actions)) local = { unresolved: true, localMiss: local.actions };
     if (textModeState.queue.length || textModeState.pending) {
         stopTextCommands(false);
         textModeResult("completed", "The new command replaces the paused commands.");
@@ -3757,7 +3802,8 @@ async function submitTextModeCommand(raw) {
     if (learned) actions = learned;
     const ttsChoice = local.unresolved && !learned ? ttsConversationChoice(input) : null;
     if (ttsChoice) actions = [ttsChoice];
-    if (local.unresolved && !learned && !ttsChoice) {
+    if (local.unresolved && !learned && !ttsChoice && local.localMiss && !aiAvailable()) actions = local.localMiss;
+    else if (local.unresolved && !learned && !ttsChoice) {
         if (!aiAvailable()) { textModeResult("blocked", 'That wording is not recognized locally, and AI command help is unavailable. Nothing was attempted. Check Use AI in Preferences and the AI connection, or type help for supported commands.', { systemOnly: true, commandFailure: "ai-unavailable" }); return; }
         textModeState.parsing = true;
         renderTextModeStatus("Interpreting your command...");
@@ -3765,6 +3811,7 @@ async function submitTextModeCommand(raw) {
         finally { textModeState.parsing = false; renderTextModeStatus(); }
         if (!textModeState.enabled || epoch !== textModeState.epoch) return;
         if (!textModeSameScene(scene)) { textModeResult("blocked", "The scene changed while interpreting. Please repeat your command."); return; }
+        if (!actions && local.localMiss) actions = local.localMiss;
     }
     if (!actions) { textModeResult("blocked", 'That wording could not be matched to an available action. Nothing was attempted. The interpreter may have failed or returned an unsupported action. Try help for supported commands, or say "..." when speaking to an NPC.', { systemOnly: true, commandFailure: "unresolved" }); return; }
     // A batch is interpreted in full before any action is allowed to run.
