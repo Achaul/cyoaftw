@@ -4927,6 +4927,10 @@ function buildIntimacyPrompt(context) {
     }
     // Add anatomy type note for reptilian and mixed species
     var _anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    var _gender = String(npc.gender || "").toLowerCase();
+    var _isFemale = _gender === "female" || _gender.includes("female");
+    var _isMale = _gender === "male" || _gender.includes("male");
+    
     if (_anatomyType === "reptilian") {
         _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\" in descriptions, not \"vagina\" or \"anus\". The opening is smooth-scaled and muscular, not mammalian.";
     } else if (_anatomyType === "mixed" || _anatomyType === "furry" || _anatomyType === "scaled") {
@@ -4940,7 +4944,24 @@ function buildIntimacyPrompt(context) {
         else if (surfaceType) surfaceDesc = surfaceType;
         else surfaceDesc = "non-skin texture";
         
-        _speciesContext += "\nANATOMY NOTE: This species has " + _anatomyType + " anatomy — HUMANOID GENITALS (separate vagina and anus, NOT a cloaca or vent) with " + surfaceDesc + " texture. Use standard body part names (vagina/pussy, anus/ass) and mention the " + surfaceDesc + " surface in descriptions. NEVER use 'vent' or 'cloaca' for this species.";
+        // Add vocabulary guidance for furry and human species
+        var vocabNote = "";
+        if (_anatomyType === "furry" || surfaceType === "fur") {
+            if (_isFemale) {
+                vocabNote = " For female furry anatomy, prefer \"vulva\" as the primary term. You may also use \"pussy\" or \"furred slit\" for variety.";
+            } else if (_isMale) {
+                vocabNote = " For male furry anatomy, use \"penis\", \"cock\", or \"dick\" as appropriate. Prefer \"sheath\" when describing the protective covering.";
+            }
+        } else if (_anatomyType === "humanoid" || _speciesLower === "human" || _speciesLower === "elf" || _speciesLower === "dwarf" || _speciesLower === "halfling") {
+            // Human/humanoid vocabulary guidance
+            if (_isFemale) {
+                vocabNote = " For human female anatomy, use varied terms: \"vagina\", \"pussy\", or \"cunt\" for different tones. Randomize between these for natural variation.";
+            } else if (_isMale) {
+                vocabNote = " For human male anatomy, use \"penis\", \"cock\", or \"dick\" for variety.";
+            }
+        }
+        
+        _speciesContext += "\nANATOMY NOTE: This species has " + _anatomyType + " anatomy — HUMANOID GENITALS (separate vagina and anus, NOT a cloaca or vent) with " + surfaceDesc + " texture. Use standard body part names (vagina/pussy, anus/ass) and mention the " + surfaceDesc + " surface in descriptions. NEVER use 'vent' or 'cloaca' for this species." + vocabNote;
     }
     // Add tail note if applicable
     if (typeof hasNPCTail === "function" && hasNPCTail(npc)) {
@@ -5102,6 +5123,10 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
         _speciesContext = "\nSPECIES NOTE: This NPC is a " + _species + ". Keep their reactions consistent with their species characteristics.";
     }
     var _anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    var _gender = String(npc.gender || "").toLowerCase();
+    var _isFemale = _gender === "female" || _gender.includes("female");
+    var _isMale = _gender === "male" || _gender.includes("male");
+    
     if (_anatomyType === "reptilian") {
         _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\" in descriptions, not \"vagina\" or \"anus\".";
     } else if (_anatomyType === "mixed" || _anatomyType === "furry" || _anatomyType === "scaled") {
@@ -5115,7 +5140,24 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
         else if (surfaceType) surfaceDesc = surfaceType;
         else surfaceDesc = "non-skin texture";
         
-        _speciesContext += "\nANATOMY NOTE: This species has " + _anatomyType + " anatomy — HUMANOID GENITALS (separate vagina and anus, NOT a cloaca or vent) with " + surfaceDesc + " texture. Use standard body part names (vagina/pussy, anus/ass) and mention the " + surfaceDesc + " surface in descriptions. NEVER use 'vent' or 'cloaca' for this species.";
+        // Add vocabulary guidance for furry and human species
+        var vocabNote = "";
+        if (_anatomyType === "furry" || surfaceType === "fur") {
+            if (_isFemale) {
+                vocabNote = " For female furry anatomy, prefer \"vulva\" as the primary term. You may also use \"pussy\" or \"furred slit\" for variety.";
+            } else if (_isMale) {
+                vocabNote = " For male furry anatomy, use \"penis\", \"cock\", or \"dick\" as appropriate. Prefer \"sheath\" when describing the protective covering.";
+            }
+        } else if (_anatomyType === "humanoid" || _speciesLower === "human" || _speciesLower === "elf" || _speciesLower === "dwarf" || _speciesLower === "halfling") {
+            // Human/humanoid vocabulary guidance
+            if (_isFemale) {
+                vocabNote = " For human female anatomy, use varied terms: \"vagina\", \"pussy\", or \"cunt\" for different tones. Randomize between these for natural variation.";
+            } else if (_isMale) {
+                vocabNote = " For human male anatomy, use \"penis\", \"cock\", or \"dick\" for variety.";
+            }
+        }
+        
+        _speciesContext += "\nANATOMY NOTE: This species has " + _anatomyType + " anatomy — HUMANOID GENITALS (separate vagina and anus, NOT a cloaca or vent) with " + surfaceDesc + " texture. Use standard body part names (vagina/pussy, anus/ass) and mention the " + surfaceDesc + " surface in descriptions. NEVER use 'vent' or 'cloaca' for this species." + vocabNote;
     }
     if (typeof hasNPCTail === "function" && hasNPCTail(npc)) {
         _speciesContext += "\nThis NPC has a tail. Mention it in descriptions when relevant (brushing, curling, twitching).";
@@ -9697,10 +9739,19 @@ function describeAnatomy(npc, target, options = {}) {
     
     // Get arousal descriptors
     const arousalDescriptors = getArousalDescriptors(arousalLevel, isAroused, isWet, isErect, isOnCooldown);
-
-    // Check anatomy type — reptilian species have cloaca instead of
-    // separate vagina and anus. Map those targets to "cloaca".
+    
+    // Get anatomy type and surface descriptors to prevent AI from hallucinating wrong features
     var anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    var surfaceDesc = "";
+    if (anatomyType === "reptilian" || anatomyType === "scaled") {
+        surfaceDesc = "scaled ";
+    } else if (anatomyType === "furry" || anatomyType === "furred") {
+        surfaceDesc = "fur-covered ";
+    } else if (anatomyType === "feathered" || anatomyType === "avian") {
+        surfaceDesc = "feathered ";
+    } else {
+        surfaceDesc = "smooth "; // mammalian/skin default
+    }
     var effectiveTarget = target;
     if (anatomyType === "reptilian") {
         var targetLower = target.toLowerCase();
@@ -9813,14 +9864,26 @@ function describeVagina(npc, anatomy, posPronoun, arousalDescriptors) {
     const body = anatomy.body || {};
     const surfaceType = body.surfaceType || "skin";
     const anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
-    if (anatomyType === "reptilian" || anatomyType === "mixed" || surfaceType !== "skin") {
+    if (surfaceType !== "skin") {
         const surfaceColor = body.color || "";
         const surface = surfaceColor ? surfaceColor + " " + surfaceType : surfaceType;
-        if (surfaceType === "scales" || anatomyType === "reptilian" || anatomyType === "mixed") {
+        if (surfaceType === "scales") {
             descriptions.push(pickRandom([
                 "smooth " + surface + " mound, the plates finer and lighter here",
                 "bare scaled mound, no hair",
                 "hairless " + surface + " mound"
+            ]));
+        } else if (surfaceType === "fur") {
+            descriptions.push(pickRandom([
+                "soft " + surface + " mound",
+                "fur-covered " + surface + " mound",
+                "" + surface + " mound"
+            ]));
+        } else if (surfaceType === "feathers") {
+            descriptions.push(pickRandom([
+                "feathered " + surface + " mound",
+                "soft " + surface + " mound covered in down",
+                "" + surface + " mound"
             ]));
         } else {
             descriptions.push(surface + " mound");
@@ -10151,7 +10214,7 @@ function describeCloaca(npc, anatomy, posPronoun, arousalDescriptors) {
  * Describe anus with rich detail
  * Uses anatomical terms: star, rosebud, pucker, ring, etc.
  */
-function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
+function describeAnus(npc, anatomy, posPronoun, arousalDescriptors, anatomyType, surfaceDesc) {
     const anus = anatomy.anus || {};
     const size = anus.size || "snug";
     const sphincter = anus.sphincter || "tight";
@@ -10192,12 +10255,14 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
 
     // Hair descriptors — the anal area often has hair, add raw detail
     // For scaled species, use scale texture instead of hair
-    var _anatomyType2 = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    // Use actual surface type from anatomy.body to prevent hallucinating wrong features
+    const body = anatomy.body || {};
+    const actualSurfaceType = (body && String(body.surfaceType || "").trim().toLowerCase()) || "skin";
     var hairDesc = "";
-    if (_anatomyType2 === "reptilian" || _anatomyType2 === "mixed") {
+    if (actualSurfaceType === "scales") {
         if (Math.random() < 0.3) {
             hairDesc = pickRandom([
-                "ringed with fine smooth scales", "smooth-scaled", "surrounded by smaller plates"
+                "ringed with fine smooth scales", "smooth-scaled"
             ]);
         }
     } else {
@@ -13483,11 +13548,12 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             ]);
         } else if (Math.random() < 0.35) {
             // Scaled species have no coarse hair back there — deterrence
-            // reads on the unwashed state, not hair.
-            var _scaledBack = (typeof getNPCAnatomyType === "function" &&
-                    (getNPCAnatomyType(npc) === "reptilian" || getNPCAnatomyType(npc) === "mixed")) ||
-                (npc.anatomy && npc.anatomy.body && String(npc.anatomy.body.surfaceType || "") === "scales");
-            deterrenceDesc = _scaledBack ? pickRandom([
+            // reads on the unwashed state, not hair. Check actual surface type.
+            var body = npc.anatomy && npc.anatomy.body;
+            var surfaceType = body && String(body.surfaceType || "");
+            var isScaled = surfaceType === "scales" || 
+                (typeof getNPCAnatomyType === "function" && getNPCAnatomyType(npc) === "reptilian");
+            deterrenceDesc = isScaled ? pickRandom([
                 "The rough, unwashed scales back there give you a moment of doubt",
                 "The unwashed state of the area makes you think twice"
             ]) : pickRandom([
@@ -14336,7 +14402,7 @@ function canCompleteAnalInsertion(npc, player) {
  */
 function isCivilizedSpecies(species) {
     if (!species) return false;
-    const civilizedSpecies = ["human", "elf", "dwarf", "halfling", "dragonborn"];
+    const civilizedSpecies = ["human", "elf", "dwarf", "halfling", "dragonborn", "catfolk", "wolfkin", "satyr", "harefolk", "kenku"];
     return civilizedSpecies.includes(species.toLowerCase());
 }
 
@@ -14510,16 +14576,49 @@ function getAnalInteriorColor(npc) {
  * Get pubic hair description
  */
 function getPubicDescription(npc) {
-    // Scaled species (lizardfolk, kobold, dragonborn) have no pubic hair —
-    // instead they have smooth, differently-colored smaller scales.
+    // Reptilian species have a cloaca (vent) with smooth scales.
+    // Other species (including mixed, furry, scaled) have humanoid genitals.
     var anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
-    if (anatomyType === "reptilian" || anatomyType === "mixed") {
+    
+    // Get actual surface type from anatomy
+    var body = (npc.anatomy && npc.anatomy.body) || (npc.nsfwTraits && npc.nsfwTraits.anatomy && npc.nsfwTraits.anatomy.body) || {};
+    var surfaceType = String(body.surfaceType || npc.surfaceType || "skin").toLowerCase();
+    
+    if (anatomyType === "reptilian") {
         var skinDesc = (typeof getSkinDescription === "function") ? getSkinDescription(npc) : "";
         return pickRandom([
             "smooth " + (skinDesc || "scaled") + " vent, the scales smaller and lighter here",
-            "bare scaled mound, the plates thin and smooth",
-            "smooth vent, no hair but fine smaller scales"
+            "bare scaled vent, no hair but fine smaller scales",
+            "smooth vent with fine scales"
         ]);
+    }
+    
+    // For non-reptilian species, check actual surface type
+    if (surfaceType !== "skin") {
+        var skinDesc = (typeof getSkinDescription === "function") ? getSkinDescription(npc) : "";
+        var surface = skinDesc ? skinDesc + " " + surfaceType : surfaceType;
+        
+        if (surfaceType === "scales") {
+            return pickRandom([
+                "smooth " + surface + " mound, the scales finer and lighter here",
+                "bare scaled mound, no hair",
+                "hairless " + surface + " mound"
+            ]);
+        } else if (surfaceType === "fur") {
+            return pickRandom([
+                "soft " + surface + " mound covered in " + (skinDesc || "") + "fur",
+                surface + " mound with fine fur",
+                surface + " mound"
+            ]);
+        } else if (surfaceType === "feathers") {
+            return pickRandom([
+                "feathered " + surface + " mound",
+                "soft " + surface + " mound covered in down",
+                surface + " mound"
+            ]);
+        } else {
+            return surface + " mound";
+        }
     }
 
     // Check nsfwTraits first (sexual anatomy), then fallback to regular anatomy

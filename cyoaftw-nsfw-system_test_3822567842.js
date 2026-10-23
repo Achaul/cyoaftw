@@ -384,6 +384,78 @@ console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptan
         body: { description: "a shifting, gelatinous mass with a cool, damp touch" }
       },
       cloaca: false
+    },
+    // === Harefolk ===
+    {
+      type: "Harefolk",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "medium",
+      allowedSkinTones: ["white", "cream", "sandy", "light brown", "gray", "charcoal", "chocolate", "honey", "frost-white", "dappled gray"],
+      visualProfile: {
+        surface: { type: "fur", texture: ["soft", "plush", "silky", "dense", "velvety"], sheen: "matte" }
+      },
+      allowedHairColors: ["white", "cream", "sandy", "light brown", "gray", "charcoal", "chocolate", "honey", "frost", "dappled"],
+      allowedEyeColors: ["amber", "hazel", "brown", "gold", "green", "red", "pink", "violet"],
+      appearanceProfile: "mammalian",
+      sensualProfile: {
+        body: { description: "a lithe, soft-furred body with a warm, inviting touch" },
+        breasts: { description: "soft, fur-covered mounds" },
+        genitals: { 
+          male: { description: "a furred sheath with a smooth, velvety texture" },
+          female: { description: "a furred slit with soft, plush folds" }
+        }
+      },
+      cloaca: false
+    },
+    // === Ratfolk ===
+    {
+      type: "Ratfolk",
+      isHumanoid: true,
+      isCivilized: false,
+      size: "small",
+      allowedSkinTones: ["brown", "black", "gray", "ashen", "dusky", "rust", "sandy", "pale", "mottled", "striped"],
+      visualProfile: {
+        surface: { type: "fur", texture: ["short", "sleek", "coarse", "patchy", "bristly"], sheen: "matte" }
+      },
+      allowedHairColors: ["brown", "black", "gray", "ashen", "dusky", "rust", "sandy", "pale", "mottled", "striped"],
+      allowedEyeColors: ["black", "red", "brown", "amber", "yellow", "pale", "pink"],
+      appearanceProfile: "mammalian",
+      sensualProfile: {
+        body: { description: "a small, wiry body with short, practical fur" },
+        breasts: { description: "small, compact mounds with short fur" },
+        genitals: { 
+          male: { description: "a small sheath with sparse, short fur" },
+          female: { description: "a small, neat slit with short fur" }
+        }
+      },
+      cloaca: false
+    },
+    // === Kenku ===
+    {
+      type: "Kenku",
+      isHumanoid: true,
+      isCivilized: true,
+      size: "medium",
+      allowedSkinTones: ["black", "dark gray", "charcoal", "soot", "midnight", "raven-black", "shiny black", "matte black"],
+      visualProfile: {
+        surface: { type: "feathers", texture: ["sleek", "smooth", "glossy", "soft", "downy"], sheen: "glossy" },
+        // Kenku have a feather fan (not a true tail) that should be visible in rear/butt views
+        tail: { has: true, type: "feather fan", description: "a long fanned feather fan that spreads dramatically when displaying or balancing", displayInRearView: true }
+      },
+      allowedHairColors: ["none"],
+      allowedEyeColors: ["black", "dark brown", "amber", "red", "gold", "silver", "pale yellow"],
+      appearanceProfile: "avian",
+      sensualProfile: {
+        body: { description: "a graceful, feathered body with sleek, cool skin beneath soft plumage" },
+        breasts: { description: "smooth, feather-covered curves" },
+        rear: { description: "a broad feathered base with a prominent fanned feather fan framing the backside" },
+        genitals: { 
+          male: { description: "a feathered base with smooth, sleek skin, framed by the base of the feather fan" },
+          female: { description: "a smooth slit with soft feathers at the edges, the feather fan creating an elegant frame" }
+        }
+      },
+      cloaca: false
     }
   ];
 
@@ -426,6 +498,11 @@ console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptan
     const size = template.size || "medium";
     const isCivilized = template.isCivilized === true;
     const anatomy = {};
+    
+    // Check if NPC is overweight from SFW anatomy
+    const isOverweight = (npc.anatomy && npc.anatomy.body && npc.anatomy.body.weightClass === "overweight") || 
+                       (npc.bodyType === "heavyset" || npc.bodyType === "plump");
+    
     const tones = Array.isArray(template.allowedSkinTones) ? template.allowedSkinTones : ["pale", "fair", "tan", "olive", "brown", "dark"];
     const tone = pickFrom(tones);
 
@@ -481,21 +558,67 @@ console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptan
       anatomy.eyes = { color: eyeColor, description: eyeColor, status: [], health: 100 };
     }
 
+    // Overweight NPCs have a prominent belly/paunch
+    if (isOverweight && isHumanoid) {
+      const g = String(gender || "").toLowerCase();
+      const bellyDesc = g === "female" 
+        ? pickFrom(["a soft, rounded belly", "a gently curved midsection", "a full, comfortable belly"])
+        : pickFrom(["a prominent paunch", "a rounded, fleshy belly", "a thick, soft gut", "a substantial midsection"]);
+      anatomy.belly = { 
+        sizeCategory: "large", 
+        description: bellyDesc,
+        status: [], 
+        health: 100,
+        softness: pickFrom(["soft", "very soft", " yielding"])
+      };
+    }
+
     if (isHumanoid && gender && gender !== "none" && gender !== "undefined") {
       const g = String(gender).toLowerCase();
-      const hipSize = pickFrom(["narrow", "average", "wide"]);
+      const hipSize = isOverweight ? pickFrom(["wide", "very wide"]) : pickFrom(["narrow", "average", "wide"]);
       anatomy.hips = { sizeCategory: hipSize, description: hipSize, status: [], health: 100 };
-      const buttockSize = pickFrom(["small", "medium", "large"]);
-      anatomy.buttocks = { sizeCategory: buttockSize, description: buttockSize, status: [], health: 100 };
+      
+      // Overweight NPCs get larger, softer buttocks
+      const buttockSize = isOverweight ? pickFrom(["large", "very large"]) : pickFrom(["small", "medium", "large"]);
+      let buttockDesc = buttockSize;
+      if (isOverweight) {
+        buttockDesc = buttockSize.replace("very ", "") + " and soft";
+        if (g === "female") {
+          buttockDesc = "full and round, " + buttockDesc;
+        } else {
+          buttockDesc = "broad and fleshy, " + buttockDesc;
+        }
+      }
+      anatomy.buttocks = { sizeCategory: buttockSize, description: buttockDesc, status: [], health: 100 };
 
       let breastSize = "flat";
       let breastDescription = "a flat, toned chest";
       if (g === "female") {
-        // Add variety to breast sizes: small, medium, large
-        breastSize = pickFrom(["small", "medium", "medium", "large"]); // 25% small, 50% medium, 25% large
-        if (breastSize === "small") breastDescription = "small, perky breasts";
-        else if (breastSize === "medium") breastDescription = "a modest bust";
-        else if (breastSize === "large") breastDescription = "generous, full breasts";
+        // Overweight females have larger, droopier breasts
+        if (isOverweight) {
+          breastSize = pickFrom(["large", "very large"]); // Overweight females always have large+ breasts
+          if (breastSize === "large") {
+            breastDescription = pickFrom([
+              "large, drooping breasts",
+              "heavy, pendulous breasts",
+              "full, sagging breasts",
+              "ample, soft breasts with a gentle droop"
+            ]);
+          } else {
+            breastDescription = pickFrom([
+              "very large, heavy pendulous breasts",
+              "massive, drooping breasts",
+              "generous, full breasts that sag noticeably",
+              "abundant, soft breasts with a pronounced droop"
+            ]);
+          }
+        } else {
+          // Normal breast size distribution
+          breastSize = pickFrom(["small", "medium", "medium", "large"]); // 25% small, 50% medium, 25% large
+          if (breastSize === "small") breastDescription = "small, perky breasts";
+          else if (breastSize === "medium") breastDescription = "a modest bust";
+          else if (breastSize === "large") breastDescription = "generous, full breasts";
+        }
       }
       anatomy.breasts = {
         sizeCategory: breastSize,
@@ -5656,6 +5779,16 @@ avoidNote,
     const surfaceColor = (body && String(body.color || "").trim().toLowerCase()) || "";
     const arousalTerms = getSurfaceArousalTerm(surfaceType) + ", aroused";
     
+    // Get anatomy type (mammal, reptilian, avian, etc.) from species template
+    // This helps prevent AI from hallucinating wrong anatomy features
+    let anatomyType = "mammalian";
+    if (npc.species && typeof window.getSpeciesTemplate === "function") {
+        const template = window.getSpeciesTemplate(npc.species);
+        if (template && template.anatomyType) {
+            anatomyType = String(template.anatomyType).toLowerCase();
+        }
+    }
+    
     // Helper to add color to surface descriptions
     const getColoredSurfaceDetail = (baseDetail) => {
         if (!surfaceColor) return baseDetail;
@@ -5704,8 +5837,8 @@ avoidNote,
         negatives: "wide shot, visible face, eyes, full body," + (feminine ? " penis, male genitalia, scrotum" : " vagina, vulva, female genitalia, clitoris")
       },
       anus: {
-        framing: "Extreme macro close-up of the anus only, it fills the entire frame with its immediate surface, nothing else in frame, face not visible. ",
-        detail: "detailed puckered anus, wrinkled asshole",
+        framing: "Extreme close-up of the buttocks, they fill the entire frame, nothing else in frame, face not visible. ",
+        detail: getColoredSurfaceDetail(getButtDetail(surfaceType)) + ", detailed puckered anus, wrinkled asshole",
         region: "rear",
         negatives: "wide shot, visible face, eyes, full body, breasts, genitals"
       }
@@ -5728,7 +5861,7 @@ avoidNote,
     if ((part === "boobs" || part === "chest") && clothing.top) return null;
     if ((part === "vulva" || part === "penis") && (clothing.bottom || clothing.undergarments)) return null;
     if (part === "butt" && clothing.bottom) return null;
-    if (part === "anus" && clothing.bottom) return null;
+    if (part === "anus" && clothing.bottom && clothing.undergarments) return null;
 
     const posId = npc.intimacy.position && npc.intimacy.position.player;
     let perspective = "";
@@ -5815,8 +5948,22 @@ avoidNote,
       if (ar >= 450) fluidBits.push("beading vanilla ice cream at the tip");
     } else if (part === "butt" || part === "anus") {
       if (fluids.externalSemen) fluidBits.push("glistening streaks of vanilla ice cream on the skin");
-      if (fluids.internalSemen && internalHole === "anus" && part === "anus") fluidBits.push("vanilla ice cream filling, vanilla ice cream dripping from the hole");
+      if (fluids.internalSemen && internalHole === "anus" && part === "anus") {
+        fluidBits.push("vanilla ice cream dripping out of the asshole");
+      }
+      // Also check for external semen (smeared on the anus area)
+      if (fluids.externalSemen && part === "anus") {
+        fluidBits.push("vanilla ice cream dripping out of the asshole");
+      }
       if (fluids.urine) fluidBits.push("wet and glistening");
+      // Add puffy sphincter description for anus
+      if (part === "anus") {
+        const anusAnatomy = (npc.anatomy && npc.anatomy.anus) || {};
+        const sphincterState = anusAnatomy.sphincter || "tight";
+        if (sphincterState === "puffy" || sphincterState === "loose" || sphincterState === "gaping") {
+          fluidBits.push("asshole rim is enlarged puffy and enlarged");
+        }
+      }
     }
 
     // "last scene" checkbox (engine): fold the ongoing act into the part

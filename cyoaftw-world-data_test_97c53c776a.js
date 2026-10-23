@@ -1,8 +1,9 @@
-// ── cyoaftw-world-data.js v2026-10-21-001 ── Street fixtures (lamppost, cart, market stall, post) get physical templates. Previous: Player-led guide check-ins and bounded intro delivery. Previous: Shop name generator uses zone and trade themes, with stable names shared by storefronts and interiors.
+// Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
+// ── cyoaftw-world-data.js v2026-10-23-001 ── Street fixtures (lamppost, cart, market stall, post) get physical templates. Previous: Player-led guide check-ins and bounded intro delivery. Previous: Shop name generator uses zone and trade themes, with stable names shared by storefronts and interiors.
 // Previous: Commoner debt dialogue identifies the creditor.
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.WORLD_DATA_VERSION = "2026-10-21-001";
+    window.WORLD_DATA_VERSION = "2026-10-23-001";
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
@@ -132,7 +133,7 @@ const ZONE_TEMPLATES = [
         // Shrine" is this zone's guaranteed shrine room (ZONE_SHRINE_ROOMS)
         // in the same style - odd for a Town, tucked away below a tavern.
         roomTypes: ["Tavern", "Taproom", "Inn", "Kitchen", "Cellar", "Smithy", "Street", "Alleyway", "Square", "Avenue", "Gate", "Town Hall", "Cellar Shrine"],
-        allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling", "Dragonborn", "Satyr", "Catfolk"],
+        allowedSpecies: ["Human", "Elf", "Dwarf", "Halfling", "Dragonborn", "Satyr", "Catfolk", "Harefolk", "Ratfolk", "Kenku"],
         lightLevel: "bright",
         defaultDanger: "safe"
     },
@@ -143,7 +144,7 @@ const ZONE_TEMPLATES = [
         // "Buried Shrine" is this zone's guaranteed shrine room
         // (ZONE_SHRINE_ROOMS) - sealed behind a cave-in, easy to miss.
         roomTypes: ["Chamber", "Corridor", "Passage", "Vault", "Trap", "Tunnel", "Armory", "Collapsed Gallery", "Throne Room", "Buried Shrine", "Smugglers' Den"],
-        allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat", "Kobold", "Lizardfolk", "Wolfkin", "Slime"],
+        allowedSpecies: ["Goblin", "Orc", "Skeleton", "Rat", "Kobold", "Lizardfolk", "Wolfkin", "Slime", "Ratfolk"],
         lightLevel: "dark",
         defaultDanger: "hostile"
     },
@@ -155,7 +156,7 @@ const ZONE_TEMPLATES = [
         // (ZONE_SHRINE_ROOMS) - "Altar" is a second, bonus prayer-capable
         // room type that can also turn up here at ordinary flat odds.
         roomTypes: ["Hallway", "Ruins Passage", "Altar", "Library", "Tower", "Shrine", "Inner Sanctum", "Smugglers' Den"],
-        allowedSpecies: ["Skeleton", "Ghost", "Goblin", "Lizardfolk", "Wolfkin"],
+        allowedSpecies: ["Skeleton", "Ghost", "Goblin", "Lizardfolk", "Wolfkin", "Kenku"],
         lightLevel: "dim",
         defaultDanger: "hostile"
     },
@@ -167,7 +168,7 @@ const ZONE_TEMPLATES = [
         // (ZONE_SHRINE_ROOMS) - built around a dried-up well shaft, tucked
         // between otherwise mundane tunnels.
         roomTypes: ["Cavern", "Mine Shaft", "Vault", "Deep Forge", "Underground Hallway", "Underground Gate", "Chieftain's Hall", "Deep Well Shrine", "Smugglers' Den"],
-        allowedSpecies: ["Dwarf", "Goblin", "Human", "Kobold", "Dragonborn", "Catfolk", "Slime"],
+        allowedSpecies: ["Dwarf", "Goblin", "Human", "Kobold", "Dragonborn", "Catfolk", "Slime", "Ratfolk", "Kenku"],
         lightLevel: "dim",
         defaultDanger: "tense"
     },
@@ -179,13 +180,17 @@ const ZONE_TEMPLATES = [
         // (ZONE_SHRINE_ROOMS) - half-submerged, easy to mistake for just
         // another ruin until you're standing in it.
         roomTypes: ["Marsh", "Broken Ground", "Swamp Camp", "Submerged Ruin", "Witch's Lair", "Sunken Chapel"],
-        allowedSpecies: ["Lizardfolk", "Rat", "Kobold", "Slime"],
+        allowedSpecies: ["Lizardfolk", "Rat", "Kobold", "Slime", "Ratfolk"],
         lightLevel: "dim",
         defaultDanger: "hostile"
     }
 ];
 
 // ── SPECIES TEMPLATES ───────────────────────────────────────────
+// anatomyProfile.morphology is shared species anatomy, never a random feature.
+// Individual anatomy.morphology fields can override it (including an empty
+// string for an absent part). typicalBuild describes a tendency, not a mandate.
+// bodyFatEligible enables the one-time 5% NPC fullness roll; frame stays separate.
 
 const SPECIES_TEMPLATES = [
     {
@@ -198,6 +203,9 @@ const SPECIES_TEMPLATES = [
         speechStyle: "common",
         lore: "Humans are adaptable people whose customs change quickly from town to frontier. They tend to judge strangers by conduct before bloodline.",
         anatomyProfile: {
+            morphology: { ears: "one pair of rounded human ears on the sides of the head", face: "a human face", bodyPlan: "an upright human body with two arms and two legs", feet: "human feet" },
+            typicalBuild: "variable human proportions and body frames",
+            bodyFatEligible: true,
             surfaceType: "skin",
             skinTones: ["pale", "fair", "tan", "olive", "brown", "dark brown"],
             hairColors: ["black", "brown", "auburn", "blond", "gray"],
@@ -217,13 +225,16 @@ const SPECIES_TEMPLATES = [
     {
         species: "Elf",
         // Used for NPC portrait prompts: face/head detail and species-specific negatives.
-        portraitProfile: { face: "long pointed ears, high cheekbones, angular delicate face, almond-shaped eyes", negatives: "round ears, tusks, stocky, heavy jaw" },
+        portraitProfile: { face: "long pointed ears, high cheekbones, angular delicate face, almond-shaped eyes", negatives: "round ears, tusks, heavy jaw" },
         isHumanoid: true,
         size: "medium",
         isCivilized: true,
         speechStyle: "formal",
         lore: "Elves carry long memory in their manners. Even a casual remark may be weighed against old promises, beauty, and restraint.",
         anatomyProfile: {
+            morphology: { ears: "one pair of long tapered elven ears on the sides of the head", face: "a fine-featured face with high cheekbones and almond-shaped eyes", bodyPlan: "an upright humanoid body with long limbs", feet: "humanlike feet" },
+            typicalBuild: "usually slender and light-framed; individuals can carry extra body fat",
+            bodyFatEligible: true,
             surfaceType: "skin",
             skinTones: ["pale", "warm ivory", "olive", "copper", "moonlit brown"],
             hairColors: ["silver", "black", "gold", "chestnut", "white"],
@@ -243,13 +254,17 @@ const SPECIES_TEMPLATES = [
     {
         species: "Dwarf",
         // Used for NPC portrait prompts: face/head detail and species-specific negatives.
-        portraitProfile: { face: "rounded ears, broad nose, strong square jaw, wide heavy-browed face", negatives: "pointed ears, elf ears, slender, narrow face, delicate" },
+        portraitProfile: { face: "rounded humanlike ears, broad nose, broad rounded face, full cheeks, rounded jaw", negatives: "pointed ears, elf ears, angular face, narrow face, sharp cheekbones" },
         isHumanoid: true,
         size: "small",
         isCivilized: true,
         speechStyle: "gruff",
         lore: "Dwarves are shaped by clan, craft, and memory. They notice workmanship quickly and remember debts even faster.",
         anatomyProfile: {
+            morphology: { ears: "one pair of rounded humanlike ears on the sides of the head", face: "a broad rounded face with full cheeks and a rounded jaw", bodyPlan: "a short broad body with compact limbs", feet: "broad humanlike feet" },
+            typicalBuild: "usually stout and endomorphic, with a heavier rounded frame",
+            buildWeights: { compact: 1, broad: 1, stout: 4, powerful: 1, thickset: 4 },
+            bodyFatEligible: true,
             surfaceType: "skin",
             skinTones: ["ruddy", "tan", "deep brown", "umber", "stone-pale"],
             hairColors: ["black", "brown", "red", "iron-gray", "white"],
@@ -276,6 +291,9 @@ const SPECIES_TEMPLATES = [
         speechStyle: "folksy",
         lore: "Halflings survive by community, caution, and cheerful misdirection. They often know more local news than they admit.",
         anatomyProfile: {
+            morphology: { ears: "one pair of rounded humanlike ears on the sides of the head", face: "a soft rounded adult face with a small nose", bodyPlan: "a short compact humanoid body with adult proportions", feet: "broad humanlike feet with hair on their tops" },
+            typicalBuild: "usually compact and softly rounded, with short limbs",
+            bodyFatEligible: true,
             surfaceType: "skin",
             skinTones: ["fair", "sun-browned", "warm tan", "olive", "brown"],
             hairColors: ["brown", "black", "sandy", "auburn", "gray"],
@@ -303,6 +321,9 @@ const SPECIES_TEMPLATES = [
         lore: "Goblin bands prize cunning, salvage, and status earned by surviving bad odds. They often test strangers before trusting them.",
         articulation: "Small sharp teeth give hard consonants a slight click. Subtle, not exaggerated.",
         anatomyProfile: {
+            morphology: { ears: "one pair of very large long pointed goblin ears projecting from the sides of the head", face: "a leathery goblin face with a hooked nose, heavy brow and sharp teeth", bodyPlan: "a short humanoid body with long fingers", feet: "small claw-nailed feet" },
+            typicalBuild: "usually wiry and thin-limbed",
+            bodyFatEligible: true,
             surfaceType: "skin",
             skinTones: ["moss green", "yellow-green", "ash gray", "mud brown", "sallow ochre"],
             hairColors: ["black", "mud-brown", "rust", "patchy gray", "none"],
@@ -322,7 +343,7 @@ const SPECIES_TEMPLATES = [
     {
         species: "Orc",
         // Used for NPC portrait prompts: face/head detail and species-specific negatives.
-        portraitProfile: { face: "brutish orc face, thick leathery weathered skin with scars, heavy protruding brow ridge, deep-set eyes, broad flat upturned nose, massive square underbite jaw, two large lower tusks jutting upward past the lip, thick neck, small rounded ears", negatives: "pointed ears, elf ears, cute, pretty, beautiful, handsome, smooth skin, delicate, slender, narrow jaw, small tusks, human face, child" },
+        portraitProfile: { face: "brutish orc face, thick leathery weathered skin with scars, heavy protruding brow ridge, deep-set eyes, broad flat upturned nose, massive square underbite jaw, two lower tusks, thick neck, small rounded ears", negatives: "pointed ears, elf ears, cute, pretty, beautiful, handsome, smooth skin, delicate, slender, narrow jaw, human face, child" },
         isHumanoid: true,
         isCivilized: false,
         size: "large",
@@ -330,6 +351,9 @@ const SPECIES_TEMPLATES = [
         lore: "Orcs respect strength, directness, and loyalty proven under pressure. Insults are remembered, but so is courage.",
         articulation: "Tusks blunt and thicken hard consonants slightly. Otherwise speaks clearly.",
         anatomyProfile: {
+            morphology: { ears: "one pair of small rounded orc ears on the sides of the head", face: "a broad orc face with a heavy brow, flat nose, square underbite jaw and two lower tusks", bodyPlan: "a large broad-shouldered humanoid body with a thick neck", feet: "large humanlike feet" },
+            typicalBuild: "usually powerful and muscular, with a broad frame",
+            bodyFatEligible: true,
             surfaceType: "skin",
             skinTones: ["deep green", "gray-green", "ash gray", "dark umber", "olive"],
             hairColors: ["black", "dark brown", "iron-gray", "rust", "shaved"],
@@ -357,6 +381,9 @@ const SPECIES_TEMPLATES = [
         lore: "Animated skeletons retain fragments of purpose rather than full lives. They respond to command, trespass, and ritual disturbance.",
         articulation: "No lungs or vocal cords - speech is a dry, hollow approximation animated by will, not breath. No breath sounds or wet consonants; words land a beat flatter than a living voice.",
         anatomyProfile: {
+            morphology: { ears: "no external ears", face: "a bare skull with exposed teeth and hollow eye sockets", bodyPlan: "an upright humanoid skeleton with exposed bones", feet: "skeletal feet", absent: ["skin", "flesh", "hair", "lips"] },
+            typicalBuild: "a bony humanoid frame without body fat",
+            bodyFatEligible: false,
             surfaceType: "bone",
             skinTones: ["ivory", "yellowed", "ash-white", "smoke-stained", "old brown"],
             eyeColors: ["blue witchlight", "green witchlight", "empty shadow", "red pinpricks"],
@@ -382,6 +409,9 @@ const SPECIES_TEMPLATES = [
         lore: "Rats follow food, warmth, and danger-scent. A lone rat is usually a sign that a larger hidden ecology is nearby.",
         articulation: "A tiny mouth built for gnawing, not speech - words come out as a thin, urgent squeak-and-chitter blend, half-formed but understandable in context.",
         anatomyProfile: {
+            morphology: { ears: "one pair of rounded rodent ears high on the sides of the head", face: "a pointed rat muzzle with whiskers and prominent incisors", bodyPlan: "a small quadrupedal rodent body", feet: "four small clawed paws", tail: "a long bare rat tail" },
+            typicalBuild: "a small low-slung rodent frame",
+            bodyFatEligible: true,
             surfaceType: "fur",
             skinTones: ["brown", "black", "gray", "mottled", "pale"],
             eyeColors: ["black", "red", "dark brown"],
@@ -414,6 +444,9 @@ const SPECIES_TEMPLATES = [
         lore: "Ghosts are memory given shape. They notice names, unfinished business, and places where the living have repeated old mistakes.",
         articulation: "No physical vocal apparatus - sound seems to arrive from just behind the listener, thin and half-formed, more impression of speech than actual speech.",
         anatomyProfile: {
+            morphology: { ears: "indistinct spectral ear outlines rather than solid external ears", face: "a translucent spectral face with wispy edges", bodyPlan: "an incorporeal humanoid outline", feet: "a fading lower outline that does not touch the floor", absent: ["solid flesh", "physical body fat"] },
+            typicalBuild: "a spectral outline; no unrecorded former species is implied",
+            bodyFatEligible: false,
             surfaceType: "translucent form",
             skinTones: ["pale blue", "silver-white", "faint green", "smoky gray", "candlelit gold"],
             eyeColors: ["white", "blue", "hollow black", "silver", "faint green"],
@@ -441,6 +474,9 @@ const SPECIES_TEMPLATES = [
         lore: "Dragonborn carry the blood of ancient dragons in their scales and breath. They value honor above all — a promise given is a debt that outlasts death. Their clans trace lineage to specific dragon ancestors, and they judge others by the weight of their word.",
         articulation: "A rigid snout with no lips - consonants form further back in the throat, with no lip-rounding for sounds like a soft b or w. Comes through as clipped and slightly breathy rather than mumbled or slurred.",
         anatomyProfile: {
+            morphology: { ears: "recessed ear openings with no external ears", face: "a scaled draconic head with a blunt snout and swept-back horns", bodyPlan: "a large upright reptilian body", hands: "clawed hands", feet: "clawed reptilian feet", tail: "a thick scaly tail", absent: ["hair", "fur", "wings"] },
+            typicalBuild: "usually tall, broad-shouldered and muscular",
+            bodyFatEligible: true,
             surfaceType: "scales",
             skinTones: ["deep green", "bronze", "crimson", "deep blue", "black", "gold"],
             hairColors: ["none"],
@@ -471,6 +507,9 @@ const SPECIES_TEMPLATES = [
         lore: "Lizardfolk are reptilian survivors shaped by swamp and jungle. They think in terms of predator and prey, not good and evil. Their tribes value practical cunning over sentiment, and they eat what they kill. Trust is earned through shared danger, not words.",
         articulation: "A long snout and forked tongue soften sibilants into a faint hiss and flatten vowels - the mouth doesn't round the way a human's does.",
         anatomyProfile: {
+            morphology: { ears: "recessed ear openings with no external ears", face: "a scaled lizard head with a long snout and slit pupils", bodyPlan: "an upright reptilian body", hands: "clawed webbed hands", feet: "clawed reptilian feet", tail: "a thick muscular scaly tail", absent: ["hair", "fur", "wings", "horns"] },
+            typicalBuild: "usually lean and sinewy",
+            bodyFatEligible: true,
             surfaceType: "scales",
             skinTones: ["moss green", "swamp brown", "olive", "dark green", "gray-green"],
             hairColors: ["none"],
@@ -501,6 +540,9 @@ const SPECIES_TEMPLATES = [
         lore: "Kobolds are small dragon-kin who survive through cleverness, traps, and sheer numbers. They revere dragons as gods and model their tunnels after dragon lairs. A lone kobold is a scout or a trap-setter — where there is one, there are always more.",
         articulation: "A small toothy snout gives words a slightly yipping, clipped quality, with sharp sibilants.",
         anatomyProfile: {
+            morphology: { ears: "recessed ear openings with no external ears", face: "a small reptilian head with a pointed snout and small horns", bodyPlan: "a very short upright reptilian body", hands: "small clawed hands", feet: "small clawed reptilian feet", tail: "a thin whip-like scaly tail", absent: ["hair", "fur", "wings"] },
+            typicalBuild: "usually slight and wiry",
+            bodyFatEligible: true,
             surfaceType: "scales",
             skinTones: ["rust red", "dark brown", "deep orange", "mottled brown", "dusty red"],
             hairColors: ["none"],
@@ -529,6 +571,9 @@ const SPECIES_TEMPLATES = [
         lore: "Catfolk are lithe, curious wanderers who travel in family troupes and caravans, trading small luxuries, stories and favours. They prize freedom, independence and a clever bargain, bow to no throne, and hold grudges and debts with equal care. A catfolk who stays in one place has usually been given a very good reason.",
         articulation: "A short muzzle and sharp canines give words a soft, purring roll on the r's, with the occasional trill when amused.",
         anatomyProfile: {
+            morphology: { ears: "one pair of triangular furred cat ears on top of the head", face: "a feline face with a short muzzle, whiskers and slit pupils", bodyPlan: "an upright furred humanoid body", hands: "padded hands with retractable claws", feet: "padded feline feet", tail: "a long furred cat tail", absent: ["human ears", "a second pair of ears"] },
+            typicalBuild: "usually lithe and flexible",
+            bodyFatEligible: true,
             surfaceType: "fur",
             skinTones: ["tabby brown", "black", "ginger", "cream", "silver-grey", "calico", "tortoiseshell", "white", "smoky grey", "golden tabby"],
             hairColors: ["black", "ginger", "silver", "cream", "brown", "white", "golden", "charcoal"],
@@ -557,6 +602,9 @@ const SPECIES_TEMPLATES = [
         lore: "Wolfkin live and hunt in packs, and the pack is everything: its hunt, its territory, its word. They are loyal to a fault and slow to trust outsiders, but once you are counted pack they will follow you into the dark. A lone wolfkin is an exile, a scout, or a hunter on a long trail.",
         articulation: "A long muzzle shapes words into a low, rumbling growl at the edges, and the occasional half-howl slips out when emotions run high.",
         anatomyProfile: {
+            morphology: { ears: "one pair of upright furred wolf ears on top of the head", face: "a lupine face with a long muzzle and fangs", bodyPlan: "an upright furred humanoid body capable of running on all fours", hands: "heavy clawed hands", feet: "padded lupine feet", tail: "a bushy wolf tail", absent: ["human ears", "a second pair of ears"] },
+            typicalBuild: "usually rangy or muscular, with a strong frame",
+            bodyFatEligible: true,
             surfaceType: "fur",
             skinTones: ["grey", "dark grey", "brown", "black", "russet", "white", "tawny", "timber-grey", "ashen grey", "snow white"],
             hairColors: ["grey", "black", "brown", "russet", "white", "tawny", "silver", "charcoal"],
@@ -575,7 +623,7 @@ const SPECIES_TEMPLATES = [
     },
     {
         species: "Satyr",
-        portraitProfile: { face: "humanoid face with pointed ears, small curved goat horns, mischievous grin, shaggy hair", negatives: "scales, snout, wings, feathers, bare human legs" },
+        portraitProfile: { face: "humanlike face with furred goat-shaped ears, small curved goat horns, shaggy hair", negatives: "elf ears, human ears, scales, snout, wings, feathers, bare human legs, human feet" },
         isHumanoid: true,
         size: "medium",
         isCivilized: true,
@@ -585,6 +633,13 @@ const SPECIES_TEMPLATES = [
         lore: "Satyrs are horned, goat-legged revellers who live for wine, music and the next good prank. They are mischievous, quick-witted and fickle, and they treat rules as suggestions. Most are harmless tricksters; a few take the joke too far. Their circles gather wherever there is a party to start or a stuffy neighbour to unsettle.",
         articulation: "Words come out in a lilting, sing-song rhythm, quick to laughter and prone to bleating when startled or when a joke lands.",
         anatomyProfile: {
+            morphology: { ears: "one pair of furred goat-shaped ears projecting from the sides of the head", face: "a humanlike face with curved goat horns", bodyPlan: "a humanlike upper body above shaggy goat legs", feet: "cloven hooves instead of human feet", tail: "a short tufted goat tail", absent: ["elf ears", "human feet", "bare human legs"] },
+            typicalBuild: "a variable humanoid frame above strong goat legs",
+            bodyFatEligible: true,
+            surfaceRegions: [
+                { region: "the upper body", surfaceType: "skin" },
+                { region: "the goat legs", surfaceType: "fur", colors: ["black", "dark brown", "chestnut", "grey", "cream", "russet"] }
+            ],
             surfaceType: "skin",
             skinTones: ["tanned", "ruddy", "olive", "sun-browned", "copper", "pale freckled", "golden brown", "weathered bronze", "rosy"],
             hairColors: ["black", "dark brown", "chestnut", "auburn", "grey", "straw", "silver", "wild blonde"],
@@ -613,6 +668,9 @@ const SPECIES_TEMPLATES = [
         lore: "Slimes are mindless blobs of living gel that drift through damp stone, eating whatever rots or moves. They do not think or speak, only seep toward warmth and food. Some take on the temper of the place they grew: acid or poison from the swamp's rot, or frost from cold deep stone. They have an unnatural love for moonbloom nectar, which makes their bodies shimmer and move with uncharacteristic energy.",
         articulation: "A slime is a faceless gelatinous pile with no eyes, mouth or limbs. It moves by oozing and rippling, never by human gestures or facial expressions; its gurgles and slurps come from shifting gel.",
         anatomyProfile: {
+            morphology: { ears: "no ears", bodyPlan: "an amorphous gelatinous body", absent: ["face", "eyes", "mouth", "limbs", "hair", "ears"] },
+            typicalBuild: "a variable pooled gelatinous shape, not a human body frame",
+            bodyFatEligible: false,
             surfaceType: "gel",
             skinTones: ["emerald green", "deep blue", "murky purple", "slate grey", "swamp green", "frost blue", "dusky violet", "stone grey"],
             hairColors: ["none"],
@@ -627,6 +685,100 @@ const SPECIES_TEMPLATES = [
             values: ["food", "warmth", "damp", "nectar"],
             topics: ["nothing it can say"],
             taboos: ["fire", "salt"]
+        }
+    },
+    {
+        species: "Harefolk",
+        portraitProfile: { face: "hare face, very long upright ears, large dark eyes, split upper lip, twitching nose, soft short fur", negatives: "human ears, bare human skin, scales, horns, wings, feathers" },
+        isHumanoid: true,
+        size: "medium",
+        isCivilized: true,
+        speechStyle: "folksy",
+        anatomyType: "mixed",
+        hasTail: true,
+        lore: "Harefolk live in warrens of linked burrows and hidden halls, and they survive by hearing trouble before it arrives. They are quick, warm, chatty and easily startled, fond of a full larder and a crowded hearth, and they trade news faster than any road can carry it. A harefolk who stands their ground has decided something is worth more than their own safety, and that is not a decision they make lightly.",
+        articulation: "A split lip and quick breath make words tumble out in rapid little bursts, with a soft thump of a hind foot when they mean it.",
+        anatomyProfile: {
+            morphology: { ears: "one pair of very long upright hare ears on top of the head", face: "a furred hare face with a twitching nose and split upper lip", bodyPlan: "an upright humanoid body with powerful hind legs", hands: "soft furred hands", feet: "long furred hind feet", tail: "a short fluffy hare tail", absent: ["human ears", "a second pair of ears"] },
+            typicalBuild: "usually light-boned and long-limbed",
+            bodyFatEligible: true,
+            surfaceType: "fur",
+            skinTones: ["sandy brown", "grey-brown", "snow white", "russet", "dappled grey", "tawny", "black-tipped brown", "cream", "dusky fawn", "white", "sandy", "light brown", "gray", "charcoal", "chocolate", "honey", "frost-white", "dappled gray"],
+            hairColors: ["brown", "white", "grey", "russet", "black", "cream", "sandy", "fawn", "light brown", "gray", "charcoal", "chocolate", "honey", "frost", "dappled"],
+            hairStyles: ["a short tuft between the ears", "a soft ruff", "a braided forelock", "a sleek short coat", "a fluffy mane", "a neat parted crest", "a wind-tousled mess", "a wild fluff", "a sleek coat", "a neatly brushed pelt", "a thick winter coat", "a summer-short trim", "a slightly disheveled mess"],
+            eyeColors: ["dark brown", "black", "amber", "hazel", "ruby", "pale grey", "brown", "gold", "green", "red", "pink", "violet"],
+            builds: ["lean", "wiry", "springy", "slight", "long-limbed", "rangy", "light-boned", "lithe", "compact", "graceful", "nimble", "delicate"],
+            features: ["very long upright ears", "a twitching nose", "a short white tail", "powerful hind legs", "large dark eyes", "a split upper lip", "ears that swivel at every sound", "soft furred hands", "long hind feet", "long upright rabbit ears", "a soft twitching nose", "large expressive eyes", "a fluffy cotton tail", "strong muscular legs", "soft padded feet", "a delicate muzzle", "fur that shimmers in sunlight", "quick reflexes"],
+            movements: ["bounds forward in quick light steps", "freezes with ears high, listening", "thumps a hind foot twice and glances back", "folds their ears flat and goes still", "hops sideways at a sudden noise", "shifts weight from foot to foot, ready to run", "stands tall on their toes to see over everything", "moves with quick, darting steps", "freezes with ears twitching", "bounds forward in long leaps", "stands poised to flee", "pauses to sniff the air", "hops lightly from foot to foot", "twitches nose while listening", "darts side to side like the wind"],
+            voices: ["quick", "breathy", "light and rapid", "soft and eager", "fluttering", "a hushed patter", "soft", "gentle", "melodic", "light", "a quiet hum", "a soft chuckle"]
+        },
+        culture: {
+            values: ["the warren", "safety in numbers", "a full larder", "fast news"],
+            topics: ["tunnel routes", "harvests and weather", "who is kin to whom", "which roads are watched"],
+            taboos: ["being cornered", "snares and cages", "going hungry", "lying to the warren"]
+        }
+    },
+    {
+        species: "Ratfolk",
+        portraitProfile: { face: "rat face, pointed snout, long whiskers, round ears, small bright eyes, long incisors", negatives: "human ears, bare human skin, scales, horns, wings, feathers" },
+        isHumanoid: true,
+        size: "small",
+        isCivilized: true,
+        speechStyle: "clipped",
+        anatomyType: "mixed",
+        hasTail: true,
+        lore: "Ratfolk make their homes in the gaps other people leave: drains, cellars, tunnels and the undersides of cities. They are clever, crowded, quick with a bargain and quicker with salvage, and nothing is ever wasted among them. They are used to being looked down on and have learned to profit from it, but they remember a kindness for years and an insult for longer.",
+        articulation: "A pointed snout and long front teeth give words a quick, whistling edge, with the occasional chitter when something pleases them.",
+        anatomyProfile: {
+            morphology: { ears: "one pair of rounded rodent ears high on the sides of the head", face: "a pointed rat muzzle with long whiskers and prominent incisors", bodyPlan: "a very short upright furred humanoid body of roughly kobold height", hands: "small clawed hands", feet: "small clawed rodent feet", tail: "a long bare rat tail", absent: ["human ears", "elf ears", "a second pair of ears"] },
+            typicalBuild: "usually compact or wiry, at kobold-like height",
+            heightRangeCm: [70, 105],
+            bodyFatEligible: true,
+            surfaceType: "fur",
+            skinTones: ["soot grey", "dun brown", "black", "piebald", "pale grey", "patchy brown and white", "dusty grey", "ginger-brown", "slate", "brown", "gray", "ashen", "dusky", "rust", "sandy", "pale", "mottled", "striped"],
+            hairColors: ["grey", "brown", "black", "white", "ginger", "dun", "mottled", "gray", "ashen", "dusky", "rust", "sandy", "pale", "striped"],
+            hairStyles: ["a patchy scruff", "a short bristle", "a tangled mane", "a neat brushed coat", "a thin tuft", "a ragged crest", "a knotted topknot", "patchy", "sleek", "ruffled", "scruffy", "neatly preened", "thick and glossy", "dull and worn", "slightly mangy"],
+            eyeColors: ["black", "ruby", "dark brown", "amber", "pale pink", "bright grey", "red", "brown", "yellow", "pale", "pink"],
+            builds: ["scrawny", "wiry", "compact", "wiry and quick", "stocky", "slight", "sinewy", "small", "nimble", "lean"],
+            features: ["a long bare tail", "sharp twitching whiskers", "round ears with a notched edge", "quick clever hands", "long yellowed incisors", "bright beady eyes", "a scarred snout", "ink-stained fingers", "a nose that never stops testing the air", "twitching whiskers", "a long naked tail", "small clawed hands", "round rodent ears", "a pointed muzzle", "sharp incisors", "beady eyes", "a scruffy pelt", "quick darting movements"],
+            movements: ["scuttles along the wall", "sniffs the air and glances over a shoulder", "rubs their hands together, thinking", "ducks low and darts between legs", "tests the ground with a cautious paw", "wrings their tail while talking", "pops up out of nowhere", "darts rapidly from place to place", "sniffs at everything", "freezes at sudden noises", "scurries along walls", "twitches whiskers constantly", "pauses to groom their fur", "squeaks when excited", "moves in short quick bursts"],
+            voices: ["quick", "squeaky", "wheedling", "a dry whistle", "chittering", "low and conspiratorial", "rapid", "nasal", "high-pitched", "a quick hiss", "a nervous squeak"]
+        },
+        culture: {
+            values: ["the nest", "clever salvage", "debts and deals", "never wasting anything"],
+            topics: ["salvage and scrap", "drains and old tunnels", "who pays best", "who is hunting the nest"],
+            taboos: ["being called vermin", "poison and traps", "wasting food", "owing a stranger"]
+        }
+    },
+    {
+        species: "Kenku",
+        portraitProfile: { face: "crow-like bird face, glossy black hooked beak, bright round eyes, smooth head feathers, no mouth other than the beak", negatives: "human ears, bare human skin, scales, fur, horns, bat wings, flying pose" },
+        isHumanoid: true,
+        size: "medium",
+        isCivilized: true,
+        speechStyle: "mimic",
+        anatomyType: "mixed",
+        hasTail: true,
+        lore: "Kenku are small, flightless bird-folk of rooftops, ruins and back alleys. They cannot speak with a voice of their own: they can only repeat what they have heard, in the very voice that said it, and fill the gaps with clicks, caws, croaks and chirps. They hoard bright trinkets and heard words with equal care, and say far more with their wings, heads and tails than with any borrowed sentence. A kenku who repeats your own words back is not mocking you. It is telling you it has kept them.",
+        articulation: "They cannot shape words of their own. They speak only in sounds they have heard: whole borrowed phrases in other people's voices, door slams and clinks, strung together with clicks, caws, croaks and chirps.",
+        anatomyProfile: {
+            morphology: { ears: "concealed ear openings beneath head feathers with no external ears", face: "a crow-like head with a hooked beak", bodyPlan: "an upright feathered humanoid body", hands: "nimble feathered hands", feet: "three-toed taloned feet", wings: "small folded wings too short for flight", tail: "a long fanned feather fan (not a true tail but decorative plumage)", absent: ["human ears", "hair", "fur", "a human mouth"] },
+            typicalBuild: "usually lean or compact, with a light birdlike frame",
+            bodyFatEligible: true,
+            surfaceType: "feathers",
+            skinTones: ["glossy black", "charcoal", "slate grey", "mottled brown", "dusky blue-black", "ash grey", "oil-slick black", "dark brown", "white-flecked black", "black", "dark gray", "soot", "midnight", "raven-black", "shiny black", "matte black"],
+            hairColors: ["none"],
+            hairStyles: ["none"],
+            eyeColors: ["black", "amber", "pale yellow", "bright silver", "dark brown", "white-rimmed black", "red", "gold", "silver"],
+            builds: ["lean", "slight", "gangling", "wiry", "hunched", "compact", "narrow", "graceful", "lanky", "delicate", "tall", "slim"],
+            features: ["a hooked black beak", "small folded wings too short for flight", "a long fanned feather fan", "three-toed taloned feet", "nimble feathered hands", "head feathers that rise and fall with mood", "sharp bead-bright eyes", "a notched wing feather", "a beak that clicks when they think", "a smooth head crest", "a ruffled crest", "a scruffy head tuft", "a high stiff crest", "a curved black beak", "sleek black feathers", "dark intelligent eyes", "long graceful fingers", "light hollow bones", "a preening instinct", "quick reflexes", "a slight hollow sound when moving", "feathers that catch the light"],
+            movements: ["tilts their head sharply to one side", "clicks their beak twice and watches with one eye", "half-opens their wings and tucks them back", "droops their wings low and hunches", "fluffs their feathers and stands tall", "bobs their head, talons clicking on the floor", "fans their tail and goes very still", "hops sideways and flares one wing", "moves with graceful precision", "tilts head curiously", "preens imaginary feathers", "steps lightly and quietly", "darts with sudden speed", "freezes in place when listening", "watches with unblinking focus", "mimics observed gestures"],
+            voices: ["a dry rasp", "clicking", "a crow's croak", "a rattling chirp", "borrowed and tinny", "a sudden clear human voice", "mimicked speech", "perfect imitation", "whispers and echoes", "repeated phrases", "sudden perfect words", "calls and cries", "mimicked laughter"]
+        },
+        culture: {
+            values: ["the flock", "bright things and fair swaps", "heard words kept like treasure", "watchfulness"],
+            topics: ["shiny things", "voices they have kept", "who belongs to the flock", "what was overheard in the market"],
+            taboos: ["clipped wings", "cages", "being mocked for a borrowed voice", "stealing from the flock"]
         }
     }
 ];
@@ -3128,7 +3280,7 @@ function planTownLayout(rngIn) {
 const ZONE_HUBS = {
     "Underground City": {
         name: "Lantern Quarter",
-        npcSpecies: ["Dwarf", "Dwarf", "Human", "Human", "Dragonborn", "Kobold", "Goblin", "Catfolk", "Catfolk"],
+        npcSpecies: ["Dwarf", "Dwarf", "Human", "Human", "Dragonborn", "Kobold", "Goblin", "Catfolk", "Catfolk", "Ratfolk", "Ratfolk", "Kenku"],
         hostilityCap: 35,
         rooms: {
             gate:    { type: "Underground Gate",     at: [0, 0] },
@@ -3187,7 +3339,7 @@ const ZONE_HUBS = {
     },
     "Ruins": {
         name: "Pilgrims' Camp",
-        npcSpecies: ["Human", "Human", "Dwarf", "Halfling", "Elf", "Wolfkin"],
+        npcSpecies: ["Human", "Human", "Dwarf", "Halfling", "Elf", "Wolfkin", "Harefolk", "Harefolk", "Kenku"],
         hostilityCap: 40,
         rooms: {
             fire:   { type: "Camp Fire Ring",     at: [0, 0] },
@@ -6133,7 +6285,8 @@ const SOCIETY_BY_SPECIES = {
     Orc: "orc-clan", Goblin: "goblin-tribe", Lizardfolk: "lizardfolk-tribe",
     Kobold: "kobold", Dragonborn: "dragonborn-house",
     Human: "realm", Elf: "realm", Dwarf: "realm", Halfling: "realm",
-    Catfolk: "catfolk-troupe", Wolfkin: "wolfkin-pack", Satyr: "satyr-revel"
+    Catfolk: "catfolk-troupe", Wolfkin: "wolfkin-pack", Satyr: "satyr-revel",
+    Harefolk: "harefolk-warren", Ratfolk: "ratfolk-nest", Kenku: "kenku-flock"
 };
 
 const DRAGONBORN_HOUSES = ["House Emberscale", "House Vaelthorn", "House Ironcrest", "House Ashmaw", "House Solgard"];
@@ -6438,6 +6591,138 @@ const SOCIETY_SHEETS = {
             { text: "I swapped the wine of a very stern man for vinegar, and the stern man is now town magistrate. I keep my hat low." },
             { text: "I do not actually know how to play the pipes. I only learned to look like I do." },
             { text: "I owe {group} more than I can ever repay, and I have begun to avoid them for it." }
+        ]
+    },
+    "harefolk-warren": {
+        label: "warren",
+        groupNames: ["Longear", "Clover Hollow", "Brindle Down", "Thistlerun", "Burrowdeep", "Quickfoot"],
+        groupPrefix: "the ",
+        leadership: "A warren is run by its eldest, who keeps the tunnel maps in their head and calls the alarm. Everyone has a say, usually all at once, and the warren moves only when the elder has finished listening.",
+        ranks: [
+            { key: "warren-elder", label: "warren elder", tier: 4, weight: 3 },
+            { key: "tunnel-warden", label: "tunnel-warden", tier: 3, weight: 10 },
+            { key: "forager", label: "forager", tier: 2, weight: 32 },
+            { key: "runner", label: "runner", tier: 1, weight: 26 },
+            { key: "kit-minder", label: "kit-minder", tier: 1, weight: 16 },
+            { key: "wanderer", label: "wanderer from the warren", tier: 0, weight: 13 }
+        ],
+        standings: [
+            "I keep the larder stocked, and nobody in the warren has gone hungry on my watch.",
+            "I carry word between warrens. If I stop, a dozen families stop hearing from each other.",
+            "I left my warren after a quarrel, and I pretend I do not listen for its alarm drum.",
+            "I mind the little ones. They say I fuss, and they are right.",
+            "I walk the tunnels and listen at every junction. Nothing gets past my ears."
+        ],
+        needs: [
+            { kind: "item", text: "Greens, root vegetables, anything fresh. The larder is thin and the cold is coming." },
+            { kind: "news", text: "Which roads are watched, and by whom. A warren lives on that." },
+            { kind: "help", text: "Someone to walk a parcel past a place I would rather not cross alone." },
+            { kind: "coin", text: "Coin for seed and a good lock. The last one was no use against a fox." }
+        ],
+        likings: [
+            "A crowded hearth and someone else cooking.",
+            "Fresh greens and sweet herb tea.",
+            "News, even small news, told twice.",
+            "A warm burrow in the cold."
+        ],
+        worries: [
+            "Snares, cages and anything with a latch on the outside.",
+            "Hunger in the winter.",
+            "That the alarm will come too late.",
+            "Strangers who stand between me and the door."
+        ],
+        secrets: [
+            { text: "I once raised a false alarm and sent the whole warren running. They still tell the story, and they do not know it was me." },
+            { text: "I have a second burrow nobody in {group} knows of, stocked in case I have to run alone." },
+            { text: "I am tired of being afraid. I want, just once, to stand my ground and not run." }
+        ]
+    },
+    "ratfolk-nest": {
+        label: "nest",
+        groupNames: ["Gutter Gnaw", "Cinder Drain", "Rusty Tail", "Pennyscrape", "Lowlamp", "Brasswhisker"],
+        groupPrefix: "the ",
+        leadership: "A nest answers to its boss, usually the best fixer in the drains, and to the debts everyone owes. Nobody is turned out while they still earn their keep, and nothing is thrown away that someone could use.",
+        ranks: [
+            { key: "nest-boss", label: "nest boss", tier: 4, weight: 3 },
+            { key: "fixer", label: "fixer", tier: 3, weight: 10 },
+            { key: "scrounger", label: "scrounger", tier: 2, weight: 32 },
+            { key: "tunnel-runner", label: "tunnel-runner", tier: 1, weight: 26 },
+            { key: "tinker", label: "tinker", tier: 2, weight: 14 },
+            { key: "outcast", label: "outcast from the nest", tier: 0, weight: 15 }
+        ],
+        standings: [
+            "I find what others throw out and sell it back to them. Honest work, mostly.",
+            "I owe the nest and the nest owes me. We keep an accurate count.",
+            "I was put out of my nest over a deal gone wrong, and I am working my way back.",
+            "I know every drain and shortcut under this place, and they pay me to say so.",
+            "I fix things: locks, pots, bad ideas. I do not ask what they are for."
+        ],
+        needs: [
+            { kind: "item", text: "Scrap, wire, anything with a bit of metal in it. A nest runs on what other people leave." },
+            { kind: "coin", text: "Coin to settle a debt before the interest eats me alive." },
+            { kind: "news", text: "Who is paying for salvage this week, and who is hunting for it." },
+            { kind: "help", text: "Someone to carry a sack past a gate I would rather not be seen at." }
+        ],
+        likings: [
+            "A good find at the bottom of a heap.",
+            "Cheese rinds, nuts, anything someone left behind.",
+            "A fair deal, shaken on.",
+            "A dry, warm corner with the whole nest close."
+        ],
+        worries: [
+            "Poison, traps and anyone with a broom and a bad attitude.",
+            "Being called vermin by someone who needs my help next week.",
+            "A flood in the lower tunnels.",
+            "Owing the wrong sort of person."
+        ],
+        secrets: [
+            { text: "I skim a coin from every deal the nest makes, and the boss does not know. I mean to stop. Soon." },
+            { text: "I kept something from a find that was meant to go to {group}. It is the best thing I have ever owned." },
+            { text: "I can read, and I pretend I cannot. Being underestimated pays better than being clever." }
+        ]
+    },
+    "kenku-flock": {
+        label: "flock",
+        groupNames: ["Brightcrow", "Tin Cup", "Echo Roof", "Magpie Row", "Clatter", "Nightperch"],
+        groupPrefix: "the ",
+        leadership: "A flock follows its caller, whoever keeps the best store of voices and the sharpest eye. Nothing is ordered aloud; the caller shows a posture, and the flock moves.",
+        ranks: [
+            { key: "flock-caller", label: "flock caller", tier: 4, weight: 3 },
+            { key: "voice-keeper", label: "keeper of voices", tier: 3, weight: 10 },
+            { key: "trader", label: "trinket trader", tier: 2, weight: 30 },
+            { key: "lookout", label: "rooftop lookout", tier: 1, weight: 28 },
+            { key: "fledgling", label: "fledgling", tier: 1, weight: 15 },
+            { key: "unflocked", label: "unflocked wanderer", tier: 0, weight: 14 }
+        ],
+        standings: [
+            "I keep the flock's best voices, the ones worth remembering. When I speak, it is with someone else's words and my own meaning.",
+            "I trade bright things for useful ones, and I never short a fair swap.",
+            "I watch from the roofs and tell the flock what I overhear, in the voices I heard it in.",
+            "I am young. I am still collecting my first voices, and I trip over every one.",
+            "I left my flock, or they left me. Either way I carry their voices and no one to say them to."
+        ],
+        needs: [
+            { kind: "item", text: "Something bright and small: a button, a coin, a bit of mirror. The flock counts a good trinket as a good day." },
+            { kind: "news", text: "New phrases, new voices, anything worth keeping. A flock is only as rich as what it has heard." },
+            { kind: "help", text: "Someone to walk me past a place with a cage in it. I do not go near cages." },
+            { kind: "coin", text: "Coin, but only the shiny sort. I do not trust the dull sort." }
+        ],
+        likings: [
+            "Bright trinkets, laid out in a row.",
+            "A clear voice saying something worth keeping.",
+            "A high perch and a good view.",
+            "A fair swap, shaken on."
+        ],
+        worries: [
+            "Cages, clipped wings and anyone who laughs at a borrowed voice.",
+            "Losing a voice I have kept for years.",
+            "That the flock will scatter.",
+            "Being asked something in my own words, when I have none."
+        ],
+        secrets: [
+            { text: "I kept one voice that was never meant to be kept: someone from {group} who is gone now. I say their words when I am alone." },
+            { text: "I once repeated a secret I overheard, in exactly the voice I heard it in, and a good person was ruined by it." },
+            { text: "I hide a small hoard on a rooftop in {zone}. It is the only thing I own that nobody has ever asked me to share." }
         ]
     },
     "dragonborn-house": {

@@ -1,7 +1,8 @@
-// ── cyoaftw-npc-data.js v2026-10-22-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
+// Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
+// ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-22-001";
+    window.NPC_DATA_VERSION = "2026-10-23-001";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -166,6 +167,17 @@ const NPC_SPEECH_PROFILES = {
         cues: ["keeps grammar simple", "uses direct warning language", "focuses on immediate facts"],
         avoid: ["eloquent phrasing", "complex syntax", "abstract reflection"]
     },
+    mimic: {
+        sample: "\"Two travelers, before dusk.\" Click. \"Mind the step!\" Caw. \"Two. Two.\"",
+        sentenceLength: "very short, borrowed fragments",
+        vocabulary: "only phrases heard before, in other people's words",
+        cadence: "whole borrowed phrases, then a click, caw, croak or chirp; sometimes only sounds",
+        tone: "borrowed and flat, with sudden shifts of voice",
+        styleDescription: "mimic speech built from remembered phrases and bird sounds",
+        languageNotes: "never forms an original sentence; picks the closest remembered phrase and may repeat the player's own words back; click, caw, croak, chirp, trill, clack and rattle fill the gaps; feeling is carried by the body (wings, head, tail, posture) more than by words",
+        cues: ["repeats a phrase the player just said", "tilts the head and clicks the beak when curious or wary", "droops or tucks the wings when sad or submissive, flaps or fluffs them when excited", "fans the tail and stiffens when threatening or afraid"],
+        avoid: ["fluent original sentences", "explaining in their own words", "long speeches", "spelling the sounds with apostrophes or odd letters"]
+    },
     whisper: {
         sample: "Keep your voice down. Yes, I saw them, and I don't want them hearing this.",
         sentenceLength: "short to medium",
@@ -231,6 +243,19 @@ const NPC_SPECIES_NATIVE_SPEECH = {
         line: "low, plain and sparing; short sentences, speaks of the pack, the hunt and the land, says 'we' for the pack, trusts slowly and watches before answering; loyalty is stated, not flattered; blunt without cruelty",
         kin: "with another wolfkin they speak of pack, den and range, and whether the other is pack or stranger"
     },
+    harefolk: {
+        line: "quick, warm and chatty; sentences tumble over each other, often trailing off into a worried aside; speaks of the warren, the larder, the weather and who is kin to whom; startles at loud noises and glances at the exits; gossips freely and trades news for news; never quite finishes a sentence they are nervous about",
+        kin: "with another harefolk they speak in half-sentences and shared worries, and relax their ears"
+    },
+    ratfolk: {
+        line: "quick, clipped and wheedling; every sentence is a small deal, quotes a price or a favour, talks about salvage, debts, the nest and what a thing is really worth; flatters when it helps and counts everything; touchy about being called vermin; speaks low when talking business",
+        kin: "with another ratfolk they drop the haggling and speak of the nest, who owes whom and where the good scrap is"
+    },
+    kenku: {
+        line: "cannot form words of their own; speaks only by repeating whole phrases they have heard, in the borrowed manner of whoever said them: pieces of what the player has said in this conversation, and stock phrases from markets and taverns; chooses the borrowed phrase that fits best, often out of order or with the wrong emphasis; very short lines; between phrases and in place of them uses bird sounds written plainly as click, click-click, caw, croak, chirp, trill, clack or rattle; understands far more than they can say; shows feeling through the body, so every reply includes a gesture beat in the narration: wing flaps, droops or tucks for excitement, sadness or submission; head tilts, beak clicks and sharp eye movements for curiosity, suspicion or attention; posture and a fanned or lowered tail for dominance or fear",
+        kin: "with another kenku they pass remembered sentences back and forth like coins, each in the voice it was first heard in, and need far fewer sounds",
+        rules: "plain common tongue only, and only phrases they could have heard; no invented words, no apostrophe names, no phonetic accent spelling; the only non-words allowed are bird sounds written as click, caw, croak, chirp, trill, clack or rattle"
+    },
     satyr: {
         line: "bright, playful and quick; lilting patter full of jokes, music and wine, teases everyone, never quite serious and never quite lying; fond of a dare, allergic to solemnity, flatters and needles in the same breath",
         kin: "with another satyr they trade pranks, gossip about revels and who is owed a cup"
@@ -248,7 +273,30 @@ function getNPCNativeSpeech(npc) {
     let text = entry.line;
     const playerKey = typeof getPlayerSpeciesKey === "function" ? getPlayerSpeciesKey() : "";
     if (entry.kin && playerKey && playerKey === key && !npc.isPlayer) text += "; " + entry.kin;
-    return text + " (" + NPC_NATIVE_SPEECH_RULES + ")";
+    if (key === "kenku" && typeof getKenkuHeardPhrases === "function") text += "; phrases this kenku already knows and may repeat exactly (each in the voice it was heard in): " + getKenkuHeardPhrases(npc).join(" / ");
+    return text + " (" + (entry.rules || NPC_NATIVE_SPEECH_RULES) + ")";
+}
+
+// Stock phrases a kenku has picked up in markets, taverns and gates. Each kenku
+// carries a stable handful of them (by id hash); the AI is told it may repeat
+// these, plus anything said in the current conversation, and nothing else.
+const NPC_KENKU_STOCK_PHRASES = [
+    "Fresh bread, hot from the oven!", "Halt! Who goes there?", "Two coppers, no less.", "Mind the step.",
+    "Last orders!", "Don't you dare.", "Come in, come in, out of the cold.", "Thief! Stop that thief!",
+    "Shh, shh, quiet now.", "Is that gold?", "Look sharp!", "Not today, friend.", "Sweet dreams, little one.",
+    "Move along.", "I never said that.", "Careful, it's hot!", "Well met!", "Hold the door!", "Hush now.",
+    "What a day.", "Who left this here?", "That'll be five.", "Keep your voice down.", "Welcome, welcome!"
+];
+function getKenkuHeardPhrases(npc) {
+    let h = 0;
+    const id = String((npc && (npc.id || npc.name)) || "");
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    const out = [];
+    for (let n = 0; n < 4; n++) {
+        const phrase = NPC_KENKU_STOCK_PHRASES[(h + n * 7) % NPC_KENKU_STOCK_PHRASES.length];
+        if (out.indexOf(phrase) < 0) out.push('"' + phrase + '"');
+    }
+    return out;
 }
 
 // The species' characteristic fallback style: applied ONLY when role, room,
@@ -267,7 +315,10 @@ const NPC_SPECIES_SPEECH_STYLE_BIAS = {
     kobold: "nervous",
     catfolk: "wry",
     wolfkin: "direct",
-    satyr: "boisterous"
+    satyr: "boisterous",
+    harefolk: "folksy",
+    ratfolk: "clipped",
+    kenku: "mimic"
 };
 
 // One in-character sample per conversable species (humans keep the style
@@ -316,6 +367,18 @@ const NPC_SPECIES_SPEECH_SAMPLES = {
         "Two. At dusk. They kept to the road and did not look at the trees. That is how you know someone has been hunted before.",
         "I scented them before I saw them. Two travellers, wary, no meat on them. They did not stay. Whatever they run from, it is not near."
     ],
+    harefolk: [
+        "Two, yes, two! Hopped past just before dusk, quick quick, didn't stop to say hello. Ears up, both of them, nervous sort. I would have followed, but my cousin says never follow. Which way did you want them gone?",
+        "Oh, I saw them, I did, and I told the whole warren, and the warren told the next warren, so by now half the countryside knows. Two travellers. One limping. Mind you, I only saw them from behind a hedge."
+    ],
+    ratfolk: [
+        "Two? Saw two, yes. Skinny, quick, nothing worth the nicking, and I looked. Might know where they went. Might. What is the knowing worth to you, friend?",
+        "Two came through the lower drains, yes. Left a trail a blind pup could follow. Free advice: do not follow it. Paid advice: I know a better way."
+    ],
+    kenku: [
+        "\"Two travelers, before dusk.\" Click. \"Mind the step!\" Caw. \"Two. Two.\"",
+        "Chirp. \"Halt! Who goes there?\" Click-click. \"Two coppers, no less.\" Rattle."
+    ],
     satyr: [
         "Two? Two! Ha, I saw them, I did - one stumbling, the other pretending not to be. Poor souls, no song between them. I offered a cup and they ran. Their loss, my gain, and a good cup it was!",
         "Oh, I saw them, friend, I saw them. Two travellers, long faces, nary a smile. I tried a joke. It did not land. I will think of a better one by midnight."
@@ -354,7 +417,8 @@ const SPEECH_STYLE_ALIASES = {
     hiss: "broken",
     majestic: "formal",
     mechanical: "clipped",
-    mimicry: "broken",
+    mimic: "mimic",
+    mimicry: "mimic",
     murmur: "guarded",
     nervous: "nervous",
     none: "broken",
@@ -1100,7 +1164,10 @@ const NPC_SPECIES_FOOD = {
     Dragonborn: "roast meat, spiced dishes and strong drink",
     Catfolk: "fish, cream, small game and sweet pastries",
     Wolfkin: "rare meat, bone-broth and hard bread shared round the fire",
-    Satyr: "wine, cheese, ripe fruit and whatever bread is left over"
+    Satyr: "wine, cheese, ripe fruit and whatever bread is left over",
+    Harefolk: "clover, greens, root vegetables, seed-cake and sweet herb tea",
+    Ratfolk: "grain, cheese rinds, roasted nuts and whatever the market throws out",
+    Kenku: "seeds, nuts, beetles, tavern leftovers and anything shiny they swear is edible"
 };
 
 function _npcRoutineFor(npc) {
@@ -1143,9 +1210,8 @@ function getNPCFacetRecords(npc, ctx, room) {
 
     // Looks and body: what they look like and how they move.
     const looks = [];
-    if (npc.physicalTraits) looks.push(String(npc.physicalTraits));
-    const highlights = Array.isArray(npc.appearanceHighlights) ? npc.appearanceHighlights : [];
-    if (highlights.length) looks.push("notable: " + highlights.join(", "));
+    const physicalTraits = buildNPCPhysicalSummary(npc);
+    if (physicalTraits) looks.push(physicalTraits);
     const anatomy = npc.anatomy && typeof npc.anatomy === "object" ? npc.anatomy : {};
     const bodyBits = [];
     if (anatomy.size) bodyBits.push("size " + anatomy.size);
@@ -1955,7 +2021,10 @@ const NPC_LORE_SPECIES_TIERS = {
     "ghost": ["military", "faith", "secret"],
     "catfolk": ["trade", "local"],
     "wolfkin": ["deep", "military"],
-    "satyr": ["local", "trade"]
+    "satyr": ["local", "trade"],
+    "harefolk": ["local", "trade"],
+    "ratfolk": ["deep", "secret"],
+    "kenku": ["local", "secret"]
 };
 
 function getNPCLoreTiers(npc, ctx) {
@@ -3416,6 +3485,72 @@ const NPC_CONVERSATION_CATALOGUE = [
     // into friendship; the NPC may also start asking the player questions back
     // (see getNPCCuriosityLines in the engine).
     {
+        id: "rapport-harefolk-listen",
+        priority: 122,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Sit quietly and listen with them",
+        textVariants: [
+            "You sit beside them without a word and listen to the room the way they do, ears and all.",
+            "You go still next to them and let them keep their watch, glad to share the quiet."
+        ],
+        intent: "flirt",
+        contextNote: "The player sits quietly beside you and listens with you, sharing your watchfulness. For a harefolk this is a gentle, chaste sign of trust and fondness: someone who does not startle you and does not rush you. React as your feelings and temperament would: ears slowly relaxing, a nervous little laugh, a shy step closer, or reserve. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 2, intent: "flirt", markMet: true, actionTag: "rapport-harefolk-listen" },
+        conditions: {
+            metPlayer: true,
+            species: ["harefolk"],
+            minAttraction: 12,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
+        id: "rapport-ratfolk-split",
+        priority: 122,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Offer them a fair split of a find",
+        textVariants: [
+            "You pull out something useful, say it is more than you need, and offer them an even half.",
+            "You slide a small find across to them and say there is no price on it, this once."
+        ],
+        intent: "flirt",
+        contextNote: "The player offers you an even share of something with no strings attached. For a ratfolk, who trades everything, this is a gentle, chaste sign of trust and fondness: being given something with no price on it. React as your feelings and temperament would: suspicion that melts, a shy chitter, a counter-gift, or reserve. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 2, intent: "flirt", markMet: true, actionTag: "rapport-ratfolk-split" },
+        conditions: {
+            metPlayer: true,
+            species: ["ratfolk"],
+            minAttraction: 12,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
+        id: "rapport-kenku-trinket",
+        priority: 122,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Offer a bright trinket and say their words back",
+        textVariants: [
+            "You hold out something small and bright, and carefully repeat the last thing they said to you, in their own voice.",
+            "You set a shiny trinket down between you and say one of their own phrases back, slowly, like a gift."
+        ],
+        intent: "flirt",
+        contextNote: "The player gives you a bright trinket and repeats your own words back to you, kindly. For a kenku this is a gentle, chaste sign of trust and fondness: someone who kept your words. React as your feelings and temperament would, in bird sounds, borrowed phrases and body language: fluffed feathers, a wing half-open, a head tilt, a beak click, a hop closer, or reserve. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 2, intent: "flirt", markMet: true, actionTag: "rapport-kenku-trinket" },
+        conditions: {
+            metPlayer: true,
+            species: ["kenku"],
+            minAttraction: 12,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
         id: "rapport-catfolk-sunspot",
         priority: 122,
         repeat: "session",
@@ -4700,6 +4835,9 @@ function determineNPCSpeechStyle(npc, room, zoneTemplate) {
         style = NPC_SPECIES_SPEECH_STYLE_BIAS[speciesKey];
     }
 
+    // A kenku cannot speak in a voice of its own, whatever its role or mood.
+    if (speciesKey === "kenku") return "mimic";
+
     return normalizeSpeechStyle(style);
 }
 
@@ -4800,7 +4938,7 @@ function isValidSomatotype(value) {
 function inferSomatotypeFromBuild(build) {
     var b = String(build || "").toLowerCase();
     if (!b) return "";
-    if (/soft(?!-featured)|round(?!-faced)|heavy|stout|thickset|plump|portly|stocky/.test(b)) return "endomorph";
+    if (/soft(?!-featured)|round(?!-faced)|heavy|heavyset|stout|thickset|plump|portly|stocky/.test(b)) return "endomorph";
     if (/lean|slight|slender|willowy|lithe|graceful|narrow|wiry|thin|scrawny|bony|bare-boned|sinewy|elegant|fragile|faint|mist|tattered|tiny|small|knobby|scrappy|sleek|nimble|quick/.test(b)) return "ectomorph";
     if (/athletic|sturdy|broad|powerful|muscular|imposing|tall|scarred|weathered|reptilian|compact/.test(b)) return "mesomorph";
     return "";
@@ -4812,6 +4950,32 @@ function rollNPCSomatotype(build) {
     var inferred = inferSomatotypeFromBuild(build);
     if (inferred) return inferred;
     return SOMATOTYPES[Math.floor(Math.random() * SOMATOTYPES.length)];
+}
+
+function rollNPCSpeciesBuild(profile, isHumanoid) {
+    const builds = Array.isArray(profile.builds) ? profile.builds : [];
+    const weights = profile.buildWeights;
+    if (weights && builds.length) {
+        const values = builds.map(build => typeof weights[build] === "number" && weights[build] >= 0 ? weights[build] : 1);
+        const total = values.reduce((sum, value) => sum + value, 0);
+        if (total > 0) {
+            let roll = Math.random() * total;
+            for (let i = 0; i < builds.length; i++) {
+                roll -= values[i];
+                if (roll < 0) return builds[i];
+            }
+        }
+    }
+    return _npcRand(builds) || (isHumanoid ? "average" : "lean");
+}
+
+// Fullness is independent of skeletal frame and muscularity. Only generation
+// rolls it; reading a profile or loading an older NPC never changes their body.
+function generateNPCBodyCondition(npc, profile) {
+    if (profile.bodyFatEligible === false) return "normal";
+    if (npc.bodyCondition === "normal" || npc.bodyCondition === "overweight") return npc.bodyCondition;
+    if (getEntityBodyCondition(npc) === "overweight") return "overweight";
+    return profile.bodyFatEligible === true && Math.random() < 0.05 ? "overweight" : "normal";
 }
 
 // Sets npc.somatotype if missing/invalid (also migrates older saves). Safe to
@@ -4877,7 +5041,11 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
 
     const surfaceType = profile.surfaceType || (isHumanoid ? "skin" : "hide");
     const surfaceColor = _npcRand(profile.skinTones) || "unremarkable";
-    const build = _npcRand(profile.builds) || (isHumanoid ? "average" : "lean");
+    
+    const bodyCondition = generateNPCBodyCondition(npc, profile);
+    const isOverweight = bodyCondition === "overweight";
+    const build = rollNPCSpeciesBuild(profile, isHumanoid);
+    
     const eyeColor = isSlimeNPC(npc) ? "" : _npcRand(profile.eyeColors) || "";
     const hairColors = Array.isArray(profile.hairColors) ? profile.hairColors : [];
     const hairColor = isHumanoid ? _npcRand(hairColors) : "";
@@ -4887,6 +5055,78 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     const marks = _npcUniquePicks(NPC_DISTINGUISHING_MARKS, isHumanoid ? _npcRandInt(1, 2) : 1);
     const movement = _npcRand(profile.movements);
     const voice = _npcRand(profile.voices);
+    
+    // Add overweight-specific body features
+    if (isOverweight) {
+        // For humanoids, add gender-appropriate overweight descriptors
+        if (isHumanoid) {
+            const gender = String(npc.gender || "").toLowerCase();
+            if (gender === "female") {
+                // Add large/droopy breast descriptor
+                if (!features.some(f => /breast|bust|chest/i.test(f))) {
+                    features.push(_npcRand([
+                        "large drooping breasts",
+                        "heavy pendulous breasts", 
+                        "full sagging bosom",
+                        "ample soft chest"
+                    ]));
+                }
+                // Add big ass descriptor
+                if (!features.some(f => /ass|butt|rear|hind/i.test(f))) {
+                    features.push(_npcRand([
+                        "a large round ass",
+                        "a wide soft backside",
+                        "a plump rear",
+                        "a generous bottom"
+                    ]));
+                }
+                // Add general weight descriptor
+                if (!features.some(f => /soft|plump|round|heavy|weight/i.test(f))) {
+                    features.push(_npcRand([
+                        "soft rounded curves",
+                        "a comfortably plump figure",
+                        "a full well-padded frame",
+                        "a generously proportioned body"
+                    ]));
+                }
+            } else {
+                // Male overweight descriptors
+                if (!features.some(f => /belly|gut|paunch|soft|round/i.test(f))) {
+                    features.push(_npcRand([
+                        "a round soft belly",
+                        "a prominent paunch",
+                        "a comfortably full midsection",
+                        "a generously rounded gut"
+                    ]));
+                }
+                // Add big ass descriptor for males too
+                if (!features.some(f => /ass|butt|rear|hind/i.test(f))) {
+                    features.push(_npcRand([
+                        "a broad soft ass",
+                        "a wide fleshy backside",
+                        "a substantial rear",
+                        "a thick bottom"
+                    ]));
+                }
+                // Add general weight descriptor
+                if (!features.some(f => /stocky|heavy|barrel/i.test(f))) {
+                    features.push(_npcRand([
+                        "a stocky heavy build",
+                        "a barrel-chested frame",
+                        "a solid thickset form",
+                        "a powerfully built body"
+                    ]));
+                }
+            }
+        } else {
+            // Non-humanoid overweight (rare)
+            features.push(_npcRand([
+                "a surprisingly heavy build",
+                "a thick rounded form",
+                "a plump appearance"
+            ]));
+        }
+    }
     const values = _npcUniquePicks(culture.values, 2);
     const preferredTopics = _npcUniquePicks(culture.topics, 3);
     const tabooTopics = _npcUniquePicks(culture.taboos, 2);
@@ -4898,7 +5138,9 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
         build,
         body: {
             surfaceType,
-            color: surfaceColor
+            color: surfaceColor,
+            // Add weight class for overweight NPCs
+            weightClass: isOverweight ? "overweight" : null
         },
         eyes: eyeColor ? { color: eyeColor } : null,
         features,
@@ -4912,6 +5154,14 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
             color: hairColor,
             style: hairStyle || "unstyled"
         };
+    }
+
+    if (Array.isArray(profile.surfaceRegions)) {
+        anatomy.body.regions = profile.surfaceRegions.map(region => ({
+            region: region.region,
+            surfaceType: region.surfaceType,
+            color: Array.isArray(region.colors) ? _npcRand(region.colors) : surfaceColor
+        }));
     }
 
     const enrichment = {
@@ -4945,12 +5195,14 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     };
 
     npc.anatomy = anatomy;
+    npc.bodyCondition = bodyCondition;
     npc.enrichment = enrichment;
     npc.size = anatomy.size;
     npc.bodyType = build;
     npc.somatotype = rollNPCSomatotype(build);
     npc.skinTone = surfaceType === "skin" ? surfaceColor : "";
     npc.furColor = surfaceType === "fur" ? surfaceColor : "";
+    npc.featherColor = surfaceType === "feathers" ? surfaceColor : "";
     npc.scaleColor = surfaceType === "scales" ? surfaceColor : "";
     npc.surfaceType = surfaceType;
     npc.surfaceColor = surfaceColor;
@@ -5045,9 +5297,9 @@ function generateNPCSocial(npc, room, zoneTemplate) {
     let status = null;
 
     const kin = npc._kinSocial && npc._kinSocial.society === society ? npc._kinSocial : null;
-    if (society === "orc-clan" || society === "goblin-tribe" || society === "lizardfolk-tribe" || society === "dragonborn-house" || society === "catfolk-troupe" || society === "wolfkin-pack" || society === "satyr-revel") {
+    if (society === "orc-clan" || society === "goblin-tribe" || society === "lizardfolk-tribe" || society === "dragonborn-house" || society === "catfolk-troupe" || society === "wolfkin-pack" || society === "satyr-revel" || society === "harefolk-warren" || society === "ratfolk-nest" || society === "kenku-flock") {
         const name = sheet.groupNames[_npcRandInt(0, sheet.groupNames.length - 1)];
-        social.group = kin ? kin.group : (sheet.groupPrefix || "") + name + (society === "lizardfolk-tribe" ? " tribe" : (society === "wolfkin-pack" ? " pack" : (society === "satyr-revel" ? " revel" : (society === "catfolk-troupe" ? " troupe" : ""))));
+        social.group = kin ? kin.group : (sheet.groupPrefix || "") + name + (society === "harefolk-warren" ? " warren" : society === "ratfolk-nest" ? " nest" : society === "kenku-flock" ? " flock" : society === "lizardfolk-tribe" ? " tribe" : (society === "wolfkin-pack" ? " pack" : (society === "satyr-revel" ? " revel" : (society === "catfolk-troupe" ? " troupe" : ""))));
         if (kin && society === "dragonborn-house") fill.house = kin.group;
         const rank = _socialWeightedPick(sheet.ranks);
         social.rank = rank.label; social.tier = rank.tier; social.rankKey = rank.key;
@@ -5423,6 +5675,9 @@ const NPC_SOCIETY_TIE_WORDS = {
     "catfolk-troupe": { spouse: "troupe-mate", lover: "lover" },
     "wolfkin-pack": { spouse: "pack-mate", lover: "lover" },
     "satyr-revel": { spouse: "consort", lover: "fling" },
+    "harefolk-warren": { spouse: "warren-mate", lover: "lover" },
+    "ratfolk-nest": { spouse: "nest-mate", lover: "lover" },
+    "kenku-flock": { spouse: "roost-mate", lover: "lover" },
     "dragonborn-house": { spouse: "consort", lover: "paramour" }
 };
 
@@ -5510,8 +5765,104 @@ function isSlimeNPC(npc) {
     return !!npc && String(npc.species || "").trim().toLowerCase() === "slime";
 }
 
+// Resolve public species anatomy live: older saves gain baseline ears/feet
+// without rerolling their recorded individual traits. Explicit overrides win.
+function getEntityAnatomyProfile(entity) {
+    const species = entity && (entity.species || (entity.appearance && entity.appearance.species));
+    const template = species && typeof getSpeciesTemplate === "function" ? getSpeciesTemplate(species) : null;
+    return template && template.anatomyProfile || {};
+}
+
+function getEntityMorphology(entity) {
+    const profile = getEntityAnatomyProfile(entity);
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    const source = Object.assign({}, profile.morphology || {}, anatomy.morphology || appearance.morphology || {});
+    const morphology = {};
+    ["ears", "face", "bodyPlan", "hands", "feet", "tail", "wings"].forEach(key => {
+        if (typeof source[key] === "string" && source[key].trim()) morphology[key] = source[key].trim();
+    });
+    if (Array.isArray(source.absent)) morphology.absent = source.absent.filter(value => typeof value === "string" && value.trim());
+    return morphology;
+}
+
+function getSpeciesAppearanceTraits(entity) {
+    const morphology = getEntityMorphology(entity);
+    // The slime's live pile/mimic description owns its current public outline.
+    if (String(entity && (entity.species || (entity.appearance && entity.appearance.species)) || "").toLowerCase() === "slime") return [];
+    return ["ears", "face", "bodyPlan", "hands", "feet", "tail", "wings"].map(key => morphology[key]).filter(Boolean);
+}
+
+function getEntityBodyCondition(entity) {
+    if (!entity) return "normal";
+    if (getEntityAnatomyProfile(entity).bodyFatEligible === false) return "normal";
+    const anatomy = entity.anatomy || {}, appearance = entity.appearance || {};
+    const condition = entity.bodyCondition || appearance.bodyCondition || anatomy.bodyCondition || (anatomy.body && anatomy.body.weightClass);
+    if (condition === "normal" || condition === "overweight") return condition;
+    const build = anatomy.build || entity.bodyType || entity.build || appearance.build || "";
+    return /\b(?:overweight|fat|obese|corpulent)\b/i.test(build) ? "overweight" : "normal";
+}
+
+function getEntityBuildText(entity) {
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    if (getEntityBodyCondition(entity) === "overweight") return "fat and round-bodied";
+    return String(anatomy.build || (entity && (entity.bodyType || entity.build)) || appearance.build || "");
+}
+
+function getEntitySurfaceParts(entity) {
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    const body = anatomy.body || {}, profile = getEntityAnatomyProfile(entity);
+    const color = body.color || (entity && (entity.surfaceColor || entity.skinTone || entity.furColor || entity.scaleColor || entity.featherColor)) || appearance.skinTone || "";
+    const regions = Array.isArray(body.regions) ? body.regions : profile.surfaceRegions;
+    if (Array.isArray(regions) && regions.length) {
+        return regions.map(region => {
+            const recorded = region.color || (!Array.isArray(region.colors) ? color : "");
+            return [recorded, region.surfaceType, region.region ? "on " + region.region : ""].filter(Boolean).join(" ");
+        }).filter(Boolean);
+    }
+    const surface = body.surfaceType || (entity && entity.surfaceType) || profile.surfaceType ||
+        (entity && (entity.skinTone ? "skin" : entity.furColor ? "fur" : entity.scaleColor ? "scales" : entity.featherColor ? "feathers" : ""));
+    return color && surface ? [color + " " + surface] : [];
+}
+
+function getSpeciesAppearanceText(entity, forPrompt) {
+    const traits = getSpeciesAppearanceTraits(entity);
+    if (forPrompt) {
+        const morphology = getEntityMorphology(entity);
+        if (Array.isArray(morphology.absent) && morphology.absent.length) traits.push("no " + morphology.absent.join(", no "));
+        if (String(entity && (entity.species || (entity.appearance && entity.appearance.species)) || "").toLowerCase() === "slime") {
+            traits.unshift("a faceless, eyeless, limbless gelatinous body; a recorded temporary mimic shape can change its outline only");
+        }
+        if (getEntityBodyCondition(entity) === "overweight") traits.push("an overweight body with visible body fat and rounded contours; preserve the species anatomy");
+    }
+    return traits.join(", ");
+}
+
+function getPublicAppearanceFacts(entity) {
+    return {
+        species: String(entity && (entity.species || (entity.appearance && entity.appearance.species)) || ""),
+        morphology: getEntityMorphology(entity),
+        build: getEntityBuildText(entity),
+        bodyCondition: getEntityBodyCondition(entity),
+        surfaces: getEntitySurfaceParts(entity)
+    };
+}
+
+function entityHasAppearancePart(entity, part) {
+    const absent = getEntityMorphology(entity).absent || [];
+    return absent.indexOf(part) < 0;
+}
+
+function getPortraitAppearanceNegatives(entity, negatives) {
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    const overrides = anatomy.morphology || appearance.morphology || {};
+    const terms = String(negatives || "").split(",").map(term => term.trim()).filter(term => term &&
+        !(Object.prototype.hasOwnProperty.call(overrides, "ears") && /ears?/i.test(term)));
+    if (getEntityBodyCondition(entity) !== "overweight") return terms.join(", ");
+    return terms.filter(term => !/^(?:stocky|heavyset|fat|overweight|plump|round(?:ed)? face|full cheeks)$/i.test(term)).join(", ");
+}
+
 function getNPCVisibleEyeColor(npc) {
-    if (!npc || isSlimeNPC(npc)) return "";
+    if (!npc || isSlimeNPC(npc) || !entityHasAppearancePart(npc, "eyes")) return "";
     const anatomy = npc.anatomy || {};
     const colour = String(npc.eyeColor || (anatomy.eyes && anatomy.eyes.color) || "").trim();
     return /^(?:none|no eyes|eyeless|n[/]a)$/i.test(colour) ? "" : colour;
@@ -5553,22 +5904,27 @@ function buildNPCAppearanceHighlights(npc, forPortrait) {
     const body = anatomy.body || {};
     const highlights = [];
 
-    if (anatomy.build) highlights.push(anatomy.build + " build");
+    const build = getEntityBuildText(npc);
+    if (build) highlights.push(build + " build");
+    const speciesTraits = getSpeciesAppearanceText(npc);
+    if (speciesTraits) highlights.push(speciesTraits);
+    
     if (isSlimeNPC(npc)) highlights.push(getSlimeBodyDescription(npc));
-    else if (body.color && body.surfaceType) highlights.push(body.color + " " + body.surfaceType);
+    else highlights.push(...getEntitySurfaceParts(npc));
     const eyes = getNPCVisibleEyeColor(npc);
     if (eyes) highlights.push(eyes + " eyes");
-    if (npc.hairColor) {
+    if (npc.hairColor && entityHasAppearancePart(npc, "hair")) {
         highlights.push((npc.hairStyle ? npc.hairStyle + " " : "") + npc.hairColor + " hair");
     }
-    // Distinguishing physical features/marks stay out of public prose;
-    // image prompts retain authored visual identity.
+    // Species anatomy above is public; optional marks/features remain portrait-only.
+    // Keep every baseline/color/eye/hair fact before budgeting optional details.
+    const requiredCount = highlights.length;
     if (forPortrait) {
         if (Array.isArray(anatomy.features)) highlights.push(...anatomy.features);
         if (Array.isArray(anatomy.marks) && anatomy.marks.length && highlights.length < 6) highlights.push(anatomy.marks[0]);
     }
 
-    return highlights.slice(0, 6);
+    return highlights.slice(0, Math.max(6, requiredCount));
 }
 
 function buildNPCPhysicalSummary(npc) {
@@ -5600,7 +5956,8 @@ const NPC_HEIGHT_RANGES_CM = {
     human: [150, 200], elf: [160, 205], dwarf: [115, 145],
     halfling: [85, 115], goblin: [95, 130], orc: [185, 230],
     dragonborn: [185, 225], lizardfolk: [165, 210], kobold: [70, 105],
-    catfolk: [150, 190], wolfkin: [170, 210], satyr: [150, 190]
+    catfolk: [150, 190], wolfkin: [170, 210], satyr: [150, 190],
+    harefolk: [145, 180], ratfolk: [70, 105], kenku: [145, 175]
 };
 const NPC_HEIGHT_LEVEL_TOLERANCE_CM = 8;
 
@@ -5669,21 +6026,23 @@ function getNPCInspectionDetail(npc) {
     const heightView = getNPCHeightView(npc);
     const opening = heightView ? "You look " + heightView + " at" : p.subject + " " + p.be;
     if (identity) first.push(opening + " " + _npcInspectionArticle(identity) + " " + identity + ".");
-    const build = _npcInspectionText(anatomy.build || npc.bodyType || npc.build);
+    const build = _npcInspectionText(getEntityBuildText(npc));
     if (build) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(build) + " " + build + " build.");
+    const speciesTraits = getSpeciesAppearanceText(npc);
+    if (speciesTraits) first.push(p.subject + " " + p.have + " " + speciesTraits + ".");
     const colouring = [];
-    const surface = body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.scaleColor ? "scales" : "");
-    const colour = body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.scaleColor;
+    const surface = body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.featherColor ? "feathers" : npc.scaleColor ? "scales" : "");
+    const colour = body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.featherColor || npc.scaleColor;
     if (isSlimeNPC(npc)) {
         const pile = getSlimeBodyDescription(npc);
         first.push("It is " + _npcInspectionArticle(pile) + " " + pile + ".");
-    } else if (surface && colour) colouring.push(colour + " " + surface);
+    } else colouring.push(...getEntitySurfaceParts(npc));
     const eyes = getNPCVisibleEyeColor(npc);
     if (eyes) colouring.push(eyes + " eyes");
     if (colouring.length) first.push(p.subject + " " + p.have + " " + _npcJoinList(colouring) + ".");
     const hair = anatomy.hair || {};
     const hairColour = npc.hairColor || hair.color;
-    if (hairColour && hairColour !== "none" && hairColour !== "shaved") {
+    if (hairColour && hairColour !== "none" && hairColour !== "shaved" && entityHasAppearancePart(npc, "hair")) {
         const length = _npcInspectionText(npc.hairLength || hair.length);
         const style = _npcInspectionText(npc.hairStyle || hair.style);
         const styles = { cropped: "cropped close", short: "cut short", long: "worn long", loose: "worn loose", flowing: "flowing freely", curly: "curly", messy: "tousled", unstyled: "unstyled" };
@@ -5844,7 +6203,10 @@ const NPC_SPECIES_TEMPER_TINT = {
     dragonborn: { bold: 1.8, friendly: 0.6, skittish: 0.3, curious: 0.8 },
     catfolk:    { curious: 2, skittish: 1.2, wary: 1.2, bold: 0.8, aggressive: 0.7 },
     wolfkin:    { wary: 2, bold: 1.5, friendly: 0.6, hostile: 1.3, skittish: 0.5 },
-    satyr:      { friendly: 1.8, curious: 1.8, bold: 1.5, wary: 0.5, aggressive: 0.5 }
+    satyr:      { friendly: 1.8, curious: 1.8, bold: 1.5, wary: 0.5, aggressive: 0.5 },
+    harefolk:   { skittish: 2, friendly: 1.5, curious: 1.3, wary: 1.2, bold: 0.5, aggressive: 0.3, hostile: 0.4 },
+    ratfolk:    { wary: 2, curious: 1.5, skittish: 1.3, friendly: 0.8, bold: 0.7, hostile: 1.0 },
+    kenku:      { curious: 2, wary: 1.8, skittish: 1.2, friendly: 0.7, aggressive: 0.6, hostile: 0.8 }
 };
 
 // Keyed "society:rank-or-status". `replace` is the whole weight table (used for
@@ -5885,6 +6247,24 @@ const NPC_SOCIETY_TEMPER = {
     "catfolk-troupe:nimble":       { replace: { curious: 3, neutral: 2, wary: 3, skittish: 2, hostile: 0.5 } },
     "catfolk-troupe:dreamer":      { replace: { neutral: 4, curious: 3, friendly: 2, skittish: 1 } },
     "catfolk-troupe:stray":        { replace: { wary: 4, skittish: 3, neutral: 2, hostile: 1 } },
+    "harefolk-warren:warren-elder": { replace: { neutral: 4, friendly: 3, wary: 2, curious: 2, skittish: 1 } },
+    "harefolk-warren:tunnel-warden": { replace: { wary: 4, neutral: 3, bold: 2, skittish: 1 } },
+    "harefolk-warren:forager":     { replace: { friendly: 3, neutral: 3, curious: 2, skittish: 2, wary: 1 } },
+    "harefolk-warren:runner":      { replace: { skittish: 3, curious: 3, friendly: 2, neutral: 2, wary: 1 } },
+    "harefolk-warren:kit-minder":  { replace: { friendly: 4, neutral: 3, skittish: 2, wary: 1 } },
+    "harefolk-warren:wanderer":    { replace: { wary: 4, skittish: 3, neutral: 2, curious: 2 } },
+    "ratfolk-nest:nest-boss":      { replace: { bold: 3, neutral: 3, wary: 3, hostile: 1 } },
+    "ratfolk-nest:fixer":          { replace: { curious: 3, neutral: 3, wary: 3, friendly: 1 } },
+    "ratfolk-nest:scrounger":      { replace: { wary: 3, neutral: 3, curious: 3, skittish: 1, hostile: 0.5 } },
+    "ratfolk-nest:tunnel-runner":  { replace: { skittish: 3, wary: 3, curious: 2, neutral: 2 } },
+    "ratfolk-nest:tinker":         { replace: { curious: 4, neutral: 3, wary: 2, friendly: 1 } },
+    "ratfolk-nest:outcast":        { replace: { wary: 4, hostile: 2, skittish: 2, neutral: 2 } },
+    "kenku-flock:flock-caller":    { replace: { neutral: 3, wary: 3, bold: 2, curious: 2, hostile: 1 } },
+    "kenku-flock:voice-keeper":    { replace: { curious: 4, neutral: 3, wary: 2, friendly: 1 } },
+    "kenku-flock:trader":          { replace: { curious: 3, neutral: 3, friendly: 2, wary: 2 } },
+    "kenku-flock:lookout":         { replace: { wary: 4, curious: 3, skittish: 2, neutral: 2 } },
+    "kenku-flock:fledgling":       { replace: { curious: 4, skittish: 3, friendly: 2, neutral: 1 } },
+    "kenku-flock:unflocked":       { replace: { wary: 4, skittish: 3, neutral: 2, hostile: 1 } },
     "wolfkin-pack:alpha":          { replace: { bold: 4, neutral: 3, wary: 3, hostile: 1 } },
     "wolfkin-pack:warden":         { replace: { wary: 4, bold: 3, neutral: 2, hostile: 2 } },
     "wolfkin-pack:hunter":         { replace: { wary: 4, bold: 3, neutral: 2, hostile: 2, aggressive: 0.5 } },
@@ -6028,9 +6408,22 @@ const NPC_GIVEN_NAME_POOLS = {
         female: ["Thessa", "Melia", "Daphnis", "Lilla", "Rosalind", "Vinia", "Calla", "Ione"],
         surnames: ["Goatsong", "Reedpipe", "Wineleaf", "Crookhorn", "Hoofbeat"]
     },
+    Harefolk: {
+        male: ["Bracken", "Tuck", "Hob", "Thistle", "Wick", "Dandy", "Barley", "Burdock"],
+        female: ["Clover", "Pimpernel", "Hazel", "Bryony", "Tansy", "Meadow", "Willa", "Primrose"],
+        surnames: ["Longear", "Quickfoot", "Thistledown", "Burrowdeep", "Cloverfield"]
+    },
+    Ratfolk: {
+        male: ["Scratch", "Nibb", "Grub", "Tack", "Sniv", "Cog", "Rasp", "Pinch"],
+        female: ["Mags", "Nettle", "Dross", "Sootie", "Biddy", "Ratch", "Lint", "Mothe"],
+        surnames: ["Gutterling", "Pennyscrape", "Gnawbone", "Cinderdrain", "Lowlamp"]
+    },
+    Kenku: {
+        any: ["Clack", "Tink", "Creak", "Krik", "Rattle", "Hinge", "Clatter", "Chime", "Scrawk", "Latch", "Bell", "Tap"]
+    },
     Slime: {
         any: ["Blob", "Gloop", "Ooze", "Squelch", "Glob", "Drip"]
-    }
+    },
 };
 
 function generateNPCGivenName(species, gender) {
@@ -6813,6 +7206,12 @@ var NPC_SCALE_COLOR_FAMILIES = [
     ["grey", ["grey", "gray", "slate", "stone", "silver"]],
     ["purple", ["purple", "violet", "plum"]]
 ];
+var NPC_FEATHER_COLOR_FAMILIES = [
+    ["black", ["black", "jet", "raven", "crow", "soot", "midnight", "charcoal"]],
+    ["white", ["white", "snow", "ivory", "cream", "alabaster"]],
+    ["grey", ["grey", "gray", "slate", "silver", "ashen", "smoky"]],
+    ["brown", ["brown", "chestnut", "umber", "tan", "russet", "chocolate"]]
+];
 function _npcColorFamily(colour, families) {
     var text = String(colour || "").toLowerCase();
     if (!text) return "";
@@ -6825,15 +7224,16 @@ function _npcColorFamily(colour, families) {
 // { surface: "fur" | "scales" | "skin" | ..., colour } as the look text shows it.
 function _npcSurfaceLook(npc) {
     var body = npc && npc.anatomy && npc.anatomy.body || {};
-    var surface = String(body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.scaleColor ? "scales" : "")).toLowerCase();
-    var colour = String(body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.scaleColor || "").toLowerCase();
+    var surface = String(body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.featherColor ? "feathers" : npc.scaleColor ? "scales" : "")).toLowerCase();
+    var colour = String(body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.featherColor || npc.scaleColor || "").toLowerCase();
     return { surface: surface, colour: colour };
 }
 
 function _npcTasteValue(npc, axis) {
-    if (axis === "furColor" || axis === "scaleColor") {
+    if (axis === "furColor" || axis === "scaleColor" || axis === "featherColor") {
         var look = _npcSurfaceLook(npc);
         if (axis === "furColor") return look.surface === "fur" ? _npcColorFamily(look.colour, NPC_FUR_COLOR_FAMILIES) : "";
+        if (axis === "featherColor") return look.surface === "feathers" ? _npcColorFamily(look.colour, NPC_FEATHER_COLOR_FAMILIES) : "";
         return look.surface === "scales" ? _npcColorFamily(look.colour, NPC_SCALE_COLOR_FAMILIES) : "";
     }
     if (axis === "penis") return _npcPenisSize(npc);

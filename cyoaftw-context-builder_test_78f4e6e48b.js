@@ -1,7 +1,8 @@
-// cyoaftw-context-builder.js v2026-10-22-001 — Sleeping NPC delivery/context follows live sleep state.
+// Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
+// cyoaftw-context-builder.js v2026-10-23-001 — Sleeping NPC delivery/context follows live sleep state.
 // Version identifier for debugging cached files.
 if (typeof window !== "undefined") {
-    window.CONTEXT_BUILDER_VERSION = "2026-10-22-001";
+    window.CONTEXT_BUILDER_VERSION = "2026-10-23-001";
     console.log("[Context Builder] Loaded v" + window.CONTEXT_BUILDER_VERSION);
 }
 
@@ -642,15 +643,18 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         : null;
     const speechStyle = speechProfile ? speechProfile.style : (npc.speechStyle || profile.speechStyle || "");
     const enrichment = npc.enrichment || {};
-    const appearanceHighlights = Array.isArray(npc.appearanceHighlights) && npc.appearanceHighlights.length
-        ? npc.appearanceHighlights : [];
-    const physicalTraits = npc.physicalTraits || "";
+    const appearanceHighlights = typeof buildNPCAppearanceHighlights === "function" ? buildNPCAppearanceHighlights(npc) :
+        (Array.isArray(npc.appearanceHighlights) ? npc.appearanceHighlights : []);
+    const physicalTraits = typeof buildNPCPhysicalSummary === "function" ? buildNPCPhysicalSummary(npc) : (npc.physicalTraits || "");
+    const speciesAppearance = typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(npc, true) : "";
     const anatomy = npc.anatomy || {};
     const anatomyBody = anatomy.body || {};
     const anatomyBits = [];
     if (anatomy.size) anatomyBits.push(`size ${anatomy.size}`);
-    if (anatomy.build) anatomyBits.push(`${anatomy.build} build`);
-    if (anatomyBody.color && anatomyBody.surfaceType) {
+    const appearanceBuild = typeof getEntityBuildText === "function" ? getEntityBuildText(npc) : anatomy.build;
+    if (appearanceBuild) anatomyBits.push(`${appearanceBuild} build`);
+    if (typeof getEntitySurfaceParts === "function") anatomyBits.push(...getEntitySurfaceParts(npc));
+    else if (anatomyBody.color && anatomyBody.surfaceType) {
         anatomyBits.push(`${anatomyBody.color} ${anatomyBody.surfaceType}`);
     }
     if (anatomy.movement) anatomyBits.push(anatomy.movement);
@@ -706,6 +710,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         `- Role: ${npc.role || "unknown"}`,
         typeof getNPCPartyDescription === "function" && getNPCPartyDescription(npc) ? `- ${getNPCPartyDescription(npc)} They form their own travelling group, separate from the player.` : "",
         `- Species: ${npc.species || "unknown"}, ${gender} (pronoun: ${pronoun})`,
+        speciesAppearance ? `- Anatomy constraints: ${speciesAppearance}. Keep incidental gestures consistent; mention appearance only when natural. These facts override generic fantasy assumptions.` : "",
         npc.age ? `- Age: ${typeof getNPCAgeDescriptor === "function" && getNPCAgeDescriptor(npc) ? getNPCAgeDescriptor(npc).label.toLowerCase() + " for their kind (never state a number of years)" : npc.age + " (" + (npc.ageCategory || "") + ")"}` : "",
         `- Temperament: ${temperament}`,
         temperamentInflection ? `- ${temperamentInflection}` : "",
