@@ -446,7 +446,7 @@ function buildNPCDeliveryNote(npc, room, mood, favorability) {
     }
 
     const G = window.G;
-    const action = String((npc.currentState && npc.currentState.gesture) || npc.action || "").trim();
+    const action = npc.currentState && npc.currentState.sleeping ? (typeof getNPCVisibleAction === "function" ? getNPCVisibleAction(npc) : "is lying asleep") : String((npc.currentState && npc.currentState.gesture) || npc.action || "").trim();
     // Bound captive: the ropes color how the words come out.
     if (npc.bound) {
         parts.push(npc.captiveProne
@@ -770,7 +770,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         // getGuideContextLine). Returns "" for every other NPC.
         typeof window.getGuideContextLine === "function" ? window.getGuideContextLine(npc) : "",
         (currentState && currentState.gesture) || npc.action
-            ? `- Currently: ${(currentState && currentState.gesture) || npc.action}`
+            ? `- Currently: ${currentState && currentState.sleeping ? (typeof getNPCVisibleAction === "function" ? getNPCVisibleAction(npc) : "is lying asleep") : (currentState && currentState.gesture) || npc.action}`
             : "",
         // A rope-bound captive is never unaware of the ropes: the AI must
         // play the restraint (no standing up, gesturing, fighting or leaving)

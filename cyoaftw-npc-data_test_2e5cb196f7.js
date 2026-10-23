@@ -5530,14 +5530,24 @@ function getSlimeBodyDescription(npc) {
     return [colour, (bond && bond.growth > 0 ? "broad, heavy gelatinous pile" : "gelatinous pile"), still ? "" : "slowly moving across the floor"].filter(Boolean).join(" ");
 }
 
+function getNPCVisibleAction(npc) {
+    if (npc && npc.currentState && npc.currentState.sleeping && !npc.dead && !npc.unconscious && !npc.isUnconsciousBody) {
+        const spot = npc._npcRestSpot;
+        const surface = spot && /^(bed|cot|floor)$/.test(spot.type) ? spot.type : "";
+        return "is lying asleep" + (surface ? " on " + (surface === "floor" ? "the floor" : "a " + surface) : "");
+    }
+    return String(npc && npc.action || "is standing nearby").trim();
+}
+
 function getNPCVisibleBehavior(npc) {
+    if (npc && npc.currentState && npc.currentState.sleeping) return getNPCVisibleAction(npc);
     if (!isSlimeNPC(npc)) return String(npc && npc.behavior || "");
     if (npc.dead || npc.unconscious || npc.isUnconsciousBody) return "";
     if (typeof window.getSlimeVisibleState === "function") return window.getSlimeVisibleState(npc);
     return (npc.hostility || 0) >= 60 ? "Looks ready to attack" : "Quivers gently";
 }
 
-function buildNPCAppearanceHighlights(npc) {
+function buildNPCAppearanceHighlights(npc, forPortrait) {
     if (!npc) return [];
     const anatomy = npc.anatomy || {};
     const body = anatomy.body || {};
@@ -5551,11 +5561,11 @@ function buildNPCAppearanceHighlights(npc) {
     if (npc.hairColor) {
         highlights.push((npc.hairStyle ? npc.hairStyle + " " : "") + npc.hairColor + " hair");
     }
-    if (Array.isArray(anatomy.features)) {
-        for (let i = 0; i < anatomy.features.length; i++) highlights.push(anatomy.features[i]);
-    }
-    if (Array.isArray(anatomy.marks) && anatomy.marks.length && highlights.length < 6) {
-        highlights.push(anatomy.marks[0]);
+    // Distinguishing physical features/marks stay out of public prose;
+    // image prompts retain authored visual identity.
+    if (forPortrait) {
+        if (Array.isArray(anatomy.features)) highlights.push(...anatomy.features);
+        if (Array.isArray(anatomy.marks) && anatomy.marks.length && highlights.length < 6) highlights.push(anatomy.marks[0]);
     }
 
     return highlights.slice(0, 6);
@@ -5577,9 +5587,8 @@ function buildNPCPhysicalSummary(npc) {
 
 function getNPCObservationDetail(npc) {
     if (!npc) return "";
-    const highlights = !isSlimeNPC(npc) && Array.isArray(npc.appearanceHighlights) && npc.appearanceHighlights.length
-        ? npc.appearanceHighlights.slice(0, 4)
-        : buildNPCAppearanceHighlights(npc).slice(0, 4);
+    // Rebuild from live facts rather than legacy cached feature lists.
+    const highlights = buildNPCAppearanceHighlights(npc).slice(0, 4);
     if (!highlights.length) return "";
     return "with " + _npcJoinList(highlights);
 }
@@ -5715,11 +5724,8 @@ function getNPCInspectionDetail(npc) {
         if (parts.length) paragraphs.push(p.subject + " " + p.have + " " + _npcJoinList(parts) + ".");
     }
 
-    const features = Array.isArray(anatomy.features) ? anatomy.features : [];
-    const marks = Array.isArray(anatomy.marks) ? anatomy.marks : [];
-    const details = Array.from(new Set(features.concat(marks).map(_npcInspectionText).filter(Boolean)));
-    if (!details.length && Array.isArray(npc.specialTraits)) details.push(...npc.specialTraits.map(_npcInspectionText).filter(Boolean));
-    if (details.length) paragraphs.push("Distinguishing features include " + _npcJoinList(details) + ".");
+    // Physical distinguishing features/marks are deliberately omitted from inspection.
+    // Keep their underlying authored data; it may have mechanical uses.
     const accessories = [];
     if (Array.isArray(npc.piercings)) {
         npc.piercings.forEach(function (piercing) {

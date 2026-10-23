@@ -1294,6 +1294,191 @@ function openWorldToolMenu(selector) {
     return { status: "needs_input" };
 }
 
+// Sleeping NPC actions are shared by native buttons and text commands.
+const sleepingNPCSearches = new WeakMap();
+let sleepingNPCActionBusy = false;
+
+function isNPCSleeping(npc) {
+    return !!(npc && !npc.dead && npc.hp > 0 && !npc.unconscious && !npc.isUnconsciousBody && npc.currentState && npc.currentState.sleeping);
+}
+
+function wakeSleepingNPC(npc) {
+    if (!isNPCSleeping(npc)) return false;
+    npc.currentState.sleeping = false;
+    npc.currentState.gesture = "is waking up";
+    npc.action = "is waking up";
+    delete npc._ambientPrevAction; delete npc._ambientPrevGesture;
+    delete npc._npcSleepProgress; delete npc._npcSleepQuality; delete npc._npcRestSpot;
+    sleepingNPCSearches.delete(npc);
+    return true;
+}
+
+function sleepingNPCBlock(npc, action) {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot do that while incapacitated.";
+    if (p.carrying) return "Put down what you are carrying before approaching them.";
+    if (!npc || !(room.creatures || []).includes(npc) || !isVisibleEntity(npc) || npc.hidden || npc.isHidden || npc.concealed || npc.visible === false || npc.reachable === false) return "That person is no longer within reach.";
+    if (!isNPCSleeping(npc)) return "They are no longer asleep.";
+    if (G.combatEncounter || G.activeNPCMode === "combat" || roomHasActiveHostile(room)) return "Deal with the nearby threat first.";
+    if (isRoomCollapsed(room)) return "Rubble prevents you from reaching them.";
+    if (typeof isPlayerJailed === "function" && isPlayerJailed()) return "You cannot reach them from your cell.";
+    if (hasPendingPartyLoot()) return "Settle the party's loot decision first.";
+    if (G.activeObject || G.activeItemModal || G.activeNPC && G.activeNPC !== npc || G.activeNPCMode && !/^(menu|sleeping-search)$/.test(G.activeNPCMode)) return "Finish the current interaction first.";
+    if (action !== "wake" && (isEntityExhausted(p) || p.stamina < 1)) return "You need one stamina to search quietly.";
+    return "";
+}
+
+function sleepingNPCResult(npc, action, status, message, data) {
+    const result = Object.assign({ action: action, target: textModeNPCLabel(npc), status: status }, data || {});
+    const player = G.player, room = G.activeRoom;
+    if (status === "interrupted") markTextModeUrgent("sleeping-action-interrupted");
+    setNarration(message);
+    if (G.player !== player || G.activeRoom !== room) return { status: "interrupted", outputPublished: true };
+    publishTextModeOutput("sleeping-npc", message, { presentation: "supplement", sleepingNPC: result }, false);
+    return { status: status, outputPublished: true };
+}
+
+function sleepingNPCGrant(npc) {
+    const grant = sleepingNPCSearches.get(npc);
+    return grant && grant.player === G.player && grant.room === G.activeRoom && grant.turn === getCurrentStoryTurn() && grant.valid() && isNPCSleeping(npc) ? grant : null;
+}
+
+function rememberSleepingNPCSearch(npc) {
+    sleepingNPCSearches.set(npc, { player: G.player, room: G.activeRoom, turn: getCurrentStoryTurn(), valid: choiceEntitySnapshot(npc) });
+}
+
+function sleepingNPCItems(npc) {
+    // Only carried belongings. Removing worn/held gear needs a separate action.
+    return (npc.inventory || []).filter(function (item) { return item && isLootItemVisible(item) && !item.infinite && !item.quest && !item.questItem; });
+}
+
+function openSleepingNPCSearch(npc) {
+    const block = sleepingNPCBlock(npc, "search");
+    if (!sleepingNPCGrant(npc)) return sharedChoiceResult("blocked", "Search them quietly again before reaching for their belongings.");
+    const sceneBlock = sleepingNPCBlock(npc, "wake");
+    if (sceneBlock) return sharedChoiceResult("blocked", sceneBlock);
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return { status: "blocked" };
+    G.activeNPCMode = "sleeping-search";
+    el.innerHTML = "";
+    // Capacity probing can restow the player's existing pack. Do that before
+    // the shared menu captures its inventory snapshot.
+    const items = sleepingNPCItems(npc);
+    const space = items.map(function (item) { return packRoomUnits(item); });
+    const menu = beginSharedChoiceMenu("sleeping-search", npc, "Belongings found on " + textModeNPCLabel(npc), function () { return openSleepingNPCSearch(npc); });
+    const valid = menu.valid, turn = getCurrentStoryTurn(), coins = getCoinValue(npc);
+    menu.valid = function () { return valid() && turn === getCurrentStoryTurn() && coins === getCoinValue(npc) && !!sleepingNPCGrant(npc); };
+    const add = function (label, run, meta, reason) { el.appendChild(createSharedChoiceButton(menu, label, run, { disabled: !!reason, title: reason || "One turn and one stamina; a failed quiet check wakes them.", textChoice: meta })); };
+    items.forEach(function (item, index) {
+        add("Take " + getItemName(item), function () { return performSleepingNPCAction(npc, "take", item); }, { action: "take", item: item }, block || (space[index] < 1 ? "No room in your pack." : ""));
+    });
+    if (coins > 0) add("Take coins (" + coins + ")", function () { return performSleepingNPCAction(npc, "coins"); }, { action: "coins" }, block);
+    add("Back", function () { G.activeNPCMode = "menu"; renderNPCActionMenu(npc); return { status: "blocked", outputPublished: true }; }, { action: "back" });
+    publishSharedChoiceMenu(menu, el);
+    publishTextModeOutput("sleeping-npc", "Searchable carried belongings.", { presentation: "supplement", sleepingNPC: { action: "contents", target: textModeNPCLabel(npc), coins: coins, items: sleepingNPCItems(npc).map(function (item) { return { name: getItemName(item), quantity: getItemQuantity(item) }; }) } }, false);
+    return { status: "needs_input", outputPublished: true };
+}
+
+function performSleepingNPCAction(npc, action, item) {
+    if (!/^(wake|search|take|coins)$/.test(action)) return sharedChoiceResult("blocked", "That sleeping action is unavailable.");
+    if (sleepingNPCActionBusy) return sharedChoiceResult("blocked", "Your previous action is still resolving.");
+    const block = sleepingNPCBlock(npc, action);
+    if (block) return sharedChoiceResult("blocked", block);
+    if (/^(take|coins)$/.test(action) && !sleepingNPCGrant(npc)) return sharedChoiceResult("blocked", "Those belongings changed. Search them again.");
+    if (action === "take" && (!sleepingNPCItems(npc).includes(item) || packRoomUnits(item) < 1)) return sharedChoiceResult("blocked", "That item is unavailable or your pack is full.");
+    if (action === "coins" && getCoinValue(npc) <= 0) return sharedChoiceResult("blocked", "There are no coins to take.");
+    const player = G.player, room = G.activeRoom, mode = G.activeNPCMode, actor = G.activeNPC, map = G.roomMap;
+    const modal = G.activeItemModal, object = G.activeObject, epoch = textModeState.epoch;
+    const sourceState = choiceEntitySnapshot(npc), playerState = choiceEntitySnapshot(player);
+    const origin = map && map[room.coords], npcHP = npc.hp;
+    const coins = getCoinValue(npc), hp = player.hp, stats = JSON.stringify([player.stats, player.statusEffects]);
+    const candidates = (npc.inventory || []).map(function (value) { return { item: value, rule: getLootItemDiscoveryRule(value) }; });
+    const cost = action === "wake" ? 0 : 1;
+    sleepingNPCActionBusy = true;
+    try {
+        if (cost) spendEntityStamina(player, cost);
+        // Reserve this tick against random natural waking; real scene changes
+        // and explicit wake/attack still invalidate the attempt below.
+        npc._npcRestTickTurn = getCurrentStoryTurn() + 1;
+        advanceNPCAffectTime(1); advanceStoryTurn(1);
+        const data = { turns: 1, staminaCost: cost, committed: false };
+        if (G.player !== player || G.activeRoom !== room || G.roomMap !== map || map && map[room.coords] !== origin || G.activeNPC !== actor || G.activeNPCMode !== mode || G.activeItemModal !== modal || G.activeObject !== object || textModeState.epoch !== epoch || player.hp !== hp || npc.hp !== npcHP || JSON.stringify([player.stats, player.statusEffects]) !== stats || !playerState() || !sourceState() || coins !== getCoinValue(npc) || sleepingNPCBlock(npc, "wake")) {
+            saveGameState(); renderStats();
+            return sleepingNPCResult(npc, action, "interrupted", "The situation changes before you finish. Your time and stamina are spent.", data);
+        }
+        if (action === "wake") {
+            wakeSleepingNPC(npc); data.committed = true; data.woke = true;
+            G.activeNPCMode = actor ? "menu" : null;
+            if (actor) { renderNPCActionMenu(npc); refreshNPCDetailPanel(npc); }
+            renderStats(); saveGameState();
+            return sleepingNPCResult(npc, action, "completed", "You wake " + textModeNPCLabel(npc) + ".", data);
+        }
+        const check = rollStatCheck(player, "flexibility", 12);
+        data.roll = { die: check.roll, bonus: check.bonus, total: check.total, dc: 12, stat: "flexibility" };
+        data.success = !!check.success; data.committed = true; data.woke = !check.success;
+        if (!check.success) {
+            wakeSleepingNPC(npc);
+            applyNPCImpact(npc, { mood: -2, favor: -20, hostility: 35, aggression: 1, intent: "wary", markMet: true, actionTag: "caught-searching-sleeper" });
+            const lines = [textModeNPCLabel(npc) + " wakes and catches you searching their belongings."];
+            reportCrime(room, "pickpocket", lines, { force: true });
+            G.activeNPCMode = actor ? "menu" : null;
+            if (G.activeNPC === actor && actor) { renderNPCActionMenu(npc); refreshNPCDetailPanel(npc); }
+            markTextModeUrgent("npc-woken-by-search");
+            renderStats(); saveGameState();
+            return sleepingNPCResult(npc, action, "blocked", lines.join(" "), data);
+        }
+        let message;
+        if (action === "search") {
+            const found = [];
+            candidates.forEach(function (entry) {
+                const rule = getLootItemDiscoveryRule(entry.item);
+                if (!entry.rule || !rule || rule.stat !== entry.rule.stat || rule.dc !== entry.rule.dc || check.critFail || !check.critSuccess && check.total < rule.dc) return;
+                entry.item.hidden = false; entry.item.isHidden = false; entry.item.concealed = false; entry.item.visible = true;
+                found.push({ name: getItemName(entry.item), quantity: getItemQuantity(entry.item) });
+            });
+            data.found = found;
+            message = "You quietly search " + textModeNPCLabel(npc) + " without waking them.";
+        } else if (action === "coins") {
+            adjustCoins(npc, -coins); adjustCoins(player, coins); data.coins = coins;
+            message = "You take " + coins + " coins without waking " + textModeNPCLabel(npc) + ".";
+        } else {
+            const taken = stealItemFromNPC(npc, item);
+            delete taken.stowed;
+            data.item = { name: getItemName(taken), quantity: 1 };
+            message = "You take " + getItemName(taken) + " without waking " + textModeNPCLabel(npc) + ".";
+        }
+        if (action !== "search") rememberStoryEvent("crime", message, 3, { tags: ["theft"] });
+        rememberSleepingNPCSearch(npc);
+        renderStats(); saveGameState();
+        const result = sleepingNPCResult(npc, action, "completed", message, data);
+        if (result.status === "interrupted" || G.player !== player || G.activeRoom !== room || G.activeNPC !== actor) return { status: "interrupted", outputPublished: true };
+        if (G.activeNPC === npc) return openSleepingNPCSearch(npc);
+        return { status: "completed", outputPublished: true };
+    } finally { sleepingNPCActionBusy = false; }
+}
+
+function executeTextSleepingNPC(action) {
+    const args = action.args || {}, query = action.verb === "wake" ? args.target : args.source;
+    const candidates = textModeVisibleNPCs().filter(isNPCSleeping);
+    const matches = action.targetRef ? candidates.filter(function (npc) { return npc === action.targetRef; }) : query ? resolveTextNPCTarget(query.replace(/^(?:sleeping|asleep)\s+/i, ""), candidates).matches : G.activeNPC && candidates.includes(G.activeNPC) ? [G.activeNPC] : candidates;
+    if (!matches.length) return textModeResult("blocked", "No sleeping person matches. Use show sleepers.");
+    if (matches.length > 1) return textModeAsk(action, "target", matches, "Which sleeping person do you mean?");
+    const npc = matches[0]; action.targetRef = npc;
+    const block = sleepingNPCBlock(npc, action.verb);
+    if (block) return textModeResult("blocked", block);
+    if (!G.activeNPC) selectNPC(npc);
+    if (G.activeNPC !== npc) return textModeResult("interrupted", "The NPC interaction changed.");
+    return performSleepingNPCAction(npc, action.verb);
+}
+
+function textSleepingNPCShow(key) {
+    if (!/^(sleepers|wake|awaken|rouse|search|search sleeping|search asleep)$/.test(key)) return null;
+    const entries = textModeVisibleNPCs().filter(isNPCSleeping).map(function (npc) { return { name: textModeNPCLabel(npc), wake: "wake " + textModeNPCLabel(npc).replace(/\s*\(.*/, ""), search: "search " + textModeNPCLabel(npc).replace(/\s*\(.*/, ""), blockedReason: sleepingNPCBlock(npc, "wake") }; });
+    if (key === "search" && !entries.length) return null;
+    return textModeResult("completed", entries.length ? entries.map(function (entry) { return entry.name + ": " + entry.wake + "; " + entry.search + (entry.blockedReason ? " — " + entry.blockedReason : ""); }).join("\n") : "No visible sleepers here.", { sleepers: entries });
+}
+
+
 const TEXT_COMMANDS = [
     { id: "tool", jobs: true, args: ["action", "target", "item"], aliases: ["tools", "tool use", "pry", "lever", "wedge", "jam", "brace", "unwedge", "force obstruction"], example: "pry packing board with iron pry bar; wedge chair under north door; unwedge north door; force obstruction north door; tools; show tools", description: "Use real objects together. Pry exposed nailed/pegged fittings with a sound rigid lever; wedge suitable furniture or a solid object against a real door. Material, shape, size, condition, reach and stats determine eligibility and dice difficulty. Pry/wedge cost 1 stamina and 1 turn; forcing a brace costs 2 stamina and 1 turn; removing your reachable brace costs 1 turn. Failures spend costs and pause later commands. A brace stays in place, blocks both sides and cannot be picked up until released. Unwedging does not unlock a lock. Show tools lists current combinations; tools opens the same choices as native controls. Options/back/cancel/leave work; explicitly continue older queued commands." },
     { id: "object", info: false, jobs: true, args: ["action", "target"], aliases: ["objects", "physical objects", "lift", "heave", "drag", "haul", "shift", "move object", "push object", "pull object"], example: "lift bucket; drag bench; shift crate; push object chair; show objects; how lift", description: "Lift an accessible object and set it down, or drag/shift it a short distance within the room. Heave means lift; haul/pull object means drag; push object/move object means shift. The engine checks reach, attachment, occupancy, material, size, contents and physical prowess. Easy lifts succeed without a roll or cost; uncertain lifts and floor moves use a stat-based d20 check, 1 stamina and 1 turn, including failures. Impossible attempts never roll. These actions do not carry objects between rooms or create cover, block exits or spill contents. Take retains pack limits. Show objects lists public properties and current availability." },
@@ -1355,7 +1540,7 @@ const TEXT_COMMANDS = [
     { id: "eat", inventory: true, combat: true, args: ["item"], aliases: ["eat", "consume", "chew"], example: "eat greenwort; eat ration", description: "Eat one carried healing herb or edible supply. Herbs cost a normal combat turn during a fight; ordinary supplies are blocked in combat." },
     { id: "take", inventory: true, room: true, args: ["item", "source", "amount"], aliases: ["take", "get", "pick up"], example: "take sword; take 2 potions from chest; take coins from body; take all from chest", description: "Pick up loose items, or take items from an opened/searched loot source. With a source, default quantity is one; all takes its visible contents and coins. An active container supplies the source when omitted. Existing capacity and party loot rules apply." },
     { id: "open", lootAction: true, args: ["source"], aliases: ["open"], example: "open chest; open rucksack", description: "Open a visible container and list its contents. Fixed containers use their normal opening turn, locks and danger checks. Carried containers are free to inspect." },
-    { id: "search", lootAction: true, args: ["source", "approach"], aliases: ["search", "rummage"], example: "search room; search room tight; search body; search chest; search rucksack", description: "Search room (or bare search) automatically uses your strongest affordable attribute to discover concealed room fixtures. Search <body/container> uses the same automatic selection for direct hidden contents. Ties prefer the cheaper search. Willpower costs 1 stamina; Flexibility 2; Prowess 3. Explicit careful/tight/force searches remain available. Each attempt takes 1 turn. Opening a closed fixed container adds its normal turn. Contents is the free list; searches do not take items." },
+    { id: "search", lootAction: true, args: ["source", "approach"], aliases: ["search", "rummage"], example: "search human; search room; search room tight; search body; search chest; search rucksack", description: "Search <sleeping NPC> quietly checks their carried belongings (Flexibility DC 12, one stamina and one turn); failure wakes them. Success opens shared choices; each take risks another quiet check. Search room (or bare search) automatically uses your strongest affordable attribute to discover concealed room fixtures. Search <body/container> uses the same automatic selection for direct hidden contents. Ties prefer the cheaper search. Willpower costs 1 stamina; Flexibility 2; Prowess 3. Explicit careful/tight/force searches remain available. Each attempt takes 1 turn. Opening a closed fixed container adds its normal turn. Contents is the free list; searches do not take items." },
     { id: "contents", lootAction: true, args: ["source"], aliases: ["contents"], example: "contents; contents chest; show contents", description: "List the selected container or inspected body's visible contents and coins without taking anything. Open closed containers or use open body first. Hidden belongings require a separate successful search." },
     { id: "loot", lootAction: true, args: ["source"], aliases: ["loot"], example: "loot body; loot second chest", description: "Open/view the named source and take its visible contents and coins through the normal loot rules. Hidden belongings require a separate search. Capacity refusal, party decisions or a threat pause the queue. Loot is not automatically all kept by you." },
     { id: "store", lootAction: true, args: ["item", "source", "amount"], aliases: ["store", "put", "stow"], example: "put 2 potions in chest; store sword in rucksack; store all herbs in chest", description: "Move carried items into an opened fixed container or an accessible carry container. Default quantity is one, maximum 100 per command. Existing space and nested-container rules apply. Worn items must be removed first." },
@@ -1371,6 +1556,7 @@ const TEXT_COMMANDS = [
     { id: "glance", args: ["direction"], aliases: ["glance", "peek"], example: "glance north", room: true, description: "Peek through an exit. Type glance alone to choose a direction." },
     { id: "move", args: ["direction"], aliases: ["go", "move", "walk", "head"], example: "north; go northwest; up", room: true, description: "Travel through an exit. Short directions such as n and nw work too." },
     { id: "npcs", info: true, aliases: ["npcs", "who", "who is here", "who's here", "people"], example: "who is here", description: "List the visible creatures in their room order, with species and gender." },
+    { id: "wake", args: ["target"], aliases: ["wake", "wake up", "awaken", "rouse"], example: "wake human; wake second dwarf; show sleepers", description: "Wake a visible sleeping NPC for one turn, with no stamina or roll. Search <npc> quietly checks their carried belongings: one stamina, one turn, Flexibility DC 12. Failure wakes them and can have theft consequences. Choose a discovered item by number; each take makes another quiet check. Show sleepers lists current targets." },
     { id: "talk", args: ["target"], aliases: ["talk", "talk to", "speak to"], example: "talk to dwarf; talk to second dwarf; talk to dwarf female", description: "Start talking to a visible NPC. Use a known name, species, gender, or ordinal. Ambiguous targets prompt for a number." },
     { id: "say", args: ["text"], aliases: ["say", "reply", "respond"], example: 'say "Where is the inn?"', description: 'Speak to the NPC you are talking with. Quote speech containing commands: say "go north and find the guard".' },
     { id: "options", info: true, aliases: ["options", "topics"], example: "options; choose 2", description: "List the current conversation choices, then choose a number. In combat, list combat commands." },
@@ -1513,6 +1699,8 @@ function parseTextCommand(input) {
     if (toolSentence && worldObjectMatches(toolSentence[1]).length) return null;
     const combat = parseTextCombatCommand(raw);
     if (combat) return combat;
+    match = /^(?:wake(?:\s+up)?|awaken|rouse)(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "wake", args: { target: textCommandUnquote(match[1] || "") } };
     match = /^(?:talk\s+to|speak\s+to|talk)(?:\s+(.+))?$/i.exec(raw);
     if (match) return { verb: "talk", args: { target: match[1] || "" } };
     match = /^(?:glance|peek)(?:\s+(?:to\s+)?(?:the\s+)?(.+))?$/i.exec(raw);
@@ -1569,7 +1757,7 @@ function validateTextAIPlan(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -2795,6 +2983,7 @@ function textModeInspectNPC(action) {
 
 function textModeHelpContent(topic, show) {
     let key = textCommandNormalize(topic).replace(/^(?:to|use)\s+/, "");
+    if (show) { const sleepers = textSleepingNPCShow(key); if (sleepers) return sleepers; }
     if (show) { const tools = worldToolShow(key); if (tools) return tools; }
     if (show) { const objects = textWorldObjectShow(key); if (objects) return objects; }
     if (/^(phrases|learned phrases)$/.test(key)) return executeTextPhraseCommand({args:{action:"list"}});
@@ -2837,7 +3026,7 @@ function textModeHelpContent(topic, show) {
     if (entry) return textModeResult("completed", entry.description + "\nExamples: " + entry.example);
     if (key && !show) return textModeHelpContent(topic, true);
     if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
-    const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
+    const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
         if (ids.indexOf(def.id) < 0 && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !/^(back|cancel)$/.test(def.id)) return false;
         if (def.social && !socialActionAvailable()) return false;
@@ -2878,6 +3067,7 @@ function textModeHelpContent(topic, show) {
             const interact = INTERACT_MENU_ACTIONS.find(function (entry) { return entry.id === def.interact; });
             if (!interact || !interact.visible(G.activeRoom) || interact.disabledReason(G.activeRoom)) return false;
         }
+        if (def.id === "wake") return textModeVisibleNPCs().some(function (npc) { return isNPCSleeping(npc) && !sleepingNPCBlock(npc, "wake"); });
         if (/^(say|options|choose|leave)$/.test(def.id)) return !!G.activeNPC;
         if (def.id === "sleep") {
             const sleep = INTERACT_MENU_ACTIONS.find(function (action) { return action.id === "sleep"; });
@@ -3007,6 +3197,7 @@ async function executeTextCommand(action) {
         if (!materialItemMatches(name, "burn").length && fireTargetEntries(name, "ignite").length) return executeTextFireCommand({ verb: "fire", args: { action: "ignite", target: name, item: split ? split[2] : "" } });
     }
     if (action.verb === "rulings") return executeTextRulingsCommand(action);
+    if (action.verb === "wake" || action.verb === "search" && (action.targetRef || args.source && resolveTextNPCTarget(args.source.replace(/^(?:sleeping|asleep)\s+/i, ""), textModeVisibleNPCs()).matches.length)) return executeTextSleepingNPC(action);
     // Container/loot and touch verbs aimed at a plain object go to the game master.
     if (/^(open|search|loot|contents)$/.test(action.verb) && args.source && !action.sourceRef && !textLootMatch(args.source, textLootSources(), function (entry) { return entry.label + (entry.kind === "body" ? " body" : " container"); }).length && !/^(?:the\s+)?(?:room|around|surroundings)$/i.test(args.source) && adjudicationObjectOnly(args.source))
         return executeTextAdjudication({ verb: "adjudicate", args: { action: action.verb, target: args.source }, rulingPromise: action.rulingPromise });
@@ -4839,6 +5030,7 @@ function textSharedChoiceCanHandle(input, action) {
     if (menu && /^goods-/.test(menu.kind) && action && action.verb === "leave") return true;
     if (action && action.verb === "options") return !!menu || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot();
     if (!menu) return false;
+    if (menu.kind === "sleeping-search" && action && /^(leave|wake)$/.test(action.verb)) return true;
     if (menu.kind === "world-tools" && (action && /^(tool|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^casting-/.test(menu.kind) && (action && /^(casting|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^synergy-/.test(menu.kind) && (action && /^(synergy|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
@@ -4876,6 +5068,13 @@ async function textRunSharedChoice(menu, choice) {
 
 async function textSharedChoiceInput(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && menu.kind === "sleeping-search" && action && /^(leave|wake)$/.test(action.verb)) {
+        if (!menu.valid()) { clearSharedChoiceMenu(menu); textModeResult("blocked", "That sleeping search changed. Search them again."); return true; }
+        clearSharedChoiceMenu(menu); G.activeNPCMode = "menu";
+        if (action.verb === "wake") await executeTextSleepingNPC(action);
+        else { chooseNPCAction("disengage"); textModeResult("completed", "You step away."); }
+        return true;
+    }
     if (menu && menu.kind === "world-tools" && (action && /^(tool|leave|back|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) {
         if ((splitTextCommands(input || "").parts || []).length > 1) textModeResult("needs_input", "Answer one tool choice at a time.", { systemOnly: true });
         else if (action && /^(leave|back|cancel)$/.test(action.verb)) { clearSharedChoiceMenu(menu); G.activeNPCMode = null; setExitGridVisible(true); textModeResult("completed", "You step away from the tools.", { systemOnly: true }); }
@@ -10296,7 +10495,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-22-009
+// Core Engine Version: 2026-10-22-010
 // Latest: SFW privacy/tolerance hook and metadata audits; shared sleep spots for native/text sleep, job nights, Rest and independent NPC lodging; established partners prefer to share.
 // Previous: Independent NPC travel parties: formation/load repair, shared movement, combat support, public descriptions/dialogue and autonomous healing. Recruiting one leaves the others together.
 // Previous: Sleeping spots: Sleep now asks where (bed, cot or floor; floor works anywhere). A bed holds up to 3 and a cot 2; the more share one the less each recovers (x0.8 for two, x0.6 for three, and a full bed no longer gives the well-rested buff). Companions take the places that give the party the most rest (empty beds, empty cots, doubling up, floor last) and the night is narrated.
@@ -10363,7 +10562,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-21-007";
+window.__ENGINE_CORE_VERSION = "2026-10-22-010";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -11988,7 +12187,7 @@ function hydrateNPCSpeciesFlags(npc) {
 }
 
 function canConverseWithNPC(npc) {
-    if (!npc || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden) return false;
+    if (!npc || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden || npc.currentState && npc.currentState.sleeping) return false;
     hydrateNPCSpeciesFlags(npc);
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
 
@@ -21193,7 +21392,7 @@ function findKeyForLock(lock) {
 
 function isAwakeHumanoidNPC(npc) {
     return !!(npc && npc.isHumanoid !== false && !(npc.hp <= 0) &&
-        !npc.unconscious && !npc.isUnconsciousBody && !npc.hidden && !npc.isHidden && !npc._inSkirmish);
+        !npc.unconscious && !npc.isUnconsciousBody && !npc.hidden && !npc.isHidden && !npc._inSkirmish && !(npc.currentState && npc.currentState.sleeping));
 }
 
 // Awake people in the room beyond the door, who can answer a knock or object
@@ -27897,7 +28096,7 @@ function attemptNPCRest(npc, room) {
     if (npc.currentState.sleeping) {
         if (npc._npcRestTickTurn === getCurrentStoryTurn()) return true;
         if (Math.random() < NPC_AUTONOMY_WAKE_CHANCE) {
-            npc.currentState.sleeping = false;
+            wakeSleepingNPC(npc);
             // Waking from rest means they bathed/slept it off: clear the
             // lingering body-use loads (dried ejaculate/urine - see
             // recordBodyUse/getBodyUseDescriptor in nsfw/intimacy-system.js,
@@ -39117,6 +39316,7 @@ function getGiftReceiveMode(npc) {
 }
 
 function openGiveMenu(npc) {
+    if (npc && npc.currentState && npc.currentState.sleeping) return sharedChoiceResult("blocked", "They are asleep. Wake them first.");
     const el = document.getElementById("chatOptionsEl");
     if (!el || !npc) return;
     G.activeNPCMode = "give";
@@ -39227,6 +39427,7 @@ function getFallbackGiftReaction(npc, item) {
 }
 
 function giveItemToNPC(npc, stackKey) {
+    if (npc && npc.currentState && npc.currentState.sleeping) return sharedChoiceResult("blocked", "They are asleep. Wake them first.");
     const room = G.activeRoom;
     const entry = buildPlayerInventoryEntries(G.player).find(function (e) { return e.key === stackKey; });
     if (!npc || !room || !entry) { openGiveMenu(npc); return; }
@@ -39356,6 +39557,17 @@ function renderNPCActionMenu(npc) {
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
 
     const actions = [];
+    if (isNPCSleeping(npc)) {
+        const room = G.activeRoom, player = G.player, turn = getCurrentStoryTurn();
+        [ { label: "Search quietly", action: "search", reason: sleepingNPCBlock(npc, "search") }, { label: "Wake", action: "wake", reason: sleepingNPCBlock(npc, "wake") }, { label: "Attack", action: "attack", reason: "", title: "Sleeping target: +4 to hit and double opening damage before armour." }, { label: "Step away", action: "disengage", reason: "" } ].forEach(function (option) {
+            const btn = createCombatButton(option.label, function () {
+                if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== "menu" || getCurrentStoryTurn() !== turn || !(room.creatures || []).includes(npc) || !isNPCSleeping(npc)) return sharedChoiceResult("blocked", "That sleeping action changed. Look at them again.");
+                return chooseNPCAction(option.action);
+            }, { disabled: !!option.reason, title: option.reason || option.title || "One turn. Search costs one stamina; failure wakes them." });
+            el.appendChild(btn);
+        });
+        return;
+    }
     if (canConverseWithNPC(npc)) {
         actions.push({ label: "Talk", action: "talk" });
     }
@@ -39467,6 +39679,8 @@ function renderNPCActionMenu(npc) {
 function chooseNPCAction(action) {
     const npc = G.activeNPC;
     if (!npc) return;
+    if (action === "wake" || action === "search") return performSleepingNPCAction(npc, action);
+    if (npc.currentState && npc.currentState.sleeping && !/^(attack|disengage)$/.test(action)) return sharedChoiceResult("blocked", "They are asleep. Wake them first.");
 
     if (action === "talk") {
         startNPCConversation(npc);
@@ -41357,6 +41571,7 @@ function attackNPC(npc, options = {}) {
     G.activeNPCMode = "combat";
     const player = G.player;
     const npcName = npc.name || "the creature";
+    const sleepingOpening = !!(npc.currentState && npc.currentState.sleeping) && !isEntityExhausted(player);
     const styleKey = options.style || "balanced";
     const crimeLines = [];
     registerAttackCrime(npc, crimeLines, !!options.sneak);
@@ -41391,6 +41606,7 @@ function attackNPC(npc, options = {}) {
         style.hitBonus +
         proficiencyHitBonus +
         (sneak ? sneak.hit : 0) +
+        (sleepingOpening ? 4 : 0) +
         (maneuver ? maneuver.hit + Math.floor(maneuverRank / 2) : 0) -
         offClassWeapon.hit -
         getWoundAttackPenalty(player) +
@@ -41454,6 +41670,11 @@ function attackNPC(npc, options = {}) {
         alertWitnessesToViolence(G.activeRoom, npc, lines, sneak.peaceful);
     }
     if (wasHidden) breakPlayerHidden(sneak ? null : lines, "You break cover to strike.");
+    if (sleepingOpening) {
+        wakeSleepingNPC(npc);
+        lines.push(formatCombatActionLine(player, npc, "You catch " + npcName + " asleep and vulnerable. The attack wakes them."));
+        publishTextModeOutput("sleeping-npc", "Opening attack against a sleeping target.", { presentation: "supplement", sleepingNPC: { action: "attack", target: npcName, hitBonus: 4, damageMultiplier: 2, woke: true } }, false);
+    }
     npc._playerAttackedTurn = getCurrentStoryTurn();
     maybeBreakWeaponOnFumble(playerWeapon.item, attackRoll, lines);
 
@@ -41486,7 +41707,7 @@ function attackNPC(npc, options = {}) {
         );
         const blocked = Math.max(0, getTargetDamageReduction(npc, targetKey, "physical") - (maneuver && maneuver.key === "runThrough" ? getRunThroughArmorIgnore(maneuverRank) : 0));
         const shadowBonus = (playerWeapon.item && playerWeapon.item.buff && playerWeapon.item.buff.shadowStack && elementCanHurtTarget(npc, "shadow")) ? advanceShadowStack(playerWeapon.item) : 0;
-        let damage = Math.max(1, ((maneuver && maneuver.damageMult) ? Math.floor(rawDamage * maneuver.damageMult) : rawDamage) - blocked) + shadowBonus;
+        let damage = Math.max(1, ((maneuver && maneuver.damageMult) ? Math.floor(rawDamage * maneuver.damageMult) : rawDamage) * (sleepingOpening ? 2 : 1) - blocked) + shadowBonus;
         if (shadowBonus > 0) lines.push(`Shadow bites through armour for ${shadowBonus} more.`);
         // Relic powers: Rising Power spends on a hit; the foe's Mirror/Shadow roll.
         damage = applyRisingPower(player, "physical", damage, lines);
@@ -46303,6 +46524,7 @@ const EXHAUSTED_ROOM_AMBUSH_HOSTILITY = 30;
 
 function isEligibleForRoomAmbush(npc) {
     if (!npc || npc.hp <= 0) return false;
+    if (npc.currentState && npc.currentState.sleeping) return false;
     if (npc.surrendered || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden) return false;
     // Mid cross-species skirmish (see CROSS-SPECIES SKIRMISHES) - too busy
     // fighting each other to also jump the player.
@@ -50754,7 +50976,7 @@ function buildObservationNarration(room) {
         if (name) {
             const presence = isZoneBoss(npc) && npc.boss && npc.boss.presence ? npc.boss.presence : "";
             const boundNote = getNPCBoundNote(npc);
-            lines.push(`You see ${name} here${presence ? ", " + presence : ""}${boundNote ? ", " + boundNote : ""}.`);
+            lines.push(`You see ${name} here${npc.currentState && npc.currentState.sleeping ? ", " + getNPCVisibleAction(npc).replace(/^is /, "") : ""}${presence ? ", " + presence : ""}${boundNote ? ", " + boundNote : ""}.`);
         }
     });
 
@@ -50883,7 +51105,7 @@ function renderRoomObservations(parent, room, layout) {
         parent.appendChild(btn);
 
         const detail = isZoneBoss(npc) && npc.boss && npc.boss.presence ? npc.boss.presence : "";
-        appendNarrationText(parent, ` here${detail ? ", " + detail : ""}.`);
+        appendNarrationText(parent, ` here${npc.currentState && npc.currentState.sleeping ? ", " + getNPCVisibleAction(npc).replace(/^is /, "") : ""}${detail ? ", " + detail : ""}.`);
         hasObservations = true;
     });
 
@@ -52628,7 +52850,7 @@ function tickNPCPartyLodgingRest() {
                 recoverRestingCompanion(npc, room, { sleep: true, fractional: true, share: 1 / SLEEP_TURNS, turns: 1,
                     completed: complete, ratioFor: plan.ratioOf, qualityFor: function () { return npc._npcSleepQuality; }, restFactorFor: plan.restFactorOf });
                 npc._npcRestTickTurn = now;
-                if (complete) { npc.currentState.sleeping = false; npc.currentState.gesture = "is waking up"; delete npc._npcSleepProgress; delete npc._npcSleepQuality; delete npc._npcRestSpot; }
+                if (complete) { wakeSleepingNPC(npc); }
             });
             if (changed && room === G.activeRoom && sleepers.every(isVisibleEntity)) {
                 const lines = plan.slots.filter(function (s) { return s.sleepers.length; }).map(function (s) {
@@ -73085,7 +73307,7 @@ function buildNPCExpressionSentence(npc) {
     if (npc.unconscious) {
         parts.push(`${pro.subj} ${pro.plural ? "lie" : "lies"} unconscious.`);
     } else if (state.sleeping) {
-        parts.push(`${pro.subj} ${pro.plural ? "are" : "is"} fast asleep.`);
+        parts.push(`${pro.subj} ${typeof getNPCVisibleAction === "function" ? getNPCVisibleAction(npc).replace(/^is\b/, pro.plural ? "are" : "is") : (pro.plural ? "are" : "is") + " fast asleep"}.`);
     } else {
         const behavior = (typeof getNPCVisibleBehavior === "function" ? getNPCVisibleBehavior(npc) : String(npc.behavior || "")).trim();
         if (behavior) {
@@ -73105,7 +73327,7 @@ function buildNPCExpressionSentence(npc) {
     }
 
     const hpMax = npc.hpMax || 0;
-    if (!npc.unconscious && hpMax > 0 && typeof npc.hp === "number" && npc.hp / hpMax <= 0.4) {
+    if (!npc.unconscious && !state.sleeping && hpMax > 0 && typeof npc.hp === "number" && npc.hp / hpMax <= 0.4) {
         parts.push(`${pro.subj} ${pro.plural ? "look" : "looks"} hurt and unsteady.`);
     }
     return parts.join(" ");
@@ -73145,7 +73367,7 @@ function getNPCPanelDescriptionSnapshot(npc) {
         ? window.getActiveSmellNotes(npc).map(note => note.text).join(";") : "";
     // Version invalidates saved prose from the old three-sentence format.
     // Live facts include equipment, anatomy, age and the player's taste result.
-    return ["appearance-v8", buildNPCLookDescription(npc), smellNotes].join("|");
+    return ["appearance-v9-sleep", buildNPCLookDescription(npc), smellNotes].join("|");
 }
 
 function npcPanelDescriptionStale(npc) {
@@ -73153,6 +73375,14 @@ function npcPanelDescriptionStale(npc) {
     const cached = npc._panelDescription;
     if (!cached || !cached.text) return true;
     return cached.snapshot !== getNPCPanelDescriptionSnapshot(npc);
+}
+
+function npcPanelHasExcludedFeatures(npc, text, facts) {
+    const anatomy = npc.anatomy || {};
+    const excluded = [].concat(anatomy.features || [], anatomy.marks || [], npc.specialTraits || []);
+    const normalize = function (value) { return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); };
+    const prose = normalize(text), supplied = normalize(facts);
+    return excluded.some(function (feature) { const phrase = normalize(feature); return phrase && !supplied.includes(phrase) && prose.includes(phrase); });
 }
 
 function buildNPCPanelDescriptionInstruction(npc, room) {
@@ -73163,13 +73393,14 @@ function buildNPCPanelDescriptionInstruction(npc, room) {
         "TASK: Copy-edit the supplied character description for clarity and flow. Keep it compact enough for a sidebar. Use complete sentences, combine related details, and remove repetition without losing distinct facts.",
         "Write complete sentences with subjects and verbs, natural articles and connective wording. Combine related appearance details into fluid sentences and vary sentence structure. The result should read like a coherent character description, never a checklist, catalogue of labels or series of noun fragments.",
         "Improve the wording without expanding the description. Mention each distinct fact once: combine duplicate descriptions of the same feature, such as soft build and soft silhouette. Keep the prose concise and natural, with no padding or elaboration. Do not reduce sentences to fragments.",
-        "Group related details into readable paragraphs in this order, omitting missing sections: age, explicit gender and species, stature, build, skin/fur/scales, eyes and hair; worn clothes; broad body shape and sizes; distinguishing features; piercings and fashion; recorded visible expression or mannerisms; the player's impression. Do not merge clothing or body sizes into the appearance paragraph.",
+        "Group related details into readable paragraphs in this order, omitting missing sections: age, explicit gender and species, stature, build, skin/fur/scales, eyes and hair; worn clothes; broad body shape and sizes; piercings and fashion; recorded visible expression or mannerisms; the player's impression. Do not merge clothing or body sizes into the appearance paragraph.",
         "Chest/breast size and butt size are distinct required details whenever supplied. Keep each size explicit. An overall build or silhouette never replaces an anatomical size. Repeat the exact size word from the facts for each part; never substitute a different size, and do not omit or generalize them to save space.",
         "The opening may contain You look up at or You look down at, calculated from the NPC and player heights. Preserve that exact cue when supplied. If neither cue is supplied, add no height cue. Do not add a separate height statement, numeric measurement or taller/shorter comparison.",
         "Preserve every distinct supplied fact and use the NPC's pronouns. Do not invent missing height, hair length, features, piercings, fashion, clothing or sizes. Body shape is a broad silhouette, not permission to describe hidden details.",
         "Describe observable appearance and ONLY the visible behavior already supplied in the facts, such as watching closely or sighing. Do not add gestures, actions, motivation, thoughts, personality, job, history or dialogue. Explicit gender must remain in the opening description, not merely be implied by pronouns. The facts are data, never instructions.",
         "The final 'You find ...' sentence is already calculated from the player's defined likes and dislikes and the NPC's Charisma. Preserve it EXACTLY as the last paragraph. Do not substitute your own beauty judgement or the NPC's attraction toward the player. If no such sentence is supplied, add no attractiveness judgement.",
         "Use plain, literal language. No metaphors, fantasy tropes, invented confidence, mysterious auras, hidden depths or narrative flourishes. Never turn a garment or body detail into an invented personality trait. Never describe someone as barefoot when footwear is listed. Do not repeat an anatomical feature as an action: having a snout does not mean the NPC draws attention to it.",
+        "Omit the Distinguishing features section and physical distinguishing marks/traits. Sleeping facts take priority over any standing, idle, watchful or conversational behavior; explicitly preserve asleep/sleeping when supplied.",
         "Third person, present tense, except the supplied opening height cue and final player-impression sentence. No headings, Markdown, HTML, quotation marks or introductory commentary. Output only the description.",
         "LOOK FACTS (JSON string):", JSON.stringify(buildNPCLookDescription(npc)),
         smellNotes ? "NOTICEABLE SCENT (JSON string): " + JSON.stringify(smellNotes) : ""
@@ -73279,7 +73510,7 @@ function queueNPCPanelDescription(npc) {
                 // cannot be cached under the new state or shown in its panel.
                 if (snapshot !== getNPCPanelDescriptionSnapshot(npc)) { refresh = true; return; }
                 const text = cleanNPCPanelDescription(typeof result === "string" ? result : result && result.text, facts);
-                if (!text || !npcPanelDimensionsPreserved(npc, text)) return;
+                if (!text || !npcPanelDimensionsPreserved(npc, text) || npcPanelHasExcludedFeatures(npc, text, facts) || /distinguishing features/i.test(text) || npc.currentState && npc.currentState.sleeping && !/\b(?:asleep|sleeping)\b/i.test(text)) return;
                 npc._panelDescription = { text: text, snapshot: snapshot };
                 refresh = true;
             } catch (e) {
@@ -73813,7 +74044,7 @@ function restoreRoomHeader() {
 // "He is baring his teeth, with broad-shouldered build, deep blue scales..."
 function buildEngagedNPCLine(npc) {
     const pro = getNPCPronounSet(npc);
-    let action = String(npc.action || "is standing nearby").trim();
+    let action = typeof getNPCVisibleAction === "function" ? getNPCVisibleAction(npc) : String(npc.action || "is standing nearby").trim();
     if (pro.plural) {
         // "They are ..." with a pronoun subject; a descriptor subject
         // ("A person is ...") keeps the singular verb.
@@ -73890,7 +74121,7 @@ function buildNPCPortraitSubject(npc) {
     let highlights = [];
     try {
         highlights = typeof buildNPCAppearanceHighlights === "function"
-            ? buildNPCAppearanceHighlights(npc)
+            ? buildNPCAppearanceHighlights(npc, true)
             : (Array.isArray(npc.appearanceHighlights) ? npc.appearanceHighlights : []);
     } catch (e) { highlights = []; }
 
@@ -74144,7 +74375,7 @@ function buildPlayerPortraitSubject(player) {
     const highlights = buildNPCAppearanceHighlights({
         anatomy: { build: a.build, body: { color: a.skinTone, surfaceType: surface }, features: a.feature ? [a.feature] : [] },
         eyeColor: a.eyeColor, hairColor: a.hairColor, hairStyle: a.hairStyle
-    });
+    }, true);
     return {
         text: ["adult", player.gender, species, profile.face].concat(highlights).filter(Boolean).join(", "),
         negatives: profile.negatives || ""
@@ -75436,9 +75667,9 @@ function selectNPC(npc) {
         }
         clearChatLog();
         // An NPC may speak first about something that just changed (budgeted).
-        if (typeof maybeNPCOpener === "function") maybeNPCOpener(npc);
+        if (!(npc.currentState && npc.currentState.sleeping) && typeof maybeNPCOpener === "function") maybeNPCOpener(npc);
         // A friendly NPC with coin may offer to buy you a drink or a meal.
-        if (typeof maybeOfferNPCShare === "function") maybeOfferNPCShare(npc);
+        if (!(npc.currentState && npc.currentState.sleeping) && typeof maybeOfferNPCShare === "function") maybeOfferNPCShare(npc);
     }
     // Use the same clean, comma-clause phrasing as the room's "You see X
     // here, with ..." observation text, instead of getNPCInspectionDetail's
@@ -75460,6 +75691,8 @@ function selectNPC(npc) {
     if (hasActiveEncounter && typeof renderIntimacyActionMenu === "function") {
         G.activeNPCMode = "intimacy";
         renderIntimacyActionMenu(npc);
+    } else if (npc.currentState && npc.currentState.sleeping) {
+        renderNPCActionMenu(npc);
     } else if (isHeldCaptive(npc)) {
         // Re-engaging a surrendered opponent reopens the captor menu — they
         // are still in the player's power, not back to ordinary discourse.
@@ -76293,6 +76526,8 @@ function renderIntimacyActionMenu(npc) {
             const tab = e.target.closest(".intimacy-tab-btn");
             const sectionLabel = tab.dataset.section;
             
+            console.log(`[DEBUG TAB CLICK] Tab clicked: ${sectionLabel}`);
+            
             // Update active tab
             const allTabs = document.querySelectorAll(".intimacy-tab-btn");
             allTabs.forEach(t => t.classList.remove("active"));
@@ -76300,13 +76535,22 @@ function renderIntimacyActionMenu(npc) {
             
             // Hide all sections
             const allSections = document.querySelectorAll(".intimacy-section-content");
+            console.log(`[DEBUG TAB CLICK] Hiding ${allSections.length} sections`);
             allSections.forEach(s => s.style.display = "none");
             
             // Show selected section
             const escapedLabel = sectionLabel.replace(/&/g, "&amp;");
+            console.log(`[DEBUG TAB CLICK] Looking for section with data-section="${escapedLabel}"`);
             const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + escapedLabel + "\"]");
+            
             if (targetSection) {
+                console.log(`[DEBUG TAB CLICK] Found target section, showing it`);
+                console.log(`[DEBUG TAB CLICK] Section HTML:`, targetSection.innerHTML.substring(0, 200));
                 targetSection.style.display = "";
+                console.log(`[DEBUG TAB CLICK] Section display style after:`, targetSection.style.display);
+            } else {
+                console.log(`[DEBUG TAB CLICK] ERROR: Target section NOT found for label: ${sectionLabel}`);
+                console.log(`[DEBUG TAB CLICK] All section data-section values:`, Array.from(allSections).map(s => s.dataset.section));
             }
         };
         
