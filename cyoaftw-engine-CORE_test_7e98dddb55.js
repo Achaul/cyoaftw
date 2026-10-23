@@ -10943,7 +10943,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-23-002";
+window.__ENGINE_CORE_VERSION = "2026-10-23-004";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -15885,13 +15885,17 @@ function getPlayerPresentationScore() {
     return getWornCharismaBonus(G.player) + getHygieneCharismaPenalty(G.player);
 }
 
-function getPlayerAppearanceText() {
+// forReader: the player's own sheet gets plain wording; AI prompts get the precise anatomy.
+function getPlayerAppearanceText(forReader) {
     const a = G && G.player && G.player.appearance;
     if (!a || typeof a !== "object") return "";
     const parts = [];
     const entity = { appearance: a };
-    const baseline = typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(entity) : "";
-    if (baseline) parts.push(baseline);
+    if (forReader && typeof getSpeciesLookParts === "function") parts.push(...getSpeciesLookParts(entity));
+    else {
+        const baseline = typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(entity) : "";
+        if (baseline) parts.push(baseline);
+    }
     const build = typeof getEntityBuildText === "function" ? getEntityBuildText(entity) : a.build;
     if (build) parts.push(`${build} build`);
     if ((a.hairColor || a.hairStyle) && (typeof entityHasAppearancePart !== "function" || entityHasAppearancePart(entity, "hair"))) {
@@ -56762,17 +56766,84 @@ function releasePlayerFromJail(how, extraLines) {
     saveGameState();
 }
 
+// Waiting out a sentence: the screen goes black and counts the days, one
+// card per day with at least JAIL_DAY_PAUSE_MS on each. Turns advance a day
+// at a time, so NPCs, time and the calendar move as before. Returns a promise
+// so text mode stays busy until release.
+const JAIL_DAY_PAUSE_MS = 5000;
+const JAIL_FADE_MS = 1200;
+const JAIL_DAY_LINES = [
+    "You sit on the straw and count the scratches on the wall.",
+    "A guard slides a bowl of thin gruel under the door.",
+    "Footsteps pass on the stairs. They do not stop.",
+    "You pace the cell. Four steps one way, four steps back.",
+    "Somewhere above, a bell marks the hours.",
+    "You sleep badly and wake stiff."
+];
+let jailWaitRunning = false;
+
 function waitOutSentence() {
     const p = G.player;
-    if (!isPlayerJailed()) return;
-    const turns = Math.max(0, p.jail.releaseTurn - getCurrentStoryTurn());
-    for (let i = 0; i < turns; i++) {
-        advanceStoryTurn(1);
-        if (i % 10 === 9 && typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
-    }
-    p.hp = Math.min(p.hpMax, p.hp + Math.floor(turns / 5));
-    restoreEntityStamina(p, Math.floor(turns / 2));
-    releasePlayerFromJail("served", [`You sit out ${turns} turns on the straw, counting scratches on the wall.`]);
+    if (!isPlayerJailed() || jailWaitRunning) return Promise.resolve();
+    const start = getCurrentStoryTurn();
+    const release = p.jail.releaseTurn;
+    const turns = Math.max(0, release - start);
+    const firstDay = getGameDay(start);
+    const lastDay = getGameDay(Math.max(start, release - 1));
+    const totalDays = lastDay - firstDay + 1;
+    const overlay = typeof document !== "undefined" ? document.getElementById("collapseFadeOverlay") : null;
+    const wait = function (ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); };
+    let advanced = 0;
+    const advanceTo = function (turn) {
+        while (getCurrentStoryTurn() < turn) {
+            advanceStoryTurn(1);
+            advanced++;
+            if (advanced % 10 === 0 && typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
+        }
+    };
+    const finish = function () {
+        p.hp = Math.min(p.hpMax, p.hp + Math.floor(turns / 5));
+        restoreEntityStamina(p, Math.floor(turns / 2));
+        releasePlayerFromJail("served", [`You sit out ${totalDays === 1 ? "the day" : totalDays + " days"} on the straw, counting scratches on the wall.`]);
+    };
+    // No overlay (tests, broken shell): resolve at once, as before.
+    if (!overlay || turns <= 0) { advanceTo(release); finish(); return Promise.resolve(); }
+
+    jailWaitRunning = true;
+    const textEl = document.getElementById("collapseFadeText");
+    if (textEl) textEl.style.whiteSpace = "pre-line";
+    return (async function () {
+        try {
+            setCollapseFadeText(null);
+            setCollapseFadeVisible(true);
+            await wait(JAIL_FADE_MS);
+            for (let i = 0; i < totalDays && isPlayerJailed(); i++) {
+                const date = getCalendarDate();
+                const left = totalDays - i - 1;
+                const line = left === 0 ? "Footsteps on the stairs. A key turns in the lock." : JAIL_DAY_LINES[(firstDay + i) % JAIL_DAY_LINES.length];
+                const text = "Day " + (i + 1) + " of " + totalDays + " \u00b7 " + date.weekdayName + ", " + formatCalendarDate(date) +
+                    "\n\n" + line + (left > 0 ? "\n\n" + left + (left === 1 ? " day remains." : " days remain.") : "");
+                setCollapseFadeText(text);
+                if (typeof publishTextModeOutput === "function" && textModeState && textModeState.enabled) {
+                    publishTextModeOutput("narration", text.replace(/\s*\u00b7\s*/g, ". ").replace(/\n+/g, " "), { source: "jail-wait" });
+                }
+                // The day passes while its card is shown.
+                advanceTo(Math.min(release, (firstDay + i) * DAY_TURNS));
+                renderStats();
+                await wait(JAIL_DAY_PAUSE_MS);
+                setCollapseFadeText(null);
+                await wait(800);
+            }
+            advanceTo(release);
+            finish();
+            setCollapseFadeVisible(false);
+            await wait(JAIL_FADE_MS);
+        } finally {
+            hideCollapseFadeOverlay();
+            if (textEl) textEl.style.whiteSpace = "";
+            jailWaitRunning = false;
+        }
+    })();
 }
 
 function payJailFine() {
@@ -61504,7 +61575,7 @@ const INTERACT_MENU_ACTIONS = [
         visible: function () { return isPlayerJailed(); },
         disabledReason: function () { return ""; },
         title: "Sit out the rest of your sentence.",
-        run: function () { closeInteractMenu(); waitOutSentence(); }
+        run: function () { closeInteractMenu(); return waitOutSentence(); }
     },
     {
         id: "jailpay",
@@ -62611,8 +62682,11 @@ function shapeshiftPick(list, current) {
 function describeShapeshiftForm(a, gender) {
     const bits = [];
     const entity = { appearance: a };
-    const baseline = typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(entity) : "";
-    if (baseline) bits.push(baseline);
+    if (typeof getSpeciesLookParts === "function") bits.push(...getSpeciesLookParts(entity));
+    else {
+        const baseline = typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(entity) : "";
+        if (baseline) bits.push(baseline);
+    }
     const build = typeof getEntityBuildText === "function" ? getEntityBuildText(entity) : a.build;
     if (build) bits.push(build + " build");
     if (a.hairColor && (typeof entityHasAppearancePart !== "function" || entityHasAppearancePart(entity, "hair"))) bits.push(a.hairColor + " hair" + (a.hairStyle ? " (" + a.hairStyle + ")" : ""));
@@ -72943,17 +73017,14 @@ function openFixtureCard(fixture, cardOptions) {
         const fxDur = getDurabilityExamineLine(fixture, "fixture");
         if (fxDur) statBits.push(fxDur);
     }
-    if (typeof worldObjectFixtureActions === "function") {
-        worldObjectFixtureActions(fixture).forEach(function (action) {
-            addAction(action.label, function (event) { return worldObjectCardAction(fixture, action, event); }, { keepOpen: true, disabledReason: action.reason, title: action.note });
-        });
-    }
+    // Lift / drag / shift / take <object> are text-mode verbs (textFixtureActions);
+    // the card keeps only the object's own buttons.
     statsEl.textContent = statBits.join("  ·  ");
     statsEl.style.display = statBits.length ? "block" : "none";
 
     const leaveBtn = document.createElement("button");
     leaveBtn.type = "button";
-    leaveBtn.textContent = "Leave";
+    leaveBtn.textContent = isContainerFixture(fixture) ? "Close" : "Leave";
     leaveBtn.onclick = () => leaveItemModal();
     if (!isNoticeFixture(fixture)) actionsEl.appendChild(leaveBtn);
 
@@ -73048,7 +73119,7 @@ function renderContainerStoreCard(fixture, cardOpts) {
 
     const leaveBtn = document.createElement("button");
     leaveBtn.type = "button";
-    leaveBtn.textContent = "Leave";
+    leaveBtn.textContent = "Close";
     leaveBtn.onclick = () => leaveItemModal();
     actionsEl.appendChild(leaveBtn);
 
@@ -73194,14 +73265,7 @@ function openItemModal(item) {
         actionsEl.appendChild(searchBtn);
     }
     actionsEl.appendChild(takeBtn);
-    if (typeof worldObjectFixtureActions === "function") {
-        worldObjectFixtureActions(item, "item").filter(function (action) { return action.id !== "take"; }).forEach(function (action) {
-            const button = document.createElement("button");
-            button.type = "button"; button.textContent = action.label; button.disabled = !!action.reason; button.title = action.reason || action.note;
-            button.onclick = function (event) { return worldObjectCardAction(item, action, event); };
-            actionsEl.appendChild(button);
-        });
-    }
+    // Lift / drag / shift stay text-mode verbs; the card shows Take and Equip.
     if (getDirectEquipmentSlot(item) && isRoomItemTakeable(item)) {
         const equipBtn = document.createElement("button");
         equipBtn.type = "button";
@@ -73361,7 +73425,7 @@ function renderSlimeRemainsActionMenu(item, el) {
     }
     const resurrection = getBodyResurrection(item);
     if (resurrection) buttons.push(createCombatButton("Resurrect", () => resurrectBody(item), { disabled: !!resurrection.block, title: resurrection.block || resurrection.summary }));
-    buttons.push(createCombatButton("Leave", () => leaveRoomObject()));
+    buttons.push(createCombatButton("Step back", () => leaveRoomObject()));
     appendCombatGroup(el, "Slime", buttons);
     if (item.bodyLooted) renderBodyLootGroup(item, el);
 }
@@ -73446,7 +73510,7 @@ function renderRoomObjectActionMenu(item) {
         buttons.push(createCombatButton("Wash up", () => washAtRoomObject(item)));
     }
 
-    buttons.push(createCombatButton("Leave", () => leaveRoomObject()));
+    buttons.push(createCombatButton(isBody ? "Step back" : "Leave", () => leaveRoomObject()));
     appendCombatGroup(el, isBody ? "Body" : "Item", buttons);
 
     if (isBody && item.bodyLooted) {
@@ -74331,7 +74395,7 @@ function getNPCLookItemName(item) {
 function buildNPCAppearanceSentence(npc) {
     if (!npc) return "";
     const highlights = typeof buildNPCAppearanceHighlights === "function"
-        ? buildNPCAppearanceHighlights(npc)
+        ? buildNPCAppearanceHighlights(npc, false, true)
         : (Array.isArray(npc.appearanceHighlights) ? npc.appearanceHighlights : []);
     if (!highlights.length) return "";
     const pro = getNPCPronounSet(npc);
@@ -74430,7 +74494,7 @@ function getNPCPanelDescriptionSnapshot(npc) {
         ? window.getActiveSmellNotes(npc).map(note => note.text).join(";") : "";
     // Version invalidates saved prose from the old three-sentence format.
     // Live facts include equipment, anatomy, age and the player's taste result.
-    return ["appearance-v10-species", buildNPCLookDescription(npc), smellNotes].join("|");
+    return ["appearance-v11-look", buildNPCLookDescription(npc), smellNotes].join("|");
 }
 
 function npcPanelDescriptionStale(npc) {
@@ -74445,7 +74509,9 @@ function npcPanelHasExcludedFeatures(npc, text, facts) {
     const excluded = [].concat(anatomy.features || [], anatomy.marks || [], npc.specialTraits || []);
     const normalize = function (value) { return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); };
     const prose = normalize(text), supplied = normalize(facts);
-    const baseline = typeof getSpeciesAppearanceText === "function" ? normalize(getSpeciesAppearanceText(npc)) : "";
+    // Both wordings of the species anatomy count as supplied (reader look + precise record).
+    const baseline = normalize([typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(npc) : "",
+        typeof getSpeciesLookText === "function" ? getSpeciesLookText(npc) : ""].join(" "));
     const speciesWords = new Set(baseline.split(" "));
     return excluded.some(function (feature) {
         const phrase = normalize(feature);
@@ -79704,7 +79770,7 @@ function buildCharacterSheetContent(root) {
     // Identity
     const who = sheetSection(root, "Character");
     if (p.gender) sheetRow(who, "Gender", String(p.gender));
-    const look = typeof getPlayerAppearanceText === "function" ? getPlayerAppearanceText() : "";
+    const look = typeof getPlayerAppearanceText === "function" ? getPlayerAppearanceText(true) : "";
     if (look) sheetRow(who, "Appearance", look);
     const traits = getPlayerTraitCounts();
     const traitKeys = Object.keys(traits).filter(k => typeof traits[k] === "number" && traits[k] > 0)

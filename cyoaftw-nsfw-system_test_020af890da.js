@@ -5663,12 +5663,17 @@ avoidNote,
     return surfaceMap[surfaceType] || surfaceMap.skin || "aroused surface";
   }
 
-  // Get appropriate butt description based on surface type
-  function getButtDetail(surfaceType) {
+  // Get appropriate butt description based on surface type and species
+  function getButtDetail(surfaceType, species) {
+    const speciesLower = String(species || "").toLowerCase();
+    // Kenku have a feather fan that should be visible
+    if (speciesLower === "kenku" || speciesLower.includes("kenku")) {
+      return "feathered buttocks with a prominent fanned feather fan";
+    }
     const surfaceMap = {
       "fur": "fur-covered buttocks",
       "scales": "scaled buttocks",
-      "skin": "bare soft buttocks",
+      "skin": "soft buttocks",
       "bone": "smooth bone contours",
       "gel": "gelatinous buttocks",
       "feathers": "feathered buttocks",
@@ -5684,7 +5689,7 @@ avoidNote,
     const surfaceMap = {
       "fur": "fur-covered chest",
       "scales": "scaled chest",
-      "skin": "bare chest",
+      "skin": "smooth chest",
       "bone": "smooth bone chest",
       "gel": "gelatinous chest",
       "feathers": "feathered chest",
@@ -5700,7 +5705,7 @@ avoidNote,
     const surfaceMap = {
       "fur": "fur-covered breasts",
       "scales": "scaled breasts",
-      "skin": "bare breasts",
+      "skin": "soft breasts",
       "bone": "bone-contoured breasts",
       "gel": "gelatinous breasts",
       "feathers": "feathered breasts",
@@ -5709,6 +5714,61 @@ avoidNote,
       "form": "amorphous breasts"
     };
     return surfaceMap[surfaceType] || surfaceMap.skin || "breasts";
+  }
+
+  // Get appropriate mouth/facial feature description based on surface type and species
+  function getMouthDetail(surfaceType, species) {
+    const speciesLower = String(species || "").toLowerCase();
+    const hasBeak = speciesLower === "kenku" || speciesLower.includes("kenku");
+    const hasSnout = speciesLower === "lizardfolk" || speciesLower === "kobold" || 
+        speciesLower === "dragonborn" || speciesLower === "rat" || 
+        speciesLower === "ratfolk" || speciesLower === "harefolk";
+    
+    if (hasBeak) {
+        return "beak";
+    } else if (hasSnout) {
+        return "snout and lips";
+    } else {
+        return "lips and mouth";
+    }
+  }
+
+  // Get pronoun for mouth framing
+  function getMouthPronoun(surfaceType) {
+    if (surfaceType === "feathers") {
+        return "it";
+    } else if (surfaceType === "scales" || surfaceType === "fur") {
+        return "they";
+    } else {
+        return "they";
+    }
+  }
+
+  // Get mouth description for portraits
+  function getMouthDescription(surfaceType, species) {
+    const speciesLower = String(species || "").toLowerCase();
+    const hasBeak = speciesLower === "kenku" || speciesLower.includes("kenku");
+    const hasSnout = speciesLower === "lizardfolk" || speciesLower === "kobold" || 
+        speciesLower === "dragonborn" || speciesLower === "rat" || 
+        speciesLower === "ratfolk" || speciesLower === "harefolk";
+    
+    if (hasBeak) {
+        return pickRandom([
+            "slightly parted beak, glossy",
+            "hooked beak, dark and smooth",
+            "beak with subtle sheen",
+            "crow-like beak, slightly open"
+        ]);
+    } else if (hasSnout) {
+        return pickRandom([
+            "snout with parted lips, textured",
+            "muzzle and mouth, scaled",
+            "snout, nostrils visible",
+            "reptilian snout, jaws slightly open"
+        ]);
+    } else {
+        return "glistening lips, slightly parted, warm breath";
+    }
   }
 
   // DeepSeek prompt optimization: Apply occlusion and visibility rules for better image generation
@@ -5777,6 +5837,7 @@ avoidNote,
     const body = anatomy.body || {};
     const surfaceType = (body && String(body.surfaceType || "").trim().toLowerCase()) || "skin";
     const surfaceColor = (body && String(body.color || "").trim().toLowerCase()) || "";
+    const species = String(npc.species || "").trim().toLowerCase();
     const arousalTerms = getSurfaceArousalTerm(surfaceType) + ", aroused";
     
     // Get anatomy type (mammal, reptilian, avian, etc.) from species template
@@ -5793,7 +5854,7 @@ avoidNote,
     const getColoredSurfaceDetail = (baseDetail) => {
         if (!surfaceColor) return baseDetail;
         // Insert color before the surface type description
-        return baseDetail.replace(/^(fur|scaled|bare|smooth|gelatinous|feathered|chitin-plated|translucent|amorphous)/i, surfaceColor + " $1");
+        return baseDetail.replace(/^(fur|scaled|soft|smooth|gelatinous|feathered|chitin-plated|translucent|amorphous)/i, surfaceColor + " $1");
     };
 
     // Part definitions: macro framing, anatomy detail and region. The
@@ -5801,8 +5862,8 @@ avoidNote,
     // part-scene redraw would never match it.
     const PART_DEFS = {
       mouth: {
-        framing: "Extreme macro focus on the lips and mouth only, they fill the entire frame, nothing else in frame. ",
-        detail: "glistening lips, slightly parted, warm breath",
+        framing: `Extreme macro focus on the ${getMouthDetail(surfaceType, species)} only, ${getMouthPronoun(surfaceType)} fill the entire frame, nothing else in frame. `,
+        detail: getMouthDescription(surfaceType, species),
         region: "head",
         negatives: "wide shot, full face, both eyes, looking at camera"
       },
@@ -5831,14 +5892,14 @@ avoidNote,
         negatives: "wide shot, visible face, eyes, full body, vagina, vulva, female genitalia, clitoris"
       },
       butt: {
-        framing: `Extreme close-up of the ${getButtDetail(surfaceType)} only, they fill the entire frame, nothing else in frame, face not visible. `,
-        detail: getColoredSurfaceDetail(getButtDetail(surfaceType)),
+        framing: `Extreme close-up of the ${getButtDetail(surfaceType, species)} only, they fill the entire frame, nothing else in frame, face not visible. `,
+        detail: getColoredSurfaceDetail(getButtDetail(surfaceType, species)),
         region: "rear",
         negatives: "wide shot, visible face, eyes, full body," + (feminine ? " penis, male genitalia, scrotum" : " vagina, vulva, female genitalia, clitoris")
       },
       anus: {
-        framing: `Extreme close-up of the ${getButtDetail(surfaceType)}, they fill the entire frame, nothing else in frame, face not visible. `,
-        detail: getColoredSurfaceDetail(getButtDetail(surfaceType)) + ", detailed puckered anus, wrinkled asshole",
+        framing: `Extreme close-up of the ${getButtDetail(surfaceType, species)}, they fill the entire frame, nothing else in frame, face not visible. `,
+        detail: getColoredSurfaceDetail(getButtDetail(surfaceType, species)) + ", detailed puckered anus, wrinkled asshole",
         region: "rear",
         negatives: "wide shot, visible face, eyes, full body, breasts, genitals"
       },

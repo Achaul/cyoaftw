@@ -5824,6 +5824,37 @@ function getEntitySurfaceParts(entity) {
     return color && surface ? [color + " " + surface] : [];
 }
 
+// Reader-facing species anatomy. anatomyProfile.morphology stays the precise
+// record for AI prompts, portraits and checks; anatomyProfile.look holds the
+// short phrases a player reads ("" leaves an unremarkable part out). An
+// individual override (anatomy.morphology) wins and is lightly tidied.
+function _npcTidyMorphologyPhrase(text) {
+    return String(text || "").replace(/^\s*one pair of\s+/i, "")
+        .replace(/\s+(?:on|projecting from) the sides of the head\b/i, "").replace(/\s+/g, " ").trim();
+}
+
+function getSpeciesLookParts(entity) {
+    if (String(entity && (entity.species || (entity.appearance && entity.appearance.species)) || "").toLowerCase() === "slime") return [];
+    const profile = getEntityAnatomyProfile(entity);
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    const overrides = anatomy.morphology || appearance.morphology || {};
+    const look = profile.look || {};
+    const morphology = getEntityMorphology(entity);
+    const parts = [];
+    ["ears", "face", "bodyPlan", "hands", "feet", "tail", "wings"].forEach(key => {
+        let text;
+        if (Object.prototype.hasOwnProperty.call(overrides, key)) text = _npcTidyMorphologyPhrase(overrides[key]);
+        else if (Object.prototype.hasOwnProperty.call(look, key)) text = String(look[key] || "").trim();
+        else text = _npcTidyMorphologyPhrase(morphology[key]);
+        if (text && parts.indexOf(text) < 0) parts.push(text);
+    });
+    return parts;
+}
+
+function getSpeciesLookText(entity) {
+    return _npcJoinList(getSpeciesLookParts(entity));
+}
+
 function getSpeciesAppearanceText(entity, forPrompt) {
     const traits = getSpeciesAppearanceTraits(entity);
     if (forPrompt) {
@@ -5898,7 +5929,7 @@ function getNPCVisibleBehavior(npc) {
     return (npc.hostility || 0) >= 60 ? "Looks ready to attack" : "Quivers gently";
 }
 
-function buildNPCAppearanceHighlights(npc, forPortrait) {
+function buildNPCAppearanceHighlights(npc, forPortrait, forReader) {
     if (!npc) return [];
     const anatomy = npc.anatomy || {};
     const body = anatomy.body || {};
@@ -5906,8 +5937,11 @@ function buildNPCAppearanceHighlights(npc, forPortrait) {
 
     const build = getEntityBuildText(npc);
     if (build) highlights.push(build + " build");
-    const speciesTraits = getSpeciesAppearanceText(npc);
-    if (speciesTraits) highlights.push(speciesTraits);
+    if (forReader) highlights.push(...getSpeciesLookParts(npc));
+    else {
+        const speciesTraits = getSpeciesAppearanceText(npc);
+        if (speciesTraits) highlights.push(speciesTraits);
+    }
     
     if (isSlimeNPC(npc)) highlights.push(getSlimeBodyDescription(npc));
     else highlights.push(...getEntitySurfaceParts(npc));
@@ -5944,7 +5978,9 @@ function buildNPCPhysicalSummary(npc) {
 function getNPCObservationDetail(npc) {
     if (!npc) return "";
     // Rebuild from live facts rather than legacy cached feature lists.
-    const highlights = buildNPCAppearanceHighlights(npc).slice(0, 4);
+    // A glance: build, the two most telling species parts, then colouring.
+    const look = getSpeciesLookParts(npc).slice(2);
+    const highlights = buildNPCAppearanceHighlights(npc, false, true).filter(h => look.indexOf(h) < 0).slice(0, 4);
     if (!highlights.length) return "";
     return "with " + _npcJoinList(highlights);
 }
@@ -6028,7 +6064,7 @@ function getNPCInspectionDetail(npc) {
     if (identity) first.push(opening + " " + _npcInspectionArticle(identity) + " " + identity + ".");
     const build = _npcInspectionText(getEntityBuildText(npc));
     if (build) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(build) + " " + build + " build.");
-    const speciesTraits = getSpeciesAppearanceText(npc);
+    const speciesTraits = getSpeciesLookText(npc);
     if (speciesTraits) first.push(p.subject + " " + p.have + " " + speciesTraits + ".");
     const colouring = [];
     const surface = body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.featherColor ? "feathers" : npc.scaleColor ? "scales" : "");

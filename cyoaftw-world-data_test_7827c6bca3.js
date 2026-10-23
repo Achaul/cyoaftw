@@ -191,6 +191,9 @@ const ZONE_TEMPLATES = [
 // Individual anatomy.morphology fields can override it (including an empty
 // string for an absent part). typicalBuild describes a tendency, not a mandate.
 // bodyFatEligible enables the one-time 5% NPC fullness roll; frame stays separate.
+// anatomyProfile.look is the reader-facing wording of the same parts, used in
+// descriptions the player reads. morphology stays the precise record for AI
+// prompts and portraits. A look part set to "" is left out of descriptions.
 
 const SPECIES_TEMPLATES = [
     {
@@ -204,6 +207,8 @@ const SPECIES_TEMPLATES = [
         lore: "Humans are adaptable people whose customs change quickly from town to frontier. They tend to judge strangers by conduct before bloodline.",
         anatomyProfile: {
             morphology: { ears: "one pair of rounded human ears on the sides of the head", face: "a human face", bodyPlan: "an upright human body with two arms and two legs", feet: "human feet" },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", face: "", bodyPlan: "", feet: "" },
             typicalBuild: "variable human proportions and body frames",
             bodyFatEligible: true,
             surfaceType: "skin",
@@ -233,6 +238,8 @@ const SPECIES_TEMPLATES = [
         lore: "Elves carry long memory in their manners. Even a casual remark may be weighed against old promises, beauty, and restraint.",
         anatomyProfile: {
             morphology: { ears: "one pair of long tapered elven ears on the sides of the head", face: "a fine-featured face with high cheekbones and almond-shaped eyes", bodyPlan: "an upright humanoid body with long limbs", feet: "humanlike feet" },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "long tapered ears", face: "fine features with high cheekbones and almond-shaped eyes", bodyPlan: "long limbs", feet: "" },
             typicalBuild: "usually slender and light-framed; individuals can carry extra body fat",
             bodyFatEligible: true,
             surfaceType: "skin",
@@ -262,6 +269,8 @@ const SPECIES_TEMPLATES = [
         lore: "Dwarves are shaped by clan, craft, and memory. They notice workmanship quickly and remember debts even faster.",
         anatomyProfile: {
             morphology: { ears: "one pair of rounded humanlike ears on the sides of the head", face: "a broad rounded face with full cheeks and a rounded jaw", bodyPlan: "a short broad body with compact limbs", feet: "broad humanlike feet" },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", face: "a broad round face with full cheeks", bodyPlan: "a short broad frame", feet: "" },
             typicalBuild: "usually stout and endomorphic, with a heavier rounded frame",
             buildWeights: { compact: 1, broad: 1, stout: 4, powerful: 1, thickset: 4 },
             bodyFatEligible: true,
@@ -292,6 +301,8 @@ const SPECIES_TEMPLATES = [
         lore: "Halflings survive by community, caution, and cheerful misdirection. They often know more local news than they admit.",
         anatomyProfile: {
             morphology: { ears: "one pair of rounded humanlike ears on the sides of the head", face: "a soft rounded adult face with a small nose", bodyPlan: "a short compact humanoid body with adult proportions", feet: "broad humanlike feet with hair on their tops" },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", face: "a soft round face with a small nose", bodyPlan: "a short compact frame", feet: "broad feet with hair on top" },
             typicalBuild: "usually compact and softly rounded, with short limbs",
             bodyFatEligible: true,
             surfaceType: "skin",
@@ -322,6 +333,8 @@ const SPECIES_TEMPLATES = [
         articulation: "Small sharp teeth give hard consonants a slight click. Subtle, not exaggerated.",
         anatomyProfile: {
             morphology: { ears: "one pair of very large long pointed goblin ears projecting from the sides of the head", face: "a leathery goblin face with a hooked nose, heavy brow and sharp teeth", bodyPlan: "a short humanoid body with long fingers", feet: "small claw-nailed feet" },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "very large pointed ears", face: "a leathery face with a hooked nose, heavy brow and sharp teeth", bodyPlan: "long fingers", feet: "small clawed feet" },
             typicalBuild: "usually wiry and thin-limbed",
             bodyFatEligible: true,
             surfaceType: "skin",
@@ -352,6 +365,8 @@ const SPECIES_TEMPLATES = [
         articulation: "Tusks blunt and thicken hard consonants slightly. Otherwise speaks clearly.",
         anatomyProfile: {
             morphology: { ears: "one pair of small rounded orc ears on the sides of the head", face: "a broad orc face with a heavy brow, flat nose, square underbite jaw and two lower tusks", bodyPlan: "a large broad-shouldered humanoid body with a thick neck", feet: "large humanlike feet" },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "small rounded ears", face: "a broad face with a heavy brow, flat nose and two lower tusks", bodyPlan: "broad shoulders and a thick neck", feet: "" },
             typicalBuild: "usually powerful and muscular, with a broad frame",
             bodyFatEligible: true,
             surfaceType: "skin",
@@ -382,6 +397,8 @@ const SPECIES_TEMPLATES = [
         articulation: "No lungs or vocal cords - speech is a dry, hollow approximation animated by will, not breath. No breath sounds or wet consonants; words land a beat flatter than a living voice.",
         anatomyProfile: {
             morphology: { ears: "no external ears", face: "a bare skull with exposed teeth and hollow eye sockets", bodyPlan: "an upright humanoid skeleton with exposed bones", feet: "skeletal feet", absent: ["skin", "flesh", "hair", "lips"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", face: "a bare skull with hollow eye sockets", bodyPlan: "nothing but bare bones", feet: "" },
             typicalBuild: "a bony humanoid frame without body fat",
             bodyFatEligible: false,
             surfaceType: "bone",
@@ -410,6 +427,8 @@ const SPECIES_TEMPLATES = [
         articulation: "A tiny mouth built for gnawing, not speech - words come out as a thin, urgent squeak-and-chitter blend, half-formed but understandable in context.",
         anatomyProfile: {
             morphology: { ears: "one pair of rounded rodent ears high on the sides of the head", face: "a pointed rat muzzle with whiskers and prominent incisors", bodyPlan: "a small quadrupedal rodent body", feet: "four small clawed paws", tail: "a long bare rat tail" },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "rounded ears", face: "a pointed whiskered muzzle with prominent incisors", bodyPlan: "", feet: "small clawed paws", tail: "a long bare tail" },
             typicalBuild: "a small low-slung rodent frame",
             bodyFatEligible: true,
             surfaceType: "fur",
@@ -445,6 +464,8 @@ const SPECIES_TEMPLATES = [
         articulation: "No physical vocal apparatus - sound seems to arrive from just behind the listener, thin and half-formed, more impression of speech than actual speech.",
         anatomyProfile: {
             morphology: { ears: "indistinct spectral ear outlines rather than solid external ears", face: "a translucent spectral face with wispy edges", bodyPlan: "an incorporeal humanoid outline", feet: "a fading lower outline that does not touch the floor", absent: ["solid flesh", "physical body fat"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", face: "a translucent face with wispy edges", bodyPlan: "a see-through outline", feet: "a lower body that fades before it reaches the floor" },
             typicalBuild: "a spectral outline; no unrecorded former species is implied",
             bodyFatEligible: false,
             surfaceType: "translucent form",
@@ -475,6 +496,8 @@ const SPECIES_TEMPLATES = [
         articulation: "A rigid snout with no lips - consonants form further back in the throat, with no lip-rounding for sounds like a soft b or w. Comes through as clipped and slightly breathy rather than mumbled or slurred.",
         anatomyProfile: {
             morphology: { ears: "recessed ear openings with no external ears", face: "a scaled draconic head with a blunt snout and swept-back horns", bodyPlan: "a large upright reptilian body", hands: "clawed hands", feet: "clawed reptilian feet", tail: "a thick scaly tail", absent: ["hair", "fur", "wings"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", face: "a scaled draconic head with a blunt snout and swept-back horns", bodyPlan: "", hands: "clawed hands", feet: "clawed feet", tail: "a thick scaly tail" },
             typicalBuild: "usually tall, broad-shouldered and muscular",
             bodyFatEligible: true,
             surfaceType: "scales",
@@ -508,6 +531,8 @@ const SPECIES_TEMPLATES = [
         articulation: "A long snout and forked tongue soften sibilants into a faint hiss and flatten vowels - the mouth doesn't round the way a human's does.",
         anatomyProfile: {
             morphology: { ears: "recessed ear openings with no external ears", face: "a scaled lizard head with a long snout and slit pupils", bodyPlan: "an upright reptilian body", hands: "clawed webbed hands", feet: "clawed reptilian feet", tail: "a thick muscular scaly tail", absent: ["hair", "fur", "wings", "horns"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", face: "a long-snouted lizard head with slit pupils", bodyPlan: "", hands: "clawed webbed hands", feet: "", tail: "a thick muscular tail" },
             typicalBuild: "usually lean and sinewy",
             bodyFatEligible: true,
             surfaceType: "scales",
@@ -541,6 +566,8 @@ const SPECIES_TEMPLATES = [
         articulation: "A small toothy snout gives words a slightly yipping, clipped quality, with sharp sibilants.",
         anatomyProfile: {
             morphology: { ears: "recessed ear openings with no external ears", face: "a small reptilian head with a pointed snout and small horns", bodyPlan: "a very short upright reptilian body", hands: "small clawed hands", feet: "small clawed reptilian feet", tail: "a thin whip-like scaly tail", absent: ["hair", "fur", "wings"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", face: "a small reptilian head with a pointed snout and little horns", bodyPlan: "", hands: "small clawed hands", feet: "", tail: "a thin whip-like tail" },
             typicalBuild: "usually slight and wiry",
             bodyFatEligible: true,
             surfaceType: "scales",
@@ -572,6 +599,8 @@ const SPECIES_TEMPLATES = [
         articulation: "A short muzzle and sharp canines give words a soft, purring roll on the r's, with the occasional trill when amused.",
         anatomyProfile: {
             morphology: { ears: "one pair of triangular furred cat ears on top of the head", face: "a feline face with a short muzzle, whiskers and slit pupils", bodyPlan: "an upright furred humanoid body", hands: "padded hands with retractable claws", feet: "padded feline feet", tail: "a long furred cat tail", absent: ["human ears", "a second pair of ears"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "triangular furred ears on top of the head", face: "a feline face with a short muzzle, whiskers and slit pupils", bodyPlan: "", hands: "padded hands with retractable claws", feet: "", tail: "a long furred tail" },
             typicalBuild: "usually lithe and flexible",
             bodyFatEligible: true,
             surfaceType: "fur",
@@ -603,6 +632,8 @@ const SPECIES_TEMPLATES = [
         articulation: "A long muzzle shapes words into a low, rumbling growl at the edges, and the occasional half-howl slips out when emotions run high.",
         anatomyProfile: {
             morphology: { ears: "one pair of upright furred wolf ears on top of the head", face: "a lupine face with a long muzzle and fangs", bodyPlan: "an upright furred humanoid body capable of running on all fours", hands: "heavy clawed hands", feet: "padded lupine feet", tail: "a bushy wolf tail", absent: ["human ears", "a second pair of ears"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "upright wolf ears", face: "a lupine face with a long muzzle and fangs", bodyPlan: "", hands: "heavy clawed hands", feet: "", tail: "a bushy tail" },
             typicalBuild: "usually rangy or muscular, with a strong frame",
             bodyFatEligible: true,
             surfaceType: "fur",
@@ -634,6 +665,8 @@ const SPECIES_TEMPLATES = [
         articulation: "Words come out in a lilting, sing-song rhythm, quick to laughter and prone to bleating when startled or when a joke lands.",
         anatomyProfile: {
             morphology: { ears: "one pair of furred goat-shaped ears projecting from the sides of the head", face: "a humanlike face with curved goat horns", bodyPlan: "a humanlike upper body above shaggy goat legs", feet: "cloven hooves instead of human feet", tail: "a short tufted goat tail", absent: ["elf ears", "human feet", "bare human legs"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "goat-shaped ears", face: "curved goat horns", bodyPlan: "shaggy goat legs", feet: "cloven hooves", tail: "a short tufted goat tail" },
             typicalBuild: "a variable humanoid frame above strong goat legs",
             bodyFatEligible: true,
             surfaceRegions: [
@@ -669,6 +702,8 @@ const SPECIES_TEMPLATES = [
         articulation: "A slime is a faceless gelatinous pile with no eyes, mouth or limbs. It moves by oozing and rippling, never by human gestures or facial expressions; its gurgles and slurps come from shifting gel.",
         anatomyProfile: {
             morphology: { ears: "no ears", bodyPlan: "an amorphous gelatinous body", absent: ["face", "eyes", "mouth", "limbs", "hair", "ears"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", bodyPlan: "" },
             typicalBuild: "a variable pooled gelatinous shape, not a human body frame",
             bodyFatEligible: false,
             surfaceType: "gel",
@@ -700,6 +735,8 @@ const SPECIES_TEMPLATES = [
         articulation: "A split lip and quick breath make words tumble out in rapid little bursts, with a soft thump of a hind foot when they mean it.",
         anatomyProfile: {
             morphology: { ears: "one pair of very long upright hare ears on top of the head", face: "a furred hare face with a twitching nose and split upper lip", bodyPlan: "an upright humanoid body with powerful hind legs", hands: "soft furred hands", feet: "long furred hind feet", tail: "a short fluffy hare tail", absent: ["human ears", "a second pair of ears"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "very long upright hare ears", face: "a furred face with a twitching nose and split upper lip", bodyPlan: "powerful hind legs", hands: "", feet: "long hind feet", tail: "a short fluffy tail" },
             typicalBuild: "usually light-boned and long-limbed",
             bodyFatEligible: true,
             surfaceType: "fur",
@@ -731,6 +768,8 @@ const SPECIES_TEMPLATES = [
         articulation: "A pointed snout and long front teeth give words a quick, whistling edge, with the occasional chitter when something pleases them.",
         anatomyProfile: {
             morphology: { ears: "one pair of rounded rodent ears high on the sides of the head", face: "a pointed rat muzzle with long whiskers and prominent incisors", bodyPlan: "a very short upright furred humanoid body of roughly kobold height", hands: "small clawed hands", feet: "small clawed rodent feet", tail: "a long bare rat tail", absent: ["human ears", "elf ears", "a second pair of ears"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "rounded rodent ears", face: "a pointed muzzle with long whiskers and prominent incisors", bodyPlan: "", hands: "small clawed hands", feet: "", tail: "a long bare tail" },
             typicalBuild: "usually compact or wiry, at kobold-like height",
             heightRangeCm: [70, 105],
             bodyFatEligible: true,
@@ -763,6 +802,8 @@ const SPECIES_TEMPLATES = [
         articulation: "They cannot shape words of their own. They speak only in sounds they have heard: whole borrowed phrases in other people's voices, door slams and clinks, strung together with clicks, caws, croaks and chirps.",
         anatomyProfile: {
             morphology: { ears: "concealed ear openings beneath head feathers with no external ears", face: "a crow-like head with a hooked beak", bodyPlan: "an upright feathered humanoid body", hands: "nimble feathered hands", feet: "three-toed taloned feet", wings: "small folded wings too short for flight", tail: "a long fanned feather fan (not a true tail but decorative plumage)", absent: ["human ears", "hair", "fur", "a human mouth"] },
+            // Reader-facing wording for the parts above ("" = not worth mentioning).
+            look: { ears: "", face: "a crow-like head with a hooked beak", bodyPlan: "", hands: "feathered hands", feet: "three-toed taloned feet", wings: "small folded wings", tail: "a long fan of tail feathers" },
             typicalBuild: "usually lean or compact, with a light birdlike frame",
             bodyFatEligible: true,
             surfaceType: "feathers",

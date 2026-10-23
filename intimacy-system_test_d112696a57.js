@@ -10382,6 +10382,42 @@ function describeMouth(npc, anatomy, posPronoun, arousalDescriptors) {
     const body = anatomy.body || {};
     const surfaceType = body.surfaceType || "skin";
     
+    // Get anatomy type to check for snout/beak
+    const anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    const species = (npc.species || "").toLowerCase();
+    
+    // Check if species has a beak or snout
+    const hasBeak = species === "kenku" || 
+        (npc && npc.anatomy && npc.anatomy.morphology && 
+         String(npc.anatomy.morphology.face || "").toLowerCase().includes("beak"));
+    const hasSnout = species === "lizardfolk" || species === "kobold" || species === "dragonborn" ||
+        species === "rat" || species === "ratfolk" ||
+        (npc && npc.anatomy && npc.anatomy.morphology && 
+         String(npc.anatomy.morphology.face || "").toLowerCase().includes("snout")) ||
+        (npc && npc.anatomy && npc.anatomy.morphology && 
+         String(npc.anatomy.morphology.face || "").toLowerCase().includes("muzzle"));
+    
+    // For beak species, use beak-focused descriptions
+    if (hasBeak) {
+        return pickRandom([
+            `${posPronoun} ${pickRandom(["hooked", "curved", "sharp", "glossy"])} beak`,
+            `${posPronoun} ${pickRandom(["sleek black", "dark", "glossy"])} beak`,
+            `${posPronoun} beak, slightly parted`,
+            `${posPronoun} beak clicking softly`
+        ]);
+    }
+    
+    // For snout species, use snout-focused descriptions
+    if (hasSnout) {
+        return pickRandom([
+            `${posPronoun} ${pickRandom(["long", "short", "broad", "reptilian", "snouted"])} snout`,
+            `${posPronoun} ${pickRandom(["scaled", "textured", "dry", "snouted"])} muzzle`,
+            `${posPronoun} snout, nostrils flaring`,
+            `${posPronoun} jaws slightly open`
+        ]);
+    }
+    
+    // For standard species, use lip/mouth descriptions
     return pickRandom([
         `${posPronoun} ${pickRandom(["soft", "warm", "inviting", "parted", "pouty"])} lips`,
         `${posPronoun} ${pickRandom(["sweet", "warm", "soft", "moist"])} mouth`,
