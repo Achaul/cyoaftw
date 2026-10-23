@@ -1077,23 +1077,19 @@ function getActionCategory(actId, npc) {
         return _npcHasCloaca(npc) ? "Cloaca" : "Anus";
     }
     
-    // Lower body (hips, thighs, groin)
-    if (target === "groin" || target === "hips" || target === "thighs" ||
+    // Body (general) - includes shoulders, hips, thighs, groin, chest, back, stomach, etc.
+    if (target === "chest" || target === "shoulders" || target === "back" || target === "stomach" || 
+        target === "arms" || target === "hands" || target === "legs" || target === "feet" ||
+        target === "groin" || target === "hips" || target === "thighs" ||
         actIdLower.includes("groin") || actIdLower.includes("thigh") ||
         labelLower.includes("groin") || labelLower.includes("thigh")) {
-        return "Lower Body";
+        return "Body";
     }
     
     // Tail (tailed species only — the acts are hidden without one)
     if (target === "tail" ||
         actIdLower.includes("tail") || labelLower.includes("tail")) {
         return "Tail";
-    }
-
-    // Body (general)
-    if (target === "chest" || target === "shoulders" || target === "back" || target === "stomach" || target === "arms" ||
-        target === "hands" || target === "legs" || target === "feet") {
-        return "Body";
     }
     
     // Now handle action types for actions that don't have a specific body target

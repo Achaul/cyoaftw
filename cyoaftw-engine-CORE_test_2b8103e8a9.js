@@ -1914,7 +1914,7 @@ function textModeSeparateGuidance(event) {
 const ttsModeState = { enabled: false, lastSpoken: null, lastNpcSpoken: null, lastDetails: null, pendingTone: null,
     systemVoice: true, npcVoices: true, readIntimate: false, narratorVoice: "", accent: "", rate: 1, volume: 1, variety: 1, pause: "normal",
     urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", thinkingTone: false, thinkingToneUrl: "", cueVolume: 0.5,
-    pronunciations: "", pronunciationMap: {}, speciesVoice: {}, micMode: "handsfree" };
+    pronunciations: "", pronunciationMap: {}, speciesVoice: {}, micMode: "handsfree", autoSubmitWait: 2, shorterDescriptions: false };
 const TTS_FAILURE_LINES = {
     unresolved: "I pause, unsure how to put that into action.",
     "ai-unavailable": "My thoughts won't come together on that right now. I'll have to put it more simply."
@@ -2045,6 +2045,13 @@ function ttsStoryForEvent(event, story) {
     const collapsed = ttsCollapseLists(text);
     return { story: ttsSpeakableText(collapsed.text), list: collapsed.list };
 }
+// Public, engine-authored room passages only; never infer omissions from prose.
+function ttsShortRoomStory(event, story) {
+    if (!ttsModeState.shorterDescriptions || !event.roomView || !event.roomDescription || event.ttsDetails) return story;
+    let text = String(story || "");
+    [event.roomDescription.size].concat(event.roomDescription.exits || []).filter(Boolean).forEach(function (passage) { text = text.split(passage).join(""); });
+    return text.replace(/[ \t]{2,}/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 // Adjusts an event before presentation is decided. Fills in the spoken story
 // for moments that are system-only in plain text mode (G1, G2).
 function ttsAdjustEvent(event) {
@@ -2064,9 +2071,9 @@ function ttsAdjustEvent(event) {
 }
 function ttsRemember(event) {
     if (!event.spoken || event.speakerRole === "player") return;
-    ttsModeState.lastSpoken = { text: event.spoken, speakerRole: event.speakerRole || "narrator", speakerInfo: event.speakerInfo || null, speaker: event.speaker || "" };
+    ttsModeState.lastSpoken = { text: event.speechText == null ? event.spoken : event.speechText, speakerRole: event.speakerRole || "narrator", speakerInfo: event.speakerInfo || null, speaker: event.speaker || "" };
     if (event.speakerRole === "npc") ttsModeState.lastNpcSpoken = ttsModeState.lastSpoken;
-    if (event.kind !== "dialogue") ttsModeState.lastDetails = { text: event.text, kind: event.kind };
+    if (event.kind !== "dialogue" && !event.ttsRepeat && !event.ttsDetails) ttsModeState.lastDetails = { text: event.text, kind: event.kind };
 }
 function ttsTalkStartLine(npc) {
     const name = typeof getNPCRoomSightName === "function" ? getNPCRoomSightName(npc) : npc && npc.name;
@@ -2248,7 +2255,7 @@ function ttsChunks(text, max) {
 // Builds the voice segments for one event: NPC speech in quotes uses the NPC
 // voice, everything else the narrator.
 function ttsSegmentsForEvent(event) {
-    const text = String(event.spoken || "").trim();
+    const text = String(event.speechText == null ? event.spoken || "" : event.speechText).trim();
     if (!text) return [];
     const narratorBase = { voice: ttsNarratorVoice(), pitch: 1, rate: 1 };
     const narratorExtra = {};
@@ -2350,7 +2357,7 @@ function ttsSpeakSegment(item, index) {
     if (!synth || ttsSpeech.current !== item || item.done) return;
     if (index >= item.segments.length) {
         ttsSpeech.current = null; ttsFinishItem(item);
-        if (typeof ttsListen !== "undefined" && !ttsListen.stopped) ttsListen.armed = true;
+        if (typeof ttsListen !== "undefined") { ttsListen.focusPending = true; if (!ttsListen.stopped) ttsListen.armed = true; }
         const gap = TTS_PAUSE_MS[ttsModeState.pause] || 0;
         if (gap) setTimeout(ttsSpeechPump, gap); else ttsSpeechPump();
         return;
@@ -2368,7 +2375,8 @@ function ttsSpeakSegment(item, index) {
     try { synth.speak(u); } catch (e) { next(); }
 }
 function ttsSpeechPump() {
-    if (ttsSpeech.current || !ttsSpeech.queue.length) return;
+    if (ttsSpeech.current) return;
+    if (!ttsSpeech.queue.length) { ttsRestoreControl(); return; }
     const item = ttsSpeech.queue.shift();
     ttsSpeech.current = item;
     ttsSpeakSegment(item, 0);
@@ -2380,10 +2388,10 @@ function ttsSpeechEnqueue(event) {
     if (event.presentation !== "story" && event.presentation !== "decision") return null;
     if (event.speakerRole === "player" || event.kind === "command") return null;
     if (ttsIntimacyMuted()) return null;
-    const text = String(event.spoken).trim();
+    const text = String(event.speechText == null ? event.spoken : event.speechText).trim();
     if (!text) return null;
     if (!event.ttsRepeat && !event.ttsDetails && text === ttsSpeech.lastText && event.scene === ttsSpeech.lastScene && event.kind === "narration") return null;
-    if (typeof ttsListen !== "undefined" && (ttsListen.listening || ttsListen.starting)) { ttsListen.starting = false; ttsListenAbort("speech"); ttsListen.armed = true; }
+    if (typeof ttsListen !== "undefined" && (ttsListen.listening || ttsListen.starting || ttsListen.draft)) { ttsListenAbort("speech"); ttsListen.armed = true; }
     // Scene changed: drop speech that has not started yet from older scenes.
     if (event.scene && ttsSpeech.lastScene && event.scene !== ttsSpeech.lastScene) {
         ttsSpeech.queue = ttsSpeech.queue.filter(function (item) { if (item.event.scene !== event.scene) { ttsFinishItem(item); return false; } return true; });
@@ -2405,7 +2413,7 @@ const TTS_SETTINGS_KEY = "cyoaftwTTSSettings";
 const TTS_SETTING_DEFAULTS = {
     systemVoice: true, narratorVoice: "", accent: "", rate: 1, volume: 1, npcVoices: true, variety: 1, pause: "normal",
     readIntimate: false, urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", thinkingTone: false, thinkingToneUrl: "",
-    cueVolume: 0.5, pronunciations: "", speciesVoice: {}, micMode: "handsfree"
+    cueVolume: 0.5, pronunciations: "", speciesVoice: {}, micMode: "handsfree", autoSubmitWait: 2, shorterDescriptions: false
 };
 const TTS_PAUSE_MS = { short: 0, normal: 250, long: 700 };
 // Built-in spoken-only respellings (screen text is not changed).
@@ -2428,6 +2436,7 @@ function ttsApplySettings(settings) {
     ttsModeState.volume = ttsClamp(ttsModeState.volume, 0, 1);
     ttsModeState.variety = ttsClamp(ttsModeState.variety, 0, 2);
     ttsModeState.cueVolume = ttsClamp(ttsModeState.cueVolume, 0, 1);
+    ttsModeState.autoSubmitWait = ttsClamp(ttsModeState.autoSubmitWait, 0.5, 10);
     ttsModeState.pronunciationMap = ttsParsePronunciations(ttsModeState.pronunciations);
     ttsSpeech.voicesCache = null;
 }
@@ -2448,7 +2457,7 @@ function ttsSetSetting(key, value) {
     ttsApplySettings(next);
     try { localStorage.setItem(TTS_SETTINGS_KEY, JSON.stringify(ttsSettingsSnapshot())); } catch (e) {}
     if (key === "systemVoice" && !ttsModeState.systemVoice) ttsSpeechStop("setting");
-    if (key === "micMode") { if (ttsModeState.micMode === "off") ttsListenAbort("setting"); else { ttsListen.stopped = false; ttsListen.armed = true; } ttsSetMicButton(); }
+    if (key === "micMode" || key === "autoSubmitWait") { ttsListenAbort("setting"); if (ttsModeState.micMode !== "off") { ttsListen.stopped = false; ttsListen.armed = true; } ttsSetMicButton(); }
     if (typeof ttsRenderSettings === "function") ttsRenderSettings();
 }
 function ttsSetSpeciesVoice(species, name) {
@@ -2511,7 +2520,8 @@ function ttsTestVoice(kind) {
 // service (Chrome; not Opera/Firefox); otherwise players type or use their OS
 // dictation (Windows: Win+H).
 const ttsListen = { rec: null, listening: false, starting: false, armed: true, stopped: false, idleSince: 0, timer: null,
-    networkErrors: 0, silentEnds: 0, heardSound: false, screenOnly: "", screenOnlyLog: {}, thinking: null, gotResult: false, unsupportedNoted: false, aborting: false };
+    networkErrors: 0, silentEnds: 0, heardSound: false, screenOnly: "", screenOnlyLog: {}, thinking: null, gotResult: false, unsupportedNoted: false, aborting: false,
+    draft: null, submitTimer: null, requested: false, focusPending: false, session: null };
 const TTS_SCREEN_ONLY_LINE = "That needs a steadier hand. You'll have to do it on the screen.";
 function ttsRecognitionCtor() { return typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition || null) : null; }
 // Opera and Brave expose SpeechRecognition but have no recognition service
@@ -2561,7 +2571,70 @@ function ttsSetMicButton() {
     btn.hidden = !show;
     if (btn.classList) btn.classList.toggle("listening", !!ttsListen.listening);
     btn.setAttribute("aria-pressed", ttsListen.listening ? "true" : "false");
+    btn.setAttribute("aria-label", ttsListen.listening ? "Stop listening" : "Speak a command");
+    btn.textContent = ttsListen.listening ? "Stop mic" : "Mic";
     btn.title = ttsListen.listening ? "Listening... click to stop" : ttsListen.stopped ? "Voice input paused. Click to speak" : "Speak a command";
+    const shorter = document.getElementById("textModeShorterEl");
+    if (shorter) shorter.hidden = !ttsModeActive();
+    const check = document.getElementById("textModeShorterInput");
+    if (check) check.checked = !!ttsModeState.shorterDescriptions;
+}
+
+function ttsRestoreControl() {
+    if (!ttsListen.focusPending || !ttsModeActive() || !ttsGameIdle() || ttsScreenOnlyReason() || document.hidden) return;
+    ttsListen.focusPending = false;
+    focusTextModeInput();
+}
+
+// Recognition owns only its own draft. Editing adopts the text as manual input.
+function ttsCancelVoiceDraft(keepText) {
+    if (ttsListen.submitTimer) clearTimeout(ttsListen.submitTimer);
+    ttsListen.submitTimer = null;
+    const draft = ttsListen.draft;
+    ttsListen.draft = null;
+    const input = typeof document !== "undefined" ? document.getElementById("textModeInputEl") : null;
+    if (input && draft) {
+        if (!keepText && input.value === draft.text) input.value = "";
+        if (input.dataset) { input.dataset.ttsInterim = ""; input.dataset.ttsVoiceDraft = ""; }
+    }
+}
+
+function ttsVoiceDraftFresh(draft) {
+    const input = document.getElementById("textModeInputEl");
+    return !!(draft && ttsModeActive() && ttsMicMode() !== "off" && !ttsListen.stopped && !document.hidden &&
+        !ttsScreenOnlyReason() && !ttsIntimacyMuted() && ttsGameIdle() && textModeSameScene(draft.scene) &&
+        draft.token === textModeSceneToken() && draft.epoch === textModeState.epoch &&
+        draft.pending === textModeState.pending && draft.choices === textModeState.choices &&
+        draft.opening === ttsOpeningCard() && input && input.value === draft.text && input.dataset.ttsVoiceDraft === "1");
+}
+
+function ttsStageTranscript(results, session) {
+    if (!textModeSameScene(session.scene) || session.epoch !== textModeState.epoch || session.token !== textModeSceneToken()) { ttsListenAbort("stale"); return; }
+    const input = document.getElementById("textModeInputEl");
+    if (!input || input.value.trim() && (!ttsListen.draft || input.value !== ttsListen.draft.text)) { ttsListenAbort("typing"); return; }
+    const parts = []; let final = true;
+    for (let i = 0; i < results.length; i++) {
+        const res = results[i]; if (!res || !res[0]) continue;
+        const alts = []; for (let k = 0; k < res.length; k++) alts.push(res[k].transcript);
+        parts.push(res.isFinal ? ttsPickAlternative(alts) : res[0].transcript);
+        final = final && !!res.isFinal;
+        ttsListen.lastAlternatives = alts.slice();
+    }
+    const text = parts.join(" ").trim().slice(0, TEXT_INPUT_LIMIT);
+    ttsCancelVoiceDraft(true);
+    if (!text) return;
+    const draft = Object.assign({}, session, { text: text, final: final });
+    ttsListen.draft = draft;
+    input.value = text; input.dataset.ttsVoiceDraft = "1"; input.dataset.ttsInterim = final ? "" : "1";
+    if (!final) return;
+    ttsListen.gotResult = true; ttsListen.networkErrors = 0;
+    ttsListen.submitTimer = setTimeout(function () {
+        if (ttsListen.draft !== draft) return;
+        if (!ttsVoiceDraftFresh(draft)) { ttsListenAbort("stale"); return; }
+        const text = draft.text;
+        ttsListenAbort("submit");
+        ttsSubmitSpoken(text);
+    }, ttsModeState.autoSubmitWait * 1000);
 }
 // Chooses among recognition alternatives: the first one the game understands
 // (a local command, a learned phrase, a voice control word or a conversation
@@ -2582,9 +2655,11 @@ function ttsPickAlternative(alternatives) {
     return list[0];
 }
 function ttsListenAbort(reason) {
-    if (!ttsListen.rec) return;
+    ttsCancelVoiceDraft(reason === "typing");
+    ttsListen.session = null;
+    ttsListen.requested = false;
     ttsListen.aborting = true;
-    try { ttsListen.rec.abort(); } catch (e) {}
+    if (ttsListen.rec) { const rec = ttsListen.rec; ttsListen.rec = null; try { rec.abort(); } catch (e) {} }
     ttsListen.rec = null; ttsListen.listening = false; ttsListen.starting = false;
     if (reason !== "speech") ttsListen.armed = false;
     if (typeof document !== "undefined") { const input = document.getElementById("textModeInputEl"); if (input && input.dataset && input.dataset.ttsInterim === "1") { input.value = ""; input.dataset.ttsInterim = ""; } }
@@ -2648,35 +2723,34 @@ function ttsStartListening(auto) {
     const Rec = ttsRecognitionCtor();
     if (!Rec || ttsListen.listening || ttsListen.starting || !ttsModeActive() || ttsMicMode() === "off") return false;
     if (ttsIntimacyMuted()) return false;
+    const input = document.getElementById("textModeInputEl");
+    if (!ttsGameIdle() || ttsScreenOnlyReason() || document.hidden || ttsListen.draft || input && input.value.trim()) return false;
     ttsListen.starting = true;
     ttsListen.gotResult = false;
+    const session = { scene: textModeScene(), token: textModeSceneToken(), epoch: textModeState.epoch,
+        pending: textModeState.pending, choices: textModeState.choices, opening: ttsOpeningCard() };
+    ttsListen.session = session;
     const begin = function () {
-        if (!ttsListen.starting || !ttsModeActive()) { ttsListen.starting = false; return; }
+        if (ttsListen.session !== session) return;
+        if (!ttsListen.starting || !ttsModeActive() || ttsMicMode() === "off" || ttsListen.stopped || !ttsGameIdle() || ttsScreenOnlyReason() || document.hidden ||
+            !textModeSameScene(session.scene) || session.token !== textModeSceneToken() || session.epoch !== textModeState.epoch ||
+            session.pending !== textModeState.pending || session.choices !== textModeState.choices || session.opening !== ttsOpeningCard() || input && input.value.trim()) { ttsListenAbort("stale"); return; }
         let r;
         try { r = new Rec(); } catch (e) { ttsListen.starting = false; return; }
         ttsListen.rec = r; ttsListen.aborting = false;
-        r.lang = ttsRecognitionLang(); r.interimResults = true; r.continuous = false; r.maxAlternatives = 5;
+        r.lang = ttsRecognitionLang(); r.interimResults = true; r.continuous = true; r.maxAlternatives = 5;
         ttsListen.heardSound = false;
         r.onsoundstart = function () { if (ttsListen.rec === r) { ttsListen.heardSound = true; ttsListen.silentEnds = 0; } };
         r.onstart = function () { if (ttsListen.rec !== r) return; ttsListen.listening = true; ttsListen.starting = false; ttsSetMicButton(); };
         r.onresult = function (ev) {
             if (ttsListen.rec !== r) return;
-            const results = ev.results, res = results[results.length - 1];
-            if (!res || !res[0]) return;
-            const input = typeof document !== "undefined" ? document.getElementById("textModeInputEl") : null;
-            if (!res.isFinal) { if (input) { input.value = res[0].transcript; if (input.dataset) input.dataset.ttsInterim = "1"; } return; }
-            const alts = []; for (let k = 0; k < res.length; k++) alts.push(res[k].transcript);
-            ttsListen.gotResult = true; ttsListen.networkErrors = 0;
-            ttsListen.lastAlternatives = alts.slice();
-            const chosen = ttsPickAlternative(alts);
-            ttsListen.rec = null; ttsListen.listening = false; ttsSetMicButton();
-            try { r.abort(); } catch (e) {}
-            ttsSubmitSpoken(chosen);
+            ttsStageTranscript(ev.results, session);
         };
         r.onerror = function (ev) {
             if (ttsListen.rec !== r && !ttsListen.aborting) return;
             const why = ev && ev.error || "error";
             if (why === "aborted" || ttsListen.aborting) return;
+            ttsCancelVoiceDraft(false);
             ttsListen.armed = false;
             if (why === "not-allowed" || why === "service-not-allowed") {
                 ttsListen.stopped = true;
@@ -2695,6 +2769,7 @@ function ttsStartListening(auto) {
             }
         };
         r.onend = function () {
+            if (ttsListen.rec !== r) return;
             if (ttsListen.rec === r) {
                 ttsListen.rec = null; ttsListen.listening = false; ttsListen.starting = false;
                 if (!ttsListen.gotResult) {
@@ -2710,6 +2785,7 @@ function ttsStartListening(auto) {
             }
             const input = typeof document !== "undefined" ? document.getElementById("textModeInputEl") : null;
             if (input && input.dataset && input.dataset.ttsInterim === "1" && !ttsListen.gotResult) { input.value = ""; input.dataset.ttsInterim = ""; }
+            if (ttsListen.draft && !ttsListen.draft.final) ttsCancelVoiceDraft(false);
             ttsSetMicButton();
         };
         try { r.start(); } catch (e) { ttsListen.rec = null; ttsListen.starting = false; ttsSetMicButton(); }
@@ -2763,15 +2839,16 @@ function ttsPlayThinkingPulse() {
 function ttsListenTick() {
     ttsUpdateThinkingTone();
     ttsSetMicButton();
-    if (!ttsModeActive()) { if (ttsListen.rec) ttsListenAbort("mode"); return; }
+    if (!ttsModeActive()) { if (ttsListen.rec || ttsListen.starting || ttsListen.draft) ttsListenAbort("mode"); return; }
+    ttsRestoreControl();
     const opening = ttsOpeningCard();
     if (opening && !ttsListen.openingRead && ttsGameIdle()) { ttsListen.openingRead = true; ttsListen.armed = true; ttsReadOpeningCard(opening); return; }
     if (!opening) ttsListen.openingRead = false;
     if (!ttsVoiceInputAvailable() || ttsMicMode() === "off") return;
-    if (typeof document !== "undefined" && document.hidden) { if (ttsListen.listening) ttsListenAbort("hidden"); return; }
+    if (typeof document !== "undefined" && document.hidden) { ttsListenAbort("hidden"); return; }
     const screen = ttsScreenOnlyReason();
     if (screen) {
-        if (ttsListen.listening) ttsListenAbort("screen");
+        if (ttsListen.listening || ttsListen.starting || ttsListen.draft) ttsListenAbort("screen");
         if (screen !== "silent" && ttsListen.screenOnly !== screen && ttsGameIdle()) {
             ttsListen.screenOnly = screen;
             ttsListen.screenOnlyLog[screen] = (ttsListen.screenOnlyLog[screen] || 0) + 1;
@@ -2782,8 +2859,15 @@ function ttsListenTick() {
         return;
     }
     if (ttsListen.screenOnly) { ttsListen.screenOnly = ""; ttsListen.armed = true; }
+    if (ttsListen.draft) {
+        if (!ttsVoiceDraftFresh(ttsListen.draft)) ttsListenAbort("stale");
+        ttsListen.idleSince = 0; return;
+    }
+    if (ttsListen.requested && ttsGameIdle()) { ttsListen.requested = false; ttsStartListening(false); return; }
     if (ttsMicMode() !== "handsfree" || ttsListen.stopped || !ttsListen.armed || ttsListen.listening || ttsListen.starting || ttsIntimacyMuted()) { ttsListen.idleSince = 0; return; }
     if (!ttsGameIdle()) { ttsListen.idleSince = 0; return; }
+    const input = document.getElementById("textModeInputEl");
+    if (input && input.value.trim()) { ttsListen.idleSince = 0; return; }
     const now = Date.now();
     if (!ttsListen.idleSince) { ttsListen.idleSince = now; return; }
     if (now - ttsListen.idleSince < 350) return;
@@ -2803,10 +2887,12 @@ function ttsListenEnsureLoop() {
 }
 // Mic button in the text-mode dock, and typed "listen".
 function ttsMicButton() {
-    if (ttsListen.listening || ttsListen.starting) { ttsListenAbort("button"); return; }
+    if (ttsListen.listening || ttsListen.starting || ttsListen.draft || ttsListen.requested) { ttsListenAbort("button"); return; }
+    const input = document.getElementById("textModeInputEl");
+    if (input && input.value.trim()) { textModeGuidanceOutput("Submit or clear your command before starting the microphone."); input.focus({ preventScroll: true }); return; }
     ttsListen.stopped = false; ttsListen.armed = true;
     if (ttsSpeech.current || ttsSpeech.queue.length) ttsSpeechStop("mic");
-    ttsStartListening(false);
+    if (ttsGameIdle()) ttsStartListening(false); else ttsListen.requested = true;
     ttsListenEnsureLoop();
 }
 
@@ -2875,6 +2961,7 @@ function publishTextModeOutput(kind, text, details, display) {
     ttsAdjustEvent(event);
     event.presentation = display === false ? "supplement" : kind === "command" || event.systemOnly ? "system" : kind === "choices" ? "decision" : "story";
     textModeAnnotateOutput(event);
+    if (ttsListen.draft && (kind === "command" || event.presentation === "story" || event.presentation === "decision")) ttsListenAbort("output");
     textModeState.events.push(event);
     if (textModeState.events.length > 100) textModeState.events.shift();
     const visible = textModeDisplayWords(event.text);
@@ -2883,9 +2970,12 @@ function publishTextModeOutput(kind, text, details, display) {
         story = visible.split("\n").filter(function (line) { return !/^(?:Type|Use|Answer|Choose a number)\b/i.test(line.trim()); }).join("\n");
     }
     if (ttsModeActive() && display !== false && !event.systemOnly && kind !== "command") {
+        const speechStory = ttsShortRoomStory(event, story);
+        const shortened = speechStory !== story;
         const tts = ttsStoryForEvent(event, story);
         story = tts.story;
         event.spoken = tts.story;
+        if (shortened) event.speechText = ttsStoryForEvent(event, speechStory).story;
         if (event.speakerRole !== "player") ttsModeState.storySinceCommand = true;
         if (tts.list.length) event.guidance = [event.guidance, tts.list.join("\n")].filter(Boolean).join("\n");
         ttsRemember(event);
@@ -3133,6 +3223,13 @@ function textModeWithExits(text, room, skipDirs) {
     const line = room ? textModeExitLine(room, skipDirs) : "";
     const base = String(text || "").replace(/\s+$/, "");
     return line ? (base ? base + "\n\n" + line : line) : base;
+}
+function textModeRoomOutput(room, extra, skipDirs) {
+    const structure = typeof roomStructureObservationParts === "function" ? roomStructureObservationParts(room).map(function (part) { return part.lead + part.label + part.tail; }) : [];
+    return Object.assign({ source: "engine", roomView: true, roomDescription: {
+        size: typeof getRoomSizeSentence === "function" ? getRoomSizeSentence(room) : "",
+        exits: [textModeExitLine(room, skipDirs)].concat(structure).filter(Boolean)
+    } }, extra || {});
 }
 
 function textModeRoomBlock() {
@@ -3399,6 +3496,7 @@ async function runTextCommandQueue() {
 }
 
 function stopTextCommands(announce) {
+    if (typeof ttsListen !== "undefined" && (ttsListen.draft || ttsListen.starting || ttsListen.rec)) ttsListenAbort("cancel");
     if (typeof travelStopOwnedWalk === "function") travelStopOwnedWalk();
     textModeState.learning = null;
     textModeState.epoch++;
@@ -3413,6 +3511,7 @@ function stopTextCommands(announce) {
 async function submitTextModeCommand(raw) {
     const input = String(raw || "").trim();
     if (!input || !textModeState.enabled) return;
+    if (ttsListen.rec || ttsListen.starting || ttsListen.draft) ttsListenAbort("typing");
     publishTextModeOutput("command", "> " + input);
     if (typeof ttsListen !== "undefined" && !ttsListen.stopped) ttsListen.armed = true;
     if (ttsControlCommand(input)) return;
@@ -3502,8 +3601,11 @@ function renderTextModeStatus(message) {
 }
 
 function focusTextModeInput() {
-    if (!textModeState.enabled || G.activeItemModal) return;
+    if (!textModeState.enabled || G.activeItemModal || ttsModeActive() && (ttsScreenOnlyReason() || document.hidden)) return;
     const input = document.getElementById("textModeInputEl");
+    ttsSetMicButton();
+    const mic = document.getElementById("textModeMicBtn");
+    if (input && !input.value.trim() && mic && ttsModeActive() && ttsVoiceInputAvailable() && ttsMicMode() !== "off") { mic.focus({ preventScroll: true }); return; }
     if (input) input.focus({ preventScroll: true });
 }
 
@@ -3541,7 +3643,7 @@ function setTextMode(enabled) {
         const current = document.getElementById("narrationEl");
         if (!textModeState.events.length && current && current.textContent.trim()) {
             const roomView = !G.activeNPC && !G.activeObject && G.activeRoom;
-            publishTextModeOutput("narration", roomView ? textModeWithExits(current.textContent, G.activeRoom) : current.textContent, { source: "engine", snapshot: true, roomView: !!roomView });
+            publishTextModeOutput("narration", roomView ? textModeWithExits(current.textContent, G.activeRoom) : current.textContent, roomView ? textModeRoomOutput(G.activeRoom, { snapshot: true }) : { source: "engine", snapshot: true, roomView: false });
         }
         if (!textModeState.events.length) textModeResult("completed", 'Text mode ready. Type help for assistance. Use say "..." for dialogue.');
         focusTextModeInput();
@@ -3569,6 +3671,7 @@ function initializeTextMode() {
         event.preventDefault();
         const raw = input.value.trim();
         if (!raw || event.isComposing) return;
+        ttsListenAbort("typing");
         // Keep a command in the box when the engine cannot accept it yet.
         const parsed = parseTextCommand(raw);
         if ((textModeState.busy || textModeState.parsing) && !(parsed && (/^(help|show|stop|cancel)$/.test(parsed.verb) || parsed.verb === "travel" && /^(pause|stop)$/.test(parsed.args.action)))) { submitTextModeCommand(raw); return; }
@@ -3582,14 +3685,16 @@ function initializeTextMode() {
     });
     input.addEventListener("keydown", function (event) {
         event.stopPropagation();
-        if (typeof ttsListen !== "undefined" && (ttsListen.listening || ttsListen.starting) && event.key && event.key.length === 1) ttsListenAbort("typing");
+        if ((ttsListen.listening || ttsListen.starting || ttsListen.draft) && event.key && (event.key.length === 1 || /^(Backspace|Delete|ArrowUp|ArrowDown)$/.test(event.key))) ttsListenAbort("typing");
         if (event.isComposing && event.key === "Enter") { event.preventDefault(); return; }
+        if (event.key === "Enter" && !input.value.trim() && ttsModeActive() && ttsVoiceInputAvailable() && ttsMicMode() !== "off") { event.preventDefault(); ttsMicButton(); return; }
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
         event.preventDefault();
         if (textModeState.historyIndex === textModeState.history.length) textModeState.draft = input.value;
         textModeState.historyIndex = Math.max(0, Math.min(textModeState.history.length, textModeState.historyIndex + (event.key === "ArrowUp" ? -1 : 1)));
         input.value = textModeState.historyIndex === textModeState.history.length ? textModeState.draft : textModeState.history[textModeState.historyIndex];
     });
+    input.addEventListener("input", function () { ttsListenAbort("typing"); });
     // Prevent a second UI action interleaving with a foreground command. Stop
     // and return controls in the dock remain available during that command.
     document.addEventListener("click", function (event) {
@@ -10523,7 +10628,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-22-011
+// Core Engine Version: 2026-10-23-001
 // Latest: SFW privacy/tolerance hook and metadata audits; shared sleep spots for native/text sleep, job nights, Rest and independent NPC lodging; established partners prefer to share.
 // Previous: Independent NPC travel parties: formation/load repair, shared movement, combat support, public descriptions/dialogue and autonomous healing. Recruiting one leaves the others together.
 // Previous: Sleeping spots: Sleep now asks where (bed, cot or floor; floor works anywhere). A bed holds up to 3 and a cot 2; the more share one the less each recovers (x0.8 for two, x0.6 for three, and a full bed no longer gives the well-rested buff). Companions take the places that give the party the most rest (empty beds, empty cots, doubling up, floor last) and the night is narrated.
@@ -10590,7 +10695,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-22-011";
+window.__ENGINE_CORE_VERSION = "2026-10-23-001";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -47399,18 +47504,15 @@ function getRoomStructureDirs(room) {
     });
     return dirs;
 }
-function appendRoomStructureObservation(parent, room) {
-    if (!parent || !room) return;
+function roomStructureObservationParts(room) {
+    if (!room) return [];
     const exits = room.exits || {};
     const collapseZone = isCollapseZone(room);
     // The street-facing entrance room of a building (isEntrance) is part of the street, not a boxed room.
     const isBuilding = (!!room.buildingId || room.isBuildingRoom === true || room.isClusterRoom === true) && room.isEntrance !== true;
     const wallZone = collapseZone || isBuilding;
     const dirs = getRoomStructureDirs(room);
-    if (!dirs.length) return;
-    appendObservationSeparator(parent, false);
-    dirs.forEach(function (d, index) {
-        if (index > 0) appendNarrationText(parent, " ");
+    return dirs.map(function (d) {
         const adj = WALL_DIR_ADJECTIVES[d] || COLLAPSE_DIR_WORDS[d] || d;
         const hasExit = !!exits[d];
         const doorKind = getExitDoor(room, d);
@@ -47419,30 +47521,7 @@ function appendRoomStructureObservation(parent, room) {
             // No implied walls here: just the door or archway. A door can be clicked (lock / locked-door options).
             const kindWord = doorKind === "arch" ? "archway" : "door";
             const dirWord = COLLAPSE_DIR_WORDS[d] || LOCK_DIRECTION_WORDS[d] || d;
-            appendNarrationText(parent, doorKind === "arch" ? "An " : "A ");
-            if (doorKind === "door") {
-                const dbtn = document.createElement("button");
-                dbtn.type = "button";
-                dbtn.className = "narration-entity-btn";
-                dbtn.textContent = kindWord;
-                dbtn.onclick = function () { openWallFromLook(room, d); };
-                parent.appendChild(dbtn);
-            } else {
-                appendNarrationText(parent, kindWord);
-            }
-            appendNarrationText(parent, " leads " + dirWord + ".");
-            return;
-        }
-        appendNarrationText(parent, "The ");
-        if (hasExit && (collapseZone || doorKind === "door")) {
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "narration-entity-btn";
-            btn.textContent = adj + " wall";
-            btn.onclick = function () { openWallFromLook(room, d); };
-            parent.appendChild(btn);
-        } else {
-            appendNarrationText(parent, adj + " wall");
+            return { dir: d, lead: doorKind === "arch" ? "An " : "A ", label: kindWord, tail: " leads " + dirWord + ".", interactive: doorKind === "door" };
         }
         let tail;
         if (fallen) tail = " has fallen in, rubble choking the way.";
@@ -47450,7 +47529,24 @@ function appendRoomStructureObservation(parent, room) {
         else if (doorKind === "door") tail = " has a door.";
         else if (doorKind === "arch") tail = " has an archway.";
         else tail = " is open to a passage.";
-        appendNarrationText(parent, tail);
+        return { dir: d, lead: "The ", label: adj + " wall", tail: tail, interactive: hasExit && (collapseZone || doorKind === "door") };
+    });
+}
+function appendRoomStructureObservation(parent, room) {
+    if (!parent || !room) return;
+    const parts = roomStructureObservationParts(room);
+    if (!parts.length) return;
+    appendObservationSeparator(parent, false);
+    parts.forEach(function (part, index) {
+        if (index > 0) appendNarrationText(parent, " ");
+        appendNarrationText(parent, part.lead);
+        if (part.interactive) {
+            const btn = document.createElement("button");
+            btn.type = "button"; btn.className = "narration-entity-btn"; btn.textContent = part.label;
+            btn.onclick = function () { openWallFromLook(room, part.dir); };
+            parent.appendChild(btn);
+        } else appendNarrationText(parent, part.label);
+        appendNarrationText(parent, part.tail);
     });
 }
 
@@ -51241,7 +51337,7 @@ function renderNarrationWithRoomObservations(room, leadText, layout, deferOutput
     const turnNotes = takeTurnNotes();
     appendNarrationText(el, ensureSentence(leadText) + (turnNotes ? " " + turnNotes : ""));
     renderRoomObservations(el, room, layout);
-    if (!deferOutput && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", textModeWithExits(el.textContent, room), { source: "engine", roomView: true });
+    if (!deferOutput && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", textModeWithExits(el.textContent, room), textModeRoomOutput(room));
 }
 
 function renderRoomNarration(room, mode, direction) {
@@ -64744,7 +64840,7 @@ function examineCurrentRoom() {
         appendObservationSeparator(narrationEl, false);
         appendNarrationText(narrationEl, trailFindings.join(" "));
     }
-    if (narrationEl && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", textModeWithExits(narrationEl.textContent, room, getRoomStructureDirs(room)), { source: "engine", roomView: true });
+    if (narrationEl && typeof textModeState !== "undefined" && textModeState.enabled) publishTextModeOutput("narration", textModeWithExits(narrationEl.textContent, room, getRoomStructureDirs(room)), textModeRoomOutput(room, null, getRoomStructureDirs(room)));
     saveGameState();
 }
 
@@ -73844,6 +73940,8 @@ function ttsRenderSettings() {
     ttsSetControl("ttsPauseSelect", "value", st.pause);
     ttsSetControl("ttsReadIntimateInput", "checked", !!st.readIntimate);
     ttsSetControl("ttsMicModeSelect", "value", ttsMicMode());
+    ttsSetControl("ttsAutoSubmitWaitInput", "value", String(st.autoSubmitWait));
+    ttsSetControl("textModeShorterInput", "checked", !!st.shorterDescriptions);
     const micNote = document.getElementById("ttsMicNote");
     if (micNote) micNote.textContent = ttsVoiceInputAvailable()
         ? "Speak your commands. Hands-free opens the microphone after each narration; push to talk uses the microphone button. Uses your browser's selected microphone and its online speech service."
@@ -76952,6 +77050,11 @@ function renderIntimacyActionMenu(npc) {
 
         returnBtn.onclick = () => {
             endIntimacyEncounter(npc);
+            // Clear chat log when ending encounter
+            const chatLog = document.getElementById("chatLogEl");
+            if (chatLog) {
+                chatLog.innerHTML = "";
+            }
             // Hide the intimacy controls right away, but leave the final
             // narration up for a beat — resetRoomViewAfterIntimacy then
             // rebuilds the room view (observations, exits, descriptions).
