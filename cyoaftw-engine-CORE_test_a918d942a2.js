@@ -74398,7 +74398,18 @@ function npcPanelHasExcludedFeatures(npc, text, facts) {
     const excluded = [].concat(anatomy.features || [], anatomy.marks || [], npc.specialTraits || []);
     const normalize = function (value) { return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); };
     const prose = normalize(text), supplied = normalize(facts);
-    return excluded.some(function (feature) { const phrase = normalize(feature); return phrase && !supplied.includes(phrase) && prose.includes(phrase); });
+    const baseline = typeof getSpeciesAppearanceText === "function" ? normalize(getSpeciesAppearanceText(npc)) : "";
+    const speciesWords = new Set(baseline.split(" "));
+    return excluded.some(function (feature) {
+        const phrase = normalize(feature);
+        if (!phrase || supplied.includes(phrase) || !prose.includes(phrase)) return false;
+        // A copy editor can combine the baseline's legs and hooves into the
+        // same phrase that also happens to occur in the optional feature pool.
+        // Only allow recombinations of supplied anatomy, never new scar/mark words.
+        const words = phrase.split(" ").filter(word => !/^(?:a|an|the|with|and|of|on|in|their)$/.test(word));
+        const anatomyPhrase = /\b(?:ears?|snout|muzzle|hooves|horns?|tail|wings?|taloned|clawed|whiskers|beak|incisors|legs|feet|paws)\b/.test(phrase);
+        return !(anatomyPhrase && words.length && words.every(word => speciesWords.has(word)));
+    });
 }
 
 function buildNPCPanelDescriptionInstruction(npc, room) {
@@ -75407,8 +75418,10 @@ function buildPlayerPortraitSubject(player) {
         anatomy: { build: a.build, body: { color: a.skinTone, surfaceType: surface }, morphology: a.morphology, features: a.feature ? [a.feature] : [] },
         eyeColor: a.eyeColor, hairColor: a.hairColor, hairStyle: a.hairStyle
     }, true);
+    const baseline = typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(player) : "";
+    const speciesAppearance = typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(player, true) : "";
     return {
-        text: ["adult", player.gender, species, profile.face].concat(highlights).filter(Boolean).join(", "),
+        text: ["adult", player.gender, species, speciesAppearance || profile.face].concat(highlights.filter(text => text !== baseline)).filter(Boolean).join(", "),
         negatives: typeof getPortraitAppearanceNegatives === "function" ? getPortraitAppearanceNegatives(player, profile.negatives) : (profile.negatives || "")
     };
 }

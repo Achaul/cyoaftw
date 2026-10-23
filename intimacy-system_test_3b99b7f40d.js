@@ -9788,12 +9788,12 @@ function describeAnatomy(npc, target, options = {}) {
             return describeNipples(npc, anatomy, posPronoun, arousalDescriptors);
         
         case "anus":
-            return describeAnus(npc, anatomy, posPronoun, arousalDescriptors);
+            return describeAnus(npc, anatomy, posPronoun, arousalDescriptors, anatomyType, surfaceDesc);
         
         case "ass":
         case "butt":
         case "buttocks":
-            return describeButtocks(npc, anatomy, posPronoun, arousalDescriptors);
+            return describeButtocks(npc, anatomy, posPronoun, arousalDescriptors, anatomyType, surfaceDesc);
         
         case "mouth":
         case "lips":
@@ -10253,16 +10253,38 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors, anatomyType,
     };
     const sphincterDesc = sphincterDescriptors[sphincter] ? pickRandom(sphincterDescriptors[sphincter]) : sphincter;
 
-    // Hair descriptors — the anal area often has hair, add raw detail
-    // For scaled species, use scale texture instead of hair
+    // Hair/surface descriptors — the anal area has surface-appropriate texture
     // Use actual surface type from anatomy.body to prevent hallucinating wrong features
     const body = anatomy.body || {};
     const actualSurfaceType = (body && String(body.surfaceType || "").trim().toLowerCase()) || "skin";
     var hairDesc = "";
+    
+    // Use surfaceDesc parameter if provided (from describeAnatomy), otherwise determine from surfaceType
+    const effectiveSurfaceDesc = surfaceDesc || 
+        (actualSurfaceType === "fur" ? "fur-covered " :
+         actualSurfaceType === "feathers" ? "feathered " :
+         actualSurfaceType === "scales" ? "scaled " :
+         "");
+    
     if (actualSurfaceType === "scales") {
         if (Math.random() < 0.3) {
             hairDesc = pickRandom([
-                "ringed with fine smooth scales", "smooth-scaled"
+                "ringed with fine smooth scales", "smooth-scaled",
+                effectiveSurfaceDesc + "ring"
+            ]);
+        }
+    } else if (actualSurfaceType === "fur") {
+        if (Math.random() < 0.3) {
+            hairDesc = pickRandom([
+                "ringed with soft fur", effectiveSurfaceDesc + "ring",
+                "surrounded by thick fur"
+            ]);
+        }
+    } else if (actualSurfaceType === "feathers") {
+        if (Math.random() < 0.3) {
+            hairDesc = pickRandom([
+                "ringed with fine feathers", effectiveSurfaceDesc + "ring",
+                "framed by feather edges"
             ]);
         }
     } else {
@@ -10298,12 +10320,23 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors, anatomyType,
  * Describe buttocks with rich detail
  * Uses terms like: cheeks, globes, mounds, rounded, firm, plump, etc.
  */
-function describeButtocks(npc, anatomy, posPronoun, arousalDescriptors) {
+function describeButtocks(npc, anatomy, posPronoun, arousalDescriptors, anatomyType, surfaceDesc) {
     const buttocks = anatomy.buttocks || {};
     const size = buttocks.sizeCategory || "medium";
     const desc = buttocks.description || "buttocks";
     const hips = anatomy.hips || {};
     const hipSize = hips.sizeCategory || "average";
+    
+    // Apply surface descriptor to replace "bare" - use the surface type from anatomy
+    const body = anatomy.body || {};
+    const actualSurfaceType = (body && String(body.surfaceType || "").trim().toLowerCase()) || "skin";
+    let surfaceAdj = "";
+    if (actualSurfaceType === "fur" || actualSurfaceType === "feathers") {
+        surfaceAdj = surfaceDesc || "fur-covered ";
+    } else if (actualSurfaceType === "scales") {
+        surfaceAdj = surfaceDesc || "scaled ";
+    }
+    // For skin, we can keep "bare" or use nothing
     
     const sizeDescriptors = {
         small: ["small", "petite", "compact", "tight"],
@@ -10323,19 +10356,22 @@ function describeButtocks(npc, anatomy, posPronoun, arousalDescriptors) {
     const { wetness, engorgement, state } = arousalDescriptors;
     const arousedDesc = state ? pickRandom(["flushed", "warm", "tingling", "needy"]) : "";
     
-    // Various ways to describe buttocks
+    // Various ways to describe buttocks - use surface-appropriate descriptors
     const cheekTerms = pickRandom(["cheeks", "globes", "mounds", "orbs", "spheres"]);
     const buttTerms = pickRandom(["butt", "rear", "backside", "posterior"]);
     
-    // Use at most one descriptor to avoid chaining (e.g., "needy shapely buttocks")
-    const singleDesc = pickRandom([sizeAdj, arousedDesc, hipAdj].filter(Boolean)) || sizeAdj;
+    // Build descriptor list - include surface type for non-skin species
+    const descParts = [sizeAdj, surfaceAdj, arousedDesc, hipAdj].filter(Boolean);
+    
+    // Use at most two descriptors to avoid overloading
+    const descriptors = descParts.slice(0, 2).join(" ");
     
     return pickRandom([
-        `${posPronoun} ${singleDesc} ${cheekTerms}`,
-        `${posPronoun} ${singleDesc} ${buttTerms}`,
-        `${posPronoun} ${singleDesc} ${cheekTerms}, ${hipAdj} hips`,
-        `${posPronoun} ${singleDesc} buttocks`,
-        `${posPronoun} ${singleDesc} backside`
+        `${posPronoun} ${descriptors} ${cheekTerms}`,
+        `${posPronoun} ${descriptors} ${buttTerms}`,
+        `${posPronoun} ${descriptors} ${cheekTerms}, ${hipAdj} hips`,
+        `${posPronoun} ${descriptors} buttocks`,
+        `${posPronoun} ${descriptors} backside`
     ]);
 }
 

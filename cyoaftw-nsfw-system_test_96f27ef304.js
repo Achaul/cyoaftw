@@ -5807,13 +5807,13 @@ avoidNote,
         negatives: "wide shot, full face, both eyes, looking at camera"
       },
       boobs: {
-        framing: "Extreme close-up of the breasts only, they fill the entire frame, face out of frame. ",
+        framing: `Extreme close-up of the ${getSurfaceBreastDetail(surfaceType)} only, they fill the entire frame, face out of frame. `,
         detail: (breasts.description || ("soft " + getColoredSurfaceDetail(getSurfaceBreastDetail(surfaceType)))) + ", " + getColoredSurfaceDetail(getSurfaceChestDetail(surfaceType)) + ", exposed nipples",
         region: "torso",
         negatives: "wide shot, visible face, eyes, full torso"
       },
       chest: {
-        framing: "Extreme close-up of the bare chest only, it fills the entire frame, face out of frame. ",
+        framing: `Extreme close-up of the ${getSurfaceChestDetail(surfaceType)} only, it fills the entire frame, face out of frame. `,
         detail: getColoredSurfaceDetail(getSurfaceChestDetail(surfaceType)) + ", visible nipples",
         region: "torso",
         negatives: "wide shot, visible face, eyes, full torso"
@@ -5831,17 +5831,17 @@ avoidNote,
         negatives: "wide shot, visible face, eyes, full body, vagina, vulva, female genitalia, clitoris"
       },
       butt: {
-        framing: "Extreme close-up of the bare buttocks only, they fill the entire frame, nothing else in frame, face not visible. ",
+        framing: `Extreme close-up of the ${getButtDetail(surfaceType)} only, they fill the entire frame, nothing else in frame, face not visible. `,
         detail: getColoredSurfaceDetail(getButtDetail(surfaceType)),
         region: "rear",
         negatives: "wide shot, visible face, eyes, full body," + (feminine ? " penis, male genitalia, scrotum" : " vagina, vulva, female genitalia, clitoris")
       },
       anus: {
-        framing: "Extreme close-up of the buttocks, they fill the entire frame, nothing else in frame, face not visible. ",
+        framing: `Extreme close-up of the ${getButtDetail(surfaceType)}, they fill the entire frame, nothing else in frame, face not visible. `,
         detail: getColoredSurfaceDetail(getButtDetail(surfaceType)) + ", detailed puckered anus, wrinkled asshole",
         region: "rear",
         negatives: "wide shot, visible face, eyes, full body, breasts, genitals"
-      }
+      },
     };
     const def = PART_DEFS[part];
     if (!def) return null;
