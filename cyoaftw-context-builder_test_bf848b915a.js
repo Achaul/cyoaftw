@@ -1,3 +1,10 @@
+// cyoaftw-context-builder.js v2026-10-22-001 — Sleeping NPC delivery/context follows live sleep state.
+// Version identifier for debugging cached files.
+if (typeof window !== "undefined") {
+    window.CONTEXT_BUILDER_VERSION = "2026-10-22-001";
+    console.log("[Context Builder] Loaded v" + window.CONTEXT_BUILDER_VERSION);
+}
+
 // ── DERIVE ROOM CONTEXT ──────────────────────────────────────────
 function deriveRoomContext(room) {
     const ctx = {
