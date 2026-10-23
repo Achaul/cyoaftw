@@ -2257,7 +2257,8 @@ const ROOM_TEMPLATES = [
 // ── ROOM IMAGE MAP ───────────────────────────────────────────────
 
 
-const ROOM_IMAGE_MAP = {
+// Retain the original Freeimage image URLs as per-room backup sources.
+const ROOM_IMAGE_BACKUP_MAP = {
 
     // ───────── Town Spine ─────────
     "Street": "https://iili.io/qFWPsNR.jpg",
@@ -2341,6 +2342,74 @@ const ROOM_IMAGE_MAP = {
 
 };
 
+// Primary host; aliases retain the same stand-in art as the original map.
+const ROOM_IMAGE_MAP = {
+    "Street": "https://i.postimg.cc/FswXcPY9/town-street.jpg",
+    "Avenue": "https://i.postimg.cc/hPNRxCXB/town-avenue.jpg",
+    "Alleyway": "https://i.postimg.cc/kX2d2rgG/town-alley.jpg",
+    "Square": "https://i.postimg.cc/c4PGYDvx/town-square.jpg",
+    "Gate": "https://i.postimg.cc/hPNRxCXg/town-gate.jpg",
+    "Portal Chamber": "https://i.postimg.cc/L6JMJd6b/portalroom.jpg",
+    "Guildhall": "https://i.postimg.cc/c19S11Z2/guildhall.jpg",
+    "Training Yard": "https://i.postimg.cc/wTnYJW1x/trainingyard.jpg",
+    "Guildmaster's Office": "https://i.postimg.cc/tCsHs0CD/guildoffice.jpg",
+    "Tavern": "https://i.postimg.cc/L6JMJd88/tavern-main.jpg",
+    "Taproom": "https://i.postimg.cc/qMNdNfvR/tavern-taproom.jpg",
+    "Kitchen": "https://i.postimg.cc/8P7V78zp/tavern-kitchen.jpg",
+    "Cellar": "https://i.postimg.cc/bNZjZXwq/tavern-cellar.jpg",
+    "Guest Room": "https://i.postimg.cc/QxFrFLxn/inn-room.jpg",
+    "Room": "https://i.postimg.cc/QxFrFLxn/inn-room.jpg",
+    "Cellar Stairs": "https://i.postimg.cc/G37C33rB/cellar-stairs.jpg",
+    "Back Door": "https://i.postimg.cc/FzB5TpD4/backdoor.jpg",
+    "Inn": "https://i.postimg.cc/jdDrDVd3/inn-common.jpg",
+    "Inn Common": "https://i.postimg.cc/jdDrDVd3/inn-common.jpg",
+    "Stairs": "https://i.postimg.cc/wT1d1KTr/innstairway.jpg",
+    "Upstairs Hallway": "https://i.postimg.cc/TYBvmkK5/upstairshallway.jpg",
+    "Brothel": "https://i.postimg.cc/7hW8K9m4/brothel.jpg",
+    "Passage": "https://i.postimg.cc/Kcq2ccFD/dungeon-passage.jpg",
+    "Corridor": "https://i.postimg.cc/kM1mMM9N/dungeon-corridor.jpg",
+    "Tunnel": "https://i.postimg.cc/T27622GS/dungeon-tunnel.jpg",
+    "Chamber": "https://i.postimg.cc/mZXsZZRP/dungeon-chamber.jpg",
+    "Trap": "https://i.postimg.cc/FFW4FFmB/dungeon-trap.jpg",
+    "Shrine": "https://i.postimg.cc/9X8hXXVt/dungeon-shrine.jpg",
+    "Armory": "https://i.postimg.cc/Pf3jffhP/dungeon-armory.jpg",
+    "Hallway": "https://i.postimg.cc/xTXSXrTw/ruins-hallway.jpg",
+    "Altar": "https://i.postimg.cc/8P7V78Px/ruins-altar.jpg",
+    "Library": "https://i.postimg.cc/pXmtmNLN/ruins-library.jpg",
+    "Tower": "https://i.postimg.cc/SNnpn0xq/ruins-tower.jpg",
+    "Ruins Passage": "https://i.postimg.cc/kX2d2rgC/ruins-passage.jpg",
+    "Cavern": "https://i.postimg.cc/MKgJRsnv/underground-cavern.jpg",
+    "Vault": "https://i.postimg.cc/02h1mtzM/underground-vault.jpg",
+    "Underground Hallway": "https://i.postimg.cc/NfZvTNKy/underground-hallway.jpg",
+    "Underground Gate": "https://i.postimg.cc/xTBVHsXX/underground-gate.jpg",
+    "Underground Stairs": "https://i.postimg.cc/qMNdNfv4/stairsundergorundcity.jpg",
+    "Lift Shaft": "https://i.postimg.cc/5yRdsgn1/cargolift.jpg",
+    "Smithy": "https://i.postimg.cc/Pf3jffhP/dungeon-armory.jpg",
+    "Deep Forge": "https://i.postimg.cc/Pf3jffhP/dungeon-armory.jpg",
+    "Mine Shaft": "https://i.postimg.cc/MKgJRsnv/underground-cavern.jpg",
+    "Collapsed Gallery": "https://i.postimg.cc/T27622GS/dungeon-tunnel.jpg",
+    "Old Mine Tunnel": "https://i.postimg.cc/T27622GS/dungeon-tunnel.jpg",
+    "Stairwell": "https://i.postimg.cc/Kcq2ccFD/dungeon-passage.jpg",
+    "Old Road": "https://i.postimg.cc/FswXcPY9/town-street.jpg",
+    "Causeway": "https://i.postimg.cc/kX2d2rgC/ruins-passage.jpg",
+    "Borderlands": "https://i.postimg.cc/kX2d2rgC/ruins-passage.jpg",
+    "Fringe Path": "https://i.postimg.cc/kX2d2rgC/ruins-passage.jpg",
+    "Town Hall": "https://i.postimg.cc/mZXsZZRP/dungeon-chamber.jpg",
+    "Throne Room": "https://i.postimg.cc/mZXsZZRP/dungeon-chamber.jpg",
+    "Chieftain's Hall": "https://i.postimg.cc/mZXsZZRP/dungeon-chamber.jpg",
+    "Inner Sanctum": "https://i.postimg.cc/8P7V78Px/ruins-altar.jpg",
+    "Witch's Lair": "https://i.postimg.cc/9X8hXXVt/dungeon-shrine.jpg",
+    "Marsh": "https://i.postimg.cc/kX2d2rgC/ruins-passage.jpg",
+    "Broken Ground": "https://i.postimg.cc/xTXSXrTw/ruins-hallway.jpg",
+    "Swamp Camp": "https://i.postimg.cc/kX2d2rgC/ruins-passage.jpg",
+    "Submerged Ruin": "https://i.postimg.cc/xTXSXrTw/ruins-hallway.jpg"
+};
+
+// An alternate format of the lift artwork was also supplied.
+const ROOM_IMAGE_ALTERNATES = {
+    "Lift Shaft": ["https://i.postimg.cc/qBbTBB0n/cargolift.png"]
+};
+
 const ZONE_IMAGE_MAP = {
     "Town": "https://iili.io/town-default-placeholder.jpg",
     "Dungeon": "https://iili.io/dungeon-default-placeholder.jpg",
@@ -2386,12 +2455,30 @@ function getRoomImage(roomType) {
     return ROOM_IMAGE_MAP[roomType] || null;
 }
 
+// Ordered candidates for visual loading only. Custom art never falls back to
+// an unrelated stock image; selecting a backup does not rewrite saved state.
+function getRoomImageSources(room) {
+    if (!room) return [];
+    const template = getRoomTemplate(room.type);
+    const key = template ? (template.imageKey || template.type) : room.type;
+    const primary = ROOM_IMAGE_MAP[key];
+    const backup = ROOM_IMAGE_BACKUP_MAP[key];
+    const alternates = ROOM_IMAGE_ALTERNATES[key] || [];
+    const assigned = room.image || primary;
+    if (!assigned) return [];
+    if (assigned !== primary && assigned !== backup && !alternates.includes(assigned)) return [assigned];
+    return [primary].concat(alternates, backup).filter(function (url, index, list) {
+        return !!url && list.indexOf(url) === index;
+    });
+}
+
 // Refresh missing art and these replaced stand-ins when saved rooms are shown.
 // Preserve deliberately assigned/custom images rather than resetting every room.
 function ensureRoomImage(room) {
     if (!room) return null;
     const template = getRoomTemplate(room.type);
     const image = template && getRoomImage(template.imageKey || template.type);
+    const backup = template && ROOM_IMAGE_BACKUP_MAP[template.imageKey || template.type];
     const previousImages = {
         "Portal Chamber": ["https://iili.io/qFVGWL7.jpg"],
         "Lift Shaft": ["https://iili.io/qFXxz6N.jpg", "https://iili.io/nOGrjvp.jpg"],
@@ -2399,7 +2486,7 @@ function ensureRoomImage(room) {
         "Training Yard": ["https://iili.io/qFVGWL7.jpg"],
         "Guildmaster's Office": ["https://iili.io/qFXfr9j.jpg"]
     };
-    if (image && (!room.image || (previousImages[room.type] || []).includes(room.image))) {
+    if (image && (!room.image || room.image === backup || (previousImages[room.type] || []).includes(room.image))) {
         room.image = image;
     }
     return room.image || null;

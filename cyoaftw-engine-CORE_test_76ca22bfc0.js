@@ -52270,6 +52270,90 @@ function removeTypingIndicator() {
 
 // ── RENDER ───────────────────────────────────────────────────────
 
+const ROOM_BACKGROUND_LOAD_TIMEOUT_MS = 6000;
+const ROOM_BACKGROUND_RETRY_MS = 60000;
+const roomBackgroundImageCache = new Map();
+let roomBackgroundRequest = null;
+
+// Background art is presentation work, independent of game/TTS action queues.
+// Preload each source so errors/timeouts can select another host; CSS alone
+// offers no load/error callbacks. Never persist the temporary selected URL.
+function renderRoomBackground(room, wrap) {
+    const sources = typeof getRoomImageSources === "function"
+        ? getRoomImageSources(room) : (room && room.image ? [room.image] : []);
+    const key = JSON.stringify(sources);
+    const previous = roomBackgroundRequest;
+    if (previous && previous.loading && previous.room === room && previous.wrap === wrap &&
+        previous.key === key && previous.image === room.image) return;
+    if (previous && previous.cancel) previous.cancel();
+    if (!wrap) { roomBackgroundRequest = null; return; }
+    if (!previous || previous.room !== room || previous.wrap !== wrap) wrap.style.backgroundImage = "";
+
+    const request = { room: room, wrap: wrap, image: room && room.image, key: key, loading: true, cancel: null };
+    roomBackgroundRequest = request;
+    let index = 0, image = null, timer = null;
+    const current = function () {
+        return roomBackgroundRequest === request && G.activeRoom === room &&
+            room.image === request.image && wrap.isConnected !== false && document.getElementById("roomImageWrapEl") === wrap;
+    };
+    const cleanup = function () {
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
+        if (image) { image.onload = null; image.onerror = null; }
+        image = null;
+    };
+    request.cancel = function () { cleanup(); request.loading = false; };
+    const remember = function (url, value) {
+        roomBackgroundImageCache.delete(url);
+        roomBackgroundImageCache.set(url, value);
+        if (roomBackgroundImageCache.size > 128) roomBackgroundImageCache.delete(roomBackgroundImageCache.keys().next().value);
+    };
+    const finish = function (url) {
+        cleanup();
+        request.loading = false;
+        if (current()) wrap.style.backgroundImage = url ? "url(" + JSON.stringify(url) + ")" : "";
+    };
+    const next = function () {
+        cleanup();
+        if (!current()) { request.loading = false; return; }
+        let url, cached;
+        while (index < sources.length) {
+            url = sources[index++];
+            cached = roomBackgroundImageCache.get(url);
+            if (!cached || cached.ready || Date.now() >= cached.retryAt) break;
+            url = null;
+        }
+        if (!url) { finish(null); return; }
+        if (cached && cached.ready) { finish(url); return; }
+        // Legacy/test environments without an Image constructor keep CSS rendering.
+        if (typeof Image !== "function") { finish(url); return; }
+        const candidate = new Image();
+        image = candidate;
+        let settled = false;
+        const settle = function (success) {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (!current()) { request.loading = false; return; }
+            if (success) {
+                remember(url, { ready: true });
+                finish(url);
+            } else {
+                remember(url, { ready: false, retryAt: Date.now() + ROOM_BACKGROUND_RETRY_MS });
+                next();
+            }
+        };
+        candidate.onload = function () { settle(candidate.naturalWidth > 0); };
+        candidate.onerror = function () { settle(false); };
+        timer = setTimeout(function () { settle(false); }, ROOM_BACKGROUND_LOAD_TIMEOUT_MS);
+        try {
+            candidate.src = url;
+            if (candidate.complete && candidate.naturalWidth > 0) settle(true);
+        } catch (err) { settle(false); }
+    };
+    next();
+}
+
 function renderRoom() {
     const room = G.activeRoom;
     if (!room) return;
@@ -52283,14 +52367,7 @@ function renderRoom() {
     repairRoomExits(room);
 
     const wrapEl = document.getElementById("roomImageWrapEl");
-    if (wrapEl) {
-        if (room.image) {
-            console.log("Setting bg image:", room.image);
-            wrapEl.style.backgroundImage = `url('${room.image}')`;
-        } else {
-            wrapEl.style.backgroundImage = "";
-        }
-    }
+    renderRoomBackground(room, wrapEl);
 
     const nameEl = document.getElementById("roomNameEl");
     if (nameEl) nameEl.textContent = getRoomHeaderLabel(room);
