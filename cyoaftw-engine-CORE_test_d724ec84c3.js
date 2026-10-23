@@ -76408,6 +76408,11 @@ function renderIntimacyActionMenu(npc) {
         return;
     }
 
+    // Get stored active tab from NPC memory, or from DOM if not set
+    const currentTabSection = (npc.intimacy && npc.intimacy._lastActiveTab) 
+        ? npc.intimacy._lastActiveTab 
+        : (document.querySelector(".intimacy-tab-btn.active")?.dataset.section || null);
+
     // This function runs at scene start, after every act and on position
     // change — the single choke point where the eye button / second portrait
     // can follow the encounter state (nothing else re-renders mid-scene).
@@ -76783,10 +76788,17 @@ function renderIntimacyActionMenu(npc) {
         // Also filter out Pause/Stop from Other section (they go in controls-row)
         console.log(`[DEBUG] sectionItems:`, sectionItems.map(item => ({label: item.label, actionsCount: item.actions ? item.actions.length : 0})));
         
+        // Get showAll state to check visibility
+        const showAllActionsState = npc.intimacy && npc.intimacy.showAllActions;
+        
         const sectionsWithActions = sectionItems
             .filter(item => {
                 if (!item.actions || item.actions.length === 0) return false;
                 if (!shouldShowSection(item.label)) return false;
+                
+                // Check if section has any visible (non-disabled) actions
+                const visibleActions = item.actions.filter(a => !a.disabled || showAllActionsState);
+                if (visibleActions.length === 0) return false;
                 
                 // For Other section, filter out Pause and Stop actions
                 if (item.label === "Other") {
@@ -77032,36 +77044,50 @@ function renderIntimacyActionMenu(npc) {
                     btn.style.cursor = "not-allowed";
                     btn.onclick = null;
                 } else {
-                    btn.onclick = () => chooseIntimacyAction(npc, action.id);
+                    // Store the current section so we can restore it after re-render
+                    btn.onclick = () => {
+                        if (npc.intimacy) {
+                            npc.intimacy._lastActiveTab = item.label;
+                        }
+                        chooseIntimacyAction(npc, action.id);
+                    };
                 }
                 
                 sectionContainer.appendChild(btn);
             }
         }
         
-        // Show the first tab's content by default
+        // Show the first tab's content by default, or restore the previously active tab
         // We need to do this after all sections are created
         if (tabOrder.length > 0 && tabContainer.children.length > 0) {
-            const firstTab = tabContainer.children[0];
-            const sectionLabel = firstTab.dataset.section;
+            // Determine which tab to activate: use stored tab if available, otherwise first
+            const tabToActivate = currentTabSection 
+                ? document.querySelector(".intimacy-tab-btn[data-section=\"" + escapeForCssSelector(currentTabSection) + "\"]")
+                : tabContainer.children[0];
             
-            // Trigger click on first tab to activate it (this will use the same logic as user clicks)
-            // But we need to do it programmatically since the event delegation is on el
+            const sectionLabel = tabToActivate ? tabToActivate.dataset.section : tabOrder[0];
+            
+            // Activate the selected tab
             const allTabs = document.querySelectorAll(".intimacy-tab-btn");
             allTabs.forEach(t => t.classList.remove("active"));
-            firstTab.classList.add("active");
+            if (tabToActivate) {
+                tabToActivate.classList.add("active");
+            } else {
+                // Fallback to first tab
+                tabContainer.children[0].classList.add("active");
+            }
             
             // Hide all sections
             const allSections = document.querySelectorAll(".intimacy-section-content");
             allSections.forEach(s => s.style.display = "none");
             
-            // Show first section - need to escape special characters for CSS attribute selector
-            const escapedFirstLabel = escapeForCssSelector(sectionLabel);
-            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + escapedFirstLabel + "\"]");
+            // Show the selected section - need to escape special characters for CSS attribute selector
+            const escapedSectionLabel = escapeForCssSelector(sectionLabel);
+            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + escapedSectionLabel + "\"]");
             if (targetSection) {
                 targetSection.style.display = "flex";
             } else {
-                console.log(`[DEBUG] First section NOT found for label: ${sectionLabel}`);
+                console.log(`[DEBUG] Section NOT found for label: ${sectionLabel}`);
                 console.log(`[DEBUG] All section data-section values:`, Array.from(allSections).map(s => s.dataset.section));
             }
         }

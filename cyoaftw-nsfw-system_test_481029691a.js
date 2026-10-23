@@ -490,7 +490,13 @@ console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptan
 
       let breastSize = "flat";
       let breastDescription = "a flat, toned chest";
-      if (g === "female") { breastSize = "medium"; breastDescription = "a modest bust"; }
+      if (g === "female") {
+        // Add variety to breast sizes: small, medium, large
+        breastSize = pickFrom(["small", "medium", "medium", "large"]); // 25% small, 50% medium, 25% large
+        if (breastSize === "small") breastDescription = "small, perky breasts";
+        else if (breastSize === "medium") breastDescription = "a modest bust";
+        else if (breastSize === "large") breastDescription = "generous, full breasts";
+      }
       anatomy.breasts = {
         sizeCategory: breastSize,
         description: breastDescription,
@@ -521,6 +527,15 @@ console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptan
         genitalSizeCategory = pickFrom(["small", "medium", "medium", "large"]); // balanced for medium
       }
       anatomy.genitalSize = { sizeCategory: genitalSizeCategory, description: "natural proportions", status: [], health: 100 };
+      
+      // Also set explicit penis/vagina size for consistency
+      // Use the same genitalSizeCategory but create separate properties for clarity
+      if (g === "male" || g === "herm") {
+        anatomy.penis = { sizeCategory: genitalSizeCategory, description: "natural size" };
+      }
+      if (g === "female" || g === "herm") {
+        anatomy.vagina = { sizeCategory: genitalSizeCategory, description: "natural size" };
+      }
 
       // Pubic hair - only generated for skin-covered creatures. Furred,
       // scaled, feathered or chitinous surfaces have no distinct groin hair
@@ -5636,8 +5651,17 @@ avoidNote,
       (clothing.undergarments ? "u1" : "u0");
     
     // Get surface-appropriate arousal description (fur, scales, skin, etc.)
-    const surfaceType = (anatomy.body && String(anatomy.body.surfaceType || "").trim().toLowerCase()) || "skin";
+    const body = anatomy.body || {};
+    const surfaceType = (body && String(body.surfaceType || "").trim().toLowerCase()) || "skin";
+    const surfaceColor = (body && String(body.color || "").trim().toLowerCase()) || "";
     const arousalTerms = getSurfaceArousalTerm(surfaceType) + ", aroused";
+    
+    // Helper to add color to surface descriptions
+    const getColoredSurfaceDetail = (baseDetail) => {
+        if (!surfaceColor) return baseDetail;
+        // Insert color before the surface type description
+        return baseDetail.replace(/^(fur|scaled|bare|smooth|gelatinous|feathered|chitin-plated|translucent|amorphous)/i, surfaceColor + " $1");
+    };
 
     // Part definitions: macro framing, anatomy detail and region. The
     // face is always excluded - the bust portrait owns the face, and a
@@ -5651,13 +5675,13 @@ avoidNote,
       },
       boobs: {
         framing: "Extreme close-up of the breasts only, they fill the entire frame, face out of frame. ",
-        detail: (breasts.description || ("soft " + getSurfaceBreastDetail(surfaceType))) + ", " + getSurfaceChestDetail(surfaceType) + ", exposed nipples",
+        detail: (breasts.description || ("soft " + getColoredSurfaceDetail(getSurfaceBreastDetail(surfaceType)))) + ", " + getColoredSurfaceDetail(getSurfaceChestDetail(surfaceType)) + ", exposed nipples",
         region: "torso",
         negatives: "wide shot, visible face, eyes, full torso"
       },
       chest: {
         framing: "Extreme close-up of the bare chest only, it fills the entire frame, face out of frame. ",
-        detail: getSurfaceChestDetail(surfaceType) + ", visible nipples",
+        detail: getColoredSurfaceDetail(getSurfaceChestDetail(surfaceType)) + ", visible nipples",
         region: "torso",
         negatives: "wide shot, visible face, eyes, full torso"
       },
@@ -5675,7 +5699,7 @@ avoidNote,
       },
       butt: {
         framing: "Extreme close-up of the bare buttocks only, they fill the entire frame, nothing else in frame, face not visible. ",
-        detail: getButtDetail(surfaceType),
+        detail: getColoredSurfaceDetail(getButtDetail(surfaceType)),
         region: "rear",
         negatives: "wide shot, visible face, eyes, full body," + (feminine ? " penis, male genitalia, scrotum" : " vagina, vulva, female genitalia, clitoris")
       },
