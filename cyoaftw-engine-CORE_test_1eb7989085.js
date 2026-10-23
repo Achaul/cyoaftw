@@ -1377,7 +1377,7 @@ const TEXT_COMMANDS = [
     { id: "choose", args: ["number"], aliases: ["choose"], example: "choose 2", description: "Pick a numbered conversation option from the most recent options list." },
     { id: "leave", aliases: ["leave", "goodbye", "bye", "step away", "leave conversation"], example: "leave", description: "Step away from the current NPC. Use a direction to leave the room." },
     { id: "rest", aliases: ["rest"], example: "rest", room: true, interact: "rest", description: "Use the normal Rest action, including recovery, time, and danger checks." },
-    { id: "sleep", aliases: ["sleep"], example: "sleep", room: true, interact: "sleep", description: "Use the normal Sleep action when a suitable bed is available." },
+    { id: "sleep", aliases: ["sleep"], example: "sleep", room: true, interact: "sleep", description: "Sleep on a bed, cot or floor. Choose your surface with options and choose <number>; sharing reduces recovery. Show sleep lists availability, and help sleep explains the choices." },
     { id: "status", info: true, aliases: ["status", "health", "stats"], example: "status", description: "Read your health, stamina, mana, and coins. Costs no turn." },
     { id: "stop", aliases: ["stop"], example: "stop", description: "Cancel pending commands. An action already in progress finishes normally." },
     { id: "continue", aliases: ["continue", "resume"], example: "continue", description: "Explicitly resume the remaining commands after a pause. A failed action is not retried." }
@@ -2786,9 +2786,10 @@ function textModeInspectNPC(action) {
     }
     if (matches.length > 1) return textModeAsk(action, "target", matches, "Who do you want to look at?");
     const npc = matches[0], name = textModeNPCLabel(npc);
-    const description = buildNPCLookDescription(npc) || "You see " + name + ".";
+    const description = [buildNPCLookDescription(npc) || "You see " + name + ".",
+        typeof getNPCPartyDescription === "function" ? getNPCPartyDescription(npc) : ""].filter(Boolean).join("\n\n");
     setNarration(description);
-    publishTextModeOutput("inspection", description, { npc: { name: name, description: description } }, false);
+    publishTextModeOutput("inspection", description, { npc: { name: name, description: description, travelParty: typeof getNPCPartyPublicInfo === "function" ? getNPCPartyPublicInfo(npc) : null } }, false);
     return { status: "completed" };
 }
 
@@ -4786,6 +4787,12 @@ function textSharedOptions() {
     const owned = menu && menu.ownsView();
     if (menu && menu.valid()) return showSharedChoiceMenu(menu);
     if (menu) clearSharedChoiceMenu(menu);
+    if (menu && menu.kind === "sleep-spot") {
+        if (owned && menu.scene.player === G.player && menu.scene.room === G.activeRoom && menu.scene.npc === G.activeNPC &&
+            menu.scene.mode === G.activeNPCMode && menu.scene.modal === G.activeItemModal && menu.scene.object === G.activeObject &&
+            !getSleepActionBlock(menu.sleepMode, G.activeRoom)) return menu.refresh();
+        return textModeResult("blocked", "Those sleeping choices changed. Use sleep again to review the current places.");
+    }
     if (menu && owned && /^shrine-/.test(menu.kind)) { returnToRoomView(); return textModeResult("blocked", "That shrine choice changed. Use shrine to inspect it again; no new prayer costs were spent."); }
     if (menu && owned && menu.kind === "structure-magic") { returnToRoomView(); return textModeResult("blocked", "That structural choice changed. Inspect the exit again."); }
     if (menu && owned && /^material-/.test(menu.kind)) { closeItemModal(); returnToRoomView(); return textModeResult("blocked", "The item menu changed. Repeat the command; no new action was taken."); }
@@ -10289,8 +10296,10 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-22-007
-// Latest: Sleeping spots: Sleep now asks where (bed, cot or floor; floor works anywhere). A bed holds up to 3 and a cot 2; the more share one the less each recovers (x0.8 for two, x0.6 for three, and a full bed no longer gives the well-rested buff). Companions take the places that give the party the most rest (empty beds, empty cots, doubling up, floor last) and the night is narrated.
+// Core Engine Version: 2026-10-22-009
+// Latest: SFW privacy/tolerance hook and metadata audits; shared sleep spots for native/text sleep, job nights, Rest and independent NPC lodging; established partners prefer to share.
+// Previous: Independent NPC travel parties: formation/load repair, shared movement, combat support, public descriptions/dialogue and autonomous healing. Recruiting one leaves the others together.
+// Previous: Sleeping spots: Sleep now asks where (bed, cot or floor; floor works anywhere). A bed holds up to 3 and a cot 2; the more share one the less each recovers (x0.8 for two, x0.6 for three, and a full bed no longer gives the well-rested buff). Companions take the places that give the party the most rest (empty beds, empty cots, doubling up, floor last) and the night is narrated.
 // Previous: NPCs pick up and wear gear: out of combat, an awake humanoid NPC (companions too) may take a loose upgrade from the floor of their room and put it on (old piece to their pack), narrated when you are there; gifts and party loot are worn at once when they are upgrades (Equip-best scoring). Never takes what you dropped, owned/quest items, broken gear or relics.
 // Previous: Companions tend the party on their own out of combat: a companion with healing skill or supplies treats the most urgent patient (bleeding, then below half HP, then infection) - the player, another companion, themselves or a downed companion - from their own pack or magic, with a narration line; potions only below 30% HP; one treatment per turn, 3-turn rest per healer.
 // Previous: Unconscious bodies recover on their own at the sleeping-rough rate (not while bleeding) and get up at half HP (downed companions rejoin if you are there, otherwise wake alone and remember it); every wake path clears all body leftovers (name prefix, tags, description, flags) and never leaves a woken NPC at 1 HP; bodies stuck in the creature list lie back down.
@@ -18023,6 +18032,7 @@ async function resumeSavedGame() {
         restorePartyMembers();
         repairSkirmishHostilityOnLoad();
         restoreSlimeFollowers();
+        repairNPCPartiesOnLoad(undefined, true);
     });
 
     await performLoadingStep("Rebuilding panels, exits, and room details...", 86, () => {
@@ -19956,6 +19966,8 @@ function createNPC(species, room, zoneTemplate, options = {}) {
         queueNPCPersonaSynthesis(npc);
     }
 
+    npc.privacyTolerance = getNPCPrivacyBaseTolerance(npc);
+
     // Generate a home for humanoid NPCs (the opening guide skips this: see spawnGuideNPC)
     if (isHumanoid && options.skipHome !== true && typeof createNPCHome === "function") {
         const homeCoords = createNPCHome(npc, room.zone || "Town", room);
@@ -19983,6 +19995,7 @@ function addToParty(npc) {
     return;
   }
 
+  if (typeof leaveNPCParty === "function") leaveNPCParty(npc, "you joined the player");
   G.partyMembers = G.partyMembers || [];
   if (!G.partyMembers.includes(npc)) {
     G.partyMembers.push(npc);
@@ -20068,6 +20081,369 @@ window.addToParty = addToParty;
 window.removeFromParty = removeFromParty;
 window.restorePartyMembers = restorePartyMembers;
 
+// -- AUTONOMOUS NPC TRAVEL PARTIES -------------------------------------------
+// Stable ids only in saved membership. These parties never share player standing.
+const NPC_PARTY_COOLDOWN_TURNS = 12;
+const NPC_PARTY_FORM_CHANCE = 0.1;
+const NPC_PARTY_MAX = 4;
+
+function npcPartyIndex() {
+    const byId = new Map(), rooms = new Map();
+    Object.values(G.roomMap || {}).forEach(function (room) {
+        (room && room.creatures || []).forEach(function (npc) {
+            if (npc && npc.id && !byId.has(npc.id)) { byId.set(npc.id, npc); rooms.set(npc.id, room); }
+        });
+    });
+    return { byId: byId, rooms: rooms };
+}
+
+function areNPCPartyMates(a, b) {
+    const p = a && a._npcParty, q = b && b._npcParty;
+    return !!(a && b && a !== b && p && q && p.id === q.id && p.leaderId === q.leaderId &&
+        Array.isArray(p.memberIds) && Array.isArray(q.memberIds) &&
+        p.memberIds.includes(a.id) && p.memberIds.includes(b.id) && q.memberIds.includes(a.id) && q.memberIds.includes(b.id) &&
+        !isCompanionNPC(a) && !isCompanionNPC(b));
+}
+
+function getNPCPartyMembers(npc, room) {
+    if (!npc || !npc._npcParty) return [];
+    const candidates = room ? room.creatures || [] : Array.from(npcPartyIndex().byId.values());
+    return candidates.filter(function (other) { return other === npc || areNPCPartyMates(npc, other); });
+}
+
+function npcPartyBaseHostility(npc) {
+    // The temporary skirmish bump is not a betrayal of travelling companions.
+    const mark = npc && npc._skirmishHostility;
+    return mark && (npc.hostility || 0) <= mark.set ? Number(mark.before) || 0 : Number(npc && npc.hostility) || 0;
+}
+
+function canBelongToNPCParty(npc) {
+    if (!npc || !npc.id || npc.isHumanoid !== true || isCompanionNPC(npc) || npc.isGuide) return false;
+    if (isCompanionDownForTravel(npc) || npc.surrendered || npc.bound || npc._prisoner || npc._boundCaptiveFollower) return false;
+    if (npc._guardDuty || isNPCScheduled(npc) || npc.stationary || npc._onCall || npc._fleeRun || npc._drunkBlackout) return false;
+    if (typeof isNPCWanted === "function" && isNPCWanted(npc)) return false;
+    if (npcPartyBaseHostility(npc) >= 30) return false;
+    // Stall owners and scheduled workers keep their existing jobs.
+    if (/merchant|shopkeeper|vendor/i.test(npc.role || "")) return false;
+    return isExplorerNPC(npc) || isPastimeNPC(npc);
+}
+
+function npcPartyPairCompatible(a, b) {
+    const hostile = function (who, other) {
+        const aggro = who.memory && who.memory.lastAggressor;
+        return !!(aggro && (aggro.id === other.id || aggro.npcId === other.id)) ||
+            (who.ties || []).some(function (tie) { return tie.id === other.id && /enemy|rival|hostile/.test(tie.type || ""); });
+    };
+    return !hostile(a, b) && !hostile(b, a);
+}
+
+function npcPartyName(npc) {
+    return typeof getNPCRoomSightName === "function" ? getNPCRoomSightName(npc) : npc.name || "a traveller";
+}
+
+function npcPartyNames(members) {
+    const names = members.map(npcPartyName);
+    return names.length < 2 ? names.join("") : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+}
+
+function getNPCPartyPublicInfo(npc) {
+    if (!npc || !npc._npcParty) return null;
+    const room = G.activeRoom;
+    if (!room || !(room.creatures || []).includes(npc) || !isVisibleEntity(npc)) return null;
+    const members = getNPCPartyMembers(npc, room).filter(function (m) { return !isCompanionDownForTravel(m) && isVisibleEntity(m); });
+    const others = members.filter(function (m) { return m !== npc; });
+    if (!others.length) return null;
+    return { companions: others.map(npcPartyName), leader: members.some(function (m) { return m.id === npc._npcParty.leaderId; }) ? npcPartyName(members.find(function (m) { return m.id === npc._npcParty.leaderId; })) : null };
+}
+
+function getNPCPartyDescription(npc) {
+    const info = getNPCPartyPublicInfo(npc);
+    if (!info) return "";
+    const names = info.companions;
+    return "Travelling with " + (names.length < 2 ? names[0] : names.slice(0, -1).join(", ") + " and " + names[names.length - 1]) + ".";
+}
+
+function rememberNPCParty(npc, members, reason) {
+    if (typeof addNPCMemory !== "function") return;
+    const others = members.filter(function (m) { return m !== npc; });
+    const text = others.length ? "You are travelling with " + npcPartyNames(others) + ". You travel as an independent group, separate from the player's companions." :
+        "You are no longer in your former travelling group" + (reason ? ": " + reason : "") + ".";
+    addNPCMemory(npc, { id: "npc-travel-party", tags: ["party", "fact"], text: text, importance: 8, pinned: true });
+}
+
+function publishNPCPartyEvent(stage, members, room, text) {
+    if (room !== G.activeRoom) return;
+    const visible = members.filter(function (m) { return isVisibleEntity(m); });
+    if (visible.length !== members.length || !visible.length) return;
+    if (text) queueTurnNote(text);
+    if (typeof publishTextModeOutput === "function") publishTextModeOutput("npc-party", text || "", {
+        presentation: "supplement", npcParty: { stage: stage, members: visible.map(npcPartyName) }
+    }, false);
+}
+
+function writeNPCParty(members, state) {
+    members.forEach(function (npc) {
+        npc._npcParty = { id: state.id, leaderId: state.leaderId, memberIds: members.map(function (m) { return m.id; }), formedTurn: state.formedTurn };
+        rememberNPCParty(npc, members);
+    });
+}
+
+function dissolveNPCParty(npc, reason, index, silent) {
+    if (!npc || !npc._npcParty) return;
+    const id = npc._npcParty.id, ix = index || npcPartyIndex();
+    const members = Array.from(ix.byId.values()).filter(function (m) { return m._npcParty && m._npcParty.id === id; });
+    if (!members.includes(npc)) members.push(npc);
+    members.forEach(function (m) { delete m._npcParty; m._npcPartyCheckTurn = getCurrentStoryTurn(); rememberNPCParty(m, [], reason); });
+    const room = ix.rooms.get(npc.id);
+    const present = members.filter(function (m) { return ix.rooms.get(m.id) === room; });
+    if (!silent) publishNPCPartyEvent("dissolved", present, room, npcPartyNames(present) + (present.length === 1 ? " leaves the travelling group." : " go their separate ways."));
+}
+
+function leaveNPCParty(npc, reason) {
+    if (!npc || !npc._npcParty) return;
+    const ix = npcPartyIndex(), state = npc._npcParty;
+    detachNPCPartySkirmisher(npc, ix.rooms.get(npc.id));
+    const members = Array.from(ix.byId.values()).filter(function (m) {
+        return m !== npc && m._npcParty && m._npcParty.id === state.id && state.memberIds.includes(m.id) && !isCompanionNPC(m);
+    });
+    delete npc._npcParty;
+    npc._npcPartyCheckTurn = getCurrentStoryTurn();
+    rememberNPCParty(npc, [], reason || "you joined the player");
+    if (members.length < 2) {
+        members.forEach(function (m) { dissolveNPCParty(m, "the group split up", ix, true); });
+    } else {
+        writeNPCParty(members, { id: state.id, leaderId: members.some(function (m) { return m.id === state.leaderId; }) ? state.leaderId : members[0].id, formedTurn: state.formedTurn });
+    }
+}
+
+// On every load, reconcile all copies against the leader's roster. A repeated
+// repair is harmless; corrupt copies cannot adopt unrelated NPCs by id alone.
+function repairNPCPartiesOnLoad(index, silent) {
+    const ix = index || npcPartyIndex(), groups = new Map();
+    Object.values(G.roomMap || {}).forEach(function (room) {
+        (room && room.items || []).forEach(function (body) {
+            if (body && body.objectType === "body" && body._npcParty) {
+                delete body._npcParty; rememberNPCParty(body, [], "you are no longer able to travel");
+            }
+        });
+    });
+    ix.byId.forEach(function (npc) {
+        const p = npc._npcParty;
+        if (!p) return;
+        if (typeof p.id !== "string" || !p.id || !Array.isArray(p.memberIds) || !p.memberIds.includes(npc.id)) {
+            delete npc._npcParty; rememberNPCParty(npc, [], "the group split up"); return;
+        }
+        if (!groups.has(p.id)) groups.set(p.id, []);
+        groups.get(p.id).push(npc);
+    });
+    groups.forEach(function (copies) {
+        const first = copies[0], p = first._npcParty;
+        const leader = ix.byId.get(p.leaderId);
+        if (!leader || !leader._npcParty || leader._npcParty.id !== p.id || isCompanionDownForTravel(leader)) {
+            dissolveNPCParty(first, "the leader is no longer able to travel", ix, silent); return;
+        }
+        const roster = leader._npcParty;
+        const members = roster.memberIds.map(function (id) { return ix.byId.get(id); }).filter(function (m, i, all) {
+            return m && all.indexOf(m) === i && copies.includes(m) && m._npcParty.leaderId === leader.id && canBelongToNPCParty(m);
+        }).slice(0, NPC_PARTY_MAX);
+        const quarrel = members.some(function (a) { return members.some(function (b) { return a !== b && !npcPartyPairCompatible(a, b); }); });
+        if (quarrel || members.length < 2 || !members.includes(leader)) {
+            // Recruitment normally passes through leaveNPCParty immediately.
+            // Old saves with a recruited leader still keep two valid survivors.
+            if (!quarrel && isCompanionNPC(leader) && members.length >= 2) {
+                copies.filter(function (m) { return !members.includes(m); }).forEach(function (m) { delete m._npcParty; rememberNPCParty(m, [], "you left the group"); });
+                writeNPCParty(members, { id: p.id, leaderId: members[0].id, formedTurn: Number.isFinite(p.formedTurn) ? p.formedTurn : getCurrentStoryTurn() });
+                return;
+            }
+            dissolveNPCParty(first, quarrel ? "the travellers fell out" : "the group can no longer travel together", ix, silent); return;
+        }
+        copies.filter(function (m) { return !members.includes(m); }).forEach(function (m) {
+            delete m._npcParty; m._npcPartyCheckTurn = getCurrentStoryTurn(); rememberNPCParty(m, [], "you left the group");
+        });
+        const ids = members.map(function (m) { return m.id; });
+        if (copies.length !== members.length || members.some(function (m) { return JSON.stringify(m._npcParty.memberIds) !== JSON.stringify(ids); })) {
+            writeNPCParty(members, { id: p.id, leaderId: leader.id, formedTurn: Number.isFinite(p.formedTurn) ? p.formedTurn : getCurrentStoryTurn() });
+        }
+    });
+}
+
+function tickNPCPartyFormation() {
+    if (!G.player) return;
+    const ix = npcPartyIndex(), now = getCurrentStoryTurn();
+    repairNPCPartiesOnLoad(ix, false);
+    Object.values(G.roomMap || {}).forEach(function (room) {
+        if (!room || room.skirmish || room.collapsed) return;
+        if (room === G.activeRoom && (G.activeNPC || G.activeObject || G.activeNPCMode === "combat")) return;
+        const candidates = (room.creatures || []).filter(function (npc) {
+            return canBelongToNPCParty(npc) && !npc._npcParty && !npc._inSkirmish && !npc._encId &&
+                !npc.hidden && !npc.isHidden && !(npc.currentState && npc.currentState.sleeping) &&
+                !(typeof npc._npcPartyCheckTurn === "number" && now - npc._npcPartyCheckTurn < NPC_PARTY_COOLDOWN_TURNS);
+        });
+        if (candidates.length < 2) return;
+        candidates.forEach(function (npc) { npc._npcPartyCheckTurn = now; });
+        if (Math.random() >= NPC_PARTY_FORM_CHANCE) return;
+        candidates.sort(function (a, b) { return Number(isExplorerNPC(b)) - Number(isExplorerNPC(a)); });
+        const leader = candidates[0], members = [leader];
+        const temperament = function (npc) { return String(npc.temperament || "neutral").toLowerCase(); };
+        const cautious = function (npc) { return /skittish|wary|timid|calm/.test(temperament(npc)); };
+        candidates.slice(1).sort(function (a, b) {
+            return Number(temperament(b) === temperament(leader)) - Number(temperament(a) === temperament(leader));
+        }).forEach(function (npc) {
+            if (members.length >= NPC_PARTY_MAX || cautious(npc) !== cautious(leader)) return;
+            if (members.every(function (m) { return npcPartyPairCompatible(m, npc); })) members.push(npc);
+        });
+        if (members.length < 2) return;
+        // Re-plan a shared evening destination with enough reserved places.
+        members.forEach(function (m) { delete m._pastimeDay; delete m._pastimeDest; });
+        writeNPCParty(members, { id: "npc-party:" + leader.id + ":" + now, leaderId: leader.id, formedTurn: now });
+        members.forEach(function (m) { m._tripDay = leader._tripDay; m._tripGo = leader._tripGo; });
+        publishNPCPartyEvent("formed", members, room, npcPartyNames(members) + " agree to travel together.");
+    });
+}
+
+function npcPartyBusy(npc, room) {
+    return !!(npc && npc._npcParty && (npc._npcPartyMoveTurn === getCurrentStoryTurn() ||
+        getNPCPartyMembers(npc, room).some(function (m) { return m._inSkirmish || m._encId; })));
+}
+
+function moveNPCPartyWithLeader(npc, fromRoom, toRoom) {
+    const state = npc._npcParty;
+    if (!state || state.leaderId !== npc.id) return;
+    npc._npcPartyMoveTurn = getCurrentStoryTurn();
+    const moved = [npc];
+    (fromRoom.creatures || []).slice().forEach(function (member) {
+        if (!areNPCPartyMates(npc, member) || !canBelongToNPCParty(member) || member._inSkirmish || member._encId ||
+            member.hidden || member.isHidden || member.currentState && member.currentState.sleeping) return;
+        // Follow only this actual hop. Door checks and world trails remain shared.
+        if (relocateNPCBetweenRooms(member, fromRoom, toRoom.coords, { npcPartyEscort: true, ignoreDrunkStumble: true })) {
+            member._npcPartyMoveTurn = getCurrentStoryTurn(); member._scheduleMoveTurn = getCurrentStoryTurn(); moved.push(member);
+        }
+    });
+    if (moved.length > 1) {
+        npc._npcPartyGroupMoveTurn = getCurrentStoryTurn();
+        if (toRoom === G.activeRoom) publishNPCPartyEvent("arrived", moved, toRoom, npcPartyName(npc) + " arrives with " + npcPartyNames(moved.slice(1)) + ".");
+        else if (fromRoom === G.activeRoom) publishNPCPartyEvent("departed", moved, fromRoom, npcPartyNames(moved) + " leave together.");
+    }
+}
+
+function describeNPCTravelParty(npc) {
+    if (!npc || G.activeNPC !== npc || !/^(chat|talk)$/.test(G.activeNPCMode || "") || !getNPCPartyPublicInfo(npc)) return false;
+    const info = getNPCPartyPublicInfo(npc), names = info.companions;
+    addChatMessage("left", npc.name || "They", "I am travelling with " + (names.length < 2 ? names[0] : names.slice(0, -1).join(", ") + " and " + names[names.length - 1]) + ". We keep each other company on the road.", { mode: "auto" });
+    return true;
+}
+
+window.getNPCPartyPublicInfo = getNPCPartyPublicInfo;
+window.getNPCPartyDescription = getNPCPartyDescription;
+
+function initNPCPartySkirmish(room, a, b) {
+    if (!room.skirmish || /^(arrest|theft)$/.test(room.skirmish.reason || "")) return;
+    if (!a._npcParty && !b._npcParty) return;
+    const side = function (npc) {
+        return [npc].concat(getNPCPartyMembers(npc, room).filter(function (m) {
+            return m !== npc && !isCompanionDownForTravel(m) && !m.hidden && !m.isHidden && !m.surrendered && !m.bound &&
+                !m._inSkirmish && !m._encId && !(m.currentState && m.currentState.sleeping);
+        }));
+    };
+    const left = side(a), right = side(b).filter(function (m) { return !left.includes(m); });
+    room.skirmish.npcPartySides = { a: left.map(function (m) { return m.id; }), b: right.map(function (m) { return m.id; }) };
+    left.concat(right).forEach(function (m) { m._inSkirmish = true; m._versusReason = "fight"; raiseSkirmishHostility(m); });
+}
+
+function clearNPCPartySkirmish(room) {
+    const sides = room && room.skirmish && room.skirmish.npcPartySides;
+    if (!sides) return;
+    (room.creatures || []).forEach(function (m) {
+        if (!m || !sides.a.concat(sides.b).includes(m.id)) return;
+        m._inSkirmish = false; m._versusReason = null; releaseSkirmishHostility(m);
+    });
+}
+
+function detachNPCPartySkirmisher(npc, room) {
+    const fight = room && room.skirmish, sides = fight && fight.npcPartySides;
+    if (!sides || !sides.a.concat(sides.b).includes(npc.id)) return;
+    npc._inSkirmish = false; npc._versusReason = null; releaseSkirmishHostility(npc);
+    sides.a = sides.a.filter(function (id) { return id !== npc.id; });
+    sides.b = sides.b.filter(function (id) { return id !== npc.id; });
+    if (!sides.a.length || !sides.b.length) { clearNPCPartySkirmish(room); delete room.skirmish; return; }
+    if (fight.aId === npc.id) fight.aId = sides.a[0];
+    if (fight.bId === npc.id) fight.bId = sides.b[0];
+}
+
+function resolveNPCPartySkirmishRound(room, lines) {
+    const fight = room.skirmish, sides = fight.npcPartySides;
+    const ready = function (ids) {
+        return (room.creatures || []).filter(function (m) { return m && ids.includes(m.id) && !isCompanionDownForTravel(m) && !m.surrendered && !isCompanionNPC(m); });
+    };
+    let a = ready(sides.a), b = ready(sides.b);
+    if (!a.length || !b.length || a.some(function (x) { return b.some(function (y) { return areNPCPartyMates(x, y); }); })) {
+        clearNPCPartySkirmish(room); delete room.skirmish; return;
+    }
+    const order = a.map(function (m) { return { actor: m, enemies: sides.b }; }).concat(b.map(function (m) { return { actor: m, enemies: sides.a }; }));
+    order.forEach(function (step) {
+        const actor = step.actor, foes = ready(step.enemies);
+        if (isCompanionDownForTravel(actor) || isCompanionNPC(actor) || !foes.length) return;
+        const target = foes[Math.floor(Math.random() * foes.length)];
+        npcVersusTurn(actor, target, lines);
+        if (isEntityCollapsed(target)) {
+            target._inSkirmish = false; target._versusReason = null; releaseSkirmishHostility(target);
+            const outcome = target._skirmishOutcome || determineCombatDefeatOutcome({ lethal: Math.random() < getVersusLethality(actor, target) });
+            delete target._skirmishOutcome;
+            moveDefeatedNPCToRoomObject(target, outcome, { cause: "skirmish" }, room);
+        }
+    });
+    a = ready(sides.a); b = ready(sides.b);
+    if (!a.length || !b.length) {
+        if (a.length || b.length) lines.push(npcPartyNames(a.length ? a : b) + " won the fight.");
+        clearNPCPartySkirmish(room); delete room.skirmish; return;
+    }
+    // Keep the original pair-based watch/guard UI pointed at living fighters.
+    fight.aId = a[0].id; fight.bId = b[0].id;
+    const spent = a.every(isEntityExhausted) && b.every(isEntityExhausted) ||
+        a.every(isEntityExhausted) && b.every(function (m) { return isEntityIncorporeal(m); }) ||
+        b.every(isEntityExhausted) && a.every(function (m) { return isEntityIncorporeal(m); });
+    if (spent) { lines.push("The exhausted travellers break off the fight."); clearNPCPartySkirmish(room); delete room.skirmish; }
+}
+
+// Same urgency, resource costs and treatment handler as player companions.
+// At most one treatment per independent party per turn, including off screen.
+function tickNPCPartyCare() {
+    const now = getCurrentStoryTurn();
+    Object.values(G.roomMap || {}).forEach(function (room) {
+        if (!room || room.skirmish || room === G.activeRoom && (G.activeNPCMode === "combat" || G.combatEncounter)) return;
+        const groups = new Map();
+        (room.creatures || []).forEach(function (npc) {
+            if (npc && npc._npcParty && canBelongToNPCParty(npc)) {
+                const id = npc._npcParty.id;
+                if (!groups.has(id)) groups.set(id, []);
+                groups.get(id).push(npc);
+            }
+        });
+        groups.forEach(function (members) {
+            if (members.some(function (m) { return m._npcPartyCareTurn === now || m._inSkirmish || m._encId; })) return;
+            if ((room.creatures || []).some(function (m) { return m && !members.includes(m) && !isCompanionDownForTravel(m) && (m.hostility || 0) >= 60; })) return;
+            const healers = members.filter(function (m) { return companionCareReady(m, now) && !m.hidden && !m.isHidden; });
+            const patients = members.filter(function (m) { return !m.hidden && !m.isHidden; }).map(function (m) { return { p: m, u: companionCareUrgency(m) }; })
+                .filter(function (x) { return x.u > 0; }).sort(function (a, b) { return b.u - a.u || a.p.hp / a.p.hpMax - b.p.hp / b.p.hpMax; });
+            for (const entry of patients) {
+                for (const actor of healers) {
+                    const option = pickCompanionCareOption(actor, entry.p, entry.u);
+                    if (!option) continue;
+                    const done = performPartyCare(actor, entry.p, option.kind, option.item);
+                    if (!done) continue;
+                    actor._careTurn = now;
+                    members.forEach(function (m) { m._npcPartyCareTurn = now; });
+                    const line = npcPartyName(actor) + " " + done.action + " " + (entry.p === actor ? "themselves" : npcPartyName(entry.p)) + "." +
+                        (done.gained > 0 ? " Their wounds begin to mend." : done.gained < 0 ? " The spirits sting." : "");
+                    publishNPCPartyEvent("care", [actor, entry.p].filter(function (m, i, all) { return all.indexOf(m) === i; }), room, line);
+                    return;
+                }
+            }
+        });
+    });
+}
+
+
 // ── SESSION FOLLOWERS ─────────────────────────────────────────────
 // Lightweight, in-memory-only companions that trail the player for the current
 // session. Unlike the party system, session followers are NOT persisted to
@@ -20080,6 +20456,7 @@ function addSessionFollower(npc) {
         console.warn("addSessionFollower: Invalid NPC.");
         return;
     }
+    if (typeof leaveNPCParty === "function") leaveNPCParty(npc, "you began following the player");
     G.sessionFollowers = G.sessionFollowers || [];
     if (!G.sessionFollowers.includes(npc)) {
         G.sessionFollowers.push(npc);
@@ -21908,6 +22285,9 @@ function queueNPCAutonomyTick() {
 }
 
 function runNPCAutonomyTick() {
+    if (typeof tickNPCPartyFormation === "function") tickNPCPartyFormation();
+    if (typeof tickNPCPartyCare === "function") tickNPCPartyCare();
+    if (typeof tickNPCPartyLodgingRest === "function") tickNPCPartyLodgingRest();
     if (typeof tickUnconsciousBodyBleeding === "function") tickUnconsciousBodyBleeding();
     if (typeof tickDrunkBlackoutWake === "function") tickDrunkBlackoutWake();
     if (typeof tickUnconsciousBodyRecovery === "function") tickUnconsciousBodyRecovery();
@@ -23249,7 +23629,8 @@ const FOLLOWER_JOIN_ASK_COOLDOWN = 40;
 function canAskFollowerToJoinParty(npc) {
     if (!npc || !G.player) return false;
     if ((G.partyMembers || []).includes(npc)) return false;
-    if (!(G.sessionFollowers || []).includes(npc)) return false;
+    if (!(G.sessionFollowers || []).includes(npc) && !(npc._npcParty && canBelongToNPCParty(npc) && !npc._inSkirmish && !npc._encId &&
+        G.activeRoom && (G.activeRoom.creatures || []).includes(npc) && isVisibleEntity(npc))) return false;
     if (typeof isHeldCaptive === "function" && isHeldCaptive(npc)) return false;
     if (npc.dead || npc.unconscious || npc.hidden) return false;
     const asked = npc._joinPartyAskedTurn;
@@ -23282,7 +23663,7 @@ function askFollowerToJoinParty(npc) {
     } else {
         addChatMessage("left", npc.name || "They", rand([
             "\"Ask me again another time. The road is long and I am not sure yet.\"",
-            "\"I follow for now. For good is a bigger word than you think.\"",
+            "\"I have company for now. For good is a bigger word than you think.\"",
             "\"No. Not yet. Do not push it.\""
         ]), { mode: "auto" });
     }
@@ -23547,6 +23928,84 @@ const DRUNK_PLAYER_ADVERBS = {
 function getDrunkTier(entity) {
     return entity ? Math.max(0, Math.min(4, getDrunkStacks(entity))) : 0;
 }
+
+// SFW-only integration contract. Presence/tolerance is information, not consent
+// or permission to perform an action. This hook never changes party membership.
+function getNPCPrivacyBaseTolerance(npc) {
+    if (npc && ["private", "relaxed", "unbothered"].includes(npc.privacyTolerance)) return npc.privacyTolerance;
+    const temperament = String(npc && (npc.temperament || npc.personalityProfile && npc.personalityProfile.temperament) || "neutral").toLowerCase();
+    if (["bold", "forward", "brash", "uninhibited"].includes(temperament)) return "unbothered";
+    if (["friendly", "curious", "calm", "confident", "outgoing"].includes(temperament)) return "relaxed";
+    return "private";
+}
+
+function getIntimacyPrivacyState(npc) {
+    const room = Object.values(G.roomMap || {}).find(function (r) { return r && Array.isArray(r.creatures) && r.creatures.includes(npc); });
+    const base = getNPCPrivacyBaseTolerance(npc);
+    const drunk = npc && typeof getDrunkTier === "function" ? getDrunkTier(npc) : 0;
+    const levels = ["private", "relaxed", "unbothered"];
+    const tolerance = levels[Math.min(2, levels.indexOf(base) + (drunk >= 4 ? 2 : drunk >= 2 ? 1 : 0))];
+    const privacy = room && typeof deriveRoomContext === "function" ? deriveRoomContext(room).privacy : "public";
+    const present = (room && room.creatures || []).filter(function (other) {
+        return other && other !== npc && !other.dead && other.bodyState !== "corpse" && other.objectType !== "body" && other.hp > 0;
+    }).map(function (other) {
+        return { id: other.id || null, name: other.name || other.species || "someone", companion: isCompanionNPC(other),
+            awake: !other.unconscious && !other.isUnconsciousBody && !(other.currentState && other.currentState.sleeping),
+            visible: typeof isVisibleEntity === "function" ? isVisibleEntity(other) : !other.hidden && !other.isHidden,
+            humanoid: other.isHumanoid === true };
+    });
+    const witnesses = present.filter(function (other) { return other.awake; });
+    return { available: !!room, roomCoords: room ? room.coords : null, roomPrivacy: privacy, isPrivate: privacy === "private",
+        playerPresent: !!(room && G.activeRoom === room && G.player && !G.player.dead),
+        present: present, companions: present.filter(function (other) { return other.companion; }),
+        otherNPCs: present.filter(function (other) { return !other.companion; }), witnesses: witnesses,
+        alone: !!room && witnesses.length === 0, baseTolerance: base, tolerance: tolerance, drunkLevel: drunk };
+}
+
+// Metadata only: never invokes an optional anatomy generator or reads its text.
+function debugNPCSurfaceAudit() {
+    const rows = [], tally = {};
+    Object.values(G.roomMap || {}).forEach(function (room) {
+        (room && room.creatures || []).forEach(function (npc) {
+            if (!npc || npc.isHumanoid !== true) return;
+            const template = typeof getSpeciesTemplate === "function" ? getSpeciesTemplate(npc.species) || {} : {};
+            const body = npc.anatomy && npc.anatomy.body || {};
+            const surface = String(body.surfaceType || npc.surfaceType || (npc.furColor ? "fur" : npc.scaleColor ? "scales" : npc.skinTone ? "skin" : "unknown")).toLowerCase();
+            const declared = String(npc.anatomyType || template.anatomyType || "unknown").toLowerCase();
+            const expected = surface === "fur" ? "furry" : surface === "scales" ? "scaled" : surface === "feathers" ? "feathered" : surface === "skin" ? "humanoid" : "unknown";
+            const row = { name: npc.name || npc.species, species: npc.species, surface: surface,
+                surfaceSource: body.surfaceType ? "anatomy.body.surfaceType" : npc.surfaceType ? "surfaceType" : "colour metadata",
+                declaredType: declared, declaredSource: npc.anatomyType ? "NPC" : "species template", expectedSurfaceClass: expected,
+                needsReview: declared === "mixed" || (declared === "furry" && surface !== "fur") || (["scaled", "reptilian"].includes(declared) && surface !== "scales") };
+            rows.push(row); const key = declared + " / " + surface; tally[key] = (tally[key] || 0) + 1;
+        });
+    });
+    if (typeof console !== "undefined" && console.table) { console.table(rows); console.table(tally); }
+    return { rows: rows, tally: tally };
+}
+
+function debugNPCSFWDiagnostics() {
+    const rows = [], tally = {}, allowed = ["flat", "tiny", "small", "medium", "large", "huge", "very large", "massive", "none"];
+    Object.values(G.roomMap || {}).forEach(function (room) {
+        (room && room.creatures || []).forEach(function (npc) {
+            if (!npc || npc.isHumanoid !== true) return;
+            ["breasts", "buttocks"].forEach(function (key) {
+                const own = npc.anatomy && npc.anatomy[key], fallback = npc.nsfwTraits && npc.nsfwTraits.anatomy && npc.nsfwTraits.anatomy[key];
+                const part = own || fallback, value = part && typeof part === "object" ? String(part.sizeCategory || part.size || "").toLowerCase() : "";
+                const size = !part ? "none" : allowed.includes(value) ? value : "unmapped";
+                rows.push({ name: npc.name || npc.species, species: npc.species, part: key, size: size, source: own ? "anatomy metadata" : fallback ? "extension metadata" : "absent" });
+                const category = key + " / " + size; tally[category] = (tally[category] || 0) + 1;
+            });
+        });
+    });
+    if (typeof console !== "undefined" && console.table) { console.table(rows); console.table(tally); }
+    return { bodySizes: { rows: rows, tally: tally }, surfaces: debugNPCSurfaceAudit() };
+}
+
+window.getIntimacyPrivacyState = getIntimacyPrivacyState;
+window.debugNPCSurfaceAudit = debugNPCSurfaceAudit;
+window.debugNPCSFWDiagnostics = debugNPCSFWDiagnostics;
+
 
 function getDrunkConversationSig(npc) {
     return getDrunkTier(npc) + "/" + getDrunkTier(G.player);
@@ -24185,7 +24644,7 @@ function renderJobMenu() {
         buttons.push(sharedButton(def.verb + " (" + def.stamina + " stamina)", () => performJobShift(), { disabled: !!block, title: block || describeJobPay(def), textChoice: { action: "work" } }));
         if (job.state === "dayDone") {
             const sleepBlock = getJobSleepBlockReason(job);
-            buttons.push(sharedButton("Sleep until morning", () => sleepThroughNight(), { disabled: !!sleepBlock, title: sleepBlock || "Sleep through the night. You wake rested, and can carry on or take your pay.", textChoice: { action: "sleep" } }));
+            buttons.push(sharedButton("Sleep until morning", () => openSleepSpotMenu("job"), { disabled: !!sleepBlock, title: sleepBlock || "Sleep through the night. You wake rested, and can carry on or take your pay.", textChoice: { action: "sleep" } }));
         }
         if (job.owed > 0 || def.mode === "real") {
             buttons.push(sharedButton("Collect your pay and stop (" + job.owed + "g)", () => collectJobPay(true), { disabled: job.owed <= 0 && def.mode !== "real", textChoice: { action: "collect" }, title: "Take the wages you have earned and finish for now." }));
@@ -24360,38 +24819,45 @@ function continueJobNextDay() {
     saveGameState();
 }
 
-function sleepThroughNight() {
+function sleepThroughNight(spot) {
     const job = getActiveJob();
     const block = job ? getJobSleepBlockReason(job) : "No job.";
     if (!job || job.state !== "dayDone" || block) { if (block) setNarration(block); return; }
     const player = G.player;
     const room = G.activeRoom;
+    const plan = assignSleepSpots(room, spot);
+    const arrangement = describeSleepArrangement(plan);
     let slept = 0;
     let interrupted = false;
     const jobFatigue = ensureFatigueState(player);
+    activeRecoveryPlans.set(room, { player: player, plan: plan });
     jobFatigue.sleeping = true;
     try {
         for (let i = 0; i < JOB_NIGHT_TURNS; i++) {
             advanceStoryTurn(1);
-            if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
             slept++;
-            if (roomHasActiveHostile(room)) { interrupted = true; break; }
+            if (!recoverySceneAvailable(player, room, plan) || getActiveJob() !== job || job.state !== "dayDone") { interrupted = true; break; }
+            if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
+            if (roomHasActiveHostile(room) || !recoverySceneAvailable(player, room, plan)) { interrupted = true; break; }
         }
     } finally {
         jobFatigue.sleeping = false;
+        if (activeRecoveryPlans.get(room) && activeRecoveryPlans.get(room).plan === plan) activeRecoveryPlans.delete(room);
     }
     const share = slept / JOB_NIGHT_TURNS;
-    const nightBed = getRestBedQuality(room);
-    const nightMult = nightBed === "proper" ? REST_BED_MULT_PROPER : (nightBed === "makeshift" ? REST_BED_MULT_MAKESHIFT : 1);
+    if (G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0 || getActiveJob() !== job) { publishRestPlan("interrupted", "job-sleep", plan, slept); return; }
+    const nightBed = plan.qualityOf(player);
+    const restFactor = plan.restFactorOf(player);
     const jobWoundFactor = getWoundHealFactor(player);
-    let heal = Math.round(player.hpMax * JOB_SLEEP_HEAL_RATIO * share * nightMult * jobWoundFactor);
+    let heal = Math.round(player.hpMax * plan.ratioOf(player) * share * jobWoundFactor);
     if (jobWoundFactor < 1) heal = Math.max(heal, Math.floor(slept * WOUND_HEAL_FLOOR_PER_TURN));
     const before = player.hp;
     player.hp = Math.min(player.hpMax, player.hp + heal);
     healPlayerLimbs(player, (player.hp - before) / player.hpMax);
-    restoreEntityStamina(player, Math.ceil(player.staminaMax * share));
-    if (playerUsesMana(player)) restorePlayerMana(player, Math.ceil(getPlayerManaCeiling(player) * share));
-    restHealParty(room, 0, { sleep: true, share: share, turns: slept, quality: nightBed, completed: !interrupted, ratio: JOB_SLEEP_HEAL_RATIO * nightMult });
+    restoreEntityStamina(player, Math.ceil(player.staminaMax * share * restFactor));
+    if (playerUsesMana(player)) restorePlayerMana(player, Math.ceil(getPlayerManaCeiling(player) * share * restFactor));
+    restHealParty(room, 0, { sleep: true, share: share, turns: slept, quality: nightBed, completed: !interrupted, ratioFor: plan.ratioOf, qualityFor: plan.qualityOf, restFactorFor: plan.restFactorOf });
+    publishRestPlan(interrupted ? "interrupted" : "result", "job-sleep", plan, slept);
     renderStats();
     if (interrupted) {
         setNarration("Your sleep is cut short by something dangerous arriving!");
@@ -24402,10 +24868,10 @@ function sleepThroughNight() {
     }
     job.state = "morning";
     job.day++;
-    const nightLift = nightBed ? markProperSleep(player) : "";
+    const nightLift = markProperSleep(player);
     const nightBuff = applyBedRestBonus(player, nightBed);
     renderJobMenu();
-    setNarration("You sleep through the night and wake rested (+" + (player.hp - before) + " HP)." + (nightLift ? " " + nightLift : "") + (nightBuff ? " " + nightBuff : "") + " A new day begins. Carry on, or take your pay and go? " + describeJobStatus(job));
+    setNarration(arrangement + " You sleep through the night and wake rested (+" + (player.hp - before) + " HP)." + (nightLift ? " " + nightLift : "") + (nightBuff ? " " + nightBuff : "") + " A new day begins. Carry on, or take your pay and go? " + describeJobStatus(job));
     saveGameState();
 }
 
@@ -26001,19 +26467,21 @@ function getNPCScheduleLine(npc, kind, where, dir) {
 function moveScheduledNPC(npc, fromRoom, destCoords, target) {
     const toRoom = G.roomMap[destCoords];
     if (!toRoom) return false;
+    if (npc._npcParty && (npc._npcParty.leaderId !== npc.id || npcPartyBusy(npc, fromRoom))) return false;
     const exitDir = getNPCExitDirTo(fromRoom, destCoords);
     const entryDir = getNPCExitDirTo(toRoom, fromRoom.coords);
     if (!relocateNPCBetweenRooms(npc, fromRoom, destCoords)) return false;
     npc._scheduleMoveTurn = getCurrentStoryTurn();
     const leftActive = G.activeRoom === fromRoom;
     const enteredActive = G.activeRoom === toRoom;
-    if ((leftActive || enteredActive) && typeof pendingTurnNotes !== "undefined" && pendingTurnNotes.length < NPC_SCHEDULE_NOTE_MAX_PENDING) {
+    if (npc._npcPartyGroupMoveTurn !== getCurrentStoryTurn() && (leftActive || enteredActive) && typeof pendingTurnNotes !== "undefined" && pendingTurnNotes.length < NPC_SCHEDULE_NOTE_MAX_PENDING) {
         if (leftActive) queueTurnNote(getNPCScheduleLine(npc, "leave", target.where, ""));
         else if (destCoords === target.coords) queueTurnNote(getNPCScheduleLine(npc, "arrive", target.where, entryDir));
     }
     if ((leftActive || enteredActive) && !G.activeNPC && !G.activeObject && typeof renderRoom === "function") {
         try { renderRoom(); } catch (renderErr) { console.warn("[NPC Schedule] render failed", renderErr); }
     }
+    if (npc._npcParty && destCoords === target.coords && /^(home|homeward)$/.test(target.where)) dissolveNPCParty(npc, "the group returned home");
     return true;
 }
 
@@ -26065,6 +26533,7 @@ function tickNPCScheduleActiveRoom() {
     if (G.activeNPCMode === "combat") return;
     const list = room.creatures.slice();
     for (let i = 0; i < list.length; i++) {
+        if (list[i]._npcParty && (list[i]._npcParty.leaderId !== list[i].id || npcPartyBusy(list[i], room))) continue;
         let result = stepNPCSchedule(list[i], room);
         if (result === null) result = stepNPCExpedition(list[i], room);
         if (result === null) result = stepNPCPastime(list[i], room);
@@ -26399,10 +26868,14 @@ function getGateOutsideCoords(gate, npc) {
 }
 
 // One decision per explorer per day: whether to go out.
-function planNPCTrip(npc, day) {
-    if (npc._tripDay === day) return;
-    npc._tripDay = day;
-    npc._tripGo = ((_npcScheduleHash(npc) + day * 37) % 100) < NPC_TRIP_CHANCE;
+function planNPCTrip(npc, day, room) {
+    if (npc._tripDay !== day) {
+        npc._tripDay = day;
+        npc._tripGo = ((_npcScheduleHash(npc) + day * 37) % 100) < NPC_TRIP_CHANCE;
+    }
+    if (npc._npcParty && npc._npcParty.leaderId === npc.id) {
+        getNPCPartyMembers(npc, room).forEach(function (member) { member._tripDay = day; member._tripGo = npc._tripGo; });
+    }
 }
 
 // Home by a real route (the shared findRoomRoute), however far: one hop with
@@ -26437,7 +26910,7 @@ function stepNPCExpedition(npc, room) {
     if (npc.currentState && npc.currentState.sleeping) return null;
     const turn = getTurnOfDay();
     if (turn < NPC_TRIP_START + (_npcScheduleHash(npc) % 4) || turn >= NPC_TRIP_LATEST) return null;
-    planNPCTrip(npc, getGameDay());
+    planNPCTrip(npc, getGameDay(), room);
     if (!npc._tripGo) return null;
     const gate = getTownGateRoom();
     if (!gate) return null;
@@ -26531,8 +27004,12 @@ function pickPastimeRoom(npc, room, day) {
     }
     if (!found.length) return null;
     found.sort(function (a, b) { return a.depth - b.depth; });
+    const group = npc._npcParty && npc._npcParty.leaderId === npc.id ? getNPCPartyMembers(npc, room) : [npc];
     const near = found.filter(function (f) { return f.depth <= found[0].depth + 2; })
-        .filter(function (f) { return countPastimeGoers(f.coords, day) < NPC_PASTIME_CAPACITY; });
+        .filter(function (f) {
+            const alreadyReserved = group.filter(function (m) { return m._pastimeDay === day && m._pastimeDest === f.coords; }).length;
+            return countPastimeGoers(f.coords, day) - alreadyReserved + group.length <= NPC_PASTIME_CAPACITY;
+        });
     if (!near.length) return null;
     return near[Math.floor(Math.random() * near.length)].coords;
 }
@@ -26548,6 +27025,9 @@ function getNPCPastimeTarget(npc, room) {
         if (npc._pastimeDay !== day) {
             npc._pastimeDay = day;
             npc._pastimeDest = pickPastimeRoom(npc, room, day);
+            if (npc._npcParty && npc._npcParty.leaderId === npc.id) {
+                getNPCPartyMembers(npc, room).forEach(function (member) { member._pastimeDay = day; member._pastimeDest = npc._pastimeDest; });
+            }
         }
         return npc._pastimeDest && G.roomMap[npc._pastimeDest] ? { coords: npc._pastimeDest, where: "tavern" } : null;
     }
@@ -26575,6 +27055,13 @@ function stepNPCAutonomy(npc, room) {
     if (npc.hp <= 0 || npc.unconscious || npc.hidden || npc.isHidden) return;
     if (typeof ensureNPCRelationshipState === "function") ensureNPCRelationshipState(npc);
     clearNPCAmbientAction(npc);
+    if (npc._inSkirmish || npc._encId || npc._npcParty && (npc._npcParty.leaderId !== npc.id || npcPartyBusy(npc, room))) {
+        if (!npc._inSkirmish && !npc._encId) {
+            healNPCOverTime(npc);
+            if (npc.currentState && npc.currentState.sleeping) attemptNPCRest(npc, room);
+        }
+        return;
+    }
 
     // The watch has one shared movement step for both partners per story turn.
     if (npc._guardDuty) {
@@ -26661,6 +27148,7 @@ function tickWorldBleeding() {
 
 function healNPCOverTime(npc) {
     clotBleedingOverTime(npc);
+    if (npc._npcRestTickTurn === getCurrentStoryTurn()) return;
     const hpMax = npc.hpMax || npc.hp || 0;
     if (!hpMax || (npc.hp || 0) >= hpMax) return;
     npc.hp = Math.min(hpMax, (npc.hp || 0) + NPC_AUTONOMY_HEAL_PER_TICK);
@@ -26753,6 +27241,16 @@ function npcPassExit(npc, room, dir) {
 function relocateNPCBetweenRooms(npc, fromRoom, toCoords, options) {
     const toRoom = toCoords ? G.roomMap[toCoords] : null;
     if (!fromRoom || !toRoom || toRoom === fromRoom) return false;
+    if (!(fromRoom.creatures || []).includes(npc)) return false;
+    if (npc._npcParty && !(options && options.npcPartyEscort) &&
+        (npc._npcParty.leaderId !== npc.id || npcPartyBusy(npc, fromRoom))) return false;
+    if (npc._npcParty && !(options && options.npcPartyEscort) && isPastimeRoom(toRoom)) {
+        const incoming = getNPCPartyMembers(npc, fromRoom).filter(function (m) {
+            return canBelongToNPCParty(m) && !m._inSkirmish && !(m.currentState && m.currentState.sleeping);
+        }).length;
+        const occupants = (toRoom.creatures || []).filter(function (m) { return isPastimeNPC(m) && !isCompanionNPC(m); }).length;
+        if (occupants + incoming > NPC_PASTIME_CAPACITY) return false;
+    }
 
     // Sloppy drunk movers may stumble, be sick, or black out instead of
     // actually leaving (see rollDrunkMovementEvent). Skipped for anyone
@@ -26816,6 +27314,7 @@ function relocateNPCBetweenRooms(npc, fromRoom, toCoords, options) {
     readNoticeBoardsOnEntry(npc, toRoom);
     npc._lastAutonomyMoveAt = Date.now();
     if (typeof layTrailMarks === "function") layTrailMarks(npc, fromRoom, toRoom, options || {});
+    if (!(options && options.npcPartyEscort) && npc._npcParty) moveNPCPartyWithLeader(npc, fromRoom, toRoom);
     return true;
 }
 
@@ -27396,6 +27895,7 @@ function attemptNPCRest(npc, room) {
     npc.currentState = npc.currentState || {};
 
     if (npc.currentState.sleeping) {
+        if (npc._npcRestTickTurn === getCurrentStoryTurn()) return true;
         if (Math.random() < NPC_AUTONOMY_WAKE_CHANCE) {
             npc.currentState.sleeping = false;
             // Waking from rest means they bathed/slept it off: clear the
@@ -27476,23 +27976,13 @@ function checkForCrossSpeciesConflict(room) {
     );
     if (eligible.length < 2) return;
 
-    const bySpecies = {};
-    eligible.forEach(npc => {
-        const key = String(npc.species || "").toLowerCase();
-        (bySpecies[key] = bySpecies[key] || []).push(npc);
-    });
-
-    const distinctSpecies = Object.keys(bySpecies);
-    if (distinctSpecies.length < 2) return;
-
-    const a = bySpecies[distinctSpecies[0]][0];
-    const b = bySpecies[distinctSpecies[1]][0];
-
-    room.skirmish = { aId: a.id, bId: b.id };
-    a._inSkirmish = true;
-    b._inSkirmish = true;
-    raiseSkirmishHostility(a);
-    raiseSkirmishHostility(b);
+    for (let i = 0; i < eligible.length; i++) {
+        const a = eligible[i];
+        const b = eligible.slice(i + 1).find(function (other) {
+            return String(a.species || "").toLowerCase() !== String(other.species || "").toLowerCase() && !areNPCPartyMates(a, other);
+        });
+        if (b) { startNPCConflict(room, a, b, "fight"); return; }
+    }
 }
 
 // One round of mutual strikes (see reinforcementOpeningStrike - same
@@ -27512,7 +28002,7 @@ function maybeSkirmishPileOn(room, a, b, lines) {
     const spent = isEntityExhausted(a) ? a : (isEntityExhausted(b) ? b : null);
     if (!spent) return;
     const attacker = (room.creatures || []).find(function (c) {
-        return c && c !== a && c !== b && !isPartyAlignedCreature(c) &&
+        return c && c !== a && c !== b && !isPartyAlignedCreature(c) && !areNPCPartyMates(c, spent) &&
             c.hp > 0 && !c.unconscious && !c.isHidden && !c.hidden &&
             !getSpeciesIsCivilized(c.species) &&
             String(c.species || "").toLowerCase() !== String(spent.species || "").toLowerCase() &&
@@ -27531,13 +28021,15 @@ function resolveSkirmishRound(room, lines) {
     // The off-screen tick passes nothing and gets a throwaway array.
     const roundLines = Array.isArray(lines) ? lines : [];
 
+    if (room.skirmish.npcPartySides) { resolveNPCPartySkirmishRound(room, roundLines); return; }
     const a = room.creatures.find(c => c && c.id === room.skirmish.aId);
     const b = room.creatures.find(c => c && c.id === room.skirmish.bId);
 
+    if (a && b && areNPCPartyMates(a, b)) { a._inSkirmish = false; b._inSkirmish = false; releaseSkirmishHostility(a); releaseSkirmishHostility(b); clearNPCPartySkirmish(room); delete room.skirmish; return; }
     if (!a || !b || a.hp <= 0 || b.hp <= 0 || a.unconscious || b.unconscious) {
         if (a) { a._inSkirmish = false; a._versusReason = null; releaseSkirmishHostility(a); }
         if (b) { b._inSkirmish = false; b._versusReason = null; releaseSkirmishHostility(b); }
-        delete room.skirmish;
+        clearNPCPartySkirmish(room); delete room.skirmish;
         return;
     }
 
@@ -27563,12 +28055,12 @@ function resolveSkirmishRound(room, lines) {
         b._versusReason = null;
         if (reason === "arrest" && isGuardNPC(winner) && isNPCWanted(loser) && skirmishOutcome !== "corpse" &&
             arrestNPCThief(loser, winner, room, roundLines)) {
-            delete room.skirmish;
+            clearNPCPartySkirmish(room); delete room.skirmish;
             return;
         }
         if (reason === "theft" && skirmishOutcome !== "corpse") reclaimStolenGoods(loser, winner);
         moveDefeatedNPCToRoomObject(loser, skirmishOutcome, { cause: "skirmish" }, room);
-        delete room.skirmish;
+        clearNPCPartySkirmish(room); delete room.skirmish;
         return;
     }
 
@@ -27588,7 +28080,7 @@ function resolveSkirmishRound(room, lines) {
         b._versusReason = null;
         releaseSkirmishHostility(a);
         releaseSkirmishHostility(b);
-        delete room.skirmish;
+        clearNPCPartySkirmish(room); delete room.skirmish;
     }
 }
 
@@ -27624,7 +28116,7 @@ function playerJoinSkirmish(room) {
     const companion = isPlayerCompanion(pair.a) ? pair.a : pair.b;
 
     [pair.a, pair.b].forEach(function (c) { c._inSkirmish = false; c._versusReason = null; releaseSkirmishHostility(c); });
-    delete room.skirmish;
+    clearNPCPartySkirmish(room); delete room.skirmish;
     clearSkirmishLine();
     if (typeof isPlayerHidden === "function" && isPlayerHidden()) breakPlayerHidden(null);
     foe.hostility = Math.max(foe.hostility || 0, 70);
@@ -27660,12 +28152,13 @@ function playerJoinSkirmish(room) {
 function dissolveSkirmishInvolving(npc) {
     const room = G.activeRoom;
     if (!npc || !room || !room.skirmish) return false;
-    if (room.skirmish.aId !== npc.id && room.skirmish.bId !== npc.id) return false;
+    const sides = room.skirmish.npcPartySides;
+    if (room.skirmish.aId !== npc.id && room.skirmish.bId !== npc.id && !(sides && sides.a.concat(sides.b).includes(npc.id))) return false;
     [room.skirmish.aId, room.skirmish.bId].forEach(function (id) {
         const c = room.creatures && room.creatures.find(function (x) { return x && x.id === id; });
         if (c) { c._inSkirmish = false; c._versusReason = null; releaseSkirmishHostility(c); }
     });
-    delete room.skirmish;
+    clearNPCPartySkirmish(room); delete room.skirmish;
     clearSkirmishLine();
     return true;
 }
@@ -43071,6 +43564,9 @@ function encBystanderSide(enc, c) {
     if (isPlayerCompanion(c)) return null; // handled as an ally already
     if (typeof hydrateNPCSpeciesFlags === "function") hydrateNPCSpeciesFlags(c);
 
+    // Independent travellers defend their own companions against the player.
+    if (!(c.currentState && c.currentState.sleeping) && enc.foes.some(function (foe) { return areNPCPartyMates(c, foe); })) return "foe";
+
     // Already out for the player's blood (same bar as a room ambush).
     if (isEligibleForRoomAmbush(c)) return "foe";
 
@@ -45744,6 +46240,10 @@ function buildBodyDescription(npc, originalName, outcome, extra) {
 function moveDefeatedNPCToRoomObject(npc, outcome, context = {}, roomOverride = null) {
     const room = roomOverride || G.activeRoom || getRoom(G.player && G.player.coords);
     if (!room || !npc) return npc;
+    if (npc._npcParty) {
+        if (npc._npcParty.leaderId === npc.id) dissolveNPCParty(npc, "the leader is no longer able to travel", undefined, true);
+        else leaveNPCParty(npc, "you are no longer able to travel");
+    }
 
     // Ghosts and other incorporeal things leave no body, only their belongings.
     if (isEntityIncorporeal(npc)) {
@@ -51885,13 +52385,17 @@ const SLEEP_SPOT_HP_RATIO = { bed: SLEEP_HP_RATIO_PROPER, cot: SLEEP_HP_RATIO_MA
 const SLEEP_SPOT_CAPACITY = { bed: 3, cot: 2, floor: 99 };
 const SLEEP_SHARE_FACTOR = [1, 1, 0.8, 0.6];   // index = sleepers on the spot
 const SLEEP_SPOT_ORDER = ["bed", "cot", "floor"];
+const activeRecoveryPlans = new WeakMap();
+
+function isUsableRestFixture(fixture) {
+    return !!(fixture && Array.isArray(fixture.tags) && fixture.tags.includes("rest") && fixture.id !== "bench" &&
+        !fixture.hidden && !fixture.isHidden && fixture.visible !== false && !fixture.invisible && !(fixture.concealed && !fixture.revealed) && !fixture.destroyed && !fixture.ruined && !fixture.unusable);
+}
 
 function getSleepSpotCounts(room) {
     const counts = { bed: 0, cot: 0, floor: 1 };
-    if (!room || !Array.isArray(room.structural)) return counts;
-    room.structural.forEach(function (f) {
-        if (!f || !Array.isArray(f.tags) || f.tags.indexOf("rest") < 0 || f.id === "bench") return;
-        if (f.id === "bed") counts.bed++; else counts.cot++;
+    (room && room.structural || []).forEach(function (fixture) {
+        if (isUsableRestFixture(fixture)) counts[fixture.id === "bed" ? "bed" : "cot"]++;
     });
     return counts;
 }
@@ -51902,58 +52406,99 @@ function getSleepShareFactor(count) {
 
 function getSleepSpotNoun(type) { return type === "bed" ? "bed" : (type === "cot" ? "cot" : "floor"); }
 
-// Who sleeps where. playerSpot: "bed" | "cot" | "floor" (falls back to the best
-// available). Returns { slots, spotOf(entity), playerSpot }.
-function assignSleepSpots(room, playerSpot) {
-    const counts = getSleepSpotCounts(room);
-    const slots = [];
-    ["bed", "cot"].forEach(function (type) {
-        for (let i = 0; i < counts[type]; i++) slots.push({ type: type, index: i + 1, sleepers: [] });
+function areRestPartners(a, b) {
+    return !!(a && b && a !== b && ((a.ties || []).some(function (t) { return t.id === b.id && /^(spouse|lover)$/.test(t.type); }) ||
+        (b.ties || []).some(function (t) { return t.id === a.id && /^(spouse|lover)$/.test(t.type); })));
+}
+
+// One planner for normal sleep, job nights, plain Rest and NPC lodging.
+// Unrelated sleeping residents reserve their own surface; no stranger is
+// automatically placed in the player's bed. Plans are transient references.
+function planRestSpots(room, occupants, preferred, anchor) {
+    const people = occupants.filter(function (p, i, all) { return p && all.indexOf(p) === i; });
+    const slots = [], indices = { bed: 0, cot: 0 };
+    (room && room.structural || []).forEach(function (fixture) {
+        if (!isUsableRestFixture(fixture)) return;
+        const type = fixture.id === "bed" ? "bed" : "cot";
+        slots.push({ type: type, index: ++indices[type], fixture: fixture, sleepers: [], reserved: false });
     });
-    const floor = { type: "floor", index: 1, sleepers: [] };
+    const floor = { type: "floor", index: 1, fixture: null, sleepers: [], reserved: false };
     slots.push(floor);
-    let spot = SLEEP_SPOT_ORDER.indexOf(playerSpot) >= 0 && counts[playerSpot] > 0 ? playerSpot : (counts.bed ? "bed" : (counts.cot ? "cot" : "floor"));
-    const mine = slots.find(function (s) { return s.type === spot; });
-    mine.sleepers.push(G.player);
-    const total = function (s) { return s.sleepers.length * SLEEP_SPOT_HP_RATIO[s.type] * (s.type === "floor" ? 1 : getSleepShareFactor(s.sleepers.length)); };
-    getRestingPartyMembers(room).forEach(function (m) {
-        let best = null, bestGain = -1;
-        slots.forEach(function (s) {
-            if (s.sleepers.length >= SLEEP_SPOT_CAPACITY[s.type]) return;
-            const before = total(s);
-            s.sleepers.push(m);
-            // the floor is the last resort: crowding a bed is preferred to it
-            const gain = (total(s) - before) * (s.type === "floor" ? 0.25 : 1);
-            s.sleepers.pop();
-            if (gain > bestGain + 1e-9) { best = s; bestGain = gain; }
+    const foreground = activeRecoveryPlans.get(room);
+    if (foreground && !people.includes(foreground.player)) {
+        foreground.plan.slots.forEach(function (used) {
+            if (!used.fixture || !used.sleepers.length) return;
+            const same = slots.find(function (slot) { return slot.fixture === used.fixture; });
+            if (same) same.reserved = true;
         });
-        (best || floor).sleepers.push(m);
+    }
+    (room && room.creatures || []).filter(function (npc) {
+        return npc && !people.includes(npc) && !npc.dead && !npc.unconscious && npc.hp > 0 && npc.currentState && npc.currentState.sleeping;
+    }).forEach(function (npc) {
+        const saved = npc._npcRestSpot;
+        let place = saved && saved.roomCoords === room.coords ? slots.find(function (s) { return s.type === saved.type && s.index === saved.index; }) : null;
+        if (!place) place = slots.find(function (s) { return s.type !== "floor" && !s.reserved; });
+        if (place && place.type !== "floor") place.reserved = true;
     });
-    const slotOf = function (entity) { return slots.find(function (s) { return s.sleepers.indexOf(entity) >= 0; }) || null; };
-    return {
-        slots: slots,
-        playerSpot: spot,
-        slotOf: slotOf,
-        // HP share of max HP for a full night
-        ratioOf: function (entity) {
-            const s = slotOf(entity);
-            if (!s) return SLEEP_SPOT_HP_RATIO.floor;
-            return SLEEP_SPOT_HP_RATIO[s.type] * (s.type === "floor" ? 1 : getSleepShareFactor(s.sleepers.length));
-        },
-        // Stamina and mana recovery: only sharing matters, not the surface
-        restFactorOf: function (entity) {
-            const s = slotOf(entity);
-            return !s || s.type === "floor" ? 1 : getSleepShareFactor(s.sleepers.length);
-        },
-        // Quality for the sleep buff and fatigue: "proper" / "makeshift" / "floor"
-        qualityOf: function (entity) {
-            const s = slotOf(entity);
-            if (!s || s.type === "floor") return "floor";
-            if (s.type === "bed" && s.sleepers.length < SLEEP_SPOT_CAPACITY.bed) return "proper";
-            return "makeshift";
+    const available = function (slot) { return !slot.reserved && (slot.type === "floor" || slot.sleepers.length < SLEEP_SPOT_CAPACITY[slot.type]); };
+    const total = function (slot) { return slot.sleepers.length * SLEEP_SPOT_HP_RATIO[slot.type] * (slot.type === "floor" ? 1 : getSleepShareFactor(slot.sleepers.length)); };
+    if (anchor && people.includes(anchor)) {
+        const mine = slots.find(function (s) { return s.type === preferred && available(s); }) ||
+            slots.find(function (s) { return s.type === "bed" && available(s); }) || slots.find(function (s) { return s.type === "cot" && available(s); }) || floor;
+        mine.sleepers.push(anchor);
+    }
+    people.filter(function (p) { return p !== anchor; }).forEach(function (person) {
+        let best = slots.find(function (s) { return s.type !== "floor" && available(s) && s.sleepers.length === 1 && areRestPartners(person, s.sleepers[0]); });
+        if (!best) {
+            let gain = -Infinity;
+            slots.forEach(function (slot) {
+                if (!available(slot)) return;
+                const before = total(slot); slot.sleepers.push(person);
+                const value = (total(slot) - before) * (slot.type === "floor" ? 0.25 : 1); slot.sleepers.pop();
+                if (value > gain + 1e-9) { gain = value; best = slot; }
+            });
         }
+        (best || floor).sleepers.push(person);
+    });
+    const slotOf = function (entity) { return slots.find(function (s) { return s.sleepers.includes(entity); }) || null; };
+    const restFactorOf = function (entity) { const s = slotOf(entity); return !s || s.type === "floor" ? 1 : getSleepShareFactor(s.sleepers.length); };
+    return { slots: slots, slotOf: slotOf, playerSpot: slotOf(anchor) ? slotOf(anchor).type : "floor", restFactorOf: restFactorOf,
+        before: people.map(function (person) { return { entity: person, hp: person.hp || 0, stamina: person.stamina || 0, mana: person.mana || 0 }; }),
+        ratioOf: function (entity) { const s = slotOf(entity); return SLEEP_SPOT_HP_RATIO[s ? s.type : "floor"] * restFactorOf(entity); },
+        qualityOf: function (entity) { const s = slotOf(entity); return !s || s.type === "floor" ? "floor" : s.type === "bed" && s.sleepers.length < SLEEP_SPOT_CAPACITY.bed ? "proper" : "makeshift"; },
+        restMultiplierOf: function (entity) { const s = slotOf(entity); return (s && s.type === "bed" ? REST_BED_MULT_PROPER : s && s.type === "cot" ? REST_BED_MULT_MAKESHIFT : 1) * restFactorOf(entity); }
     };
 }
+
+function assignSleepSpots(room, playerSpot) {
+    return planRestSpots(room, [G.player].concat(getRestingPartyMembers(room)), playerSpot, G.player);
+}
+
+function publicRestPlan(plan) {
+    return plan.slots.filter(function (s) { return s.sleepers.some(function (p) { return p === G.player || isVisibleEntity(p); }); }).map(function (s) {
+        const visible = s.sleepers.filter(function (p) { return p === G.player || isVisibleEntity(p); });
+        return { surface: s.type, place: s.index, occupants: visible.map(function (p) { return p === G.player ? "you" : p.name || "a companion"; }),
+            sharing: visible.length, healthFraction: plan.ratioOf(visible[0]), resourceFraction: plan.restFactorOf(visible[0]) };
+    });
+}
+
+function recoverySceneAvailable(player, room, plan) {
+    return G.player === player && G.activeRoom === room && !player.dead && !player.unconscious && player.hp > 0 &&
+        !isRoomCollapsed(room) && G.activeNPCMode !== "combat" && plan.slots.every(function (slot) {
+            return !slot.sleepers.length || !slot.fixture || (room.structural || []).includes(slot.fixture) && isUsableRestFixture(slot.fixture);
+        });
+}
+
+function publishRestPlan(stage, action, plan, turns) {
+    if (stage === "interrupted" && typeof markTextModeUrgent === "function") markTextModeUrgent("recovery-interrupted");
+    if (typeof publishTextModeOutput === "function") publishTextModeOutput("recovery", stage === "interrupted" ? "Rest was interrupted." : stage === "arrangement" ? "The travellers settle in to rest." : "Rest and recovery resolved.", {
+        presentation: "supplement", recovery: { stage: stage, action: action, turns: turns || 0, spots: publicRestPlan(plan),
+            recovered: (plan.before || []).filter(function (before) { return before.entity === G.player || isVisibleEntity(before.entity); }).map(function (before) { const p = before.entity; return {
+                name: p === G.player ? "you" : p.name || "a companion", health: Math.max(0, (p.hp || 0) - before.hp),
+                stamina: Math.max(0, (p.stamina || 0) - before.stamina), mana: Math.max(0, (p.mana || 0) - before.mana) }; }) }
+    }, false);
+}
+
 
 function sleepNameList(names) {
     if (names.length <= 1) return names[0] || "";
@@ -51964,13 +52509,13 @@ function sleepNameList(names) {
 function describeSleepArrangement(plan) {
     const lines = [];
     const mine = plan.slotOf(G.player);
-    const others = mine ? mine.sleepers.filter(function (e) { return e !== G.player; }) : [];
+    const others = mine ? mine.sleepers.filter(function (e) { return e !== G.player && (typeof isVisibleEntity !== "function" || isVisibleEntity(e)); }) : [];
     const names = others.map(function (e) { return e.name || "your companion"; });
     const surface = mine ? (mine.type === "bed" ? "a real bed" : (mine.type === "cot" ? "a cot" : "the bare floor")) : "the floor";
     if (!mine || mine.type === "floor") {
         lines.push(names.length ? "You bed down on the floor with " + sleepNameList(names) + "." : "You bed down on the bare floor.");
     } else if (!names.length) {
-        lines.push("You settle into " + surface + " on your own.");
+        lines.push("You settle into " + surface + (mine.sleepers.length === 1 ? " on your own." : "."));
     } else if (mine.sleepers.length === 2) {
         lines.push("You share " + surface + " with " + names[0] + "; it is snug, and neither of you rests as deeply.");
     } else {
@@ -51978,7 +52523,8 @@ function describeSleepArrangement(plan) {
     }
     plan.slots.forEach(function (s) {
         if (s === mine || !s.sleepers.length) return;
-        const who = s.sleepers.map(function (e) { return e.name || "A companion"; });
+        const who = s.sleepers.filter(function (e) { return typeof isVisibleEntity !== "function" || isVisibleEntity(e); }).map(function (e) { return e.name || "A companion"; });
+        if (!who.length) return;
         if (s.type === "floor") lines.push(sleepNameList(who) + (who.length > 1 ? " lie down on the floor." : " beds down on the floor."));
         else if (who.length === 1) lines.push(who[0] + " takes " + (s.type === "bed" ? "another bed" : "a cot") + ".");
         else lines.push(sleepNameList(who) + " share " + (s.type === "bed" ? "a bed" : "a cot") + (who.length > 2 ? ", packed in tight." : "."));
@@ -51987,31 +52533,114 @@ function describeSleepArrangement(plan) {
 }
 
 // The buttons for "where to sleep", each with a short preview of the result.
-function renderSleepSpotMenu() {
+function sleepSpotGuard(mode) {
+    const player = G.player, room = G.activeRoom, map = G.roomMap, source = room.structural;
+    const fixtures = (source || []).slice(), job = mode === "job" ? getActiveJob() : null;
+    const stamp = function () { return JSON.stringify([getCurrentStoryTurn(), room.structural, player.hp, player.hpMax, player.stamina, player.mana, player.fatigue,
+        (room.creatures || []).map(function (n) { return [n.id, n.dead, n.unconscious, n.currentState, n.hidden, n.isHidden, n._npcRestSpot, n.ties]; }),
+        getRestingPartyMembers(room).map(function (n) { return [n.id, n.hp, n.stamina, n.mana, n.fatigue, n.ties]; }), job && [job.state, job.day, job.owed]]); };
+    const initial = stamp();
+    return function () { return G.player === player && G.activeRoom === room && G.roomMap === map && room.structural === source &&
+        (!map || map[room.coords] === room) && fixtures.every(function (f, i) { return source[i] === f; }) && fixtures.length === (source || []).length &&
+        (!job || getActiveJob() === job && job.state === "dayDone") && !getSleepActionBlock(mode, room) && stamp() === initial; };
+}
+
+function getSleepActionBlock(mode, room) {
+    return mode === "job" ? (!getActiveJob() || getActiveJob().state !== "dayDone" ? "The workday is no longer ready for sleep." : getJobSleepBlockReason(getActiveJob())) : getSleepBlockReason(room);
+}
+
+function renderSleepSpotMenu(mode) {
     const el = document.getElementById("chatOptionsEl");
-    if (!el) return;
+    if (!el || !G.activeRoom || !G.player) return;
     el.innerHTML = "";
-    const room = G.activeRoom;
-    const counts = getSleepSpotCounts(room);
-    const buttons = [];
-    const labels = { bed: "Sleep in a bed", cot: "Sleep on a cot", floor: "Sleep on the floor" };
+    const room = G.activeRoom, counts = getSleepSpotCounts(room), title = "Where will you sleep?";
+    const menu = typeof beginSharedChoiceMenu === "function" ? beginSharedChoiceMenu("sleep-spot", null, title, function () { renderSleepSpotMenu(mode); }) : null;
+    if (menu) menu.sleepMode = mode;
+    const fresh = sleepSpotGuard(mode);
+    if (menu) { const valid = menu.valid; menu.valid = function () { return valid() && fresh(); }; }
+    const makeButton = function (label, run, opts) {
+        const checked = function () { if (!fresh()) { setNarration("The sleeping places changed. Choose where to sleep again."); return { status: "blocked" }; } return run(); };
+        return menu ? createSharedChoiceButton(menu, label, checked, opts) : createCombatButton(label, checked, opts);
+    };
+    const labels = { bed: "Sleep in a bed", cot: "Sleep on a cot", floor: "Sleep on the floor" }, choices = [], buttons = [];
     SLEEP_SPOT_ORDER.forEach(function (type) {
         if (!counts[type]) return;
         const plan = assignSleepSpots(room, type);
-        const pct = Math.round(plan.ratioOf(G.player) * 100);
-        buttons.push(createCombatButton(labels[type], function () { closeInteractMenu(); performSleep(type); }, {
-            title: describeSleepArrangement(plan) + " (about " + pct + "% of your health back)"
-        }));
+        if (plan.playerSpot !== type) return;
+        const preview = describeSleepArrangement(plan);
+        const ratio = Math.round(plan.ratioOf(G.player) * 100);
+        choices.push({ surface: type, healthPercent: ratio, arrangement: preview, spots: publicRestPlan(plan) });
+        buttons.push(makeButton(labels[type], function () {
+            if (menu) clearSharedChoiceMenu(menu);
+            if (mode === "job") sleepThroughNight(type); else { closeInteractMenu(); performSleep(type); }
+            return { status: mode === "job" ? "needs_input" : "completed", outputPublished: true };
+        }, { title: preview + " Restores up to " + ratio + " percent of your maximum health before wound penalties. Sharing reduces stamina and mana recovery too.", textChoice: { action: "sleep", surface: type } }));
     });
-    appendCombatGroup(el, "Where do you sleep?", buttons);
-    appendCombatGroup(el, "", [createCombatButton("Never mind", function () { closeInteractMenu(); })]);
-    const counts2 = [];
-    if (counts.bed) counts2.push(counts.bed + (counts.bed > 1 ? " beds" : " bed"));
-    if (counts.cot) counts2.push(counts.cot + (counts.cot > 1 ? " cots" : " cot"));
-    const party = getRestingPartyMembers(room).length;
-    setNarration("Where will you sleep? " + (counts2.length ? "There " + (counts.bed + counts.cot > 1 ? "are " : "is ") + sleepNameList(counts2) + " here" : "There is nothing to lie on here") +
-        (party ? ", and your companions will find their own places." : ".") + " A bed holds up to " + SLEEP_SPOT_CAPACITY.bed + ", but the more share one, the less each of you recovers.");
+    appendCombatGroup(el, title, buttons);
+    const cancel = function () { if (menu) clearSharedChoiceMenu(menu); if (mode === "job") renderJobMenu(); else closeInteractMenu(); return { status: "blocked", message: "Sleep cancelled." }; };
+    appendCombatGroup(el, "", [menu ? createSharedChoiceButton(menu, "Never mind", cancel, { textChoice: { action: "cancel" } }) : createCombatButton("Never mind", cancel)]);
+    if (menu) publishSharedChoiceMenu(menu, el);
+    if (!(typeof textModeState !== "undefined" && textModeState.enabled)) setNarration("Choose a bed, a cot or the floor. Companions find places too. Sharing a bed reduces recovery; established partners prefer to stay together.");
+    if (typeof publishTextModeOutput === "function") publishTextModeOutput("recovery", "Choose where to sleep.", { presentation: "supplement", recovery: { stage: "choices", action: mode === "job" ? "job-sleep" : "sleep", choices: choices } }, false);
 }
+
+
+// Independent parties may share lodging surfaces. Recovery uses the same
+// treatment/limb/resource rules as player companions, with fractional carries.
+function tickNPCPartyLodgingRest() {
+    const now = getCurrentStoryTurn();
+    Object.values(G.roomMap || {}).forEach(function (room) {
+        if (!room || room.skirmish || !isRestfulRoom(room)) return;
+        if (room === G.activeRoom && (G.combatEncounter || G.activeNPCMode === "combat")) return;
+        const groups = new Map();
+        (room.creatures || []).forEach(function (npc) {
+            if (!npc || !npc._npcParty || !canBelongToNPCParty(npc) || npc._inSkirmish || npc._encId) return;
+            if (!groups.has(npc._npcParty.id)) groups.set(npc._npcParty.id, []);
+            groups.get(npc._npcParty.id).push(npc);
+        });
+        groups.forEach(function (members) {
+            if ((room.creatures || []).some(function (n) { return n && !members.includes(n) && !isCompanionDownForTravel(n) && (n.hostility || 0) >= 60; })) return;
+            const leader = members.find(function (n) { return n.id === n._npcParty.leaderId; });
+            if (leader && leader.currentState && leader.currentState.sleeping) {
+                members.forEach(function (npc) {
+                    if (npc === G.activeNPC || npc.bound || npc.hidden || npc.isHidden) return;
+                    npc.currentState = npc.currentState || {}; npc.currentState.sleeping = true; npc.currentState.gesture = "asleep";
+                });
+            }
+            const sleepers = members.filter(function (n) { return n.currentState && n.currentState.sleeping; });
+            members.filter(function (n) { return !sleepers.includes(n); }).forEach(function (n) { delete n._npcRestSpot; delete n._npcSleepProgress; delete n._npcSleepQuality; });
+            if (!sleepers.length) return;
+            const plan = planRestSpots(room, sleepers);
+            let changed = false;
+            sleepers.forEach(function (npc) {
+                if (npc._npcRestTickTurn === now) return;
+                if (typeof npc._npcRestTickTurn === "number" && npc._npcRestTickTurn !== now - 1) {
+                    delete npc._npcSleepProgress; delete npc._npcSleepQuality;
+                    delete npc._npcSleepHpCarry; delete npc._npcSleepStaminaCarry; delete npc._npcSleepManaCarry;
+                }
+                const slot = plan.slotOf(npc), key = room.coords + ":" + slot.type + ":" + slot.index;
+                if (!npc._npcRestSpot || npc._npcRestSpot.key !== key) changed = true;
+                npc._npcRestSpot = { key: key, roomCoords: room.coords, type: slot.type, index: slot.index };
+                npc._npcSleepProgress = (npc._npcSleepProgress || 0) + 1;
+                const complete = npc._npcSleepProgress >= SLEEP_TURNS;
+                const qualities = ["floor", "makeshift", "proper"], quality = plan.qualityOf(npc);
+                if (!npc._npcSleepQuality || qualities.indexOf(quality) < qualities.indexOf(npc._npcSleepQuality)) npc._npcSleepQuality = quality;
+                recoverRestingCompanion(npc, room, { sleep: true, fractional: true, share: 1 / SLEEP_TURNS, turns: 1,
+                    completed: complete, ratioFor: plan.ratioOf, qualityFor: function () { return npc._npcSleepQuality; }, restFactorFor: plan.restFactorOf });
+                npc._npcRestTickTurn = now;
+                if (complete) { npc.currentState.sleeping = false; npc.currentState.gesture = "is waking up"; delete npc._npcSleepProgress; delete npc._npcSleepQuality; delete npc._npcRestSpot; }
+            });
+            if (changed && room === G.activeRoom && sleepers.every(isVisibleEntity)) {
+                const lines = plan.slots.filter(function (s) { return s.sleepers.length; }).map(function (s) {
+                    return npcPartyNames(s.sleepers) + (s.sleepers.length > 1 ? " settle together on " : " settles on ") + (s.type === "floor" ? "the floor." : "a " + s.type + ".");
+                });
+                queueTurnNote(lines.join(" "));
+                publishRestPlan("arrangement", "npc-sleep", plan, 0);
+            }
+        });
+    });
+}
+
 
 function getSleepBlockReason(room) {
     const player = G.player;
@@ -52025,17 +52654,16 @@ function getSleepBlockReason(room) {
 
 // Sleep action entry point: ask where unless there is only the floor (or the
 // text-mode / scripted caller already knows).
-function openSleepSpotMenu() {
+function openSleepSpotMenu(mode) {
     const room = G.activeRoom;
-    if (!room || !G.player || G.activeNPC || G.activeObject) return;
-    const block = getSleepBlockReason(room);
+    if (!room || !G.player || (mode !== "job" && G.activeNPC) || G.activeObject) return;
+    const block = getSleepActionBlock(mode, room);
     if (block) { setNarration(block); return; }
     const counts = getSleepSpotCounts(room);
-    const textMode = typeof textModeState !== "undefined" && textModeState.enabled;
-    if (textMode || (!counts.bed && !counts.cot)) { closeInteractMenu(); performSleep(); return; }
+    if (!counts.bed && !counts.cot) { if (mode === "job") sleepThroughNight("floor"); else { closeInteractMenu(); performSleep("floor"); } return; }
     clearChatLog();
     setExitGridVisible(false);
-    renderSleepSpotMenu();
+    renderSleepSpotMenu(mode);
 }
 
 function performSleep(spot) {
@@ -52052,17 +52680,21 @@ function performSleep(spot) {
     const hpBefore = player.hp;
     let slept = 0;
     let interrupted = false;
+    activeRecoveryPlans.set(room, { player: player, plan: plan });
     f.sleeping = true;
     try {
         for (let i = 0; i < SLEEP_TURNS; i++) {
             advanceStoryTurn(1);
-            if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
             slept++;
-            if (roomHasActiveHostile(room)) { interrupted = true; break; }
+            if (!recoverySceneAvailable(player, room, plan)) { interrupted = true; break; }
+            if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
+            if (roomHasActiveHostile(room) || !recoverySceneAvailable(player, room, plan)) { interrupted = true; break; }
         }
     } finally {
         f.sleeping = false;
+        if (activeRecoveryPlans.get(room) && activeRecoveryPlans.get(room).plan === plan) activeRecoveryPlans.delete(room);
     }
+    if (G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0) { publishRestPlan("interrupted", "sleep", plan, slept); return; }
     const share = slept / SLEEP_TURNS;
     const restFactor = plan.restFactorOf(player);
 
@@ -52082,6 +52714,7 @@ function performSleep(spot) {
         sleep: true, share: share, turns: slept, quality: quality, completed: !interrupted,
         ratio: SLEEP_SPOT_HP_RATIO.floor, ratioFor: plan.ratioOf, restFactorFor: plan.restFactorOf, qualityFor: plan.qualityOf
     });
+    publishRestPlan(interrupted ? "interrupted" : "result", "sleep", plan, slept);
     renderStats();
 
     if (interrupted) {
@@ -52673,13 +53306,13 @@ function partyNeedsRest(room) {
     });
 }
 
-function getCompanionRestRates(member, room) {
+function getCompanionRestRates(member, room, plan) {
     const designated = typeof isRestfulRoom === "function" && isRestfulRoom(room);
     const baseHeal = designated ? REST_HEAL_PER_TURN_DESIGNATED : REST_HEAL_PER_TURN_UNDESIGNATED;
     const path = getFaithPathDef(member);
     const bonus = Math.round(getClassPerk(member, "restHealBonus", 0) * (path ? path.restHealMult : 1)) + getEquippedAffinityTotal(member, "restHeal");
     const quality = getRestBedQuality(room);
-    const mult = quality === "proper" ? REST_BED_MULT_PROPER : (quality === "makeshift" ? REST_BED_MULT_MAKESHIFT : 1);
+    const mult = plan ? plan.restMultiplierOf(member) : quality === "proper" ? REST_BED_MULT_PROPER : (quality === "makeshift" ? REST_BED_MULT_MAKESHIFT : 1);
     return {
         hp: isSlowHealRoom(room) ? (REST_HP_PER_TURN_SLOW + Math.max(0, bonus) * REST_HP_SLOW_BONUS_FACTOR) * mult : Math.max(1, Math.round((baseHeal + bonus) * mult)),
         stamina: Math.max(1, Math.round((baseHeal + bonus) * mult)),
@@ -52696,14 +53329,17 @@ function recoverRestingCompanion(member, room, options) {
         const ratio = typeof options.ratioFor === "function" ? options.ratioFor(member) : options.ratio;
         const restFactor = typeof options.restFactorFor === "function" ? options.restFactorFor(member) : 1;
         if (options.completed && quality) markProperSleep(member);
-        const full = Math.round(max * ratio * options.share);
+        let full;
+        if (options.fractional) { member._npcSleepHpCarry = (member._npcSleepHpCarry || 0) + max * ratio * options.share; full = Math.floor(member._npcSleepHpCarry + 1e-9); member._npcSleepHpCarry -= full; }
+        else full = Math.round(max * ratio * options.share);
         heal = Math.round(full * factor);
         if (factor < 1) heal = Math.max(heal, Math.min(full, Math.floor(options.turns * WOUND_HEAL_FLOOR_PER_TURN)));
-        restoreEntityStamina(member, Math.ceil((member.staminaMax || 0) * options.share * restFactor));
-        restorePlayerMana(member, Math.ceil(getPlayerManaCeiling(member) * options.share * restFactor));
+        const recoveryAmount = function (key, amount) { if (!options.fractional) return Math.ceil(amount); member[key] = (member[key] || 0) + amount; const whole = Math.floor(member[key] + 1e-9); member[key] -= whole; return whole; };
+        restoreEntityStamina(member, recoveryAmount("_npcSleepStaminaCarry", (member.staminaMax || 0) * options.share * restFactor));
+        restorePlayerMana(member, recoveryAmount("_npcSleepManaCarry", getPlayerManaCeiling(member) * options.share * restFactor));
         if (options.completed) { resetSpeciesRestState(member, null); applyBedRestBonus(member, quality); }
     } else {
-        const rates = getCompanionRestRates(member, room);
+        const rates = getCompanionRestRates(member, room, options.plan);
         const hp = factor < 1 ? Math.max(rates.hp * factor, Math.min(rates.hp, WOUND_HEAL_FLOOR_PER_TURN)) : rates.hp;
         member._restHpCarry = (member._restHpCarry || 0) + hp;
         heal = Math.floor(member._restHpCarry + 1e-9);
@@ -52735,7 +53371,7 @@ function restHealParty(room, amount, options) {
     standing.forEach(function (m) {
         if (options) {
             recoverRestingCompanion(m, room, options);
-            if (options.rest && !playerNeedsRest(m) && !hasOpenWound(m)) applyBedRestBonus(m, getRestBedQuality(room));
+            if (options.rest && !playerNeedsRest(m) && !hasOpenWound(m)) applyBedRestBonus(m, options.plan ? options.plan.qualityOf(m) : getRestBedQuality(room));
         }
         else m.hp = Math.min(m.hpMax || m.hp, m.hp + amount);
     });
@@ -56658,7 +57294,7 @@ function guardBreakUpFight(guard, room) {
     const b = room.creatures.find(function (c) { return c && c.id === room.skirmish.bId; });
     const reason = room.skirmish.reason;
     [a, b].forEach(function (c) { if (c) { c._inSkirmish = false; c._versusReason = null; releaseSkirmishHostility(c); } });
-    delete room.skirmish;
+    clearNPCPartySkirmish(room); delete room.skirmish;
     if (reason === "theft") markNPCWanted(aggressor, room, "theft", ((a === aggressor ? b : a) || {}).name);
     if (!startNPCConflict(room, guard, aggressor, reason === "theft" || isNPCWanted(aggressor) ? "arrest" : "fight")) return null;
     return `${guard.name || "A guard"} bursts in, shouting for the fighting to stop, and goes for ${aggressor.name || "the aggressor"}.`;
@@ -56741,6 +57377,7 @@ function getVersusLethality(attacker, defender) {
 
 function startNPCConflict(room, a, b, reason) {
     if (!room || room.skirmish || !a || !b || !a.id || !b.id || a === b) return false;
+    if (areNPCPartyMates(a, b)) return false;
     if (!canNPCConflictInvolve(a, reason || "fight") || !canNPCConflictInvolve(b, reason || "fight")) return false;
     room.skirmish = { aId: a.id, bId: b.id, reason: reason || "fight" };
     a._inSkirmish = true;
@@ -56749,6 +57386,7 @@ function startNPCConflict(room, a, b, reason) {
     b._versusReason = reason || "fight";
     raiseSkirmishHostility(a);
     raiseSkirmishHostility(b);
+    initNPCPartySkirmish(room, a, b);
     if (room === G.activeRoom && typeof skirmishNextRoundAt !== "undefined") {
         skirmishNextRoundAt = Date.now() + SKIRMISH_ENTRY_GRACE_MS;
     }
@@ -56839,6 +57477,7 @@ function getNPCTheftVictims(room, thief) {
 // could be taken. Notes go through `seen` so the caller decides if the player
 // sees it.
 function npcStealFromNPC(thief, victim, room) {
+    if (areNPCPartyMates(thief, victim)) return null;
     const rank = getNPCClassRank(thief, "rogue");
     const coins = getCoinValue(victim);
     const items = getStealableItems(victim, 6 + rank * 6);
@@ -60000,8 +60639,9 @@ function attemptRest() {
         getClassPerk(player, "restManaBonus", 0) + getEquippedAffinityTotal(player, "restMana") +
         (getFaithPathDef(player) ? getFaithPathDef(player).restManaBonus : 0);
 
-    const bedQuality = getRestBedQuality(room);
-    const bedMult = bedQuality === "proper" ? REST_BED_MULT_PROPER : (bedQuality === "makeshift" ? REST_BED_MULT_MAKESHIFT : 1);
+    const restPlan = assignSleepSpots(room);
+    const bedQuality = restPlan.qualityOf(player);
+    const bedMult = restPlan.restMultiplierOf(player);
     const bedHeal = Math.max(1, Math.round(healPerTurn * bedMult));   // also the per-turn STAMINA recovery (unchanged)
     const bedMana = Math.round(manaPerTurn * bedMult);
     // HP is slower in the exploration zones (fractions carry over between turns).
@@ -60017,12 +60657,15 @@ function attemptRest() {
     let interrupted = false;
     const partyWoke = [];
 
-    for (let i = 0; i < REST_MAX_TURNS_PER_ACTION; i++) {
+    activeRecoveryPlans.set(room, { player: player, plan: restPlan });
+    try { for (let i = 0; i < REST_MAX_TURNS_PER_ACTION; i++) {
         if (!playerNeedsRest(player)) break;
 
         advanceStoryTurn(1);
-        if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
         turnsRested++;
+        if (!recoverySceneAvailable(player, room, restPlan)) { interrupted = true; break; }
+        if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
+        if (!recoverySceneAvailable(player, room, restPlan)) { interrupted = true; break; }
         if (turnsRested === 1) resetSpeciesRestState(player, null);
 
         // HP per turn: zone rule, then the open-wound factor (never below the floor).
@@ -60032,7 +60675,7 @@ function attemptRest() {
         player._restHpCarry = (player._restHpCarry || 0) + hpPerTurn;
         const hpStep = Math.floor(player._restHpCarry + 1e-9);
         player._restHpCarry = Math.max(0, player._restHpCarry - hpStep);
-        const wokeLines = restHealParty(room, hpStep, { rest: true });
+        const wokeLines = restHealParty(room, hpStep, { rest: true, plan: restPlan });
         if (wokeLines.length) partyWoke.push.apply(partyWoke, wokeLines);
         const before = player.hp;
         player.hp = Math.min(player.hpMax, player.hp + hpStep);
@@ -60047,18 +60690,21 @@ function attemptRest() {
         }
     }
 
+    } finally { if (activeRecoveryPlans.get(room) && activeRecoveryPlans.get(room).plan === restPlan) activeRecoveryPlans.delete(room); }
+    if (G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0) { publishRestPlan("interrupted", "rest", restPlan, turnsRested); return; }
     if (player.hp >= player.hpMax) player._restHpCarry = 0;
-    if (turnsRested >= 3 && !bedQuality && !(typeof getActiveLodging === "function" && getActiveLodging()) && typeof setStoryFlag === "function") {
+    if (turnsRested >= 3 && (!bedQuality || bedQuality === "floor") && !(typeof getActiveLodging === "function" && getActiveLodging()) && typeof setStoryFlag === "function") {
         if (room.zone === "Town") setStoryFlag("slept-rough", true);
     }
     renderStats();
 
+    publishRestPlan(interrupted ? "interrupted" : "result", "rest", restPlan, turnsRested);
     const recoveryBits = [];
     if (staminaRecovered > 0) recoveryBits.push(`${staminaRecovered} stamina`);
     if (manaRecovered > 0) recoveryBits.push(`${manaRecovered} mana`);
     const staminaNote = recoveryBits.length ? ` and ${recoveryBits.join(" and ")}` : "";
 
-    let bedNote = bedQuality === "proper" ? " The bed makes it a real rest." : (bedQuality === "makeshift" ? " Even a rough bed helps." : "");
+    let bedNote = " " + describeSleepArrangement(restPlan).replace(/bed down/g, "rest").replace(/sleep/g, "rest") + (bedQuality === "proper" ? " The bed makes it a real rest." : (bedQuality === "makeshift" ? " Even a rough bed helps." : ""));
     if (hasOpenWound(player) && getWoundTreatmentKey(player) !== "both") bedNote += " Your wounds are not fully tended, so they heal slowly (Tend wounds, beside the exits).";
     if (!interrupted && !playerNeedsRest(player)) {
         const buffText = applyBedRestBonus(player, bedQuality);
@@ -74539,7 +75185,8 @@ function refreshNPCDetailPanel(npc) {
     const lookFallback = buildNPCLookDescription(npc) || inspection;
     const behaviorEl = document.getElementById("npcDetailBehaviorEl");
     behaviorEl.style.whiteSpace = "pre-line";
-    behaviorEl.textContent = polishedPanelDescription || [lookFallback, smellLine].filter(Boolean).join("\n\n");
+    const partyDescription = typeof getNPCPartyDescription === "function" ? getNPCPartyDescription(npc) : "";
+    behaviorEl.textContent = [polishedPanelDescription || [lookFallback, smellLine].filter(Boolean).join("\n\n"), partyDescription].filter(Boolean).join("\n\n");
     document.getElementById("npcMoodEl").textContent =
         npc.memory && npc.memory.lastMood ? npc.memory.lastMood : "neutral";
     document.getElementById("npcRoleEl").textContent = (npc.role || "unknown") + (isZoneBoss(npc) ? " (Zone Boss)" : "");
@@ -75532,7 +76179,9 @@ function renderIntimacyActionMenu(npc) {
         const npcAnatomy = npc.anatomy || {};
         
         // Debug: log NPC properties for debugging
-        console.log(`[DEBUG] NPC gender: ${npc.gender}, species: ${npc.species}, anatomy:`, npc.anatomy);
+        console.log(`[DEBUG] NPC gender: ${npc.gender} (type: ${typeof npc.gender}), species: ${npc.species} (type: ${typeof npc.species})`);
+        console.log(`[DEBUG] NPC anatomy:`, npc.anatomy ? npc.anatomy : 'undefined');
+        console.log(`[DEBUG] NPC full object keys:`, Object.keys(npc).slice(0, 20));
         
         // Determine anatomy
         const isMale = npcGender.includes("male");
@@ -75543,7 +76192,10 @@ function renderIntimacyActionMenu(npc) {
         const hasCloaca = npcAnatomy.cloaca || npcSpecies.includes("avian") || npcSpecies.includes("bird");
         const hasBreasts = npcAnatomy.breasts || isFemale || isHerm || npcGender.includes("non-binary");
         
+        console.log(`[DEBUG] isMale: ${isMale}, isFemale: ${isFemale}, isHerm: ${isHerm}`);
         console.log(`[DEBUG] hasCock: ${hasCock}, hasPussy: ${hasPussy}, hasBreasts: ${hasBreasts}, hasCloaca: ${hasCloaca}`);
+        console.log(`[DEBUG] Anatomy check - cock: ${npcAnatomy.cock}, penis: ${npcAnatomy.penis}, dick: ${npcAnatomy.dick}`);
+        console.log(`[DEBUG] Anatomy check - vagina: ${npcAnatomy.vagina}, pussy: ${npcAnatomy.pussy}, vulva: ${npcAnatomy.vulva}`);
         
         // Define tab order priority
         const tabPriority = {
@@ -75594,9 +76246,13 @@ function renderIntimacyActionMenu(npc) {
         }
         
         // Collect all section labels with actions and valid anatomy
+        console.log(`[DEBUG] sectionItems:`, sectionItems.map(item => ({label: item.label, actionsCount: item.actions ? item.actions.length : 0})));
+        
         const sectionsWithActions = sectionItems
             .filter(item => item.actions && item.actions.length > 0 && shouldShowSection(item.label))
             .map(item => item.label);
+        
+        console.log(`[DEBUG] sectionsWithActions (after filtering):`, sectionsWithActions);
         
         // Sort by priority, then alphabetically
         const tabOrder = sectionsWithActions
@@ -75606,7 +76262,10 @@ function renderIntimacyActionMenu(npc) {
                 return aPrio - bPrio || a.localeCompare(b);
             });
         
+        console.log(`[DEBUG] tabOrder (final):`, tabOrder);
+        
         // Create all tabs
+        console.log(`[DEBUG] Creating ${tabOrder.length} tabs for:`, tabOrder);
         let firstTab = true;
         tabOrder.forEach(label => {
             const tabLabel = getTabLabel(label);

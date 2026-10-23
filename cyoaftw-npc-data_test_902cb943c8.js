@@ -2683,6 +2683,16 @@ const NPC_CONVERSATION_CATALOGUE = [
         }
     },
     {
+        id: "npc-travel-party",
+        priority: 2,
+        repeat: "always",
+        label: "Ask about travelling companions",
+        text: "You ask about their travelling companions.",
+        intent: "talk",
+        conditions: { custom: (npc) => typeof getNPCPartyPublicInfo === "function" && !!getNPCPartyPublicInfo(npc) },
+        action: (npc) => { if (typeof describeNPCTravelParty === "function") describeNPCTravelParty(npc); }
+    },
+    {
         // A session follower (someone already travelling with you, this
         // session) can be asked to make it permanent and join the party
         // proper. Scripted, no AI turn: the answer is a roll from how much
