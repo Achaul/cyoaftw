@@ -1491,7 +1491,7 @@ const TEXT_COMMANDS = [
     { id:"synergy", synergy:true, args:["action","target"], aliases:["synergies","combine skills","notebook"], example:"synergy; combine skills; first skill firebolt; second skill trained strike; add catalyst greenwort; picture \"a burning arc\"; experiment; notebook; memorise synergy <name>; forget synergy <name>; name synergy <old> as \"new\"; use synergy <name>", description:"Use native synergy experiments, catalyst choices, notebook, naming and memory rules. Review attempts and memorisation, then confirm separately. Show synergy and how synergy are free. Answer one step at a time; explicitly continue older batches." },
     { id: "travel", travel: true, args: ["action", "target"], aliases: ["directions", "guide questions", "rent room", "follow guide", "keep following"], example: "directions to <place>; lead me to <place>; guide questions; ask guide how to earn money; rent room; follow guide; keep following; stop walking; show lodging", description: "Use shared native directions, guide questions and rental menus. Directions cost 1 turn; guiding agreement costs 1 turn. Follow guide takes one native movement step; keep following waits for the native paced walk. Rent room reviews the weekly price and requires separate numbered confirmation. Guide answers and menu browsing are free. Options/choose/back/cancel/leave work; answer one step per reply and explicitly continue older batches." },
     { id: "nectar", primary: "feed nectar", nectar: true, args: ["item", "amount", "target"], aliases: ["nectar", "feed nectar", "offer nectar"], example: "feed nectar to slime; feed 5 drops of nectar syrup to second slime; give 3 drops of nectar to slime; show nectar", description: "Offer nectar to a visible living slime. Select a container and a whole drop count from that ONE container; the native dose transaction keeps leftovers and returns its ordinary empty container where applicable. Each offering costs 1 turn. Options/choose/back/cancel/leave work; one menu step per reply and explicit continue for older queued actions. Show nectar/show gifts lists public availability. Ordinary gifts keep give <item> to <npc>." },
-    { id: "merchant", merchant: true, args: ["action", "target"], aliases: ["merchant services", "trade extras", "ask about", "sell junk", "restock"], example: "ask about stock sword; ask about carried sword; sell junk; restock; show trade extras", description: "While trading, ask about <item> uses the native free merchant opinion and existing trait discovery. Sell junk reviews visible unworn native junk before a separate numbered confirmation; native per-unit prices, refusals and partial sales apply. Restock asks an eligible barkeeper for missing drinks through the native cellar/backroom route. Other merchants use their supply cycle. Show trade extras lists availability; how ask about, how sell junk and how restock give examples. Options/choose/back/cancel/leave work; finish one menu step per reply and continue older commands explicitly." },
+    { id: "merchant", merchant: true, args: ["action", "target"], aliases: ["merchant services", "trade extras", "ask about", "sell junk", "restock"], example: "ask about stock sword; sell junk; restock; show trade extras", description: "While trading, ask about <merchant stock item> uses the native free merchant opinion and existing trait discovery. Sell junk reviews visible unworn native junk before a separate numbered confirmation; native per-unit prices, refusals and partial sales apply. Restock asks an eligible barkeeper for missing drinks through the native cellar/backroom route. Other merchants use their supply cycle. Show trade extras lists availability; how ask about, how sell junk and how restock give examples. Options/choose/back/cancel/leave work; finish one menu step per reply and continue older commands explicitly." },
     { id: "shrine", shrine: true, jobs: true, args: ["action", "target"], aliases: ["shrine", "dedicate", "rededicate", "dedication"], example: "shrine; show shrine; pray at shrine; dedicate shrine to <known deity>; pray to <known deity>; how dedicate; newcomer blessing; favor willpower; defile shrine; renew mana; quiet devotion", description: "Use the current room shrine. Shrine opens native prayer/dedication choices; show shrine freely reports public dedication, known choices, costs and restrictions. Pray at shrine uses its current deity. Dedicate shrine to <known deity> (or pray to <known deity> while at a shrine) includes prayer, at the native 2 stamina / 2 turns and 50-turn same-place cooldown. First permanent patron pledges and changed dedication require a separate numbered review confirmation. Unknown shrine gods stay unnamed until native prayer discovers them. Your existing patron cannot be changed by rededication. Options/choose/back/cancel/leave work; answer one step per reply and explicitly continue older queued commands after a decision. Fixture prayers retain pray at <altar>. Newcomer blessing, favor <stat/gift>, defile shrine, renew mana and quiet devotion share native rules and menus. Show shrine lists their costs/restrictions. Defiling and HP-cost renewal require a separate numbered review. Favor waits for its native answer and rejects stale replies." },
     { id: "structure", structure: true, info: true, jobs: true, args: ["action", "target"], aliases: ["structure", "structural magic", "walls", "doors", "rubble"], example: "show structure; unlock north door; pick north door; force north door; smash north door; push through north door; lock north door; knock on north door; hammer east wall; dig south rubble; pray for rescue; cast frost shard at north door", description: "Inspect public directional doors, exit walls and rubble without spending a turn. Cast <learned damaging spell> at <direction> door/wall/rubble uses native eligibility, mana and one turn. Watch <direction> door waits one turn for an existing fire. Wall damage may collapse the exit or whole room; fire can clear rubble into a crawl even in a collapsed room. Native magic choices accept options/choose/back/cancel/leave and pause older queues for explicit continue. Physical commands include unlock north door, pick north door, force north door, smash frozen north door, push through burning north door, lock north door with key/lockpick, knock on north door, hammer east wall, dig south rubble and pray for rescue when trapped. Show structure lists current costs/restrictions. Use how dig for physical examples. Each command makes one native attempt; failed attempts and movement pause later commands." },
     ...["burn", "dip", "pour"].map(function (verb) { return { id: verb, material: true, jobs: true, args: ["item", "fixture"], aliases: verb === "burn" ? ["burn", "burning"] : verb === "dip" ? ["dip", "dunk", "dipping"] : ["pour", "pour out", "empty", "pouring"], example: verb === "burn" ? "burn note at hearth; burn; show burn" : verb === "dip" ? "dip dagger in cauldron; dip; show dip" : "pour out waterskin; pour healing potion; show pour", description: verb === "burn" ? "Burn one visible carried eligible item at a visible warmth source. Review irreversible destruction and confirm separately by number; it costs one turn. Spellbooks are excluded. Options/back/cancel/leave work. Explicitly continue older queued commands after a decision." : verb === "dip" ? "Dip a single carried item or wielded weapon in an explicitly named cauldron for one turn. Hidden brew effects are discovered only through the native action. Dunk is an alias. Dip <item> in bowl, or unqualified dip <item> beside an alchemy table, retains the crafting route. Options/back/cancel/leave work." : "Pour one carried liquid or potion onto the floor for one turn, retaining its normal empty container. Potions soak away; water, oil, spirits and alcohol use native floor-liquid rules. Empty is an alias; this cannot transfer into another container. Pour out mixture/bowl retains the crafting confirmation. Show pour lists public items." }; }),
@@ -1556,6 +1556,7 @@ const TEXT_COMMANDS = [
     { id: "glance", args: ["direction"], aliases: ["glance", "peek"], example: "glance north", room: true, description: "Peek through an exit. Type glance alone to choose a direction." },
     { id: "move", args: ["direction"], aliases: ["go", "move", "walk", "head"], example: "north; go northwest; up", room: true, description: "Travel through an exit. Short directions such as n and nw work too." },
     { id: "npcs", info: true, aliases: ["npcs", "who", "who is here", "who's here", "people"], example: "who is here", description: "List the visible creatures in their room order, with species and gender." },
+    { id: "taste", tasting: true, args: ["fixture"], aliases: ["taste", "taste from", "sip from"], example: "taste cauldron; sip from soup pot; show taste; taste mixture", description: "Taste or sip from a visible cauldron for one normal story turn, using its actual soup/brew rules. A nearby unengaged hostile does not block tasting or dipping; active combat and other eligibility rules remain. Taste mixture uses the alchemy extraction bowl. Show taste lists current sources." },
     { id: "wake", args: ["target"], aliases: ["wake", "wake up", "awaken", "rouse"], example: "wake human; wake second dwarf; show sleepers", description: "Wake a visible sleeping NPC for one turn, with no stamina or roll. Search <npc> quietly checks their carried belongings: one stamina, one turn, Flexibility DC 12. Failure wakes them and can have theft consequences. Choose a discovered item by number; each take makes another quiet check. Show sleepers lists current targets." },
     { id: "talk", args: ["target"], aliases: ["talk", "talk to", "speak to"], example: "talk to dwarf; talk to second dwarf; talk to dwarf female", description: "Start talking to a visible NPC. Use a known name, species, gender, or ordinal. Ambiguous targets prompt for a number." },
     { id: "say", args: ["text"], aliases: ["say", "reply", "respond"], example: 'say "Where is the inn?"', description: 'Speak to the NPC you are talking with. Quote speech containing commands: say "go north and find the guard".' },
@@ -1673,6 +1674,8 @@ function parseTextCommand(input) {
     if (forging) return forging;
     const crafting = typeof parseTextCraftCommand === "function" ? parseTextCraftCommand(raw) : null;
     if (crafting) return crafting;
+    const taste = /^(?:taste(?:\s+from)?|sip\s+from)(?:\s+(.+))?$/i.exec(raw);
+    if (taste) return {verb:"taste",args:{fixture:textCommandUnquote(taste[1] || "")}};
     const reading = typeof parseTextReadingCommand === "function" ? parseTextReadingCommand(raw) : null;
     if (reading) return reading;
     const goods = typeof parseTextGoodsCommand === "function" ? parseTextGoodsCommand(raw) : null;
@@ -1757,7 +1760,7 @@ function validateTextAIPlan(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return !def.tasting && !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -2830,6 +2833,7 @@ function textModeSceneToken() {
     return "p" + textModeObjectGen(player) + ".m" + (player && player.moveSeq || 0) + ".c" + (combat && !combat.ended ? textModeObjectGen(combat) : 0);
 }
 function markTextModeUrgent(reason) {
+    if (typeof sleepTransition !== "undefined" && sleepTransition) sleepTransition.finish(true);
     if (!textModeOutputMeta.urgent) textModeOutputMeta.urgent = String(reason || "urgent");
 }
 function textModeFindSpeaker(name) {
@@ -2983,6 +2987,7 @@ function textModeInspectNPC(action) {
 
 function textModeHelpContent(topic, show) {
     let key = textCommandNormalize(topic).replace(/^(?:to|use)\s+/, "");
+    if (show && /^(taste|tasting)$/.test(key) && typeof textTastingShow === "function") return textTastingShow();
     if (show) { const sleepers = textSleepingNPCShow(key); if (sleepers) return sleepers; }
     if (show) { const tools = worldToolShow(key); if (tools) return tools; }
     if (show) { const objects = textWorldObjectShow(key); if (objects) return objects; }
@@ -3026,7 +3031,7 @@ function textModeHelpContent(topic, show) {
     if (entry) return textModeResult("completed", entry.description + "\nExamples: " + entry.example);
     if (key && !show) return textModeHelpContent(topic, true);
     if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
-    const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
+    const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "taste", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
         if (ids.indexOf(def.id) < 0 && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !/^(back|cancel)$/.test(def.id)) return false;
         if (def.social && !socialActionAvailable()) return false;
@@ -3067,6 +3072,7 @@ function textModeHelpContent(topic, show) {
             const interact = INTERACT_MENU_ACTIONS.find(function (entry) { return entry.id === def.interact; });
             if (!interact || !interact.visible(G.activeRoom) || interact.disabledReason(G.activeRoom)) return false;
         }
+        if (def.tasting) return typeof tastingSources === "function" && tastingSources().some(function (entry) { return !environmentSceneBlock(entry.fixture,true) && !getCauldronTasteBlockReason(entry.fixture,G.activeRoom); });
         if (def.id === "wake") return textModeVisibleNPCs().some(function (npc) { return isNPCSleeping(npc) && !sleepingNPCBlock(npc, "wake"); });
         if (/^(say|options|choose|leave)$/.test(def.id)) return !!G.activeNPC;
         if (def.id === "sleep") {
@@ -3216,6 +3222,7 @@ async function executeTextCommand(action) {
     if (def.shrine) return executeTextShrineCommand(action);
     if (def.structure && args.action) return executeTextStructuralTool(action);
     if (def.structure) return textStructuralShow("structure" + (args.target ? " " + args.target : ""));
+    if (def.tasting) return executeTextTaste(action);
     if (def.material) return executeTextMaterialCommand(action);
     if (def.environmental) return executeTextEnvironmentCommand(action);
     if (def.notice) return executeTextNoticeCommand(action);
@@ -3279,7 +3286,7 @@ async function executeTextCommand(action) {
         if (!entry || !entry.visible(G.activeRoom)) return textModeResult("blocked", "You cannot " + action.verb + " here.");
         const reason = entry.disabledReason(G.activeRoom);
         if (reason) return textModeResult("blocked", reason);
-        entry.run(G.activeRoom);
+        await entry.run(G.activeRoom);
         return { status: "completed" };
     }
     if (action.verb === "talk") {
@@ -3321,6 +3328,7 @@ async function executeTextCommand(action) {
     if (action.verb === "leave") {
         if (!G.activeNPC) return textModeResult("blocked", "You are already in the room view. Use a direction to move.");
         if (!/^(talk|respond|menu|trade)$/.test(G.activeNPCMode)) return textModeResult("blocked", "Finish the current interaction using its controls first.");
+        if (G.activeNPC.guide && typeof guidePartingDue === "function" && guidePartingDue(G.activeNPC) && speakGuideParting(G.activeNPC, "goodbye")) return {status:"completed"};
         disengageFromNPC();
         return { status: "completed" };
     }
@@ -3984,6 +3992,7 @@ async function executeTextInventoryCommand(action) {
     if (matches.length > 1) return textModeAsk(action, "item", matches, "Which item do you mean?");
     const entry = matches[0], item = entry.item, name = getItemName(item);
     const inCombat = textModeInCombat();
+    if (typeof isMapScrap === "function" && isMapScrap(item) && action.verb === "examine") return readPaperMap(item, "scrap", false);
     if (action.verb === "examine") {
         const scene = textModeScene();
         const epoch = textModeState.epoch;
@@ -4596,6 +4605,7 @@ function textFixtureActions(fixture) {
     if (FIXTURE_ORE_SOURCES[fixture.id]) add("scavenge", getScavengeBlockReason(fixture, room), function () { scavengeFixture(fixture); }, PROSPECT_STAMINA_COST + " stamina, 1 turn");
     if (MINING_ENABLED && MINING_SOURCES[fixture.id]) add("mine", getMiningBlockReason(fixture, room), function () { mineFixture(fixture); }, MINING_STAMINA_COST + " stamina, 1 turn; needs a pickaxe");
     if (isReadableFixture(fixture)) add("read", getReadBlockReason(fixture, room), function () { readFixture(fixture); }, "1 turn");
+    if (typeof isCauldronFixture === "function" && isCauldronFixture(fixture) && !isAlchemyTableFixture(fixture)) add("taste", getCauldronTasteBlockReason(fixture,room), function(){return tasteCauldron(fixture);}, "1 turn; nearby hostiles do not block this action");
     if (isDrinkableFixture(fixture)) {
         add("drink", getDrinkBlockReason(room), function () { drinkFromFixture(fixture); }, "1 turn");
         add("fill", getFillableEmptyEntries().length ? "" : "You need an empty carried bottle or vial.", null, "1 turn");
@@ -4637,6 +4647,7 @@ function textFixtureCommand(action, entry) {
 }
 
 function textFixtureDescribe(entry) {
+    if (entry.fixture.id === "district-map") return readPaperMap(entry.fixture, "district", false);
     const fixture = entry.fixture, actions = textFixtureActions(fixture);
     const baseDescription = getBoardFixtureDescription(fixture) || fixture.examineText || fixture.description || "You take a closer look at " + entry.label + ".";
     const stateLine = adjudicationStateLine(fixture), description = stateLine ? baseDescription + " " + stateLine : baseDescription;
@@ -4725,6 +4736,7 @@ async function executeTextExplorationCommand(action) {
     if (entries.length > 1) return textModeAsk(action, "fixture", entries, "Which fixture do you mean?");
     const entry = entries[0], fixture = entry.fixture;
     action.fixtureRef = entry;
+    if (fixture.id === "district-map" && /^(examine|read)$/.test(verb)) return readPaperMap(fixture, "district", verb === "read");
     if (isTrainingDummyFixture(fixture) && verb === "examine") return trainingDummyMenu(fixture);
     if (fixture.id === "commission-board" && /^(examine|read)$/.test(verb)) return openForgeCommissionBoard(fixture);
     if (fixture.id === "job-board" && /^(examine|read)$/.test(verb)) { openJobBoard(G.activeRoom); return { status: "needs_input" }; }
@@ -4772,7 +4784,7 @@ const sharedChoiceState = { menu: null, sequence: 0 };
 
 function choiceItemStamp(item) {
     if (Array.isArray(item)) return JSON.stringify(item.map(choiceItemStamp));
-    return item ? JSON.stringify([item.name, item.type, item.qualityName, item.slot, item.stowed, item.quantity, item.unitSize, item.hidden, item.isHidden, item.concealed, item.visible, item.ruined, item.unusable, item.damage, item.armor]) : "";
+    return item ? JSON.stringify([item.name, item.type, item.qualityName, item.slot, item.stowed, item.quantity, item.unitSize, item.hidden, item.isHidden, item.concealed, item.visible, item.ruined, item.unusable, item.damage, item.armor, item.paperMap]) : "";
 }
 
 function choiceArraySnapshot(list, visited) {
@@ -4809,7 +4821,7 @@ function beginSharedChoiceMenu(kind, npc, title, refresh) {
         valid: function () {
             if (!menu.ownsView()) return false;
             if (G.player !== player || G.activeRoom !== room || G.activeNPC !== activeNPC || G.activeNPCMode !== mode || !player || player.hp <= 0 || player.dead || player.unconscious || player._dying || player._collapsing || G.activeItemModal !== modal || G.activeObject !== object) return false;
-            if (G.activeNPCMode === "combat" || roomHasActiveHostile(room) && !/^nectar-/.test(kind) || isRoomCollapsed(room) && kind !== "structure-magic") return false;
+            if (G.activeNPCMode === "combat" || roomHasActiveHostile(room) && !/^nectar-/.test(kind) && kind !== "material-dip" && kind !== "craft-dip" || isRoomCollapsed(room) && kind !== "structure-magic") return false;
             if (!playerState() || !npcState() || (npc && ((room.creatures || []).indexOf(npc) < 0 || !isVisibleEntity(npc) || npc.dead || npc.hp <= 0 || npc.unconscious))) return false;
             if (partyMembers.length !== (G.partyMembers || []).length || partyMembers.some(function (member) { return (G.partyMembers || []).indexOf(member) < 0; }) || followers.length !== (G.sessionFollowers || []).length || followers.some(function (member) { return (G.sessionFollowers || []).indexOf(member) < 0; })) return false;
             if (/^loot/.test(kind)) {
@@ -5026,6 +5038,7 @@ function textSharedChoiceBlock() {
 
 function textSharedChoiceCanHandle(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && menu.kind === "paper-map" && action && /^(close|leave)$/.test(action.verb)) return true;
     if (action && /^(back|cancel)$/.test(action.verb)) return true;
     if (menu && /^goods-/.test(menu.kind) && action && action.verb === "leave") return true;
     if (action && action.verb === "options") return !!menu || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot();
@@ -5068,6 +5081,11 @@ async function textRunSharedChoice(menu, choice) {
 
 async function textSharedChoiceInput(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && menu.kind === "paper-map" && action && /^(close|leave)$/.test(action.verb)) {
+        const owned = G.player === menu.scene.player && G.activeRoom === menu.scene.room && G.activeItemModal === menu.scene.modal;
+        clearSharedChoiceMenu(menu); if (owned) closeItemModal();
+        textModeResult("completed", "You close the paper map.", {systemOnly:true}); return true;
+    }
     if (menu && menu.kind === "sleeping-search" && action && /^(leave|wake)$/.test(action.verb)) {
         if (!menu.valid()) { clearSharedChoiceMenu(menu); textModeResult("blocked", "That sleeping search changed. Search them again."); return true; }
         clearSharedChoiceMenu(menu); G.activeNPCMode = "menu";
@@ -5479,7 +5497,7 @@ function readableActionBlock() {
 }
 
 function readableItemStamp(item) {
-    return JSON.stringify([choiceItemStamp(item), item.type, item.spells, item.spellId, item.copyProgress, item.primerClass, item.poisonRecipeKey, item.deityId, item.description, item.generatedContent, item.generatedTopic, item.generatedDeityId]);
+    return JSON.stringify([choiceItemStamp(item), item.type, item.spells, item.spellId, item.copyProgress, item.primerClass, item.poisonRecipeKey, item.deityId, item.description, item.generatedContent, item.generatedTopic, item.generatedDeityId, item.paperMap]);
 }
 
 function captureReadableRequest(entry) {
@@ -5531,6 +5549,7 @@ async function runReadableItemAction(entry, id, ability) {
     if (activeReadableRequests.has(player)) return { status: "blocked", message: "Another reading or study action is still finishing." };
     const fresh = textInventoryFreshSelection(entry, "examine");
     if (!fresh || fresh.location !== "carried") return { status: "blocked", message: "That readable item moved, changed or became hidden. Select it again." };
+    if (typeof isMapScrap === "function" && isMapScrap(fresh.item) && id === "read") return readPaperMap(fresh.item, "scrap", true);
     const action = readableActions(fresh).find(function (candidate) { return candidate.id === id && candidate.ability === (ability || ""); });
     if (!action || action.reason) return { status: "blocked", message: action && action.reason || "That reading action is unavailable." };
     const context = captureReadableRequest(fresh), name = getItemName(fresh.item), turn = getCurrentStoryTurn();
@@ -5566,6 +5585,7 @@ function appendReadableInventoryActions(entry, parent) {
             try {
                 const result = await runReadableItemAction(ref, action.id, action.ability);
                 if (typed) { for (let index = 0; index < textModeState.capture.length; index++) await textModeState.capture[index]; }
+                if (result.outputPublished) return;
                 if (result.status !== "completed") { if (typed) textModeResult(result.status, result.message); else if (owner.sameScene() && G.player === actor) refreshInventoryUi(result.message); }
             } finally {
                 button.disabled = !!action.reason;
@@ -5662,17 +5682,17 @@ async function executeTextReadingCommand(action) {
 
 // Shared crafting presentation. Native handlers retain the actual game rules.
 let activeCraftWork = null, craftDraftScene = null;
-function craftSceneBlock() {
+function craftSceneBlock(allowHostiles) {
     const p=G.player,r=G.activeRoom;
     if(!p||!r||p.hp<=0||p.dead||p.unconscious||p._dying||p._collapsing) return "You cannot work at a table right now.";
     if(G.activeNPC||G.activeObject||G.activeItemModal||G.combatEncounter||G.activeNPCMode==="combat"||hasPendingPartyLoot()) return "Finish the current interaction or decision first.";
-    if(roomHasActiveHostile(r)||isRoomCollapsed(r)) return "It is too dangerous to work here.";
+    if(!allowHostiles&&roomHasActiveHostile(r)||isRoomCollapsed(r)) return "It is too dangerous to work here.";
     return "";
 }
 function craftTable() { return G.activeRoom&&Array.isArray(G.activeRoom.structural)&&G.activeRoom.structural.length?findAlchemyTableFixture(G.activeRoom):null; }
 function textCraftAvailable() { return !craftSceneBlock() && !!craftTable(); }
 function craftItemStamp(item) { return JSON.stringify([choiceItemStamp(item),item.id,item.herbKey,item.prepBase,item.prepMethod,item.poisonKey,item.poisonRecipeKey,item.poison,item.poisonHits,item.mixture,item.liquid,item.statusKey,item.stackKey]); }
-function captureCraftState(work) {
+function captureCraftState(work, allowHostiles) {
     const player=G.player,room=G.activeRoom,mode=G.activeNPCMode,fixture=craftTable(),structural=room.structural;
     const state=ensureAlchemyState(player),known=ensurePoisonKnowledge(player),inventory=choiceEntitySnapshot(player);
     const mixLog=state.mixLog,designs=Object.keys(mixLog).map(function(sig){return {sig:sig,design:mixLog[sig],stamp:JSON.stringify(mixLog[sig])};});
@@ -5681,7 +5701,7 @@ function captureCraftState(work) {
     const bowl=fixture&&fixture.bowl, bowlStamp=JSON.stringify(bowl||null),rack=fixture&&fixture.vialRack,rackStamp=JSON.stringify(rack||null);
     const turn=getCurrentStoryTurn(),queue=JSON.stringify(alchemyQueue),log=JSON.stringify(state.mixLog);
     return function(){
-        if(G.player!==player||G.activeRoom!==room||G.activeNPCMode!==mode||craftSceneBlock()||room.structural!==structural||craftTable()!==fixture||player.alchemy!==state||player.knownPoisons!==known||state.mixLog!==mixLog||!inventory())return false;
+        if(G.player!==player||G.activeRoom!==room||G.activeNPCMode!==mode||craftSceneBlock(allowHostiles)||room.structural!==structural||craftTable()!==fixture||player.alchemy!==state||player.knownPoisons!==known||state.mixLog!==mixLog||!inventory())return false;
         if(designs.some(function(e){return mixLog[e.sig]!==e.design||JSON.stringify(e.design)!==e.stamp;}))return false;
         if(items.some(function(e){return craftItemStamp(e.item)!==e.stamp;})||JSON.stringify([player.classSkills,player.classBranches,state.skill,state.known,known])!==training)return false;
         if(fixture&&(fixture.bowl!==bowl||JSON.stringify(bowl||null)!==bowlStamp))return false;
@@ -5692,7 +5712,7 @@ function beginCraftMenu(kind,title,refresh) {
     const menu=beginSharedChoiceMenu("craft-"+kind,null,title,refresh),valid=menu.valid;
     menu.valid=function(){return valid()&&menu.craftGuard&&menu.craftGuard();};return menu;
 }
-function publishCraftMenu(menu,el) { menu.craftGuard=captureCraftState(false);publishSharedChoiceMenu(menu,el); }
+function publishCraftMenu(menu,el) { menu.craftGuard=captureCraftState(false, menu.kind === "craft-dip");publishSharedChoiceMenu(menu,el); }
 function craftIntent(fn,action,name,key) { fn.craft={action:action,name:name||"",key:key||""};return fn; }
 function createCraftButton(menu,label,run,opts) { return createSharedChoiceButton(menu,label,run,Object.assign({},opts||{},{textChoice:run.craft||{}})); }
 function claimCraftDraft() {
@@ -5700,13 +5720,13 @@ function claimCraftDraft() {
     if(!craftDraftScene||craftDraftScene.player!==G.player||craftDraftScene.room!==G.activeRoom||craftDraftScene.table!==table||craftDraftScene.list!==G.activeRoom.structural) alchemyQueue=[];
     craftDraftScene={player:G.player,room:G.activeRoom,table:table,list:G.activeRoom.structural};
 }
-function captureCraftWork() {
+function captureCraftWork(allowHostiles) {
     const player=G.player,room=G.activeRoom,fixture=craftTable(),mode=G.activeNPCMode;
-    let guard=captureCraftState(true);
+    let guard=captureCraftState(true, allowHostiles);
     const work={player:player,room:room,fixture:fixture,
         sameScene:function(){return G.player===player&&G.activeRoom===room&&G.activeNPCMode===mode;},
         valid:function(){return activeCraftWork===work&&guard()&&(!fixture||!fixture.bowl||!fixture.bowl.doses||getAlchemyBowl(fixture)===fixture.bowl);},
-        commitCosts:function(){guard=captureCraftState(true);}
+        commitCosts:function(){guard=captureCraftState(true, allowHostiles);}
     };
     activeCraftWork=work;return work;
 }
@@ -5725,6 +5745,7 @@ function releaseStaleCraftWork() {
 }
 function runCraftBowlAction(fixture,fn) {
     const result=fn();if(result&&result.status)return result;
+    if (roomHasActiveHostile(G.activeRoom)) return {status:"completed"};
     openAlchemyMenu(__lastAlchemyNarration());return {status:"needs_input"};
 }
 function getCraftAlchemyTurns(stepCount,prepped) { return Math.max(3,stepCount)+prepped*ALCHEMY_PREP_TURNS; }
@@ -5776,9 +5797,9 @@ function quoteCraft(kind,data) {
     return {status:"needs_input"};
 }
 function openCraftDipMenu(fixture,message) {
-    if(craftSceneBlock()||fixture!==craftTable())return sharedChoiceResult("blocked","That bowl is unavailable.");
+    if(craftSceneBlock(true)||fixture!==craftTable())return sharedChoiceResult("blocked","That bowl is unavailable.");
     const menu=beginCraftMenu("dip","Dip an item in the extraction bowl",function(){openCraftDipMenu(fixture);}),el=document.getElementById("chatOptionsEl");el.innerHTML="";
-    getDippableEntries().filter(function(e){return isLootItemVisible(e.item);}).forEach(function(entry){el.appendChild(createSharedChoiceButton(menu,getItemName(entry.item),function(){return dipItemInAlchemyBowl(fixture,entry.key);},{disabled:!!getAlchemyBowlBlockReason(fixture),textChoice:{action:"dip",name:getItemName(entry.item)}}));});
+    getDippableEntries().filter(function(e){return isLootItemVisible(e.item);}).forEach(function(entry){el.appendChild(createSharedChoiceButton(menu,getItemName(entry.item),function(){return dipItemInAlchemyBowl(fixture,entry.key);},{disabled:!!getAlchemyBowlBlockReason(fixture, undefined, true),textChoice:{action:"dip",name:getItemName(entry.item)}}));});
     el.appendChild(createSharedChoiceButton(menu,"Back",function(){openAlchemyMenu();},{textChoice:{action:"back"}}));
     if(message)setNarration(message);publishCraftMenu(menu,el);
 }
@@ -5882,7 +5903,13 @@ async function routeCraftIntent(action,foreground) {
         openCraftDipMenu(craftTable());return target?chooseCraftIntent(sharedChoiceState.menu,"dip",target,foreground):{status:"needs_input"};
     }
     if(verb==="coat"){openPoisonMenu();return chooseCraftIntent(sharedChoiceState.menu,"coat",target,foreground);}
-    if(/^(bottle|taste|dab|drink|discard)$/.test(verb)){
+    if (/^(taste|drink)$/.test(verb)) {
+        const result = verb === "taste" ? probeAlchemyBowl(craftTable(), "taste") : drinkFromAlchemyBowl(craftTable());
+        if (result && result.status) return result;
+        if (roomHasActiveHostile(G.activeRoom)) return {status:"completed"};
+        openAlchemyMenu(); return {status:"needs_input"};
+    }
+    if(/^(bottle|dab|discard)$/.test(verb)){
         openAlchemyMenu();return chooseCraftIntent(sharedChoiceState.menu,verb,"",foreground);
     }
     if(verb==="menu"){openAlchemyMenu();return {status:"needs_input"};}
@@ -5899,7 +5926,7 @@ async function textCraftMenuInput(menu,action) {
     }finally{textModeState.capture=null;textModeState.busy=false;renderTextModeStatus();focusTextModeInput();}
 }
 async function executeTextCraftCommand(action) {
-    releaseStaleCraftWork();const reason=craftSceneBlock();if(reason)return textModeResult("blocked",reason);
+    releaseStaleCraftWork();const reason=craftSceneBlock(/^(taste|drink|dip)$/.test(action.args && action.args.action || ""));if(reason)return textModeResult("blocked",reason);
     if(!craftTable()&&!/^(poisons|coat)$/.test(action.args.action||""))return textModeResult("blocked","You need a visible alchemy table here.");
     const result=await routeCraftIntent(action,false);
     return result.status==="completed"&&sharedChoiceState.menu?{status:"needs_input"}:result;
@@ -7416,14 +7443,14 @@ async function executeTextNoticeCommand(action) {
 
 // Environmental input adapters. Consequences remain in the native handlers.
 let environmentExecution = null;
-function environmentSceneBlock(target) {
+function environmentSceneBlock(target, allowHostiles) {
     const p = G.player, r = G.activeRoom;
     if (!p || !r || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot act while incapacitated.";
     if (G.activeNPC || G.activeObject || G.activeNPCMode) return "Finish the current interaction before working with the environment.";
     if (G.activeItemModal && G.activeItemModal !== target) return "Close the current item window first.";
     if (isPlayerJailed()) return "You cannot do that while jailed.";
     if (isRoomCollapsed(r)) return "Everything here is buried under rubble.";
-    if (roomHasActiveHostile(r)) return "Too dangerous right now.";
+    if (!allowHostiles && roomHasActiveHostile(r)) return "Too dangerous right now.";
     if (hasPendingPartyLoot()) return "Resolve the party's loot decision first.";
     return "";
 }
@@ -7698,7 +7725,7 @@ function materialItems(verb) {
     });
 }
 function materialBlock(verb, fixture) {
-    const reason = environmentSceneBlock(fixture) || (G.combatEncounter ? "Finish the current encounter first." : "");
+    const reason = environmentSceneBlock(fixture, verb === "dip") || (G.combatEncounter ? "Finish the current encounter first." : "");
     if (reason) return reason;
     if (fixture && !materialFixtures(verb).some(function (entry) { return entry.fixture === fixture; })) return "That source moved, disappeared or became hidden.";
     if (fixture && (fixture.burntOut || fixture.durability && fixture.durability.hp <= 0)) return "That source is destroyed.";
@@ -7708,7 +7735,7 @@ function materialItemStamp(item) {
     return JSON.stringify([choiceItemStamp(item), item && item.id, item && item._uid, item && item.stackKey, item && item.container,
         item && item.durability, item && item.grime, item && item.poison, item && item.poisonHits, item && item.statusKey]);
 }
-function materialGuard(fixture, entry, timed) {
+function materialGuard(fixture, entry, timed, verb) {
     const player = G.player, room = G.activeRoom, inventory = player.inventory, equipped = player.equipped, rucksack = player.rucksack;
     const npc = G.activeNPC, mode = G.activeNPCMode, object = G.activeObject, modal = G.activeItemModal, list = room.structural;
     const entity = choiceEntitySnapshot(player), turn = getCurrentStoryTurn(), stamp = fixture && JSON.stringify(fixture);
@@ -7718,7 +7745,7 @@ function materialGuard(fixture, entry, timed) {
     return function () {
         return G.player === player && G.activeRoom === room && G.activeNPC === npc && G.activeNPCMode === mode && G.activeObject === object &&
             G.activeItemModal === modal && room.structural === list && player.inventory === inventory && player.equipped === equipped && player.rucksack === rucksack &&
-            !environmentSceneBlock(fixture) && !G.combatEncounter &&
+            !environmentSceneBlock(fixture, verb === "dip") && !G.combatEncounter &&
             (!fixture || list.indexOf(fixture) >= 0 && getVisibleRoomFixtures(room).indexOf(fixture) >= 0 && JSON.stringify(fixture) === stamp) &&
             entity() && items.every(function (item, index) { return materialItemStamp(item) === stamps[index]; }) &&
             (!entry || items.indexOf(entry.item) >= 0) &&
@@ -7726,7 +7753,7 @@ function materialGuard(fixture, entry, timed) {
     };
 }
 function materialCheckpoint() {
-    if (materialExecution) materialExecution.afterTurn = materialGuard(materialExecution.fixture, null, false);
+    if (materialExecution) materialExecution.afterTurn = materialGuard(materialExecution.fixture, null, false, materialExecution.verb);
 }
 function materialCurrent() {
     return !materialExecution || !materialExecution.afterTurn || materialExecution.afterTurn();
@@ -7760,7 +7787,7 @@ function runMaterialAction(verb, fixture, key) {
     } finally { materialExecution = previous; }
     const turns = getCurrentStoryTurn() - turn;
     const interrupted = ctx.interrupted || result && result.status === "interrupted" || G.player !== player || G.activeRoom !== room ||
-        player.dead || player.hp <= 0 || player.unconscious || roomHasActiveHostile(room) || hasPendingPartyLoot() || G.activeNPC || G.activeNPCMode;
+        player.dead || player.hp <= 0 || player.unconscious || verb !== "dip" && roomHasActiveHostile(room) || hasPendingPartyLoot() || G.activeNPC || G.activeNPCMode;
     if (interrupted) {
         const message = "The situation changed. Spent time and items already used are kept; later effects and commands are paused.";
         publishTextModeOutput("material", message, { material: materialPublic(verb, fixture, entry, "interrupted", turns) });
@@ -7795,7 +7822,7 @@ function openMaterialMenu(verb, fixture, selected, message) {
     const card = createNoticeWindow(fixture, verb === "burn" ? "Burn an item" : "Dip an item", (message ? message + "\n" : "") + description);
     if (!card) return sharedChoiceResult("blocked", "The item controls are unavailable.");
     const menu = beginSharedChoiceMenu("material-" + (entry ? "confirm" : verb), null, description, function () { return openMaterialMenu(verb, fixture); });
-    const valid = menu.valid, guard = materialGuard(fixture, entry, true);
+    const valid = menu.valid, guard = materialGuard(fixture, entry, true, verb);
     menu.verb = verb; menu.fixture = fixture; menu.selected = entry; menu.preserveView = !card.root;
     menu.valid = function () { return valid() && guard() && !materialBlock(verb, fixture); };
     const button = function (label, run, action, item) {
@@ -7867,7 +7894,7 @@ function executeTextMaterialCommand(action) {
             args.fixture ? textLootMatch(args.fixture, materialFixtures(verb), function (entry) { return entry.label; }) : materialFixtures(verb);
         if (!sources.length) return textModeResult("blocked", "No matching visible source. Type show " + verb + " for available items and sources.");
         if (sources.length > 1) {
-            action.materialGuard = materialGuard(null, null, true);
+            action.materialGuard = materialGuard(null, null, true, verb);
             return textModeAsk(action, "materialFixture", sources, "Which source?");
         }
         action.materialFixture = sources[0]; fixture = sources[0].fixture;
@@ -7878,7 +7905,7 @@ function executeTextMaterialCommand(action) {
     if (!entries.length) return textModeResult("blocked", "No matching eligible carried item. Type show " + verb + ". Take floor items first; dipping requires a single item or wielded weapon.");
     if (!args.item && verb !== "pour") return openMaterialMenu(verb, fixture);
     if (entries.length > 1) {
-        action.materialGuard = materialGuard(fixture, null, true);
+        action.materialGuard = materialGuard(fixture, null, true, verb);
         return textModeAsk(action, "materialItem", entries, "Which item?");
     }
     return verb === "burn" ? openMaterialMenu(verb, fixture, entries[0]) : runMaterialAction(verb, fixture, entries[0].key);
@@ -8841,9 +8868,10 @@ function reviewMerchantJunk(npc) {
     return {status:"needs_input"};
 }
 function merchantQuestionEntries(npc, target) {
-    let query=String(target||""),sides=["buy","sell"];
+    let query=String(target||""),sides=["buy"];
     const scope=/^(stock|shop|wares|carried|inventory|my)\s+(.+)$/i.exec(query);
     if(scope){sides=[/^(stock|shop|wares)$/i.test(scope[1])?"buy":"sell"];query=scope[2];}
+    if (sides.includes("sell")) return [];
     const entries=sides.reduce(function(all,side){return all.concat(textTradeGroups(npc,side).map(function(entry){entry.label=(side==="buy"?"Stock: ":"Carried: ")+entry.label;return entry;}));},[]);
     return query?textTradeMatchGroups(query,entries):entries;
 }
@@ -10495,7 +10523,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-22-010
+// Core Engine Version: 2026-10-22-011
 // Latest: SFW privacy/tolerance hook and metadata audits; shared sleep spots for native/text sleep, job nights, Rest and independent NPC lodging; established partners prefer to share.
 // Previous: Independent NPC travel parties: formation/load repair, shared movement, combat support, public descriptions/dialogue and autonomous healing. Recruiting one leaves the others together.
 // Previous: Sleeping spots: Sleep now asks where (bed, cot or floor; floor works anywhere). A bed holds up to 3 and a cot 2; the more share one the less each recovers (x0.8 for two, x0.6 for three, and a full bed no longer gives the well-rested buff). Companions take the places that give the party the most rest (empty beds, empty cots, doubling up, floor last) and the night is narrated.
@@ -10562,7 +10590,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-22-010";
+window.__ENGINE_CORE_VERSION = "2026-10-22-011";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -17129,11 +17157,25 @@ function queueGuideReply(npc, beatId, beat, playerLine, onSpoken) {
             if (typeof rememberNPCConversationLine === "function") rememberNPCConversationLine(npc, "npc", lines.join(" "), "talk");
             spoken = true;
             playGuideGreeting(npc, lines, function () {
-                if (!current()) return;
+                if (!current()) { pending.finish("interrupted"); return; }
+                if (beat.endConversation) {
+                    setTimeout(function () {
+                        if (!current()) { pending.finish("interrupted"); return; }
+                        if (typeof advanceNPCAffectTime === "function") advanceNPCAffectTime(1);
+                        if (typeof advanceStoryTurn === "function") advanceStoryTurn(1);
+                        if (!current()) { pending.finish("interrupted"); return; }
+                        const farewell = { id: "goodbye", action: "disengage", intent: "goodbye", relationshipImpact: { mood: 0, favor: 1, intent: "goodbye", markMet: true, actionTag: "goodbye" } };
+                        if (typeof recordNPCConversationChoice === "function") recordNPCConversationChoice(npc, farewell);
+                        if (typeof applyNPCImpact === "function" && typeof classifyConversationChoice === "function") applyNPCImpact(npc, classifyConversationChoice(npc, farewell));
+                        pending.finish("completed");
+                        disengageFromNPC("You leave the guide with their advice in mind.");
+                    }, GUIDE_TURN_PAUSE_MS);
+                    return;
+                }
                 if (typeof setChatOptionsDisabled === "function") setChatOptionsDisabled(false);
                 renderChatOptions(npc);
                 saveGameState();
-            }, current, function (status) { pending.finish(status); });
+            }, current, function (status) { if (status !== "completed" || !beat.endConversation) pending.finish(status); });
         };
         Promise.resolve(phrased).then(deliver, function () { deliver((beat.lines || []).filter(Boolean)); });
     }, delay);
@@ -17516,7 +17558,7 @@ function speakGuideParting(npc, kind) {
     addChatMessage("player", "You", playerLine, { mode: "narration", animate: true });
     if (npc.memory) npc.memory.pendingResponse = null;
     G.activeNPCMode = "talk";
-    queueGuideReply(npc, "parting", beat, playerLine);
+    queueGuideReply(npc, "parting", Object.assign({}, beat, { endConversation: true }), playerLine);
     return true;
 }
 
@@ -25024,6 +25066,7 @@ function sleepThroughNight(spot) {
     if (!job || job.state !== "dayDone" || block) { if (block) setNarration(block); return; }
     const player = G.player;
     const room = G.activeRoom;
+    const transition = typeof beginSleepTransition === "function" ? beginSleepTransition("job-sleep") : null;
     const plan = assignSleepSpots(room, spot);
     const arrangement = describeSleepArrangement(plan);
     let slept = 0;
@@ -25035,6 +25078,7 @@ function sleepThroughNight(spot) {
         for (let i = 0; i < JOB_NIGHT_TURNS; i++) {
             advanceStoryTurn(1);
             slept++;
+            if (transition) recordSleepTransition(transition);
             if (!recoverySceneAvailable(player, room, plan) || getActiveJob() !== job || job.state !== "dayDone") { interrupted = true; break; }
             if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
             if (roomHasActiveHostile(room) || !recoverySceneAvailable(player, room, plan)) { interrupted = true; break; }
@@ -25044,7 +25088,7 @@ function sleepThroughNight(spot) {
         if (activeRecoveryPlans.get(room) && activeRecoveryPlans.get(room).plan === plan) activeRecoveryPlans.delete(room);
     }
     const share = slept / JOB_NIGHT_TURNS;
-    if (G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0 || getActiveJob() !== job) { publishRestPlan("interrupted", "job-sleep", plan, slept); return; }
+    if (G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0 || getActiveJob() !== job) { publishRestPlan("interrupted", "job-sleep", plan, slept); if (transition) finishSleepTransition(transition, true); return; }
     const nightBed = plan.qualityOf(player);
     const restFactor = plan.restFactorOf(player);
     const jobWoundFactor = getWoundHealFactor(player);
@@ -25061,6 +25105,7 @@ function sleepThroughNight(spot) {
     if (interrupted) {
         setNarration("Your sleep is cut short by something dangerous arriving!");
         renderJobMenu();
+        if (transition) finishSleepTransition(transition, true);
         if (typeof triggerRoomAmbush === "function") triggerRoomAmbush(room);
         saveGameState();
         return;
@@ -25070,8 +25115,9 @@ function sleepThroughNight(spot) {
     const nightLift = markProperSleep(player);
     const nightBuff = applyBedRestBonus(player, nightBed);
     renderJobMenu();
-    setNarration(arrangement + " You sleep through the night and wake rested (+" + (player.hp - before) + " HP)." + (nightLift ? " " + nightLift : "") + (nightBuff ? " " + nightBuff : "") + " A new day begins. Carry on, or take your pay and go? " + describeJobStatus(job));
+    setNarration(arrangement + " You sleep" + (transition ? " from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : " through the night") + " and wake rested (+" + (player.hp - before) + " HP)." + (nightLift ? " " + nightLift : "") + (nightBuff ? " " + nightBuff : "") + " A new day begins. Carry on, or take your pay and go? " + describeJobStatus(job));
     saveGameState();
+    return transition ? finishSleepTransition(transition, false) : undefined;
 }
 
 // ── notice boards ────────────────────────────────────────────────
@@ -33853,6 +33899,7 @@ function cloneItemForStackAmount(item, quantity) {
 
 function getInventoryStackKey(item) {
     if (!item || typeof item !== "object") return "";
+    if (/^scrap-map(?:-|$)/i.test(String(item.id || ""))) { assignLootUID(item); return "map-scrap:" + item._uid; }
     if (item.physicalDefinition && item._uid) return "world-object:" + item._uid;
     // Containers and pocketed garments keep their own identity and contents.
     if (isCarryContainerItem(item)) return "container:" + ensureContainerKey(item);
@@ -40956,6 +41003,8 @@ function syncPortalChamberWaygates(room) {
     room.structural = room.structural.filter(function (f) {
         if (!isTownReturnWaygate(f)) return true;
         if (wanted[f.portalTargetTier] && !have[f.portalTargetTier]) {
+            const label = "waygate back to " + getPortalTownLabel(f.portalTargetTier) + " (free)";
+            if (f.name !== label || f.alwaysShow !== true) { f.name = label; f.alwaysShow = true; changed = true; }
             have[f.portalTargetTier] = true;
             return true;
         }
@@ -40968,7 +41017,7 @@ function syncPortalChamberWaygates(room) {
         const label = getPortalTownLabel(t);
         room.structural.push({
             id: "town-portal-return-" + t,
-            name: "waygate back to " + label,
+            name: "waygate back to " + label + " (free)",
             tags: ["landmark", "portal", "portal-return"],
             alwaysShow: true,
             portalTargetTier: t,
@@ -49315,6 +49364,7 @@ function renderDuplicateItemPicker(npc) {
 // Different values stay separate rows because value is part of the key.
 function getTradeStackKey(item) {
     if (!item || typeof item !== "object") return "";
+    if (item && /^scrap-map(?:-|$)/i.test(String(item.id || ""))) { assignLootUID(item); return "map-scrap:" + item._uid; }
     return [
         getInventoryStackKey(item),
         item.hiddenTrait ? (item.hiddenTrait.label || item.hiddenTrait.key || "trait") + (item.hiddenTraitRevealed ? "+" : "") : "",
@@ -49409,7 +49459,7 @@ function createTradeItemRow(options) {
     };
     row.appendChild(examineBtn);
 
-    if (options.npc) {
+    if (options.npc && options.side === "buy") {
         const askBtn = document.createElement("button");
         askBtn.className = "chat-option-btn trade-option-btn";
         askBtn.textContent = "Ask";
@@ -49558,6 +49608,7 @@ function renderTradeOptions(npc) {
             item,
             npc,
             label: `${labelWithCount(getItemName(item), item.infinite ? 1 : group.count)} (${price}g)${item.infinite ? " [always in stock]" : ""}`,
+            side: "buy",
             actionLabel: "Buy",
             actionDisabled: !hasEnoughCoins(G.player, price),
             onAction: () => buyTradeItem(npc, item),
@@ -49575,6 +49626,7 @@ function renderTradeOptions(npc) {
             item,
             npc,
             label: `${labelWithCount(getItemName(item), group.count)} (${price}g)`,
+            side: "sell",
             actionLabel: "Sell",
             actionBlockReason: saleBlock,
             actionDisabled: !hasEnoughCoins(npc, price),
@@ -52125,6 +52177,7 @@ function removeTypingIndicator() {
 function renderRoom() {
     const room = G.activeRoom;
     if (!room) return;
+    if (room.type === "Portal Chamber" && typeof syncPortalChamberWaygates === "function") syncPortalChamberWaygates(room);
     if (typeof ensureUndergroundStairRoutes === "function") ensureUndergroundStairRoutes();
     if (typeof ensureRoomImage === "function") ensureRoomImage(room);
     if (typeof ensureShopNamesForRoomMap === "function") ensureShopNamesForRoomMap(G.roomMap);
@@ -52794,8 +52847,10 @@ function renderSleepSpotMenu(mode) {
         choices.push({ surface: type, healthPercent: ratio, arrangement: preview, spots: publicRestPlan(plan) });
         buttons.push(makeButton(labels[type], function () {
             if (menu) clearSharedChoiceMenu(menu);
-            if (mode === "job") sleepThroughNight(type); else { closeInteractMenu(); performSleep(type); }
-            return { status: mode === "job" ? "needs_input" : "completed", outputPublished: true };
+            let transition;
+            if (mode === "job") transition = sleepThroughNight(type); else { closeInteractMenu(); transition = performSleep(type); }
+            const result = { status: mode === "job" ? "needs_input" : "completed", outputPublished: true };
+            return transition && typeof transition.then === "function" ? transition.then(function () { return result; }) : result;
         }, { title: preview + " Restores up to " + ratio + " percent of your maximum health before wound penalties. Sharing reduces stamina and mana recovery too.", textChoice: { action: "sleep", surface: type } }));
     });
     appendCombatGroup(el, title, buttons);
@@ -52882,7 +52937,7 @@ function openSleepSpotMenu(mode) {
     const block = getSleepActionBlock(mode, room);
     if (block) { setNarration(block); return; }
     const counts = getSleepSpotCounts(room);
-    if (!counts.bed && !counts.cot) { if (mode === "job") sleepThroughNight("floor"); else { closeInteractMenu(); performSleep("floor"); } return; }
+    if (!counts.bed && !counts.cot) { if (mode === "job") return sleepThroughNight("floor"); closeInteractMenu(); return performSleep("floor"); }
     clearChatLog();
     setExitGridVisible(false);
     renderSleepSpotMenu(mode);
@@ -52895,6 +52950,7 @@ function performSleep(spot) {
     const block = getSleepBlockReason(room);
     if (block) { setNarration(block); return; }
 
+    const transition = typeof beginSleepTransition === "function" ? beginSleepTransition("sleep") : null;
     const plan = assignSleepSpots(room, spot);
     const quality = plan.qualityOf(player);
     const arrangement = describeSleepArrangement(plan);
@@ -52908,6 +52964,7 @@ function performSleep(spot) {
         for (let i = 0; i < SLEEP_TURNS; i++) {
             advanceStoryTurn(1);
             slept++;
+            if (transition) recordSleepTransition(transition);
             if (!recoverySceneAvailable(player, room, plan)) { interrupted = true; break; }
             if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
             if (roomHasActiveHostile(room) || !recoverySceneAvailable(player, room, plan)) { interrupted = true; break; }
@@ -52916,7 +52973,7 @@ function performSleep(spot) {
         f.sleeping = false;
         if (activeRecoveryPlans.get(room) && activeRecoveryPlans.get(room).plan === plan) activeRecoveryPlans.delete(room);
     }
-    if (G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0) { publishRestPlan("interrupted", "sleep", plan, slept); return; }
+    if (G.player !== player || G.activeRoom !== room || player.dead || player.hp <= 0) { publishRestPlan("interrupted", "sleep", plan, slept); if (transition) finishSleepTransition(transition, true); return; }
     const share = slept / SLEEP_TURNS;
     const restFactor = plan.restFactorOf(player);
 
@@ -52942,6 +52999,7 @@ function performSleep(spot) {
     if (interrupted) {
         setNarration("Your sleep is cut short by something dangerous arriving!");
         renderInteractSidePanels();
+        if (transition) finishSleepTransition(transition, true);
         if (typeof triggerRoomAmbush === "function") triggerRoomAmbush(room);
         saveGameState();
         return;
@@ -52949,7 +53007,7 @@ function performSleep(spot) {
     const buff = applyBedRestBonus(player, quality);
     const gained = player.hp - hpBefore;
     const partyNote = getRestingPartyMembers(room).length ? " Your companions sleep and recover alongside you." : "";
-    const base = arrangement + " You sleep through the night" +
+    const base = arrangement + " You sleep" + (transition ? " from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : " through the night") +
         (gained > 0 ? " and wake restored (+" + gained + " HP)." : " and wake rested.");
     renderNarrationWithRoomObservations(room, base + partyNote + (lifted ? " " + lifted : "") + (buff ? " " + buff : "") +
         (partyWoke.length ? " " + partyWoke.join(" ") : "") +
@@ -52958,6 +53016,7 @@ function performSleep(spot) {
     scheduleGuideArrival();
     schedulePressureEvent();
     saveGameState();
+    return transition ? finishSleepTransition(transition, false) : undefined;
 }
 
 // ── WOUNDS, TREATMENT AND INFECTION ──────────────────────────────
@@ -60429,7 +60488,7 @@ const INTERACT_MENU_ACTIONS = [
         visible: function (room) { return !!room; },
         disabledReason: function (room) { return getSleepBlockReason(room); },
         title: "Sleep through the night on a bed, a cot or the floor. Clears weariness from going without sleep; beds and not sharing recover the most.",
-        run: function () { openSleepSpotMenu(); }
+        run: function () { return openSleepSpotMenu(); }
     },
     {
         id: "tend",
@@ -63601,18 +63660,19 @@ function describeAlchemyBowl(fixture) {
     return "Bowl: empty";
 }
 
-function getAlchemyBowlBlockReason(fixture, needsDose) {
+function getAlchemyBowlBlockReason(fixture, needsDose, allowHostiles) {
+    if (G.combatEncounter || G.activeNPCMode === "combat") return "Finish the current fight first.";
     if (!G.player || !fixture) return "There is no bowl here.";
-    if (G.activeRoom && roomHasActiveHostile(G.activeRoom)) return "Too dangerous right now.";
+    if (!allowHostiles && G.activeRoom && roomHasActiveHostile(G.activeRoom)) return "Too dangerous right now.";
     if (needsDose !== false && !getAlchemyBowl(fixture)) return "The extraction bowl is empty.";
     return "";
 }
 
 function drinkFromAlchemyBowl(fixture) {
-    const block = getAlchemyBowlBlockReason(fixture);
+    const block = getAlchemyBowlBlockReason(fixture, undefined, true);
     if (block) { setNarration(block); return; }
     const bowl = getAlchemyBowl(fixture);
-    const work = captureCraftWork();
+    const work = captureCraftWork(true);
     advanceStoryTurn(1);
     if (!work.valid()) return interruptCraftWork(work);
     bowl.doses -= 1;
@@ -63656,13 +63716,13 @@ function collectFromAlchemyBowl(fixture) {
 // and never teaches the recipe outright. It tells you the sense (skin or taste) and, for the skin test,
 // a very small taste of the effect.
 function probeAlchemyBowl(fixture, mode) {
-    const block = getAlchemyBowlBlockReason(fixture);
+    const block = getAlchemyBowlBlockReason(fixture, undefined, mode === "taste");
     if (block) { setNarration(block); return; }
     const bowl = getAlchemyBowl(fixture);
     const a = ensureAlchemyState(G.player);
     const design = a.mixLog[bowl.sig] || { kind: bowl.kind, element: bowl.element || "", name: bowl.name || "Strange mixture" };
     const senses = getDesignSenses(design);
-    const work = captureCraftWork();
+    const work = captureCraftWork(mode === "taste");
     advanceStoryTurn(1);
     if (!work.valid()) return interruptCraftWork(work);
     let text;
@@ -63707,13 +63767,15 @@ function pourOutAlchemyBowl(fixture) {
 }
 
 function getAlchemyDipBlockReason(fixture) {
-    const block = getAlchemyBowlBlockReason(fixture);
+    const block = getAlchemyBowlBlockReason(fixture, undefined, true);
     if (block) return block;
     if (!getDippableEntries().length) return "You have nothing to dip.";
     return "";
 }
 
 function dipItemInAlchemyBowl(fixture, stackKey) {
+    const reason = getAlchemyDipBlockReason(fixture);
+    if (reason || craftSceneBlock(true)) return sharedChoiceResult("blocked", reason || craftSceneBlock(true));
     const player = G.player;
     const bowl = getAlchemyBowl(fixture);
     const entry = getDippableEntries().find(function (e) { return e.key === stackKey; });
@@ -63724,7 +63786,7 @@ function dipItemInAlchemyBowl(fixture, stackKey) {
     const design = a.mixLog[bowl.sig];
     const kind = bowl.botched ? "nothing" : bowl.kind;
     const mag = Math.max(1, Math.min(ALCHEMY_MAX_MAGNITUDE, bowl.magnitude || 1));
-    const work = captureCraftWork();
+    const work = captureCraftWork(true);
     advanceStoryTurn(1);
     if (!work.valid()) return interruptCraftWork(work);
     let message = "";
@@ -66123,6 +66185,7 @@ const FIXTURE_MARKER_LINES = [
 ];
 
 const FIXTURE_READ_RULES = {
+    "district-map": { kind: "map" },
     "notice-board":  { kind: "rumor" },
     "notice-post":   { kind: "rumor" },
     "faded-mural":   { kind: "lore", dc: 0,  deities: ["guardian", "titan", "healer"] },
@@ -66504,6 +66567,7 @@ function readFixture(fixture) {
 }
 
 function readFixtureInner(fixture) {
+    if (fixture && fixture.id === "district-map") return readPaperMap(fixture, "district", true);
     const room = G.activeRoom;
     const player = G.player;
     const rule = fixture && FIXTURE_READ_RULES[fixture.id];
@@ -66734,7 +66798,7 @@ function getCauldronContentsNote(fixture, room) {
 }
 
 function getCauldronTasteBlockReason(fixture, room) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
+    if (G.combatEncounter || G.activeNPCMode === "combat") return "Finish the current fight first.";
     if (isSoupCauldron(fixture, room)) {
         const player = G.player;
         const soup = getCauldronSoup(fixture);
@@ -66753,7 +66817,12 @@ function tasteCauldron(fixture) {
     const player = G.player;
     const room = G.activeRoom;
     if (!player || !fixture || !room) return;
+    const block = environmentSceneBlock(fixture, true) || (G.combatEncounter ? "Finish the current fight first." : "") || getCauldronTasteBlockReason(fixture, room);
+    if (block) return sharedChoiceResult("blocked", block);
+    if (!getVisibleRoomFixtures(room).includes(fixture)) return sharedChoiceResult("blocked", "That liquid is no longer within reach.");
+    const inventory = choiceEntitySnapshot(player), source = JSON.stringify(fixture);
     advanceStoryTurn(1);
+    if (G.player !== player || G.activeRoom !== room || !getVisibleRoomFixtures(room).includes(fixture) || JSON.stringify(fixture) !== source || !inventory() || environmentSceneBlock(fixture, true) || G.combatEncounter) return sharedChoiceResult("interrupted", "The situation changed before you could taste the liquid. Your turn is spent.");
     const name = getEntityName(fixture);
     const lines = [];
 
@@ -66767,7 +66836,8 @@ function tasteCauldron(fixture) {
         if (soup.servings <= 0) lines.push("That was the last of the pot.");
         renderStats();
         setNarration(lines.join(" "));
-        saveGameState();
+        publishTextModeOutput("liquid", lines.join(" "), {presentation:"supplement",liquidAction:{action:"taste",source:name,turns:1}}, false);
+    saveGameState();
         return;
     }
 
@@ -66812,6 +66882,7 @@ function tasteCauldron(fixture) {
     }
     renderStats();
     setNarration(lines.join(" "));
+    publishTextModeOutput("liquid", lines.join(" "), {presentation:"supplement",liquidAction:{action:"taste",source:name,turns:1}}, false);
     saveGameState();
 }
 
@@ -66830,7 +66901,7 @@ function getDippableEntries() {
 }
 
 function getCauldronDipBlockReason(room) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
+    if (G.combatEncounter || G.activeNPCMode === "combat") return "Finish the current fight first.";
     if (!getDippableEntries().length) return "You have nothing to dip.";
     return "";
 }
@@ -71499,6 +71570,7 @@ function moveThroughFixture(fixture, room, option) {
 }
 
 function openFixtureCard(fixture, cardOptions) {
+    if (fixture && fixture.id === "district-map") return readPaperMap(fixture, "district", false);
     if (typeof materialCaptureCard === "function" && materialCaptureCard(fixture, cardOptions)) return;
     if (typeof environmentCaptureCard === "function" && environmentCaptureCard(fixture, cardOptions)) return;
     if (isTrainingDummyFixture(fixture) && !(cardOptions && cardOptions.mode === "environment")) return trainingDummyMenu(fixture);
@@ -71800,7 +71872,7 @@ function openFixtureCard(fixture, cardOptions) {
         statBits.push("Free passage");
         statBits.push(describePortalTownStrength(backTier));
         if (backBlock) statBits.push(backBlock);
-        addAction("Step back through to " + backLabel, () => { returnThroughTownPortal(backTier); }, { primary: true, disabledReason: backBlock });
+        addAction("Return to " + backLabel + " (free)", () => { returnThroughTownPortal(backTier); }, { primary: true, disabledReason: backBlock });
     } else if (isPortalFixture(fixture)) {
         const portalCost = getTownPortalCost();
         const portalBlock = getTownPortalBlockReason(room);
@@ -72086,6 +72158,7 @@ function leaveItemModal() {
 }
 
 function openItemModal(item) {
+    if (typeof isMapScrap === "function" && isMapScrap(item)) return readPaperMap(item, "scrap", false);
     const modal = document.getElementById("itemModal");
     if (!modal || !item) return;
     clearItemModalContents();
@@ -76409,7 +76482,21 @@ function renderIntimacyActionMenu(npc) {
         // Get NPC gender and anatomy to filter sections
         const npcGender = (npc.gender || "").toString().toLowerCase();
         const npcSpecies = (npc.species || "").toString().toLowerCase();
-        const npcAnatomy = npc.anatomy || {};
+        // Handle case where npc.anatomy is a string (e.g., "Mixed") instead of an object
+        let npcAnatomy = {};
+        if (npc.anatomy) {
+            if (typeof npc.anatomy === 'string') {
+                // If anatomy is a string like "Mixed", we need to determine what it means
+                // For now, treat "Mixed" as having both male and female anatomy
+                const anatomyStr = npc.anatomy.toLowerCase();
+                if (anatomyStr.includes("mixed") || anatomyStr.includes("herm")) {
+                    npcAnatomy = { cock: true, pussy: true, vagina: true, penis: true, dick: true, vulva: true };
+                }
+                console.log(`[DEBUG] NPC anatomy was string: "${npc.anatomy}", interpreted as:`, npcAnatomy);
+            } else if (typeof npc.anatomy === 'object') {
+                npcAnatomy = npc.anatomy;
+            }
+        }
         
         // Debug: log NPC properties for debugging
         console.log(`[DEBUG] NPC gender: ${npc.gender} (type: ${typeof npc.gender}), species: ${npc.species} (type: ${typeof npc.species})`);
@@ -76456,6 +76543,18 @@ function renderIntimacyActionMenu(npc) {
             ? getNPCAnatomyType(npc) 
             : "humanoid";
         
+        // Helper to escape special characters for CSS attribute selectors
+        // & needs to be escaped as \26 in CSS attribute selectors
+        function escapeForCssSelector(str) {
+            if (!str) return str;
+            // Escape & to \26 for CSS attribute selectors
+            // Also escape other special characters that might appear
+            return str.replace(/&/g, '\\26')
+                      .replace(/\\/g, '\\\\')
+                      .replace(/"/g, '\\22')
+                      .replace(/'/g, '\\27');
+        }
+        
         // Helper to get display label for a section
         function getTabLabel(sectionLabel) {
             // Rename Hair based on anatomy type
@@ -76471,11 +76570,14 @@ function renderIntimacyActionMenu(npc) {
         
         // Filter sections based on NPC anatomy - only show tabs for body parts the NPC actually has
         function shouldShowSection(sectionLabel) {
-            if (sectionLabel === "Cock" && !hasCock) return false;
-            if (sectionLabel === "Pussy" && !hasPussy) return false;
-            if (sectionLabel === "Cloaca" && !hasCloaca) return false;
-            if (sectionLabel === "Breasts" && !hasBreasts) return false;
-            return true;
+            const result = !(
+                (sectionLabel === "Cock" && !hasCock) ||
+                (sectionLabel === "Pussy" && !hasPussy) ||
+                (sectionLabel === "Cloaca" && !hasCloaca) ||
+                (sectionLabel === "Breasts" && !hasBreasts)
+            );
+            console.log(`[DEBUG] shouldShowSection("${sectionLabel}") = ${result} (hasCock=${hasCock}, hasPussy=${hasPussy}, hasCloaca=${hasCloaca}, hasBreasts=${hasBreasts})`);
+            return result;
         }
         
         // Collect all section labels with actions and valid anatomy
@@ -76538,17 +76640,23 @@ function renderIntimacyActionMenu(npc) {
             console.log(`[DEBUG TAB CLICK] Hiding ${allSections.length} sections`);
             allSections.forEach(s => s.style.display = "none");
             
-            // Show selected section - use the raw label directly, no escaping needed
-            // dataset.section already returns the decoded value, and the attribute
-            // selector works with the actual value (not HTML-encoded)
+            // Show selected section - need to escape special characters for CSS attribute selector
+            // & in particular must be escaped as \26 in CSS attribute selectors
             console.log(`[DEBUG TAB CLICK] Looking for section with data-section="${sectionLabel}"`);
-            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + sectionLabel + "\"]");
+            const escapedLabel = escapeForCssSelector(sectionLabel);
+            console.log(`[DEBUG TAB CLICK] Escaped label: "${escapedLabel}"`);
+            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + escapedLabel + "\"]");
             
             if (targetSection) {
                 console.log(`[DEBUG TAB CLICK] Found target section, showing it`);
                 console.log(`[DEBUG TAB CLICK] Section HTML:`, targetSection.innerHTML.substring(0, 200));
-                targetSection.style.display = "";
-                console.log(`[DEBUG TAB CLICK] Section display style after:`, targetSection.style.display);
+                console.log(`[DEBUG TAB CLICK] Section display style BEFORE:`, targetSection.style.display);
+                console.log(`[DEBUG TAB CLICK] Section computed style BEFORE:`, window.getComputedStyle(targetSection).display);
+                targetSection.style.display = "flex";
+                console.log(`[DEBUG TAB CLICK] Section display style AFTER:`, targetSection.style.display);
+                console.log(`[DEBUG TAB CLICK] Section computed style AFTER:`, window.getComputedStyle(targetSection).display);
+                console.log(`[DEBUG TAB CLICK] Section offsetParent:`, targetSection.offsetParent);
+                console.log(`[DEBUG TAB CLICK] Section clientHeight:`, targetSection.clientHeight);
             } else {
                 console.log(`[DEBUG TAB CLICK] ERROR: Target section NOT found for label: ${sectionLabel}`);
                 console.log(`[DEBUG TAB CLICK] All section data-section values:`, Array.from(allSections).map(s => s.dataset.section));
@@ -76640,17 +76748,24 @@ function renderIntimacyActionMenu(npc) {
                 return !action.disabled || showAllActions;
             });
             
+            console.log(`[DEBUG] Section "${item.label}": ${item.actions.length} total actions, ${visibleActions.length} visible (showAllActions=${showAllActions})`);
+            
             // Skip category if no visible actions
-            if (!visibleActions.length) continue;
+            if (!visibleActions.length) {
+                console.log(`[DEBUG] Skipping section "${item.label}" - no visible actions`);
+                continue;
+            }
             
             // Create section content div for tabbed display
             // Use the actual label as the section name, not the display name
             const sectionName = item.label;
-            let sectionContainer = document.querySelector(".intimacy-section-content[data-section=\"" + sectionName + "\"]");
+            const escapedSectionName = escapeForCssSelector(sectionName);
+            let sectionContainer = document.querySelector(".intimacy-section-content[data-section=\"" + escapedSectionName + "\"]");
             if (!sectionContainer) {
                 sectionContainer = document.createElement("div");
                 sectionContainer.className = "intimacy-section-content";
                 sectionContainer.dataset.section = sectionName;
+                // Start hidden, will be shown when its tab is clicked
                 sectionContainer.style.display = "none";
                 el.appendChild(sectionContainer);
             }
@@ -76718,10 +76833,11 @@ function renderIntimacyActionMenu(npc) {
             const allSections = document.querySelectorAll(".intimacy-section-content");
             allSections.forEach(s => s.style.display = "none");
             
-            // Show first section - use raw label, no escaping needed
-            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + sectionLabel + "\"]");
+            // Show first section - need to escape special characters for CSS attribute selector
+            const escapedFirstLabel = escapeForCssSelector(sectionLabel);
+            const targetSection = document.querySelector(".intimacy-section-content[data-section=\"" + escapedFirstLabel + "\"]");
             if (targetSection) {
-                targetSection.style.display = "";
+                targetSection.style.display = "flex";
             } else {
                 console.log(`[DEBUG] First section NOT found for label: ${sectionLabel}`);
                 console.log(`[DEBUG] All section data-section values:`, Array.from(allSections).map(s => s.dataset.section));
@@ -77911,6 +78027,7 @@ function closeEquipmentExamine() {
 }
 
 function openEquipmentExamine(item, options) {
+    if (typeof isMapScrap === "function" && isMapScrap(item)) return readPaperMap(item, "scrap", false);
     const opts = options || {};
     const modal = document.getElementById("itemModal");
     if (!modal || !item) return;
@@ -78708,6 +78825,209 @@ function toggleEquipment() {
 // follows ordinary exits only; stairs, lifts and portal exits (a door into a
 // building) are shown as marks on the room that has them, so each building,
 // floor or level is its own map. Display only: nothing here changes the world.
+// Recovery presentation records real clock phases without changing recovery rules.
+let sleepTransition = null;
+function beginSleepTransition(action) {
+    if (sleepTransition) sleepTransition.finish(true);
+    const state = { player: G.player, room: G.activeRoom, action: action, npc: G.activeNPC, modal: G.activeItemModal, object: G.activeObject, start: getCurrentStoryTurn(), phases: [], finish: function () {} };
+    recordSleepTransition(state);
+    return state;
+}
+function recordSleepTransition(state) {
+    const phase = getTimePhase(), day = getGameDay(), last = state.phases[state.phases.length - 1];
+    if (!last || last.id !== phase.id || last.day !== day) state.phases.push({ id: phase.id, label: phase.label, day: day, turns: getCurrentStoryTurn() - state.start });
+    else last.turns = getCurrentStoryTurn() - state.start;
+}
+function finishSleepTransition(state, interrupted) {
+    if (!state) return;
+    const elapsed = Math.max(0, getCurrentStoryTurn() - state.start);
+    const valid = function () { return G.player === state.player && G.activeRoom === state.room && G.activeNPC === state.npc && G.activeItemModal === state.modal && G.activeObject === state.object && state.player.hp > 0 && !state.player.dead && !G.combatEncounter && !roomHasActiveHostile(state.room); };
+    if (!valid()) return;
+    const text = "Time passes while you sleep: " + state.phases.map(function (p) { return p.label; }).join(" to ") + ".";
+    publishTextModeOutput("recovery", text, { presentation: "supplement", recovery: { stage: "transition", action: state.action, turns: elapsed, interrupted: !!interrupted, phases: state.phases.map(function (p) { return { phase: p.label, day: p.day, turns: p.turns }; }) } }, false);
+    if (interrupted || !valid() || typeof document === "undefined" || !document.body || document.body.isConnected !== true || typeof requestAnimationFrame !== "function") return;
+    const overlay = document.createElement("div"), caption = document.createElement("div");
+    overlay.className = "sleep-transition";
+    overlay.setAttribute("role", "status"); overlay.setAttribute("aria-label", "Sleeping; time passes");
+    overlay.style.cssText = "position:fixed;inset:0;z-index:12000;background:#000;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 240ms ease;color:#eee;text-align:center;font:20px Georgia,serif;pointer-events:auto;";
+    caption.style.cssText = "padding:24px;white-space:pre-line;"; overlay.appendChild(caption); document.body.appendChild(overlay);
+    let timer, settled = false, resolve;
+    const promise = new Promise(function (done) { resolve = done; });
+    state.finish = function () { if (settled) return; settled = true; clearTimeout(timer); overlay.remove(); if (sleepTransition === state) sleepTransition = null; resolve(); };
+    sleepTransition = state;
+    const frames = state.phases.length ? state.phases : [{ label: getTimePhase().label }];
+    let index = 0;
+    const step = function () {
+        if (!valid()) { state.finish(); return; }
+        if (index < frames.length) { caption.textContent = "Sleeping…\n\n" + frames[index].label + "\n\n" + frames[index++].turns + " turns pass"; timer = setTimeout(step, 500); }
+        else { overlay.style.opacity = "0"; timer = setTimeout(function () { state.finish(); }, 240); }
+    };
+    overlay.onclick = function () { state.finish(); };
+    overlay.tabIndex = 0; overlay.onkeydown = function (event) { event.stopPropagation(); if (/^(Escape|Enter| )$/.test(event.key)) { event.preventDefault(); state.finish(); } };
+    overlay.focus();
+    requestAnimationFrame(function () { if (!settled) { overlay.style.opacity = "1"; step(); } });
+    return promise;
+}
+
+function tastingSources() {
+    return G.activeRoom ? getVisibleRoomFixtures(G.activeRoom).filter(function(f){return isCauldronFixture(f)&&!isAlchemyTableFixture(f);}).map(function(f){return {fixture:f,room:G.activeRoom,list:G.activeRoom.structural,label:getEntityName(f)};}) : [];
+}
+function textTastingShow() {
+    const entries=tastingSources().map(function(e){return {source:e.label,command:"taste "+e.label,blockedReason:environmentSceneBlock(e.fixture,true)||(G.combatEncounter?"Finish the current fight first.":"")||getCauldronTasteBlockReason(e.fixture,G.activeRoom)};});
+    return textModeResult("completed",entries.length?entries.map(function(e){return e.command+(e.blockedReason?" — "+e.blockedReason:" — one turn");}).join("\n"):"No visible cauldron or soup pot here. Taste mixture uses an extraction bowl.",{liquidSources:entries});
+}
+async function executeTextTaste(action) {
+    const args=action.args||{},all=tastingSources();
+    const entries=action.fixtureRef?all.filter(function(e){return e.fixture===action.fixtureRef.fixture&&e.room===action.fixtureRef.room&&e.list===action.fixtureRef.list;}):args.fixture?textLootMatch(args.fixture,all,function(e){return e.label;}):all;
+    if(!entries.length)return textModeResult("blocked","No matching visible liquid source. Use show taste.");
+    if(entries.length>1)return textModeAsk(action,"fixture",entries,"Which liquid source do you mean?");
+    const entry=entries[0],p=G.player,room=G.activeRoom;action.fixtureRef=entry;
+    const block=environmentSceneBlock(entry.fixture,true)||(G.combatEncounter?"Finish the current fight first.":"")||getCauldronTasteBlockReason(entry.fixture,room);
+    if(block)return textModeResult("blocked",block);
+    const result=await tasteCauldron(entry.fixture);
+    if(result&&result.status)return result;
+    return G.player!==p||G.activeRoom!==room||G.activeNPC||G.combatEncounter||p.dead||p.hp<=0||p.unconscious?{status:"interrupted"}:{status:"completed"};
+}
+
+// Paper maps contain saved public cartographic facts, never live actor/loot state.
+function isMapScrap(item) { return !!item && /^scrap-map(?:-|$)/i.test(String(item.id || "")); }
+function paperMapSourceHere(source, kind) {
+    const room = G.activeRoom, p = G.player;
+    if (!room || !p || !source || !isLootItemVisible(source)) return false;
+    return kind === "district" ? (room.structural || []).includes(source) && getVisibleRoomFixtures(room).includes(source) : (p.inventory || []).includes(source) || (room.items || []).includes(source);
+}
+function paperMapBlock(source, kind) {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot study a map right now.";
+    if (!paperMapSourceHere(source, kind)) return "That map is no longer visible or within reach.";
+    if (G.activeNPC || G.activeObject || G.combatEncounter || G.activeNPCMode === "combat" || roomHasActiveHostile(room) || isRoomCollapsed(room) || hasPendingPartyLoot()) return "Find a safe moment and finish the current interaction before reading a map.";
+    return "";
+}
+function paperMapCandidates(kind) {
+    const here = G.activeRoom, map = G.roomMap || {};
+    if (!here) return [];
+    if (kind === "district") return Object.values(map).filter(function (room) { return room && room.zone === "Town" && (!room.isBuildingRoom || room.isEntrance) && !(Number(room.floor) || 0) && parseCoords(room.coords); });
+    const result = [], seen = new Set(), queue = [here], floor = Number(here.floor) || 0;
+    while (queue.length && result.length < 1500) {
+        const room = queue.shift(); if (!room || seen.has(room.coords)) continue; seen.add(room.coords);
+        if (room.zone !== here.zone || (Number(room.floor) || 0) !== floor || !parseCoords(room.coords)) continue;
+        result.push(room);
+        Object.keys(room.exits || {}).forEach(function (dir) {
+            if (!/^(N|NE|E|SE|S|SW|W|NW)$/.test(dir) || isPortalExit(room, dir)) return;
+            const target = room.exits[dir]; if (target !== getAdjacentCoords(room.coords, dir)) return;
+            if (map[target]) queue.push(map[target]);
+        });
+    }
+    return result;
+}
+function paperMapRoomFacts(room) {
+    const p = parseCoords(room.coords);
+    // Public building/terrain labels only; getMapRoomMarks can expose hidden fixtures.
+    const label = room.isEntrance && room.buildingName ? room.buildingName : room.displayName || room.name || room.type || "Room";
+    const type = String(room.buildingType || room.type || "");
+    const symbol = /inn|tavern|taproom/i.test(type) ? "I" : /chapel|shrine/i.test(type) ? "S" : /smith|forge/i.test(type) ? "F" : /house|home/i.test(type) ? "H" : /guild|town hall/i.test(type) ? "G" : "R";
+    return { key: room.coords, name: label, type: room.type || "", zone: room.zone || "", floor: Number(room.floor) || 0, x: p.x, y: p.y, symbol: symbol };
+}
+function ensurePaperMap(source, kind) {
+    if (source.paperMap && source.paperMap.version === 1) return source.paperMap;
+    if (kind === "scrap" && getItemQuantity(source) > 1) {
+        const list = [G.player.inventory, G.activeRoom.items].find(function (items) { return Array.isArray(items) && items.includes(source); });
+        if (list) {
+            const count = getItemQuantity(source); source.quantity = 1;
+            for (let i = 1; i < count; i++) { const copy = cloneLootTemplate(source, {quantity:1,_uid:generateLootUID()}); delete copy.paperMap; list.push(copy); }
+        }
+    }
+    let rooms = paperMapCandidates(kind);
+    if (kind === "scrap") {
+        rooms = rooms.slice();
+        for (let i = rooms.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)), swap = rooms[i]; rooms[i] = rooms[j]; rooms[j] = swap; }
+        rooms = rooms.slice(0, 3);
+    }
+    const rows = rooms.map(paperMapRoomFacts), keys = new Set(rows.map(function (r) { return r.key; })), links = [];
+    rooms.forEach(function (room) { Object.keys(room.exits || {}).forEach(function (dir) {
+        const target = room.exits[dir];
+        if (keys.has(target) && target === getAdjacentCoords(room.coords, dir) && !isPortalExit(room, dir) && room.coords < target) links.push({ from: room.coords, to: target, direction: dir });
+    }); });
+    source.paperMap = { version: 1, kind: kind, tier: getPortalTier(), zone: G.activeRoom.zone, floor: Number(G.activeRoom.floor) || 0, rooms: rows, links: links };
+    return source.paperMap;
+}
+function learnPaperMap(map) {
+    if (map.tier !== getPortalTier()) return;
+    map.rooms.forEach(function (entry) {
+        const room = G.roomMap && G.roomMap[entry.key];
+        if (room && room.zone === entry.zone && room.type === entry.type && (Number(room.floor) || 0) === entry.floor) room.mapKnown = true;
+    });
+}
+function paperMapPublic(map) {
+    return { kind: map.kind, incomplete: map.kind === "scrap", rooms: map.rooms.map(function (r, i) { return { number: i + 1, name: r.name, x: r.x, y: r.y, symbol: r.symbol }; }), links: map.links.map(function (link) { return { from: map.rooms.findIndex(function (r) { return r.key === link.from; }) + 1, to: map.rooms.findIndex(function (r) { return r.key === link.to; }) + 1, direction: link.direction }; }), legend: { R: "Room or street", H: "House", I: "Inn or tavern", S: "Shrine or chapel", F: "Smithy", G: "Guildhall or town hall" } };
+}
+function paperMapNarration(map) {
+    const heading = map.kind === "district" ? "You identify the town's streets, houses and public locations from the district plan." : "The torn map fragment shows " + map.rooms.length + " rooms on one floor. It is only part of the layout.";
+    return heading + (map.rooms.length ? "\n\n" + map.rooms.map(function (r, i) { return (i + 1) + ". " + r.name; }).join("\n") : " No legible locations remain.") + "\n\nNorth is at the top. Lines join only the rooms drawn on this copy. Blank space is unmapped.";
+}
+function readPaperMap(source, kind, study) {
+    const reason = paperMapBlock(source, kind); if (reason) return sharedChoiceResult("blocked", reason);
+    const p = G.player, room = G.activeRoom, world = G.roomMap, sourceList = kind === "district" ? room.structural : (p.inventory || []).includes(source) ? p.inventory : room.items;
+    const old = JSON.stringify(source.paperMap || null), turn = getCurrentStoryTurn();
+    if (study && kind === "district") { advanceStoryTurn(1); if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick(); }
+    if (G.player !== p || G.activeRoom !== room || G.roomMap !== world || !sourceList.includes(source) || JSON.stringify(source.paperMap || null) !== old || paperMapBlock(source, kind)) return sharedChoiceResult("interrupted", "The situation changed before you finished reading the map. Spent time remains spent.");
+    const map = ensurePaperMap(source, kind);
+    if (study || kind === "scrap") learnPaperMap(map);
+    const text = paperMapNarration(map), publicMap = paperMapPublic(map);
+    saveGameState();
+    if (!textModeState.enabled) setNarration(text);
+    if (G.player !== p || G.activeRoom !== room) return {status:"interrupted",outputPublished:true};
+    publishTextModeOutput("reading", text, { presentation: textModeState.enabled ? "story" : "supplement", reading: { title: getEntityName(source), text: text, turns: getCurrentStoryTurn() - turn }, paperMap: publicMap }, textModeState.enabled);
+    return showPaperMapCopy(source, map, study);
+}
+function showPaperMapCopy(source, map, studied) {
+    if (paperMapBlock(source, map.kind)) return { status: "interrupted" };
+    clearItemModalContents();
+    const modal = document.getElementById("itemModal"), desc = document.getElementById("itemModalDesc"), actions = document.getElementById("itemModalActions"), stats = document.getElementById("itemModalStats");
+    if (!modal || !desc || !actions || !stats) return { status: "completed" };
+    if (activeReadingSession) { activeReadingSession.cancel(); activeReadingSession = null; }
+    document.getElementById("itemModalTitle").textContent = map.kind === "district" ? "Copy of the town district plan" : "Map fragment — incomplete";
+    desc.style.whiteSpace = "pre-line"; desc.textContent = map.kind === "scrap" ? "A torn copy showing only these rooms. Blank space is unknown." : "A copied street plan. Buildings are shown at their entrances; interiors are not mapped.";
+    stats.style.display = "block"; stats.textContent = "";
+    renderPaperMapCopy(map, stats);
+    actions.innerHTML = "";
+    const owner = { paperMapView: true }; G.activeItemModal = owner; modal.classList.add("active");
+    const menu = beginSharedChoiceMenu("paper-map", null, "Read the paper map", function () { return showPaperMapCopy(source, map, studied); });
+    const valid = menu.valid, stamp = JSON.stringify(map), world = G.roomMap, turn = getCurrentStoryTurn();
+    menu.valid = function () { return valid() && G.roomMap === world && turn === getCurrentStoryTurn() && paperMapSourceHere(source, map.kind) && source.paperMap === map && JSON.stringify(map) === stamp; };
+    const close = function () { if (G.activeItemModal !== owner || G.player !== menu.scene.player || G.activeRoom !== menu.scene.room) return {status:"blocked",outputPublished:true}; clearSharedChoiceMenu(menu); closeItemModal(); return { status: "blocked", outputPublished: true }; };
+    if (map.kind === "district" && !studied) actions.appendChild(createSharedChoiceButton(menu, "Study town layout (1 turn)", function () { closeItemModal(); return readPaperMap(source, "district", true); }, { textChoice: { action: "read" } }));
+    actions.appendChild(createSharedChoiceButton(menu, "Close", close, { textChoice: { action: "back" } }));
+    const x = document.getElementById("itemModalClose"); if (x) x.onclick = close;
+    modal.onclick = function (event) { if (event.target === modal) close(); };
+    publishSharedChoiceMenu(menu, actions);
+    return { status: "needs_input", outputPublished: true };
+}
+function renderPaperMapCopy(map, parent) {
+    const data = paperMapPublic(map), paper = document.createElement("div"), scroll = document.createElement("div"), grid = document.createElement("div");
+    paper.className = "paper-map-copy" + (data.incomplete ? " fragment" : "");
+    paper.style.cssText = "padding:16px;background:#d8c59a;color:#302719;border:3px " + (data.incomplete ? "dashed" : "double") + " #786440;border-radius:3px;box-shadow:inset 0 0 22px #8d754f;";
+    scroll.style.cssText = "max-height:340px;overflow:auto;"; grid.style.cssText = "display:grid;gap:3px;width:max-content;padding:8px;";
+    const xs = [...new Set(map.rooms.map(function (r) { return r.x; }))].sort(function (a, b) { return a - b; }), ys = [...new Set(map.rooms.map(function (r) { return r.y; }))].sort(function (a, b) { return b - a; });
+    // Rank compression keeps fragments readable while retaining relative positions.
+    map.rooms.forEach(function (room, index) {
+        const cell = document.createElement("div"); cell.className = "paper-map-room";
+        cell.style.cssText = "border:2px solid #59472d;padding:6px;min-width:64px;max-width:105px;min-height:44px;font-size:11px;text-align:center;white-space:normal;";
+        cell.style.gridColumn = String(xs.indexOf(room.x) * 2 + 1); cell.style.gridRow = String(ys.indexOf(room.y) * 2 + 1);
+        cell.textContent = (index + 1) + " · " + room.symbol + "\n" + room.name; cell.title = room.name; grid.appendChild(cell);
+    });
+    map.links.forEach(function (link) {
+        const a = map.rooms.find(function (r) { return r.key === link.from; }), b = map.rooms.find(function (r) { return r.key === link.to; }); if (!a || !b) return;
+        const mark = document.createElement("div"); mark.style.cssText = "align-self:center;justify-self:center;font:18px monospace;";
+        mark.style.gridColumn = String(xs.indexOf(a.x) + xs.indexOf(b.x) + 1); mark.style.gridRow = String(ys.indexOf(a.y) + ys.indexOf(b.y) + 1);
+        mark.textContent = a.x === b.x ? "│" : a.y === b.y ? "─" : (b.x - a.x) * (b.y - a.y) > 0 ? "╱" : "╲"; grid.appendChild(mark);
+    });
+    scroll.appendChild(grid); paper.appendChild(scroll);
+    const legend = document.createElement("div"); legend.style.cssText = "font-size:11px;margin-top:10px;white-space:normal;";
+    legend.textContent = "North ↑ · " + [...new Set(map.rooms.map(function (r) { return r.symbol; }))].map(function (key) { return key + ": " + data.legend[key]; }).join(" · ") + " · Lines: mapped connections · Blank: unknown" + (data.incomplete ? " · Incomplete fragment" : " · Copied plan");
+    paper.appendChild(legend); parent.appendChild(paper);
+}
+
 const MAP_CELL_SPAN = 2; // grid tracks per room: one room cell + one link cell
 const MAP_MAX_ROOMS = 1500;
 
@@ -78772,7 +79092,7 @@ function collectMapRooms(start) {
             const other = G.roomMap[tp.key];
             const state = (typeof isExitCollapsed === "function" && isExitCollapsed(room, dir)) ? "rubble"
                 : (typeof isExitLocked === "function" && isExitLocked(room, dir)) ? "locked" : "open";
-            if (other && other.mapSeen) {
+            if (other && (other.mapSeen || other.mapKnown)) {
                 links.push({ x: p.x, y: p.y, dir: dir, state: state });
                 if (!seen[tp.key]) { seen[tp.key] = true; queue.push(other); }
             } else if (!ghosts[tp.key]) {
@@ -78825,6 +79145,7 @@ function renderMap() {
         const marks = getMapRoomMarks(room);
         const cell = document.createElement("div");
         cell.className = "map-room";
+        if (room.mapKnown && !room.mapSeen) { cell.style.borderStyle = "dashed"; cell.style.opacity = "0.72"; cell.setAttribute("aria-label", (room.displayName || room.name || room.type) + ", known from a map, not visited"); }
         const isHere = room === current;
         if (isHere) { cell.className += " here"; hereCell = cell; }
         if (marks.length) cell.className += marks.some(function (m) { return m.key === "boss"; }) ? " boss" : " special";
@@ -78885,7 +79206,7 @@ function renderMap() {
 
     if (legendEl) {
         const order = ["boss", "shrine", "bar", "inn", "forge", "guild", "hall", "down", "up", "portal"];
-        let html = '<span>● you</span><span>? unexplored</span><span style="color:#c9a227">━ locked</span>';
+        let html = '<span>Dashed: known from a map, not visited</span><span>● you</span><span>? unexplored</span><span style="color:#c9a227">━ locked</span>';
         order.forEach(function (k) {
             if (usedMarks[k]) html += "<span>" + usedMarks[k].icon + " " + usedMarks[k].label + "</span>";
         });
