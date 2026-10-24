@@ -1,8 +1,9 @@
+// Warmstone Baths: public bathkeeper services, profession, routine and workplace ties.
 // NPC Life W1/W2: bounded short-term/entity memory, delivered-reply annotations and compatible behavior syntax. Shared species appearance retained.
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-23-004";
+    window.NPC_DATA_VERSION = "2026-10-24-003";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -1115,6 +1116,7 @@ const NPC_ROUTINE_DEFAULT = {
     pastime: "resting, and swapping news with neighbours"
 };
 const NPC_ROUTINES = {
+    Bathkeeper: { duties: "running The Warmstone Baths, tending hot water and linen, offering washes and shoulder and back massage, and supervising practical trials", pay: "customer fees, with wages paid to attendants and qualified practitioners", shifts: ["warming water and setting out clean linen", "serving bathers and supervising staff", "finishing treatments and washing linen", "home"], pastime: "a quiet cup of herbal tea and news from travelers" },
     Innkeeper: { duties: "running the inn: rooms, the common room, the cellar and keeping order", pay: "what guests pay for rooms and meals; you answer for the till", shifts: ["lighting the fires and starting the cooking", "settling rooms and keeping stock", "the common room fills and you keep the peace", "closing up, then bed"], pastime: "talking with regulars and tallying the week's takings" },
     Bartender: { duties: "pouring drinks, keeping the bar clean and watching the room", pay: "wages from the house plus whatever tips come over the bar", shifts: ["home", "cleaning and stocking the bar", "pouring for the evening crowd", "last pours, then clearing up"], pastime: "listening to the room's gossip" },
     Cook: { duties: "cooking for the house and keeping the pantry stocked", pay: "wages and your own meals from the kitchen", shifts: ["baking and prepping", "cooking the midday meal", "the supper rush", "scrubbing pots, then home"], pastime: "trying small changes to old recipes" },
@@ -3631,30 +3633,55 @@ const NPC_CONVERSATION_CATALOGUE = [
         id: "rent-room",
         priority: 84,
         repeat: "always",
-        label: "Ask about renting a room by the week",
+        kind: "action",
+        service: "rooms",
+        label: "Inquire about rooms (weekly rental)",
         action: "rentroom",
         intent: "curious",
         conditions: {
-            metPlayer: true,
             roleIncludes: ["innkeeper"],
             maxHostility: 79,
-            minFavor: -69
+            minFavor: -69,
+            custom: (npc) => typeof getNPCServiceOptions === "function" && getNPCServiceOptions(npc).some(o => o.service === "rooms")
         }
     },
     {
         id: "browse-wares",
         priority: 85,
         repeat: "always",
-        label: npc => npc && npc.role ? `Ask the ${npc.role} what they're selling` : "Ask what they have for sale",
+        kind: "action",
+        service: "wares",
+        label: "See wares",
         action: "trade",
         conditions: {
-            metPlayer: true,
             roleIncludes: ["vendor", "shopkeeper", "clothier", "merchant", "trader", "bartender", "innkeeper", "blacksmith"],
             maxHostility: 79,
             minFavor: -69,
-            custom: (npc, ctx) => !ctx.offDuty
+            custom: (npc, ctx) => !ctx.offDuty && typeof getNPCServiceOptions === "function" && getNPCServiceOptions(npc).some(o => o.service === "wares")
         }
     },
+    // Obvious public services can start a conversation without a greeting.
+    // The engine owns role eligibility and the existing service handlers.
+    ...[
+        ["drinks", "Order a drink"],
+        ["menu", "Ask for the menu"],
+        ["healing", "Ask about healing supplies"],
+        ["forge", "Ask about forge services"],
+        ["enchanting", "Ask about enchanting services"],
+        ["tailoring", "Ask about tailoring services"],
+        ["baths", "Ask about baths, massage and work"]
+    ].map(([service, label], index) => ({
+        id: "service-" + service,
+        service,
+        priority: 84.1 + index * 0.1,
+        repeat: "always",
+        kind: "action",
+        label,
+        action: "service",
+        conditions: {
+            custom: npc => typeof getNPCServiceOptions === "function" && getNPCServiceOptions(npc).some(o => o.service === service)
+        }
+    })),
     {
         id: "ask-deity",
         priority: 95,
@@ -4348,6 +4375,17 @@ const NPC_CONVERSATION_CATALOGUE = [
         relationshipImpact: { mood: 0, favor: 0, intent: "talk", markMet: true, actionTag: "guide-party" },
         conditions: { custom: (npc) => _npcIsGuide(npc) && !!npc._inParty }
     },
+    {
+        id: "offer-hug",
+        priority: 46,
+        repeat: "always",
+        kind: "action",
+        label: "Offer a hug",
+        action: "contact-hug",
+        conditions: {
+            custom: npc => typeof socialActionBlock === "function" && !socialActionBlock(npc)
+        }
+    },
     // Directions: opens a list of buildings this speaker knows and answers with a
     // real route over the map (see showDirectionsMenu in the engine). No AI call.
     {
@@ -4387,6 +4425,335 @@ const NPC_CONVERSATION_CATALOGUE = [
         intent: "goodbye",
         relationshipImpact: { mood: 0, favor: 1, intent: "goodbye", markMet: true, actionTag: "goodbye" }
     },
+    
+    // ===== SUBMISSIVE DEMEANOR REQUESTS =====
+    // These requests appear when player selects Submissive demeanor mode in intimacy
+    // They allow the player to make submissive roleplay requests to the NPC
+    {
+        id: "request-step-on-face",
+        priority: 160,
+        repeat: "always",
+        label: "Request they step on your face",
+        textVariants: [
+            "You look up at them with a submissive expression, asking if they would be willing to step on your face.",
+            "You kneel and gaze up, requesting the honor of them placing their foot on your face.",
+            "With a humble tone, you ask if they'd please step on your face."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "request_step_on_face",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} step on their face. Respond in character.`
+    },
+    {
+        id: "request-step-on-chest",
+        priority: 160,
+        repeat: "always",
+        label: "Request they step on your chest",
+        textVariants: [
+            "You position yourself on the ground and ask if they would step on your chest.",
+            "With a submissive posture, you request that they place their foot on your chest.",
+            "You look up at them and humbly ask if they'd step on your chest."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "request_step_on_chest",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} step on their chest. Respond in character.`
+    },
+    {
+        id: "request-squeeze-balls",
+        priority: 160,
+        repeat: "always",
+        label: "Request they squeeze your balls",
+        textVariants: [
+            "You take a deep breath and ask if they would be willing to squeeze your testicles.",
+            "With a submissive tone, you request that they apply pressure to your balls.",
+            "You look at them with trust and ask if they'd please squeeze your balls."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "request_squeeze_balls",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} squeeze their balls. Respond in character.`
+    },
+    {
+        id: "request-spanking",
+        priority: 160,
+        repeat: "always",
+        label: "Request a spanking",
+        textVariants: [
+            "You bend over slightly and ask if they would give you a spanking.",
+            "With a submissive expression, you request that they spank you.",
+            "You position yourself and humbly ask for a spanking."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "request_spanking",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} spank them. Respond in character.`
+    },
+    {
+        id: "beg-for-touch",
+        priority: 160,
+        repeat: "always",
+        label: "Beg for their touch",
+        textVariants: [
+            "You look at them with pleading eyes, begging them to please touch you.",
+            "With a desperate, submissive tone, you beg them to touch you.",
+            "You kneel before them and beg for the gift of their touch."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "beg_for_touch",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for their touch. Respond in character.`
+    },
+    {
+        id: "beg-for-attention",
+        priority: 160,
+        repeat: "always",
+        label: "Beg for their attention",
+        textVariants: [
+            "You look up at them with a needy expression, begging for their attention.",
+            "With a submissive plea, you beg them to please pay attention to you.",
+            "You position yourself humbly and beg for them to focus on you."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "beg_for_attention",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for their attention. Respond in character.`
+    },
+    {
+        id: "beg-for-use",
+        priority: 160,
+        repeat: "always",
+        label: "Beg to be used",
+        textVariants: [
+            "You kneel before them with a submissive expression, begging them to use you as they please.",
+            "With a desperate tone, you beg them to please use you.",
+            "You look up at them with complete submission, begging to be used for their pleasure."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "beg_for_use",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to use them as they please. Respond in character.`
+    },
+    {
+        id: "beg-for-praise",
+        priority: 160,
+        repeat: "always",
+        label: "Beg for praise",
+        textVariants: [
+            "You look at them with hope, begging them to tell you that you're good.",
+            "With a submissive voice, you beg them to please praise you.",
+            "You kneel and plead with them to give you their approval and praise."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "beg_for_praise",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for praise. Respond in character.`
+    },
+    
+    // ===== DOMINANT DEMEANOR REQUESTS =====
+    // These commands appear when player selects Dominant demeanor mode in intimacy
+    // They allow the player to make dominant roleplay commands to the NPC
+    {
+        id: "order-kneel",
+        priority: 160,
+        repeat: "always",
+        label: "Order them to kneel",
+        textVariants: [
+            "You command them with authority to kneel before you.",
+            "You give them a firm order to drop to their knees.",
+            "With a dominant tone, you tell them to kneel."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "order_kneel",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and orders ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to kneel. Respond in character.`
+    },
+    {
+        id: "command-undress",
+        priority: 160,
+        repeat: "always",
+        label: "Command them to undress",
+        textVariants: [
+            "You command them to remove their clothing.",
+            "With authority, you order them to strip for you.",
+            "You tell them firmly to take off their clothes."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "command_undress",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to undress. Respond in character.`
+    },
+    {
+        id: "demand-serve",
+        priority: 160,
+        repeat: "always",
+        label: "Demand they serve you",
+        textVariants: [
+            "You demand they serve you with a commanding tone.",
+            "With authority, you tell them their place is to serve you.",
+            "You assert your dominance and command them to serve."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "demand_serve",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} serve them. Respond in character.`
+    },
+    {
+        id: "demand-worship",
+        priority: 160,
+        repeat: "always",
+        label: "Demand they worship you",
+        textVariants: [
+            "You demand they worship you, asserting your superiority.",
+            "With a commanding voice, you order them to show worship.",
+            "You tell them firmly that they should worship you."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "demand_worship",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} worship them. Respond in character.`
+    },
+    {
+        id: "assert-dominance",
+        priority: 160,
+        repeat: "always",
+        label: "Assert your dominance",
+        textVariants: [
+            "You assert your dominance over them with a firm command.",
+            "You make it clear who is in charge with your tone and posture.",
+            "With authority, you establish your dominance over them."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "assert_dominance",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}. Respond in character.`
+    },
+    {
+        id: "command-mouth",
+        priority: 160,
+        repeat: "always",
+        label: "Command their mouth",
+        textVariants: [
+            "You command them to use their mouth on you.",
+            "With authority, you order them to put their mouth to work.",
+            "You tell them firmly what to do with their mouth."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "command_mouth",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to use their mouth. Respond in character.`
+    },
+    {
+        id: "demand-obey",
+        priority: 160,
+        repeat: "always",
+        label: "Demand they obey",
+        textVariants: [
+            "You demand their complete obedience.",
+            "You command them to obey your every word.",
+            "With authority, you make it clear they must obey you."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "demand_obey",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} obey them. Respond in character.`
+    },
+    {
+        id: "force-kneel",
+        priority: 160,
+        repeat: "always",
+        label: "Force them to their knees",
+        textVariants: [
+            "You force them down to their knees with your command.",
+            "With authority, you push them to kneel before you.",
+            "You physically guide them to their knees as you command it."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "force_kneel",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and forces ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to their knees. Respond in character.`
+    },
+    
     // ===== NSFW OPTIONS =====
     // NSFW catalogue entries (flirt / seduce / touch_intimately /
     // start_intimacy) live in cyoaftw-npc-data-nsfw.js and are merged into the
@@ -4512,7 +4879,11 @@ function getNPCConversationContext(npc, extraContext = {}) {
             ? String(getPlayerDominantTrait() || "").toLowerCase()
             : "",
         // Live player stat values for minStats/maxStats conditions.
-        playerStats: _npcGetPlayerStats()
+        playerStats: _npcGetPlayerStats(),
+        // Intimacy demeanor mode (consentual/submissive/dominant) for roleplay-specific options
+        demeanorMode: (npc.intimacy && npc.intimacy._demeanorMode) ? String(npc.intimacy._demeanorMode).toLowerCase() : "consentual",
+        // Whether an intimacy encounter is currently active
+        intimacyActive: !!(npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active)
     };
 }
 
@@ -4662,6 +5033,11 @@ function conversationConditionMatches(conditions, ctx) {
         .some(tag => _npcActionTagsInclude(ctx.actionTags, [tag]))) {
         return false;
     }
+
+    // Demeanor mode conditions for intimacy roleplay
+    if (conditions.demeanorMode && !_npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.demeanorMode))) return false;
+    if (conditions.excludeDemeanorMode && _npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.excludeDemeanorMode))) return false;
+    if (typeof conditions.intimacyActive === "boolean" && ctx.intimacyActive !== conditions.intimacyActive) return false;
 
     if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
 
@@ -4861,6 +5237,7 @@ function buildConversationOption(entry, npc, ctx) {
         deedTalkId: entry.deedTalk ? String(_npcResolveConversationValue(entry.deedTalk, npc, ctx) || "") : "",
         revealsName: entry.revealsName !== undefined ? _npcResolveConversationValue(entry.revealsName, npc, ctx) === true : false,
         action,
+        service: entry.service,
         intent: resolvedIntent,
         className: _npcResolveConversationValue(entry.className, npc, ctx),
         relationshipImpact: impact && typeof impact === "object" ? { ...impact } : impact,
@@ -4914,6 +5291,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     const greetedThisSession = ctx.sessionUsedOptionIds && (
         ctx.sessionUsedOptionIds.includes("greet-intro") ||
         ctx.sessionUsedOptionIds.includes("greet-known") ||
+        ctx.sessionUsedOptionIds.includes("service-opened") ||
         ctx.sessionUsedOptionIds.some(id => typeof id === "string" && id.indexOf("greet-") === 0)
     );
     
@@ -4937,7 +5315,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
         }
     }
     
-    // Filter by greeting gate: only greeting and disengage options until greeting in current session
+    // Public services may open the conversation alongside greetings.
     let filtered = fullCatalogue;
     if (!greetedThisSession) {
         filtered = fullCatalogue.filter(entry => {
@@ -4950,7 +5328,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
             // before the session greeting. Same for asking a follower to
             // join the party for good.
             const isCompanionManagement = entry.id === "stop-following" || entry.id === "follower-ask-stay" || entry.id === "follower-join-party";
-            return isGreeting || isDisengage || isCompanionManagement;
+            return isGreeting || isDisengage || isCompanionManagement || !!entry.service;
         });
     }
 
@@ -5745,9 +6123,9 @@ const NPC_TIE_LOVER_CHANCE = 0.10;
 const NPC_TIE_RECIPROCAL = { spouse: "spouse", parent: "child", child: "parent", sibling: "sibling", friend: "friend", coworker: "coworker", employer: "employee", employee: "employer", lover: "lover" };
 const NPC_TIE_FAMILY = ["spouse", "parent", "child", "sibling"];
 // Roles that are staff of the building they stand in (a place of work).
-const NPC_TIE_WORK_ROLES = ["Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
+const NPC_TIE_WORK_ROLES = ["Bathkeeper", "Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
 // Employers in a building and who they plausibly employ there.
-const NPC_TIE_EMPLOYER_ROLES = ["Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
+const NPC_TIE_EMPLOYER_ROLES = ["Bathkeeper", "Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
 const NPC_TIE_EMPLOYEE_ROLES = ["Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk"];
 // Roles that work in teams across a zone rather than in one building.
 const NPC_TIE_TEAM_ROLES = ["Town Guard", "Stone Guard", "Miner", "Scout", "Raider", "Scavenger", "Cultist"];
@@ -6444,6 +6822,7 @@ function getBaseFavorabilityForTemperament(temperament) {
 const NPC_TEMPER_KEYS = ["friendly", "neutral", "curious", "bold", "wary", "skittish", "hostile", "aggressive"];
 
 const NPC_ROLE_TEMPER_CLASS = {
+    "Bathkeeper": "staff",
     "Innkeeper": "staff", "Bartender": "staff", "Cook": "staff", "Shopkeeper": "staff", "Vendor": "staff",
     "Wandering Merchant": "staff", "Blacksmith": "staff", "Clothier": "staff", "Healer": "staff", "Priest": "staff", "Archivist": "staff",
     "Scholar": "staff", "Enchanter": "staff", "Arcanist": "staff", "Reliquarian": "staff", "Servant": "staff",

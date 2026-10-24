@@ -1,3 +1,4 @@
+// Warmstone Baths: shared treatments, practical trials, paid shifts and safe town backfill.
 // Text commands are a presentation/input layer. Game rules remain in the engine.
 // Session-only state: never save pending commands or clarification references.
 const textModeState = {
@@ -24,6 +25,8 @@ function parseTextSocialCommand(input) {
     let raw = String(input || "").trim().replace(/[.!?]+$/, "");
     if (raw.charAt(0) === "*") raw = raw.replace(/^\*+\s*|\s*\*+$/g, "");
     raw = raw.replace(/^(?:act|emote)\s+/i, "").replace(/^I\s+/i, "");
+    const hug = /^(?:hug|embrace)(?:\s+(.+))?$/i.exec(raw);
+    if (hug) return { verb: "act", args: { family: "contact", action: "give them a hug", target: (hug[1] || "").trim() } };
     let match = /^invite\s+(.+?)\s+to\s+(?:a\s+)?dance$/i.exec(raw);
     if (match) return { verb: "act", args: { action: "dance", target: match[1].trim() } };
     match = /^(wave|bow|nod|smile|salute|dance)(?:\s+(?:(?:at|to|with)\s+)?(.+))?$/i.exec(raw);
@@ -727,6 +730,7 @@ async function executeTextInteractionCommand(action) {
         : !request.target && request.family === "expression" ? [] : resolveTextNPCTarget(request.target, candidates).matches;
     if (!matches.length && !action.targetRef && /^(assault|physical)$/.test(request.family) && request.target && !textModeInCombat() && adjudicationObjectOnly(request.target))
         return executeTextAdjudication({ verb: "adjudicate", args: { action: request.action, target: request.target }, rulingPromise: action.rulingPromise });
+    if (!matches.length && !action.targetRef && request.family === "contact" && request.action === "give them a hug" && request.target && adjudicationObjectOnly(request.target)) return executeTextAdjudication({ verb: "adjudicate", args: { action: "hug", target: request.target }, rulingPromise: action.rulingPromise });
     if (!matches.length && (request.target || request.family !== "expression" || action.targetRef)) return textModeResult("blocked", "No visible person matches that description.");
     if (matches.length > 1) return textModeAsk(action, "target", matches, "Who do you mean?");
     const npc = matches[0] || null;
@@ -1525,7 +1529,399 @@ function textSleepingNPCShow(key) {
 }
 
 
+// Warmstone Baths: shared customer treatments, practical trials and work offers.
+// Pending menus and action latches are session-only; training lives on the player.
+const BATHHOUSE_TREATMENTS = Object.freeze({
+    bath: { label: "Hot bath", fee: 4, turns: 2, recovery: 3, cleans: true,
+        text: "Warm water lifts the road dust away. You dry off with clean linen, feeling fresher." },
+    wash: { label: "Attendant-assisted wash", fee: 7, turns: 3, recovery: 5, cleans: true,
+        text: "The bathkeeper helps wash away the road grime, rinses your hair and brings fresh linen. You finish clean and refreshed." },
+    massage: { label: "Shoulder and back massage", fee: 9, turns: 3, recovery: 7, cleans: false,
+        text: "The bathkeeper works carefully across your shoulders and back, easing the knots left by travel and hard work." }
+});
+var bathhouseActionBusy = false;
+const bathhouseMigrationMaps = new WeakMap();
+
+// Older saves gain an establishment only where a street has a genuinely vacant
+// connection. Existing rooms, occupied cells and reserved onward routes survive.
+function ensureTownBathhouse() {
+    const map = G.roomMap, active = G.activeRoom;
+    if (!map || !active || active.zone !== "Town" || !G.player || G.player.dead || G.player.hp <= 0 || G.activeNPC || G.activeObject || G.activeItemModal || G.combatEncounter || roomHasActiveHostile(active) || hasPendingPartyLoot() ||
+        typeof _planBuildingInterior !== "function" || typeof instantiatePlannedRooms !== "function" || typeof assignGeneratedNPCs !== "function") return false;
+    const rooms = Object.values(map).filter(Boolean);
+    if (rooms.some(r => r.zone === "Town" && r.buildingType === "Bathhouse")) return false;
+    if (bathhouseMigrationMaps.get(map) === rooms.length) return false;
+    bathhouseMigrationMaps.set(map, rooms.length);
+    if (typeof MAP_MAX_ROOMS === "number" && rooms.length + 3 > MAP_MAX_ROOMS) return false;
+    const reserved = new Set(rooms.flatMap(r => Object.values(r.exits || {})));
+    const streets = rooms.filter(r => r.zone === "Town" && !r.isBuildingRoom && /^(Street|Avenue|Square)$/.test(r.type) && r.coords && !isRoomCollapsed(r));
+    for (const street of streets) {
+        for (const dir of ["N", "S"]) {
+            if ((street.exits || {})[dir] || (street.doors || {})[dir] || (street.locks || {})[dir] || (street.linkExits || {})[dir] || (street.portalExits || {})[dir]) continue;
+            const coords = getAdjacentCoords(street.coords, dir);
+            if (!coords || map[coords] || reserved.has(coords)) continue;
+            for (let index = 0; index < 1000; index++) {
+                const plan = { zone: "Town", rooms: {}, buildings: [] };
+                const entrance = _planAddRoom(plan, coords, "Bathhouse", "Town", {});
+                _planBuildingInterior(plan, "Bathhouse", index, entrance, dir === "N" ? 1 : -1, Math.random, null);
+                if (Object.keys(plan.rooms).some(key => map[key] || reserved.has(key))) continue;
+                const streetDesc = _planAddRoom(plan, street.coords, street.type, "Town", {});
+                _planLink(plan, streetDesc.coords, coords, dir, "door", false);
+                delete plan.rooms[street.coords]; // never instantiate a replacement street
+                const added = instantiatePlannedRooms(plan);
+                street.exits = street.exits || {}; street.exits[dir] = coords;
+                street.doors = street.doors || {}; street.doors[dir] = "door";
+                const previous = PLANNED_GENERATION_ACTIVE;
+                PLANNED_GENERATION_ACTIVE = true;
+                try {
+                    added.forEach(room => {
+                        assignGeneratedNPCs(room, "Town");
+                        (room.creatures || []).forEach(npc => { if (npc && typeof npc.hostility === "number") npc.hostility = Math.min(25, npc.hostility); });
+                    });
+                } finally { PLANNED_GENERATION_ACTIVE = previous; }
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function isBathhouseRoom(room) {
+    return !!(room && room.buildingId && room.buildingType === "Bathhouse");
+}
+
+function bathhouseTrainingKey(room) {
+    return getPortalTier() + ":" + String(room && room.buildingId || "");
+}
+
+function getBathhouseTraining(room) {
+    const records = G.player && G.player.bathhouseTraining;
+    return records && records[bathhouseTrainingKey(room)] || null;
+}
+
+function bathhouseQualified(room) {
+    return !!(getBathhouseTraining(room) || {}).qualified;
+}
+
+function bathhouseWorkBlock(job) {
+    if (!job || !/^(bathAttendant|bathMassage)$/.test(job.type)) return "";
+    const site = getJobSiteRoom(job), giver = findJobGiver(job);
+    if (!site || !isBathhouseRoom(site) || site.type !== (job.type === "bathMassage" ? "Massage Room" : "Bathing Room") || isRoomCollapsed(site)) return "The bathhouse work site is unavailable.";
+    if (job.type === "bathMassage" && !bathhouseQualified(site)) return "You must pass this bathhouse's practical massage trial before doing this work.";
+    const keeperRoom = Object.values(G.roomMap || {}).find(r => r && r.buildingId === site.buildingId && (r.creatures || []).includes(giver));
+    if (!giver || giver.role !== "Bathkeeper" || !keeperRoom || !jobGiverIsAvailable(giver) || (giver.hostility || 0) >= 40 || giver.bound || giver._prisoner ||
+        giver.currentState && giver.currentState.sleeping || isNPCOffDuty(giver, keeperRoom) || roomHasActiveHostile(keeperRoom)) return "The bathkeeper is unavailable to supervise work. Return during working hours.";
+    return "";
+}
+
+function bathhouseProvider(room) {
+    return (room && room.creatures || []).find(npc => npc && npc.role === "Bathkeeper" && !bathhouseBlock(npc)) || null;
+}
+
+function bathhouseBlock(npc) {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot use the baths while incapacitated.";
+    if (!isBathhouseRoom(room)) return "Visit The Warmstone Baths and speak to the bathkeeper.";
+    if (G.combatEncounter || G.activeNPCMode === "combat" || roomHasActiveHostile(room) || isRoomCollapsed(room)) return "The baths are unsafe right now.";
+    if (isPlayerJailed() || p.carrying || G.activeObject || G.activeItemModal || hasPendingPartyLoot()) return "Finish your current interaction before using the baths.";
+    if (G.activeNPC && G.activeNPC !== npc) return "Leave the current conversation before speaking to the bathkeeper.";
+    if (G.activeNPC && !/^(menu|talk|respond|bathhouse)$/.test(G.activeNPCMode || "")) return "Finish the current service first.";
+    if (!npc || npc.role !== "Bathkeeper" || !(room.creatures || []).includes(npc) || npc.buildingId && npc.buildingId !== room.buildingId ||
+        npc._postCoords && G.roomMap[npc._postCoords] && G.roomMap[npc._postCoords].buildingId !== room.buildingId ||
+        !isVisibleEntity(npc) || !canConverseWithNPC(npc) || npc.dead || npc.hp <= 0 || npc.unconscious || npc.isUnconsciousBody ||
+        npc.currentState && npc.currentState.sleeping || npc._inSkirmish || npc.bound || npc._prisoner ||
+        (npc.hostility || 0) >= 40 || (npc.memory && npc.memory.favorability || 0) <= -20 ||
+        isNPCOffDuty(npc, room) || renownRefusesTrade(npc)) return "The bathkeeper is unavailable. Find them here during working hours.";
+    return "";
+}
+
+// Treatments use the building's actual facilities. Broken, blocked or rewired
+// rooms cannot continue supplying services simply because an old menu remains.
+function bathhouseFacility(room, action) {
+    const type = action === "massage" || action === "trial" || action === "practitioner" ? "Massage Room" : "Bathing Room";
+    return Object.values(G.roomMap || {}).find(other => other && other.buildingId === room.buildingId && other.type === type) || null;
+}
+
+function bathhouseFacilityBlock(room, action) {
+    const target = bathhouseFacility(room, action);
+    if (!target || isRoomCollapsed(target) || roomHasActiveHostile(target)) return "The treatment room is unavailable.";
+    const seen = new Set([room]), queue = [room];
+    while (queue.length) {
+        const here = queue.shift();
+        if (here === target) return "";
+        Object.keys(here.exits || {}).forEach(dir => {
+            const next = G.roomMap[here.exits[dir]];
+            if (!next || next.buildingId !== room.buildingId || seen.has(next) || isRoomCollapsed(next) || roomHasActiveHostile(next) ||
+                isExitLocked(here, dir) || isExitCollapsed(here, dir) ||
+                typeof getDoorObstruction === "function" && getDoorObstruction(here, dir)) return;
+            seen.add(next); queue.push(next);
+        });
+    }
+    return "The way to the treatment room is blocked.";
+}
+
+function bathhouseActionSpec(npc, action) {
+    const def = BATHHOUSE_TREATMENTS[action], room = G.activeRoom;
+    const spec = { action, label: def ? def.label : action === "trial" ? "Practical massage trial" : action === "attendant" ? "Bath-attendant work" : "Massage-practitioner work",
+        fee: def ? scaleJobCoins(def.fee, false) : 0, turns: def ? def.turns : action === "trial" ? 2 : 1,
+        staminaCost: action === "trial" ? 1 : 0, recovery: def ? def.recovery : 0, cleans: !!(def && def.cleans) };
+    spec.reason = bathhouseBlock(npc);
+    if (!def && !["trial", "attendant", "practitioner"].includes(action)) spec.reason = "Choose a current bathhouse service.";
+    if (!spec.reason) spec.reason = bathhouseFacilityBlock(room, action);
+    if (!spec.reason && bathhouseActionBusy) spec.reason = "A bathhouse action is still finishing.";
+    if (!spec.reason && !hasEnoughCoins(G.player, spec.fee)) spec.reason = "You cannot afford this treatment.";
+    if (!spec.reason && action === "trial") {
+        const record = getBathhouseTraining(room);
+        if (record && record.qualified) spec.reason = "You have already passed this bathhouse's massage trial.";
+        else if (record && record.attemptDay === getGameDay()) spec.reason = "Practise and return tomorrow for another trial.";
+        else if (getActiveJob()) spec.reason = "Finish your current job before taking a trial.";
+        else if (G.player.stamina < spec.staminaCost) spec.reason = "Rest before taking the practical trial.";
+    }
+    if (!spec.reason && (action === "attendant" || action === "practitioner") && !canOfferJob(npc, action === "attendant" ? "bathAttendant" : "bathMassage"))
+        spec.reason = getActiveJob() ? "You already have a job." : "Pass this bathhouse's practical massage trial first.";
+    return spec;
+}
+
+function bathhouseSceneStamp(npc) {
+    const p = G.player, room = G.activeRoom;
+    return JSON.stringify([getPortalTier(), room && [room.buildingId, room.buildingType],
+        p && [p.hp, p.stamina, p.staminaMax, p.stats, p.statusEffects, getCoinValue(p), p.bathhouseTraining],
+        getActiveJob(), npc && [npc.role, npc.buildingId, npc.hp],
+        Object.values(G.roomMap || {}).filter(r => r && room && r.buildingId === room.buildingId).map(r => [r.coords, r.type, r.exits, r.locks, r.collapse, r.objectRelations])]);
+}
+
+function openBathhouseMenu(npc) {
+    npc = npc || bathhouseProvider(G.activeRoom);
+    const block = bathhouseBlock(npc);
+    if (block) return sharedChoiceResult("blocked", block);
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return sharedChoiceResult("blocked", "The bathhouse menu is unavailable.");
+    if (!G.activeNPC) selectNPC(npc);
+    if (G.activeNPC !== npc) return sharedChoiceResult("interrupted", "The conversation changed.");
+    G.activeNPCMode = "bathhouse";
+    setExitGridVisible(false); el.innerHTML = "";
+    const title = "The Warmstone Baths — hot water or honest work. Treatments refresh stamina; they do not replace sleep or wound care.";
+    const menu = beginSharedChoiceMenu("bathhouse-services", npc, title, () => openBathhouseMenu(npc));
+    const valid = menu.valid, stamp = bathhouseSceneStamp(npc), turn = getCurrentStoryTurn(), map = G.roomMap;
+    const rooms = Object.values(map).filter(r => r && r.buildingId === G.activeRoom.buildingId);
+    menu.valid = () => valid() && G.roomMap === map && rooms.every(r => map[r.coords] === r) && getCurrentStoryTurn() === turn && !bathhouseBlock(npc) && bathhouseSceneStamp(npc) === stamp;
+    const services = [];
+    ["bath", "wash", "massage", "trial", "attendant", "practitioner"].forEach(action => {
+        const spec = bathhouseActionSpec(npc, action);
+        let label = spec.label;
+        if (BATHHOUSE_TREATMENTS[action]) label += " — " + spec.fee + " gold, " + spec.turns + " turns, up to " + spec.recovery + " stamina";
+        else if (action === "trial") label += " — flexibility check, difficulty 11; 1 stamina, 2 turns; retry tomorrow if unsuccessful";
+        else label += " — " + describeJobPay(JOB_TYPES[action === "attendant" ? "bathAttendant" : "bathMassage"]) + ", 4 shifts";
+        services.push(Object.assign({}, spec, { command: "bathhouse " + action, available: !spec.reason }));
+        el.appendChild(createSharedChoiceButton(menu, label, () => performBathhouseAction(npc, action), {
+            disabled: !!spec.reason, title: spec.reason, textChoice: { action }
+        }));
+    });
+    el.appendChild(createSharedChoiceButton(menu, "Back to conversation", () => {
+        G.activeNPCMode = "talk"; renderChatOptions(npc); return { status: "completed" };
+    }, { textChoice: { action: "back" } }));
+    menu.publicData = { bathhouse: { stage: "choices", qualified: bathhouseQualified(G.activeRoom), services } };
+    publishSharedChoiceMenu(menu, el);
+    if (!textModeState.enabled) publishTextModeOutput("service", title, Object.assign({ presentation: "supplement" }, menu.publicData), false);
+    return { status: "needs_input", outputPublished: true };
+}
+
+async function performBathhouseAction(npc, action) {
+    const spec = bathhouseActionSpec(npc, action);
+    if (spec.reason) return sharedChoiceResult("blocked", spec.reason);
+    const p = G.player, room = G.activeRoom, map = G.roomMap, mode = G.activeNPCMode, modal = G.activeItemModal, object = G.activeObject;
+    const facility = bathhouseFacility(room, action), turn = getCurrentStoryTurn(), epoch = textModeState.epoch;
+    const playerState = choiceEntitySnapshot(p), npcState = choiceEntitySnapshot(npc);
+    bathhouseActionBusy = true;
+    try {
+        adjustCoins(p, -spec.fee);
+        spendEntityStamina(p, spec.staminaCost, [], { isPlayer: true });
+        const stamp = bathhouseSceneStamp(npc);
+        await advanceStoryTurn(spec.turns);
+        if (G.player !== p || G.activeRoom !== room || G.roomMap !== map || map[room.coords] !== room || G.activeNPC !== npc ||
+            G.activeNPCMode !== mode || G.activeItemModal !== modal || G.activeObject !== object || textModeState.epoch !== epoch ||
+            getCurrentStoryTurn() !== turn + spec.turns || !playerState() || !npcState() || bathhouseSceneStamp(npc) !== stamp ||
+            bathhouseFacility(room, action) !== facility || bathhouseBlock(npc) || bathhouseFacilityBlock(room, action)) {
+            const message = "Your bathhouse session was interrupted after time and any quoted fee or effort were spent. No treatment, qualification or job was awarded.";
+            markTextModeUrgent("bathhouse-interrupted");
+            if (G.player === p && G.activeRoom === room) setNarration(message);
+            publishTextModeOutput("service", message, { presentation: "supplement", bathhouse: { stage: "result", action, committed: false, fee: spec.fee, turns: spec.turns, staminaCost: spec.staminaCost } }, false);
+            saveGameState(); return { status: "interrupted", outputPublished: true };
+        }
+        let message, result = { stage: "result", action, committed: true, fee: spec.fee, turns: spec.turns, staminaCost: spec.staminaCost };
+        if (BATHHOUSE_TREATMENTS[action]) {
+            const recovered = restoreEntityStamina(p, spec.recovery);
+            if (spec.cleans) cleanEntityAfterWashing(p);
+            message = BATHHOUSE_TREATMENTS[action].text + " You recover " + recovered + " stamina.";
+            Object.assign(result, { recovered, cleaned: spec.cleans });
+        } else if (action === "trial") {
+            const roll = rollStatCheck(p, "flexibility", 11);
+            if (!p.bathhouseTraining || typeof p.bathhouseTraining !== "object") p.bathhouseTraining = {};
+            p.bathhouseTraining[bathhouseTrainingKey(room)] = { qualified: !!roll.success, attemptDay: getGameDay() };
+            message = roll.success ? "Under the bathkeeper's supervision, you demonstrate careful pressure and a steady rhythm on their shoulders. You pass the practical trial and may apply for massage work here." :
+                "The bathkeeper stops the demonstration and shows you where your pressure was uneven. You have not passed yet. Return tomorrow for another trial; ordinary bath-attendant work is still available.";
+            Object.assign(result, { qualified: !!roll.success, roll: { stat: "flexibility", dc: 11, die: roll.roll, bonus: roll.bonus, total: roll.total, success: !!roll.success } });
+        } else {
+            // The same native acceptance, site, wage and save handler as NPC work.
+            const type = action === "attendant" ? "bathAttendant" : "bathMassage";
+            if (!acceptJobFromNPC(npc, type)) return sharedChoiceResult("blocked", "That job is no longer available.");
+            message = "Your work is arranged. " + describeJobStatus(getActiveJob()) + " Step away from the conversation and use work when you reach the job site.";
+            result.job = { name: JOB_TYPES[type].label, site: getJobSiteName(getActiveJob()) };
+        }
+        G.activeNPCMode = "talk"; renderChatOptions(npc);
+        setNarration(message); renderStats(); saveGameState();
+        publishTextModeOutput("service", message, { presentation: "supplement", bathhouse: result }, false);
+        return { status: action === "trial" && !result.qualified ? "blocked" : "completed", outputPublished: true };
+    } finally { bathhouseActionBusy = false; }
+}
+
+function parseTextBathhouseCommand(raw) {
+    const match = /^(?:bathhouse|baths|spa)(?:\s+(.+))?$/i.exec(raw);
+    const aliases = { "take a bath": "bath", "take bath": "bath", "hot bath": "bath", "get bathed": "wash", "assisted wash": "wash", "get a massage": "massage", "get massage": "massage", "massage trial": "trial", "audition massage": "trial", "trial shift": "trial" };
+    const key = textCommandNormalize(raw), action = match ? textCommandNormalize(match[1] || "menu") : aliases[key];
+    return action ? { verb: "bathhouse", args: { action: aliases[action] || action } } : null;
+}
+
+function textBathhouseShow() {
+    const npc = bathhouseProvider(G.activeRoom), reason = bathhouseBlock(npc);
+    const services = reason ? [] : ["bath", "wash", "massage", "trial", "attendant", "practitioner"].map(action => {
+        const spec = bathhouseActionSpec(npc, action);
+        return Object.assign({}, spec, { command: "bathhouse " + action, available: !spec.reason });
+    });
+    return textModeResult("completed", reason || services.map(s => s.label + ": " + s.command + "; " + s.fee + " gold, " + s.turns + " turns" + (s.reason ? "; " + s.reason : "")).join("\n"),
+        { bathhouse: { stage: "availability", qualified: bathhouseQualified(G.activeRoom), services } });
+}
+
+async function executeTextBathhouseCommand(action) {
+    const selected = (action.args || {}).action || "menu";
+    const result = openBathhouseMenu(G.activeNPC || bathhouseProvider(G.activeRoom));
+    if (result.status !== "needs_input" || selected === "menu") return result;
+    const menu = sharedChoiceState.menu, choice = menu.options.find(option => option.meta.action === selected);
+    return choice ? runSharedChoice(menu, choice) : textModeResult("needs_input", "Choose a treatment, trial or job from the current bathhouse options.");
+}
+
+async function textBathhouseMenuInput(menu, action, input) {
+    if ((splitTextCommands(input || "").parts || []).length > 1) return textModeResult("needs_input", "Answer one bathhouse choice at a time. Later commands stay paused.", { systemOnly: true });
+    if (action && /^(leave|cancel)$/.test(action.verb)) {
+        clearSharedChoiceMenu(menu);
+        if (action.verb === "cancel") stopTextCommands(false);
+        if (G.player === menu.scene.player && G.activeRoom === menu.scene.room && G.activeNPC === menu.npc && G.activeNPCMode === menu.scene.mode) {
+            if (action.verb === "leave") disengageFromNPC();
+            else { G.activeNPCMode = "talk"; renderChatOptions(menu.npc); }
+        }
+        return textModeResult("completed", "You leave the bathhouse menu.", { systemOnly: true });
+    }
+    const choice = menu.options.find(option => option.meta.action === ((action.args || {}).action || "menu"));
+    return choice ? textRunSharedChoice(menu, choice) : textSharedOptions();
+}
+
+
+// Public role services share eligibility across the opening menu and text input.
+function getNPCServiceOptions(npc) {
+    const p = G.player, room = G.activeRoom;
+    if (!npc || !/bathkeeper|innkeeper|bartender|cook|vendor|shopkeeper|clothier|merchant|trader|blacksmith|healer|herbalist|physician|apothecary|enchanter/i.test(String(npc.role || ""))) return [];
+    if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing || p.carrying ||
+        !npc || !(room.creatures || []).includes(npc) || !isVisibleEntity(npc) || !canConverseWithNPC(npc) ||
+        (G.activeNPC === npc && !/^(menu|talk|respond)$/.test(G.activeNPCMode || "")) ||
+        npc.dead || npc.hp <= 0 || npc.unconscious || npc.isUnconsciousBody || (npc.currentState && npc.currentState.sleeping) ||
+        (npc.hostility || 0) >= 80 || (npc.memory && npc.memory.favorability || 0) <= -70 ||
+        isNPCOffDuty(npc, room) || renownRefusesTrade(npc) || npc._cellarTrip || npc._inSkirmish ||
+        G.combatEncounter || G.activeNPCMode === "combat" || roomHasActiveHostile(room) ||
+        isRoomCollapsed(room) || hasPendingPartyLoot() || G.activeObject || G.activeItemModal) return [];
+    const role = String(npc.role || "").toLowerCase(), options = [];
+    const add = (service, label) => options.push({ service, label, command: "service " + service });
+    if (npc.role === "Bathkeeper" && !bathhouseBlock(npc)) add("baths", "Ask about baths, massage and work");
+    if (role.includes("innkeeper")) add("rooms", "Inquire about rooms (weekly rental)");
+    if (isBarKeeper(npc)) add("drinks", "Order a drink");
+    if (/bartender|innkeeper|cook/.test(role)) add("menu", "Ask for the menu");
+    if (/vendor|shopkeeper|clothier|merchant|trader|bartender|innkeeper|blacksmith/.test(role)) add("wares", "See wares");
+    if (/healer|herbalist|physician|apothecary/.test(role)) add("healing", "Ask about healing supplies");
+    if (isForgeSmith(npc)) add("forge", "Ask about forge services");
+    if (npc.role === "Enchanter") add("enchanting", "Ask about enchanting services");
+    if (isClothier(npc)) add("tailoring", "Ask about tailoring services");
+    return options;
+}
+
+function requestNPCService(npc, service) {
+    if (G.activeNPC !== npc || !/^(menu|talk|respond)$/.test(G.activeNPCMode || "") ||
+        !getNPCServiceOptions(npc).some(option => option.service === service)) {
+        return sharedChoiceResult("blocked", "That service is no longer available.");
+    }
+    // Business opens normal topics without greeting rewards or name reveals.
+    const state = typeof ensureNPCConversationState === "function" ? ensureNPCConversationState(npc) : null;
+    if (state && !state.sessionUsedOptionIds.includes("service-opened")) state.sessionUsedOptionIds.push("service-opened");
+    if (npc.memory) npc.memory.metPlayer = true;
+    if (service === "baths") return openBathhouseMenu(npc);
+    if (service === "drinks") return showNPCDrinkMenu(npc);
+    if (service === "rooms") showRentRoomMenu(npc);
+    else if (service === "forge") visitForge(npc);
+    else if (service === "enchanting") visitEnchanter(npc);
+    else if (service === "tailoring") visitClothier(npc);
+    else tradeWithNPC(npc);
+    // Native rendering owns narration; text uses the existing real-stock view.
+    if (textModeState.enabled && G.activeNPC === npc && G.activeNPCMode === "trade") textTradeList("buy");
+    return { status: "needs_input" };
+}
+
+function showNPCDrinkMenu(npc) {
+    if (G.activeNPC !== npc || !getNPCServiceOptions(npc).some(option => option.service === "drinks")) return sharedChoiceResult("blocked", "That drink service is no longer available.");
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return sharedChoiceResult("blocked", "The drink menu is unavailable.");
+    G.activeNPCMode = "talk";
+    const menu = beginSharedChoiceMenu("npc-drinks", npc, "Order a drink", () => showNPCDrinkMenu(npc));
+    const valid = menu.valid, turn = getCurrentStoryTurn();
+    const drinks = TAVERN_DRINK_TEMPLATES.map(tpl => ({ tpl, price: getBarPrice(npc, tpl), stock: countBarStock(npc, tpl.id) }));
+    // Browsing must not roll a sobriety verdict. The native purchase does that.
+    menu.valid = () => valid() && getCurrentStoryTurn() === turn &&
+        getNPCServiceOptions(npc).some(option => option.service === "drinks") &&
+        drinks.every(entry => entry.price === getBarPrice(npc, entry.tpl) && entry.stock === countBarStock(npc, entry.tpl.id));
+    el.innerHTML = "";
+    drinks.forEach(({ tpl, price, stock }) => {
+        const verdict = npc._barVerdict;
+        const refused = verdict && verdict.ok === false && getCurrentStoryTurn() < verdict.until &&
+            (typeof getDrunkStacks !== "function" || verdict.stacks === getDrunkStacks(G.player));
+        const reason = refused ? "The barkeeper is refusing further drinks." : (npc.hostility || 0) >= 60 ? "The barkeeper will not serve you." : !stock ? "Out of stock." : !hasEnoughCoins(G.player, price) ? "You cannot afford this drink." : "";
+        el.appendChild(createSharedChoiceButton(menu, tpl.name + " — " + price + " gold", () => {
+            if ((npc.hostility || 0) >= 60) return sharedChoiceResult("blocked", "The barkeeper will not serve you.");
+            const served = orderBarDrink(npc, tpl.id);
+            if (G.activeNPC === npc && G.activeNPCMode === "talk" && getNPCServiceOptions(npc).some(option => option.service === "drinks")) showNPCDrinkMenu(npc);
+            return { status: served ? "needs_input" : "blocked" };
+        }, { disabled: !!reason, title: reason, textChoice: { action: "drink" } }));
+    });
+    el.appendChild(createSharedChoiceButton(menu, "Back to conversation", () => {
+        G.activeNPCMode = "talk"; renderChatOptions(npc); return { status: "completed" };
+    }, { textChoice: { action: "back" } }));
+    publishSharedChoiceMenu(menu, el);
+    return { status: "needs_input" };
+}
+
+function parseTextNPCService(raw) {
+    const match = /^(?:service|services)(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "service", args: { service: textCommandNormalize(match[1] || "") } };
+    const aliases = {
+        "ask about bathhouse services": "baths", "ask about baths": "baths",
+        "inquire about rooms": "rooms", "ask about rooms": "rooms",
+        "order drink": "drinks", "order a drink": "drinks",
+        "ask for menu": "menu", "ask for the menu": "menu",
+        "see wares": "wares", "ask about wares": "wares",
+        "ask about healing services": "healing", "ask about healing supplies": "healing",
+        "ask about forge services": "forge", "ask about enchanting services": "enchanting",
+        "ask about tailoring services": "tailoring"
+    };
+    const service = aliases[textCommandNormalize(raw)];
+    return service ? { verb: "service", args: { service } } : null;
+}
+
+function textNPCServicesShow() {
+    const services = getNPCServiceOptions(G.activeNPC);
+    return textModeResult("completed", services.length ? services.map(option => option.label + ": " + option.command).join("\n") : "No public services are available from this person here. Talk to an available provider first.", { services });
+}
+
+
 const TEXT_COMMANDS = [
+    { id: "bathhouse", bathhouse: true, args: ["action"], aliases: ["bathhouse", "baths", "spa", "take a bath", "get bathed", "get a massage", "massage trial", "audition massage", "trial shift"], example: "bathhouse; bathhouse bath; get bathed; get a massage; bathhouse trial; bathhouse attendant; bathhouse practitioner; show baths; how bathhouse", description: "Visit The Warmstone Baths and ask the available bathkeeper for services. Hot bath: 4 gold/2 turns/up to 3 stamina; assisted wash: 7 gold/3 turns/up to 5 stamina; massage: 9 gold/3 turns/up to 7 stamina. Prices scale with town tier. Bath and wash clean you and worn gear; massage does not. Treatments do not heal wounds or replace sleep. A practical massage trial costs 1 stamina and 2 turns and uses flexibility against difficulty 11; failure can be retried tomorrow. Ordinary attendant work needs no trial. Qualified massage work pays more and may earn tips. Work uses the existing job system: leave the conversation, go to the stated site, work, collect pay. Answer menus one step at a time; back/cancel/leave are free; continue resumes an older batch explicitly." },
+    { id: "actions", conversationActions: true, args: ["group"], aliases: ["actions", "conversation actions"], example: "actions; actions services; actions food; actions company; actions interactions; show conversation actions; how conversation actions", description: "Open grouped conversation actions through the same current callbacks as the buttons. Services/trade, food/drink, travel/company and interactions are separate menus. Choose one numbered option at a time. Back returns to conversation; leave steps away; cancel closes the menu and cancels later commands. Resume older batches explicitly with continue." },
+    { id: "service", service: true, args: ["service"], aliases: ["service", "services", "inquire about rooms", "order drink", "ask for menu", "see wares", "ask about healing services", "ask about forge services"], example: "show services; service rooms; order a drink; ask for the menu; see wares; service forge; how service", description: "While talking to an obvious provider, choose any available service without greeting first. Blacksmiths offer wares and forge work separately; innkeepers offer rooms, drinks and a menu. Service healing opens supplies for sale. Menus retain native prices, checks and costs. Choices pause later commands; continue explicitly after finishing." },
     { id: "commitment", commitment: true, args: ["action","target"], aliases: ["tasks","requests","commitments","promises","promise","ask-for","accept task","decline task","deliver task","break promise"], example: "tasks; accept task; deliver task; commitments; promise bread; promise 2 coins", description: "Review real NPC requests, accept or decline their current terms, settle tasks with real items or coin, or review a player-made promise. Accepting costs one turn. Promised coin rewards are reserved from the giver. Breaking a promise costs trust; cancelling is free." },
     { id: "tool", jobs: true, args: ["action", "target", "item"], aliases: ["tools", "tool use", "pry", "lever", "wedge", "jam", "brace", "unwedge", "force obstruction"], example: "pry packing board with iron pry bar; wedge chair under north door; unwedge north door; force obstruction north door; tools; show tools", description: "Use real objects together. Pry exposed nailed/pegged fittings with a sound rigid lever; wedge suitable furniture or a solid object against a real door. Material, shape, size, condition, reach and stats determine eligibility and dice difficulty. Pry/wedge cost 1 stamina and 1 turn; forcing a brace costs 2 stamina and 1 turn; removing your reachable brace costs 1 turn. Failures spend costs and pause later commands. A brace stays in place, blocks both sides and cannot be picked up until released. Unwedging does not unlock a lock. Show tools lists current combinations; tools opens the same choices as native controls. Options/back/cancel/leave work; explicitly continue older queued commands." },
     { id: "object", info: false, jobs: true, args: ["action", "target"], aliases: ["objects", "physical objects", "lift", "heave", "drag", "haul", "shift", "move object", "push object", "pull object"], example: "lift bucket; drag bench; shift crate; push object chair; show objects; how lift", description: "Lift an accessible object and set it down, or drag/shift it a short distance within the room. Heave means lift; haul/pull object means drag; push object/move object means shift. The engine checks reach, attachment, occupancy, material, size, contents and physical prowess. Easy lifts succeed without a roll or cost; uncertain lifts and floor moves use a stat-based d20 check, 1 stamina and 1 turn, including failures. Impossible attempts never roll. These actions do not carry objects between rooms or create cover, block exits or spill contents. Take retains pack limits. Show objects lists public properties and current availability." },
@@ -1618,7 +2014,7 @@ const TEXT_COMMANDS = [
     { id: "continue", aliases: ["continue", "resume"], example: "continue", description: "Explicitly resume the remaining commands after a pause. A failed action is not retried." }
     ,{ id: "touch", nsfw: true, args: ["target"], aliases: ["touch", "touch gently"], example: "touch elf; touch gently human", description: "Gently touch a visible humanoid NPC. Their reaction depends on your relationship, their temperament, and the context. Only works on romance-eligible NPCs." },
     { id: "grab", nsfw: true, args: ["target"], aliases: ["grab"], example: "grab elf; grab second human", description: "Firmly grab a visible humanoid NPC. Their reaction depends on your relationship and the context. Only works on romance-eligible NPCs." },
-    { id: "hug", nsfw: true, args: ["target"], aliases: ["hug", "embrace"], example: "hug elf; embrace human", description: "Hug a visible humanoid NPC affectionately. Their reaction depends on relationship. Only works on romance-eligible NPCs." },
+    { id: "hug", social: true, args: ["target"], aliases: ["hug", "embrace"], example: "hug elf; embrace human; contact give them a hug with elf", description: "Offer an ordinary hug through the shared contact-and-reply handler. The NPC may accept or decline. The narrated attempt costs one conversation turn and adds no special relationship reward." },
     { id: "grope", nsfw: true, args: ["target"], aliases: ["grope"], example: "grope elf", description: "Boldly and intimately touch a visible humanoid NPC. High risk/high reward. Only works on romance-eligible NPCs." }
 ];
 
@@ -1683,6 +2079,10 @@ function parseTextCommand(input) {
     if (/^(?:"[\s\S]*"|“[\s\S]*”|'[\s\S]*')$/.test(raw)) return { verb: "say", args: { text: textCommandUnquote(raw) } };
     match = /^(?:say|reply|respond)\s+([\s\S]+)$/i.exec(original);
     if (match) return { verb: "say", args: { text: textCommandUnquote(match[1]) } };
+    match = /^(?:actions|conversation actions)(?:\s+(.+))?$/i.exec(raw);
+    if (match) return { verb: "actions", args: { group: textCommandNormalize(match[1] || "") } };
+    const bathhouse = parseTextBathhouseCommand(raw); if (bathhouse) return bathhouse;
+    const npcService = parseTextNPCService(raw); if (npcService) return npcService;
     const commitment = parseTextCommitmentCommand(raw); if (commitment) return commitment;
     const toolCommand = parseTextWorldToolCommand(raw); if (toolCommand) return toolCommand;
     const objectCommand = parseTextObjectCommand(raw); if (objectCommand) return objectCommand;
@@ -1810,7 +2210,7 @@ function validateTextAIPlan(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return !def.tasting && (!def.commitment || commitmentIntentAvailable()) && !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return (!def.bathhouse || !!bathhouseProvider(G.activeRoom)) && !def.tasting && (!def.conversationActions || typeof conversationActionMenuBlock === "function" && !conversationActionMenuBlock(G.activeNPC)) && (!def.service || getNPCServiceOptions(G.activeNPC).length > 0) && (!def.commitment || commitmentIntentAvailable()) && !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -1833,7 +2233,8 @@ async function interpretTextCommands(input) {
     // ("talk talk to talk to human") can be mapped to someone actually here.
     let peopleWords = "";
     try { const seen = []; textModeVisibleNPCs().forEach(function (npc) { const w = [npc.gender, npc.species].filter(Boolean).join(" ").toLowerCase(); if (w && seen.indexOf(w) < 0) seen.push(w); }); if (seen.length) peopleWords = "\nhere=" + seen.slice(0, 10).join("|"); } catch (e) {}
-    const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\nExpand args keys: i=item,t=target,s=source,a=action,f=fixture,b=ability\n' + schema + combatWords + socialWords + objectWords + peopleWords + '\n' + JSON.stringify(input);
+    const bathWords = shapes.some(shape => shape.verbs.includes("bathhouse")) ? "\nbathhouse.action=menu|bath|wash|massage|trial|attendant|practitioner." : "";
+    const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\nExpand args keys: i=item,t=target,s=source,a=action,f=fixture,b=ability\n' + schema + combatWords + socialWords + objectWords + bathWords + peopleWords + '\n' + JSON.stringify(input);
     try {
         const raw = await textModeAIRequest(instruction, 12000);
         if (!raw) return null;
@@ -3358,6 +3759,9 @@ function textModeInspectNPC(action) {
 
 function textModeHelpContent(topic, show) {
     let key = textCommandNormalize(topic).replace(/^(?:to|use)\s+/, "");
+    if (key === "conversation actions") return show ? textConversationActionsShow() : textModeResult("completed", textCommandDefinition("actions").example + ". Choose one current action at a time; back returns to conversation, leave steps away, and continue resumes older commands explicitly.");
+    if (show && /^(bathhouse|baths|spa|massage|massage trial)$/.test(key)) return textBathhouseShow();
+    if (show && /^(service|services)$/.test(key)) return textNPCServicesShow();
     if (show && /^(taste|tasting)$/.test(key) && typeof textTastingShow === "function") return textTastingShow();
     if (show) { const sleepers = textSleepingNPCShow(key); if (sleepers) return sleepers; }
     if (show) { const tools = worldToolShow(key); if (tools) return tools; }
@@ -3405,8 +3809,11 @@ function textModeHelpContent(topic, show) {
     if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
     const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "taste", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
-        if (ids.indexOf(def.id) < 0 && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !def.commitment && !/^(back|cancel)$/.test(def.id)) return false;
+        if (ids.indexOf(def.id) < 0 && !def.bathhouse && !def.conversationActions && !def.service && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !def.commitment && !/^(back|cancel)$/.test(def.id)) return false;
+        if (def.conversationActions && (typeof conversationActionMenuBlock !== "function" || conversationActionMenuBlock(G.activeNPC))) return false;
+        if (def.service && !getNPCServiceOptions(G.activeNPC).length) return false;
         if (def.commitment && !commitmentIntentAvailable()) return false;
+        if (def.bathhouse && !bathhouseProvider(G.activeRoom)) return false;
         if (def.social && !socialActionAvailable()) return false;
         if (def.id === "object" && !worldObjectEntries().length) return false;
         if (def.id === "tool" && !worldToolAvailable()) return false;
@@ -3525,7 +3932,7 @@ function textModeListOptions() {
     if (!G.activeNPC || !/^(talk|respond)$/.test(G.activeNPCMode)) return textModeResult("blocked", "Start a conversation with talk to <npc> first.");
     const options = getChatOptions(G.activeNPC);
     textModeState.choices = { scene: textModeScene(), options: options };
-    return textModeResult("completed", options.length ? options.map(function (option, i) { return (i + 1) + ". " + option.label; }).join("\n") + "\nType choose followed by a number, or use say to speak." : "No conversation choices are available. You can use say or leave.");
+    return textModeResult("completed", options.length ? options.map(function (option, i) { return (i + 1) + ". " + option.label; }).join("\n") + "\nType choose followed by a number, or use say to speak." : "No conversation choices are available. You can use say or leave.", { choices: options.map(function (option, i) { return { number: i + 1, label: option.label, response: "choose " + (i + 1), service: option.service || undefined }; }) });
 }
 
 function textModeInterruptReason() {
@@ -3562,6 +3969,11 @@ async function executeTextCommand(action) {
     const def = textCommandDefinition(action.verb);
     if (!def) return textModeResult("blocked", "That command is not supported. Type how for examples.");
     if (/^(help|show)$/.test(action.verb)) return textModeHelp(args.topic, action.verb === "show");
+    if (action.verb === "actions") return showConversationActionMenu(G.activeNPC, args.group || "");
+    if (action.verb === "service") {
+        if (!args.service) return textNPCServicesShow();
+        return requestNPCService(G.activeNPC, args.service);
+    }
     if (action.verb === "phrases") return executeTextPhraseCommand(action);
     if (action.verb === "status") {
         const p = G.player;
@@ -3573,6 +3985,7 @@ async function executeTextCommand(action) {
     if (combatBlock) return textModeResult("blocked", combatBlock);
     const physicalIntent = structuralLegacyIntent(action);
     if (physicalIntent) return executeTextStructuralTool(physicalIntent);
+    if (action.verb === "bathhouse") return executeTextBathhouseCommand(action);
     if (action.verb === "commitment") return executeTextCommitment(action);
     if (action.verb === "tool") return executeTextWorldToolCommand(action);
     if (action.verb === "object") return executeTextObjectCommand(action);
@@ -3593,6 +4006,7 @@ async function executeTextCommand(action) {
         const objects = worldObjectMatches(args.item || "").filter(function (entry) { return entry.kind === "fixture"; });
         if (objects.length) return executeTextObjectCommand({ verb: "object", args: { action: "take", target: args.item } });
     }
+    if (action.verb === "hug") return executeTextInteractionCommand({ verb: "act", targetRef: action.targetRef, args: { family: "contact", action: "give them a hug", target: args.target || "" } });
     if (def.social) return executeTextSocialCommand(action);
     if (def.casting) return executeTextCastingCommand(action);
     if (def.nsfw && action.verb.match(/^(touch|grab|hug|grope)$/)) return executeTextTouchCommand(action);
@@ -5411,6 +5825,7 @@ function textSharedOptions() {
     }
     if (menu && owned && menu.kind === "commission-board" && !commissionBoardBlock(menu.commissionBoard)) return openForgeCommissionBoard(menu.commissionBoard);
     if (menu && owned && /^tailor-/.test(menu.kind) && !tailorServiceBlock(menu.npc)) { return tailorMenu(menu.npc, "services"); }
+    if (menu && owned && /^bathhouse-/.test(menu.kind) && !bathhouseBlock(menu.npc)) return openBathhouseMenu(menu.npc);
     if (menu && owned && /^casting-/.test(menu.kind) && !castingBlock(menu.caster, menu.scene.mode === "combat")) return menu.refresh();
     if (menu && owned && /^synergy-/.test(menu.kind) && !synergyActionBlock(menu.room, menu.synergyKind !== "self")) return menu.refresh();
     if (menu && owned && /^travel-/.test(menu.kind) && !travelNPCBlock(menu.npc, menu.kind.replace("travel-", ""))) { return menu.refresh(); }
@@ -5443,6 +5858,9 @@ function textSharedChoiceBlock() {
 
 function textSharedChoiceCanHandle(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && /^bathhouse-/.test(menu.kind) && (action && /^(bathhouse|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
+    if (menu && /^conversation-actions(?:-root)?$/.test(menu.kind) && (splitTextCommands(input || "").parts || []).length > 1) return true;
+    if (menu && /^(npc-drinks|conversation-actions(?:-root)?)$/.test(menu.kind) && action && action.verb === "leave") return true;
     if (menu && menu.kind === "paper-map" && action && /^(close|leave)$/.test(action.verb)) return true;
     if (action && /^(back|cancel)$/.test(action.verb)) return true;
     if (menu && /^goods-/.test(menu.kind) && action && action.verb === "leave") return true;
@@ -5487,6 +5905,16 @@ async function textRunSharedChoice(menu, choice) {
 
 async function textSharedChoiceInput(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && /^bathhouse-/.test(menu.kind) && (action && /^(bathhouse|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textBathhouseMenuInput(menu, action, input); return true; }
+    if (menu && /^conversation-actions(?:-root)?$/.test(menu.kind) && (splitTextCommands(input || "").parts || []).length > 1) {
+        textModeResult("needs_input", "Choose one conversation action at a time. Later commands stay paused.", { systemOnly: true });
+        showSharedChoiceMenu(menu); return true;
+    }
+    if (menu && /^(npc-drinks|conversation-actions(?:-root)?)$/.test(menu.kind) && action && action.verb === "leave") {
+        clearSharedChoiceMenu(menu);
+        if (G.activeNPC === menu.npc && G.activeRoom === menu.scene.room && G.player === menu.scene.player && G.activeNPCMode === menu.scene.mode) disengageFromNPC();
+        return true;
+    }
     if (menu && menu.kind === "paper-map" && action && /^(close|leave)$/.test(action.verb)) {
         const owned = G.player === menu.scene.player && G.activeRoom === menu.scene.room && G.activeItemModal === menu.scene.modal;
         clearSharedChoiceMenu(menu); if (owned) closeItemModal();
@@ -10930,7 +11358,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-23-011
+// Core Engine Version: 2026-10-24-002
 // Latest: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
 // Previous: Trade and economy pass: Traders now carry a real purse (20-50 gold) instead of the 2-10 default; merchants pay at most 1.75x half value so deity tomes and similar cannot be bought and flipped for profit; bone dice wagers move coin to and from the NPC and have a cooldown; sealed goods pay slightly less coin. Previous -007: Hand-in tokens now pay out of the NPC's own coin pouch and are kept if they cannot cover them. Previous -006: Item purpose pass part 2: keepsakes (charms, rings, brooches, scarves) wear on the Neck for +1 Charisma; rivets, nails, pick-heads, sewing kits, twine and cloth mend worn gear; relics, tokens, candles and incense can be left as offerings at a shrine; sealed bales, crates and goods open; spice seasons a meal; pawn tickets, receipts, tally sticks, chits and house tokens are handed in to the right NPC; bone dice wager with friendly NPCs; ledgers, maps and receipts are readable; ink, chalk, parchment and wax tablets count as writing supplies; the ladle and net weight are improvised weapons; clean linen bandages. New "apply" text command.
 // Previous: Item purpose pass part 1: quest trophies take half a unit each and stack; plain shop goods (travel bread, dried meat, tavern meal, warm supper, bitter tonic...) were created with no item type and could not be eaten, now fixed in createNPCTradeGood and covered by name for existing saves; supplies by name (meal, stew, supper, broth, fungus, nectar glaze) are edible.
@@ -11003,7 +11431,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-23-011";
+window.__ENGINE_CORE_VERSION = "2026-10-24-003";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -13813,7 +14241,7 @@ function generateLootItem(mainType, slot, options = {}) {
 }
 
 const UNIQUE_ROOM_NPC_ROLES = [
-    "Bartender", "Innkeeper", "Blacksmith", "Clothier", "Vendor", "Shopkeeper",
+    "Bathkeeper", "Bartender", "Innkeeper", "Blacksmith", "Clothier", "Vendor", "Shopkeeper",
     "Wandering Merchant", "Healer", "Priest", "Cook", "Archivist", "Town Guard",
     "Stone Guard", "Cultist", "Miner", "Enchanter", "Arcanist", "Reliquarian", "Shady Merchant", "Guildmaster"
 ];
@@ -13883,6 +14311,7 @@ function getRequiredLocationRole(roomType, hostileArea, zoneName, room) {
     if (roomType === "town hall") return "Town Guard";
     if (roomType === "jail") return zoneName === "Underground City" ? "Stone Guard" : "Town Guard";
     if (roomType === "records office") return "Archivist";
+    if (roomType === "bathhouse") return "Bathkeeper";
     if (roomType === "guildhall") return "Guildmaster";
     if (roomType === "chapel") return hostileArea ? "Cultist" : "Priest";
     if (roomType === "kitchen") return "Cook";
@@ -13898,6 +14327,8 @@ function getRequiredLocationRole(roomType, hostileArea, zoneName, room) {
 }
 
 function getLocationRoleTable(roomType, roomRole, hostileArea, zoneName) {
+    if (roomType === "bathhouse") return [{ role: "Bathkeeper", weight: 6, unique: true }, { role: "Patron", weight: 2 }];
+    if (roomType === "bathing room" || roomType === "massage room") return [{ role: "Patron", weight: 3 }, { role: "Townsfolk", weight: 1 }];
     if (roomType === "gate" || roomType === "underground gate") {
         return [
             { role: zoneName === "Underground City" ? "Stone Guard" : "Town Guard", weight: 8, unique: zoneName === "Underground City" },
@@ -25073,6 +25504,24 @@ const TROPHY_PARTS = {
 };
 
 const JOB_TYPES = {
+    bathAttendant: {
+        label: "Bath-attendant work", verb: "Tend the baths", mode: "timed", site: "baths",
+        givers: ["Bathkeeper"], shifts: 4, stamina: 3, turns: 2, wage: 3, bonus: 5,
+        hospitality: false, tips: false,
+        offer: "\"Carry water, tend the fires and keep the linen clean. Four shifts, and I'll settle your wages. No massage trial needed for this work.\"",
+        work: ["You carry buckets to the tubs and check the water before the next customer arrives.", "You wash used linen, fold the dry towels and scrub the screens.", "You tend the furnace and sweep the wet floor before anyone slips."],
+        events: [{ text: "A tired traveler thanks you for a fresh towel.", coins: 0 }],
+        done: "The tubs are clean, the fire is banked and the linen is ready for the next hands."
+    },
+    bathMassage: {
+        label: "Massage-practitioner work", verb: "Work a massage shift", mode: "timed", site: "massage",
+        givers: ["Bathkeeper"], shifts: 4, stamina: 3, turns: 3, wage: 5, bonus: 7,
+        hospitality: true, tips: true,
+        offer: "\"You've passed the practical trial. Four shifts easing tired shoulders and backs, and I'll pay the agreed wages. Any tips are yours.\"",
+        work: ["You ask where a customer's shoulders ache and work with careful, even pressure.", "You ease a laborer's stiff back, check their comfort and change the linen afterward.", "You work through the next appointment with the steady rhythm the keeper taught you."],
+        events: [{ text: "A regular says their shoulders feel easier and promises to return.", coins: 0 }],
+        done: "The last appointment is finished. You leave the treatment bench clean and ready."
+    },
     cleanKitchen: {
         label: "Clean the kitchen", verb: "Scrub the kitchen", mode: "timed", site: "kitchen",
         givers: ["Cook", "Innkeeper", "Bartender"], shifts: 4, stamina: 3, turns: 2, wage: 3, bonus: 6,
@@ -25382,6 +25831,11 @@ function jobGiverIsAvailable(npc) {
 function resolveJobSite(typeId, room, npc) {
     const def = JOB_TYPES[typeId];
     if (!def || !room) return null;
+    if (def.site === "baths" || def.site === "massage") {
+        if (!isBathhouseRoom(room)) return null;
+        const target = bathhouseFacility(room, def.site === "massage" ? "massage" : "bath");
+        return target && !isRoomCollapsed(target) ? { room: target } : null;
+    }
     if (def.site === "kitchen") {
         const k = /kitchen/i.test(String(room.type || "")) ? room : findBuildingRoomByType(room, /kitchen/i);
         return k ? { room: k } : null;
@@ -25405,6 +25859,10 @@ function canOfferJob(npc, typeId) {
     const room = G.activeRoom;
     if (!def || !npc || !room || !G.player || getActiveJob()) return false;
     if (!jobGiverIsAvailable(npc) || isPlayerJailed()) return false;
+    if (typeId === "bathAttendant" || typeId === "bathMassage") {
+        if (bathhouseBlock(npc) || bathhouseFacilityBlock(room, typeId === "bathMassage" ? "massage" : "bath")) return false;
+        if (typeId === "bathMassage" && !bathhouseQualified(room)) return false;
+    }
     if (def.givers.length) {
         if (def.givers.indexOf(npc.role) < 0) return false;
     } else if (!npc.buildingId && !room.buildingId) {
@@ -25428,6 +25886,7 @@ function startJob(typeId, site, giver, extra) {
     const def = JOB_TYPES[typeId];
     const jobs = ensureJobState();
     if (!def || !jobs || jobs.active || !site || !site.room) return null;
+    if ((typeId === "bathAttendant" || typeId === "bathMassage") && (!isBathhouseRoom(site.room) || (typeId === "bathMassage" && !bathhouseQualified(site.room)))) return null;
     const now = getCurrentStoryTurn();
     const job = {
         type: typeId, tier: getPortalTier(), siteCoords: site.room.coords, siteCoordsAlt: site.alt || null, siteDir: site.dir || null,
@@ -25477,6 +25936,7 @@ function getJobWorkBlockReason(job) {
     if (job.state === "morning") return "A new day. Choose whether to carry on.";
     if (job.tier !== getPortalTier()) return "Your work is in another town.";
     if (!isPlayerAtJobSite(job)) return "Your work is at " + getJobSiteName(job) + ".";
+    if (job.type === "bathAttendant" || job.type === "bathMassage") { const reason = bathhouseWorkBlock(job); if (reason) return reason; }
     if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (isEntityExhausted(G.player) || (typeof G.player.stamina === "number" && G.player.stamina < def.stamina)) return "You're too worn out. Rest first.";
     if (job.type === "floodCleanup") {
@@ -25573,7 +26033,7 @@ function performJobShift() {
     const lines = [];
     spendEntityStamina(player, def.stamina, lines, { isPlayer: true });
     advanceStoryTurn(def.turns);
-    if (G.player !== player || G.activeRoom !== room || getActiveJob() !== job || player.hp <= 0 || player.dead || player.unconscious || roomHasActiveHostile(room)) {
+    if (G.player !== player || G.activeRoom !== room || getActiveJob() !== job || player.hp <= 0 || player.dead || player.unconscious || roomHasActiveHostile(room) || /^(bathAttendant|bathMassage)$/.test(job.type) && bathhouseWorkBlock(job)) {
         const message = "Work was interrupted after time and effort were spent. No shift or wages were added.";
         setNarration(message); saveGameState(); return { status: "interrupted", message: message };
     }
@@ -25587,7 +26047,7 @@ function performJobShift() {
     if (def.hospitality && getCharismaPayBonus() > 0) lines.push("Your easy manner earns you a little extra.");
 
     // tips: hospitality in a tavern, taproom or inn common room only
-    if (def.tips && isTipRoom(room)) {
+    if (def.tips && (isTipRoom(room) || job.type === "bathMassage" && isBathhouseRoom(room))) {
         const roll = rollStatCheck(player, "charisma", JOB_TIP_DC);
         if (roll.success) {
             let tip = scaleJobCoins(randInt(JOB_TIP_RANGE[0], JOB_TIP_RANGE[1]) + getCharismaPayBonus(), false);
@@ -26673,7 +27133,7 @@ function collectJobPayFromNPC(npc) {
 
 // One conversation option ("ask-about-work") opens this menu instead of one
 // option per job or bounty, so a busy innkeeper does not crowd the chat list.
-const WORK_MENU_JOB_TYPES = ["cleanKitchen", "serveTables", "mopFloors", "floodCleanup"];
+const WORK_MENU_JOB_TYPES = ["cleanKitchen", "serveTables", "mopFloors", "floodCleanup", "bathAttendant", "bathMassage"];
 const WORK_MENU_QUEST_SLOTS = [0, 1, 2];
 
 function getNPCWorkTopics(npc) {
@@ -28545,7 +29005,7 @@ function getKnownAdjacentRoomCoords(room) {
 // player opens doors for them). Every move goes through relocateNPCBetweenRooms,
 // so wandering, fleeing, guards answering trouble and thieves all obey it.
 const NPC_GUARD_FORCE_CHANCE = 0.35;
-const NPC_STAFF_KEY_ROLES = ["Innkeeper", "Shopkeeper", "Vendor", "Bartender", "Blacksmith", "Archivist", "Healer", "Priest", "Guildmaster"];
+const NPC_STAFF_KEY_ROLES = ["Bathkeeper", "Innkeeper", "Shopkeeper", "Vendor", "Bartender", "Blacksmith", "Archivist", "Healer", "Priest", "Guildmaster"];
 
 function getNPCExitDirTo(room, toCoords) {
     if (!room || !room.exits) return null;
@@ -31319,6 +31779,7 @@ const AI_OFF_SPEECH_LEADS = {
     hostile: ["They answer stiffly.", "They give you a hard look.", "They speak through clenched teeth."]
 };
 const AI_OFF_ROLE_WORK_LINES = [
+    { tags: ["bathkeeper"], work: "Hot water, clean linen and relief for aching shoulders. I offer baths and massage, and hire attendants. Massage work needs a practical trial first.", hardest: "Keeping the water warm and the linen clean when everyone comes in from the road at once." },
     { tags: ["guard", "watch"], work: "Keep the peace, mostly. Long watches and not much thanks.", hardest: "The long hours, and the people who only notice us when something goes wrong." },
     { tags: ["healer", "priest", "cleric"], work: "I tend to the sick and the hurt, and I see to what the gods ask of me.", hardest: "Losing the ones I could not save." },
     { tags: ["bartender", "innkeeper", "cook"], work: "I keep folk fed and watered. Busy from open to close.", hardest: "Drunks, and the ones who will not pay." },
@@ -32049,7 +32510,7 @@ async function npcRespond(npc, interaction) {
 
 // ── CHAT UI ──────────────────────────────────────────────────────
 
-function getChatOptions(npc) {
+function getChatOptions(npc, expanded = false) {
     if (!canConverseWithNPC(npc)) return [];
     if (typeof queryConversationCatalogue === "function") {
         const room = G.activeRoom;
@@ -32060,12 +32521,109 @@ function getChatOptions(npc) {
         if (Array.isArray(options) && options.length) {
             // Use AI off: nobody can answer free text, so drop "Say something...".
             const withReplies = withCannedReplyOptions(npc, options);
-            if (!useAIEnabled()) return withReplies.filter(function (o) { return !(o && o.id === "respond-free"); });
-            return withReplies;
+            const ready = normalizeConversationActions(useAIEnabled() ? withReplies : withReplies.filter(function (o) { return !(o && o.id === "respond-free"); }));
+            return expanded ? ready : groupConversationActions(npc, ready);
         }
     }
     return [];
 }
+
+// Group presentation never rewrites opaque extension callbacks or their routing.
+function conversationActionGroups() {
+    return [
+        { key: "services", label: "Services and trade" },
+        { key: "food", label: "Food and drink" },
+        { key: "company", label: "Travel and company" },
+        { key: "interactions", label: "Interactions" }
+    ];
+}
+
+function normalizeConversationActions(options) {
+    const seen = new Set();
+    const hasStock = options.some(o => o && /^(wares|menu|healing)$/.test(o.service || ""));
+    const hasDrinks = options.some(o => o && o.service === "drinks");
+    return options.filter(option => {
+        if (!option) return false;
+        if (option.id && seen.has(option.id)) return false;
+        if (option.id) seen.add(option.id);
+        if (hasStock && option.id === "trade" && option.action === "trade" && !option.service) return false;
+        if (hasDrinks && /^bar-order-(mug-of-ale|cheap-wine|house-spirits)$/.test(option.id || "")) return false;
+        // The ordinary hug has one SFW handler; leave all other extension rows opaque.
+        if (option.id !== "offer-hug" && (option.kind === "action" || typeof option.action === "function") && /^(?:hug|embrace)(?:\s+(?:them|him|her|the npc))?[.!]?$/i.test(String(option.label || "").trim())) return false;
+        return true;
+    });
+}
+
+function conversationActionGroup(option) {
+    if (!option || option.action === "respond" || option.action === "disengage" || option.action === "conversation-group") return "";
+    if (option.kind !== "action" && !option.action) return "";
+    if (/^(drinks|menu)$/.test(option.service || "")) return "food";
+    if (option.service || /^(trade|rentroom|workmenu)$/.test(option.action)) return "services";
+    if (/^(?:bar-|meal-|join-.*(?:meal|drink)|offer-to-buy-.*drink)/.test(option.id || "")) return "food";
+    if (option.action === "directions" || /follow|party|companion/.test(option.id || "")) return "company";
+    return "interactions";
+}
+
+function groupConversationActions(npc, options) {
+    // Before greeting, services remain separate, immediate opening choices.
+    const used = npc && npc.memory && npc.memory.conversationState && npc.memory.conversationState.sessionUsedOptionIds || [];
+    if (!used.some(id => id === "service-opened" || typeof id === "string" && id.indexOf("greet-") === 0) ||
+        npc.guide || options.some(option => option.action === "pressure")) return options;
+    const groups = conversationActionGroups().filter(group => options.some(option => conversationActionGroup(option) === group.key));
+    if (!groups.length) return options;
+    const result = options.filter(option => !conversationActionGroup(option));
+    groups.forEach(group => result.push({ id: "conversation-actions-" + group.key, kind: "action", label: group.label + "...", action: "conversation-group", conversationGroup: group.key }));
+    return result;
+}
+
+function conversationActionMenuBlock(npc) {
+    if (!npc || G.activeNPC !== npc || !/^(menu|talk|respond)$/.test(G.activeNPCMode || "")) return "Start a conversation first.";
+    return socialActionBlock(npc);
+}
+
+function showConversationActionMenu(npc, key) {
+    const blocked = conversationActionMenuBlock(npc);
+    if (blocked) return sharedChoiceResult("blocked", blocked);
+    const groups = conversationActionGroups();
+    const group = groups.find(value => value.key === key);
+    if (key && !group) return sharedChoiceResult("blocked", "That action group is unavailable.");
+    const leafOptions = getChatOptions(npc, true);
+    const available = groups.filter(value => leafOptions.some(option => conversationActionGroup(option) === value.key));
+    const options = group ? leafOptions.filter(option => conversationActionGroup(option) === key) : available;
+    if (!options.length) return sharedChoiceResult("blocked", "No actions are available in that group now.");
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return sharedChoiceResult("blocked", "The action menu is unavailable.");
+    const menu = beginSharedChoiceMenu(group ? "conversation-actions" : "conversation-actions-root", npc, group ? group.label : "Conversation actions", () => showConversationActionMenu(npc, key));
+    const valid = menu.valid, turn = getCurrentStoryTurn(), source = G.activeRoom.creatures;
+    const state = npc.memory && npc.memory.conversationState, session = state && state.sessionNumber, lastOption = state && state.lastOptionId;
+    menu.valid = () => valid() && turn === getCurrentStoryTurn() && source === G.activeRoom.creatures && !conversationActionMenuBlock(npc) &&
+        (npc.memory && npc.memory.conversationState) === state && (!state || state.sessionNumber === session && state.lastOptionId === lastOption);
+    menu.publicData = { conversationActions: { group: key || "all" } };
+    el.innerHTML = "";
+    options.forEach(option => {
+        el.appendChild(createSharedChoiceButton(menu, option.label, () => {
+            if (!group) return showConversationActionMenu(npc, option.key);
+            const fresh = getChatOptions(npc, true).find(current => (option.id ? current.id === option.id : current === option) && conversationActionGroup(current) === key);
+            if (!fresh || fresh.disabled) return sharedChoiceResult("blocked", "That action is no longer available.");
+            return chooseChatOption(fresh);
+        }, { disabled: !!option.disabled, title: option.reason || "", textChoice: { action: "option" } }));
+    });
+    el.appendChild(createSharedChoiceButton(menu, "Back to conversation", () => {
+        if (G.player === menu.scene.player && G.activeRoom === menu.scene.room && G.activeNPC === npc && G.activeNPCMode === menu.scene.mode) { G.activeNPCMode = "talk"; renderChatOptions(npc); }
+        return { status: "completed" };
+    }, { textChoice: { action: "back" } }));
+    publishSharedChoiceMenu(menu, el);
+    return { status: "needs_input" };
+}
+
+function textConversationActionsShow() {
+    const npc = G.activeNPC, blocked = conversationActionMenuBlock(npc);
+    if (blocked) return textModeResult("blocked", blocked);
+    const options = getChatOptions(npc, true);
+    const groups = conversationActionGroups().map(group => ({ group: group.key, label: group.label, command: "actions " + group.key, count: options.filter(option => conversationActionGroup(option) === group.key).length })).filter(group => group.count);
+    return textModeResult("completed", groups.length ? groups.map(group => group.label + ": " + group.command).join("\n") : "No conversation actions are currently available.", { actionGroups: groups });
+}
+
 
 // When the NPC's last line asked for an answer (npc.memory.pendingResponse,
 // set in npcRespond), put the canned replies that came with it just before
@@ -38107,6 +38665,19 @@ function washAtRoomObject(item) {
     renderRoomObjectActionMenu(item);
 }
 
+function cleanEntityAfterWashing(player) {
+    player.hygiene = 100;
+    delete player.smellNotes;
+    if (player.equipped && typeof player.equipped === "object") {
+        Object.keys(player.equipped).forEach(slot => {
+            const equippedItem = player.equipped[slot];
+            if (equippedItem && typeof equippedItem.grime === "number" && equippedItem.grime > 0) {
+                equippedItem.grime = 0;
+            }
+        });
+    }
+}
+
 function performWash() {
     const player = G.player;
     if (!player) return;
@@ -38120,16 +38691,7 @@ function performWash() {
     // clothes in the pack keep their grime until worn and washed. It also
     // clears lingering smell notes (see addSmellMark in
     // nsfw/intimacy-system.js).
-    player.hygiene = 100;
-    delete player.smellNotes;
-    if (player.equipped && typeof player.equipped === "object") {
-        Object.keys(player.equipped).forEach(slot => {
-            const equippedItem = player.equipped[slot];
-            if (equippedItem && typeof equippedItem.grime === "number" && equippedItem.grime > 0) {
-                equippedItem.grime = 0;
-            }
-        });
-    }
+    cleanEntityAfterWashing(player);
 
     renderStats();
     setNarration(wasGrimy
@@ -52010,7 +52572,11 @@ function renderChatOptions(npc, options = null) {
             btn.className = `chat-option-btn kind-${kind}${toneClass}${stanceClass}${option.className ? " " + option.className : ""}`;
             if (option.id) btn.dataset.optionId = option.id;
             btn.textContent = CHAT_KIND_GLYPHS[kind] + option.label;
-            btn.onclick = () => chooseChatOption(option);
+            const player = G.player, room = G.activeRoom, mode = G.activeNPCMode;
+            btn.onclick = () => {
+                if ((option.service || /^(conversation-group|contact-hug)$/.test(option.action)) && (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== mode || !el.contains(btn))) return sharedChoiceResult("blocked", "That action choice is no longer available.");
+                return chooseChatOption(option);
+            };
             el.appendChild(btn);
         });
     });
@@ -52020,6 +52586,9 @@ function chooseChatOption(option) {
     const choice = typeof option === "string" ? { text: option } : option;
     if (!choice || (!choice.text && !choice.action) || !canConverseWithNPC(G.activeNPC)) return;
     const npc = G.activeNPC;
+    if (choice.action === "conversation-group") return showConversationActionMenu(npc, choice.conversationGroup);
+    if (choice.action === "contact-hug") return performPlayerInteraction(npc, { family: "contact", action: "give them a hug" });
+    if (choice.service) return requestNPCService(npc, choice.service);
     if (npc && npc.guide) _guideReplySequence += 1;
     
     // Debug: Log conversation action selection
@@ -52159,37 +52728,56 @@ function chooseChatOption(option) {
     if (choice.action && typeof choice.action === "function") {
         console.log("[DEBUG] Option has function action, firing it and skipping npcRespond");
         choice.__actionFired = true;
-        try {
-            choice.action(npc);
-        } catch (err) {
-            console.error("[Engine] Conversation action failed for", choice.id, err);
-        }
-        // Defensive enforcement for the follow/unfollow options: their actions
-        // are supposed to add/remove the NPC in G.sessionFollowers themselves,
-        // but a stale nsfw-system copy can set the seduction flags and stop
-        // there. The design rule is "if the option shows, consent is assumed",
-        // so if the action completed without the follower list changing, make
-        // the change here. The guards mean this never double-applies when the
-        // action already did the work.
-        if (npc && (choice.id === "ask-npc-to-follow" || choice.id === "ask-to-follow")
-            && !(G.sessionFollowers || []).includes(npc)) {
-            console.log("[Engine] Follow option action did not add the NPC to sessionFollowers — adding directly.");
-            addSessionFollower(npc);
-            if (typeof addChatMessage === "function") {
-                addChatMessage("left", npc.name || "They", "Alright, I'll come with you.", { mode: "auto" });
+        const actionPlayer = G.player, actionRoom = G.activeRoom;
+        setChatOptionsDisabled(true);
+        const actionDialogue = textModeState.dialogue;
+        const task = (async function () {
+            let actionResult;
+            try {
+                actionResult = await choice.action(npc);
+            } catch (err) {
+                console.error("[Engine] Conversation action failed for", choice.id, err);
+                if (G.player === actionPlayer && G.activeRoom === actionRoom && G.activeNPC === npc) {
+                    socialActionFeedback("blocked", "That action could not finish.");
+                    if (!sharedChoiceState.menu && (!textModeState.dialogue || textModeState.dialogue === actionDialogue) && /^(talk|respond|menu)$/.test(G.activeNPCMode || "")) {
+                        setChatOptionsDisabled(false); renderChatOptions(npc);
+                    }
+                }
+                return { status: "blocked" };
+            } finally {
+                if (actionDialogue && textModeState.dialogue === actionDialogue) textModeDialogueBusy(false);
             }
-        }
-        if (npc && choice.id === "stop-following"
-            && (G.sessionFollowers || []).includes(npc)) {
-            removeSessionFollower(npc);
-            if (typeof addChatMessage === "function") {
-                addChatMessage("left", npc.name || "They", "Alright, I'll stay here then.", { mode: "auto" });
+            if (G.player !== actionPlayer || G.activeRoom !== actionRoom || G.activeNPC !== npc) return { status: "interrupted" };
+            // Defensive enforcement for the follow/unfollow options: their actions
+            // are supposed to add/remove the NPC in G.sessionFollowers themselves,
+            // but a stale nsfw-system copy can set the seduction flags and stop
+            // there. The design rule is "if the option shows, consent is assumed",
+            // so if the action completed without the follower list changing, make
+            // the change here. The guards mean this never double-applies when the
+            // action already did the work.
+            if (npc && (choice.id === "ask-npc-to-follow" || choice.id === "ask-to-follow")
+                && !(G.sessionFollowers || []).includes(npc)) {
+                console.log("[Engine] Follow option action did not add the NPC to sessionFollowers — adding directly.");
+                addSessionFollower(npc);
+                if (typeof addChatMessage === "function") {
+                    addChatMessage("left", npc.name || "They", "Alright, I'll come with you.", { mode: "auto" });
+                }
             }
-        }
-        setChatOptionsDisabled(false);
-        if (typeof renderChatOptions === "function") renderChatOptions(npc);
-        saveGameState();
-        return;
+            if (npc && choice.id === "stop-following"
+                && (G.sessionFollowers || []).includes(npc)) {
+                removeSessionFollower(npc);
+                if (typeof addChatMessage === "function") {
+                    addChatMessage("left", npc.name || "They", "Alright, I'll stay here then.", { mode: "auto" });
+                }
+            }
+            if (!sharedChoiceState.menu && !textModeState.dialogue && /^(talk|respond|menu)$/.test(G.activeNPCMode || "")) {
+                setChatOptionsDisabled(false);
+                if (typeof renderChatOptions === "function") renderChatOptions(npc);
+            }
+            saveGameState();
+            return actionResult && actionResult.status ? actionResult : { status: actionResult === false ? "blocked" : "completed" };
+        })();
+        return typeof textModeTrackTask === "function" ? textModeTrackTask(task) : task;
     }
 
     setChatOptionsDisabled(true);
@@ -54091,6 +54679,7 @@ function renderRoom() {
     if (!room) return;
     if (room.type === "Portal Chamber" && typeof syncPortalChamberWaygates === "function") syncPortalChamberWaygates(room);
     if (typeof ensureUndergroundStairRoutes === "function") ensureUndergroundStairRoutes();
+    if (typeof ensureTownBathhouse === "function") ensureTownBathhouse();
     if (typeof ensureRoomImage === "function") ensureRoomImage(room);
     if (typeof ensureShopNamesForRoomMap === "function") ensureShopNamesForRoomMap(G.roomMap);
 
@@ -62556,6 +63145,13 @@ const INTERACT_MENU_ACTIONS = [
         disabledReason: function () { return ""; },
         title: "Do the paid work you have taken on, or collect your wages.",
         run: function () { openJobMenu(); }
+    },
+    {
+        id: "bathhouse", label: "Bathhouse services",
+        visible: room => isBathhouseRoom(room),
+        disabledReason: room => bathhouseProvider(room) ? "" : "Speak to the bathkeeper during working hours.",
+        title: "Buy a bath or massage, take a practical trial, or ask for paid work.",
+        run: () => { closeInteractMenu(); return openBathhouseMenu(); }
     },
     {
         id: "jobboard",
@@ -78465,15 +79061,25 @@ function attemptDominateAction(npc, action, btnElement) {
     const isCaptive = npc._captive === true || npc.isCaptive === true;
     const alwaysFails = isSlave || isCaptive;
     
+    // Get resistance stat from action or default to willpower
+    const resistanceStat = action.resistanceStat || "willpower";
+    const statValue = typeof getEntityStatValue === "function" ? getEntityStatValue(npc, resistanceStat, 3) : 3;
+    
     // Get NPC's prep and comfort level (0-100 scale)
     // These represent how prepared/comfortable the NPC is with intimacy
     const prepLevel = (npc.memory && npc.memory.prep) || 0;
     const comfortLevel = (npc.memory && npc.memory.comfort) || 50;
     const lustLevel = (npc.memory && npc.memory.lust) || 0;
     
-    // Calculate resistance: higher prep/comfort = harder to dominate
-    // Formula: (prep + comfort) / 2 gives average resistance (0-100)
-    const resistance = Math.round((prepLevel + comfortLevel) / 2);
+    // Calculate base resistance from prep/comfort (0-100 scale)
+    const baseResistance = Math.round((prepLevel + comfortLevel) / 2);
+    
+    // Add stat-based resistance: stat value of 3-10 adds 0-70 to resistance
+    // Formula: (statValue - 3) * 10 = 0-70 bonus
+    const statResistance = (statValue - 3) * 10;
+    
+    // Total resistance = base + stat bonus (capped at 100)
+    const resistance = Math.min(100, baseResistance + statResistance);
     
     // Player's domination roll: d100 + modifiers
     // Base: 50 (average)
@@ -78490,15 +79096,48 @@ function attemptDominateAction(npc, action, btnElement) {
     const actionLabel = action.label || action.id || "the action";
     const npcName = npc.name || "them";
     
+    // Get stat name for narration
+    const statName = resistanceStat === "physicalProwess" ? "physical prowess" : 
+                     resistanceStat === "flexibility" ? "flexibility" : 
+                     resistanceStat === "willpower" ? "willpower" : 
+                     resistanceStat === "endurance" ? "endurance" : "willpower";
+    
+    // Generate NPC dialogue based on stat and outcome
+    const getNpcDominateSpeech = (npc, stat, isSuccess) => {
+        if (!npc) return "";
+        const name = npc.name || "they";
+        const speechStyle = npc.speechProfile && npc.speechProfile.sample ? "in their usual manner" : "";
+        
+        if (isSuccess) {
+            // Submissive/reluctant compliance
+            const successSpeeches = {
+                "willpower": [`"Y-yes... as you command, ${G.player.name || 'master'}"`, `"I... I'll obey"`, `"Very well... if you insist"`],
+                "physicalProwess": [`"I can't fight you... I'll do it"`, `"Fine, you win this time"`, `"My strength is no match for your will"`],
+                "flexibility": [`"I move as you wish..."`, `"Your will guides me"`, `"I bend to your command"`],
+                "endurance": [`"I... I'll endure this"`, `"As you command, I submit"`, `"I have no choice but to comply"`]
+            };
+            return `"${successSpeeches[stat] ? successSpeeches[stat][Math.floor(Math.random() * successSpeeches[stat].length)] : successSpeeches["willpower"][0]}" ${speechStyle}`;
+        } else {
+            // Defiant refusal
+            const failureSpeeches = {
+                "willpower": [`"No! I won't be controlled!"`, `"You cannot command my will!"`, `"I refuse to be your puppet!"`],
+                "physicalProwess": [`"Try and make me!"`, `"My strength defies you!"`, `"You'll have to do better than that!"`],
+                "flexibility": [`"You'll never catch me!"`, `"I'm too quick for your games!"`, `"I slip from your grasp!"`],
+                "endurance": [`"I won't be broken!"`, `"You cannot wear me down!"`, `"My resolve is unshakable!"`]
+            };
+            return `"${failureSpeeches[stat] ? failureSpeeches[stat][Math.floor(Math.random() * failureSpeeches[stat].length)] : failureSpeeches["willpower"][0]}" ${speechStyle}`;
+        }
+    };
+    
     if (alwaysFails) {
         // Slave/captive always fails to resist
-        narration = `You attempt to dominate ${npcName} into ${actionLabel}, but as a ${npc.isSlave ? "slave" : "captive"}, they have no choice but to comply. Their resistance is nonexistent, and they submit to your will.`;
+        narration = `You attempt to dominate ${npcName} into ${actionLabel}, but as a ${npc.isSlave ? "slave" : "captive"}, they have no choice but to comply. Their resistance is nonexistent, and they submit to your will, ${getNpcDominateSpeech(npc, resistanceStat, true)}.`;
     } else if (success) {
         // Player successfully dominates
-        narration = `You attempt to dominate ${npcName} into ${actionLabel}. With a roll of ${playerRoll} against their resistance of ${resistance}, you succeed! They comply with your demand, though ${getDominateSuccessReaction(npc, actionLabel)}.`;
+        narration = `You attempt to dominate ${npcName} into ${actionLabel}. Testing their ${statName}, you roll ${playerRoll} against their resistance of ${resistance}... you succeed! They comply with your demand ${getNpcDominateSpeech(npc, resistanceStat, true)}, ${getDominateSuccessReaction(npc, actionLabel, resistanceStat)}.`;
     } else {
         // Player fails to dominate
-        narration = `You attempt to dominate ${npcName} into ${actionLabel}. With a roll of ${playerRoll} against their resistance of ${resistance}, you fail. They refuse, ${getDominateFailureReaction(npc, actionLabel)}.`;
+        narration = `You attempt to dominate ${npcName} into ${actionLabel}. Testing their ${statName}, you roll ${playerRoll} against their resistance of ${resistance}... you fail. They refuse ${getNpcDominateSpeech(npc, resistanceStat, false)}, ${getDominateFailureReaction(npc, actionLabel, resistanceStat)}.`;
     }
     
     // Set narration
@@ -78526,9 +79165,9 @@ function attemptDominateAction(npc, action, btnElement) {
 
 /**
  * Get NPC reaction for successful domination
- * Reacts based on NPC's prep and comfort levels
+ * Reacts based on NPC's prep and comfort levels, with stat-specific vocalizations
  */
-function getDominateSuccessReaction(npc, actionLabel) {
+function getDominateSuccessReaction(npc, actionLabel, resistanceStat) {
     if (!npc) return "";
     
     const prepLevel = (npc.memory && npc.memory.prep) || 0;
@@ -78536,13 +79175,20 @@ function getDominateSuccessReaction(npc, actionLabel) {
     const lustLevel = (npc.memory && npc.memory.lust) || 0;
     const avg = (prepLevel + comfortLevel) / 2;
     const npcName = npc.name || "they";
+    const speaker = npc.speechProfile && npc.speechProfile.sample ? "in their usual cadence" : "in their own voice";
     
     // High prep/comfort: more willing, less resistance
     if (avg >= 70) {
+        const statReactions = {
+            "willpower": `${npcName} sighs softly, their willpower no match for your command`,
+            "physicalProwess": `${npcName} yields with a small smile, their strength useless against your authority`,
+            "flexibility": `${npcName} moves gracefully into position, their agility serving your will`,
+            "endurance": `${npcName} submits with quiet acceptance, their stamina no help against your dominance`
+        };
         const reactions = [
             `though ${npcName} protests weakly, their body already responding`,
             `${npcName}'s eyes darken with reluctant arousal as they comply`,
-            `a flush spreads across ${npcName}'s cheeks despite their reservations`,
+            `a flush spreads across ${npcName}'s cheeks despite their reservations, ${statReactions[resistanceStat] || statReactions["willpower"]}`,
             `${npcName} hesitates briefly before giving in, their breathing quickening`,
             `their resistance crumbles, replaced by a shy, knowing smile`
         ];
@@ -78550,8 +79196,14 @@ function getDominateSuccessReaction(npc, actionLabel) {
     }
     // Medium prep/comfort: conflicted
     else if (avg >= 40) {
+        const statReactions = {
+            "willpower": `${npcName} grumbles under their breath but obeys, their mental resistance overcome`,
+            "physicalProwess": `${npcName} tenses their muscles briefly before relaxing into submission`,
+            "flexibility": `${npcName} moves with practiced grace, though their expression shows reluctance`,
+            "endurance": `${npcName} endures the command with gritted teeth, their stamina tested`
+        };
         const reactions = [
-            `though ${npcName}'s expression shows clear reluctance`,
+            `though ${npcName}'s expression shows clear reluctance, ${statReactions[resistanceStat] || statReactions["willpower"]}`,
             `${npcName} complies with stiff movements, their discomfort evident`,
             `their body betrays their verbal protests, responding despite themselves`,
             `${npcName} closes their eyes briefly before submitting, jaw clenched`,
@@ -78561,8 +79213,14 @@ function getDominateSuccessReaction(npc, actionLabel) {
     }
     // Low prep/comfort: very reluctant, but forced
     else {
+        const statReactions = {
+            "willpower": `${npcName} swallows hard, their will broken by your command`,
+            "physicalProwess": `${npcName} strains against your authority, their strength finally yielding`,
+            "flexibility": `${npcName} moves stiffly, their usual grace absent under your control`,
+            "endurance": `${npcName} breathes heavily, their endurance no match for your dominance`
+        };
         const reactions = [
-            `though ${npcName}'s face shows clear discomfort and resistance`,
+            `though ${npcName}'s face shows clear discomfort and resistance, ${statReactions[resistanceStat] || statReactions["willpower"]}`,
             `${npcName} complies with visible reluctance, their body tense`,
             `their submission is written on their face even as they obey`,
             `${npcName} moves as if through force of will alone, not desire`,
@@ -78574,9 +79232,13 @@ function getDominateSuccessReaction(npc, actionLabel) {
 
 /**
  * Get NPC reaction for failed domination
- * Reacts based on NPC's prep and comfort levels
+ * Reacts based on NPC's prep and comfort levels, with stat-specific resistance types:
+ * - willpower: Vocal resistance (speaks out)
+ * - physicalProwess: Physical resistance (pushes back)
+ * - flexibility: Escape attempt (tries to get away)
+ * - endurance: Enduring resistance (holds firm)
  */
-function getDominateFailureReaction(npc, actionLabel) {
+function getDominateFailureReaction(npc, actionLabel, resistanceStat) {
     if (!npc) return "";
     
     const prepLevel = (npc.memory && npc.memory.prep) || 0;
@@ -78592,36 +79254,44 @@ function getDominateFailureReaction(npc, actionLabel) {
         return `${npcName} tries to resist but cannot, their status preventing true refusal`;
     }
     
+    // Stat-specific resistance messages
+    const statResistance = {
+        "willpower": `${npcName}'s voice rings out with defiance as they vocally resist`,
+        "physicalProwess": `${npcName} flexes their muscles and physically resists your command`,
+        "flexibility": `${npcName} twists away with agile grace, attempting to escape your control`,
+        "endurance": `${npcName} digs in their heels, holding firm against your dominance`
+    };
+    
     // High prep/comfort: polite but firm refusal
     if (avg >= 70) {
         const reactions = [
-            `${npcName} shakes their head with a gentle but firm refusal`,
+            `${npcName} shakes their head with a gentle but firm refusal, ${statResistance[resistanceStat] || statResistance["willpower"]}`,
             `${npcName} places a hand on your chest, stopping you with a soft "no"`,
-            `their expression turns apologetic as they decline your demand`,
+            `their expression turns apologetic as they decline your demand, ${statResistance[resistanceStat] || statResistance["willpower"]}`,
             `${npcName} steps back slightly, their smile warm but their answer clear`,
-            `they maintain their boundary with quiet determination`
+            `they maintain their boundary with quiet determination, ${statResistance[resistanceStat] || statResistance["willpower"]}`
         ];
         return reactions[Math.floor(Math.random() * reactions.length)];
     }
     // Medium prep/comfort: more assertive
     else if (avg >= 40) {
         const reactions = [
-            `${npcName} pushes your hand away with a sharp "no"`,
-            `${npcName} draws back, their expression hardening into resistance`,
-            `their voice is firm as they refuse your attempt at control`,
-            `${npcName} crosses their arms, physically blocking your advance`,
-            `a spark of defiance lights in ${npcName}'s eyes as they resist`
+            `${npcName} pushes your hand away with a sharp "no", ${statResistance[resistanceStat] || statResistance["willpower"]}`,
+            `${npcName} draws back, their expression hardening into resistance, ${statResistance[resistanceStat] || statResistance["physicalProwess"]}`,
+            `their voice is firm as they refuse your attempt at control, ${statResistance[resistanceStat] || statResistance["willpower"]}`,
+            `${npcName} crosses their arms, physically blocking your advance, ${statResistance[resistanceStat] || statResistance["physicalProwess"]}`,
+            `a spark of defiance lights in ${npcName}'s eyes as they resist, ${statResistance[resistanceStat] || statResistance["willpower"]}`
         ];
         return reactions[Math.floor(Math.random() * reactions.length)];
     }
     // Low prep/comfort: strong resistance
     else {
         const reactions = [
-            `${npcName} recoils from your touch, their discomfort obvious`,
-            `${npcName} takes a step back, their face a mask of refusal`,
-            `their body language is a clear wall against your domination attempt`,
-            `${npcName} firmly pushes you away, their resistance unequivocal`,
-            `a look of affront crosses ${npcName}'s face at your presumption`
+            `${npcName} recoils from your touch, their discomfort obvious, ${statResistance[resistanceStat] || statResistance["physicalProwess"]}`,
+            `${npcName} takes a step back, their face a mask of refusal, ${statResistance[resistanceStat] || statResistance["willpower"]}`,
+            `their body language is a clear wall against your domination attempt, ${statResistance[resistanceStat] || statResistance["physicalProwess"]}`,
+            `${npcName} firmly pushes you away, their resistance unequivocal, ${statResistance[resistanceStat] || statResistance["physicalProwess"]}`,
+            `a look of affront crosses ${npcName}'s face at your presumption, ${statResistance[resistanceStat] || statResistance["willpower"]}`
         ];
         return reactions[Math.floor(Math.random() * reactions.length)];
     }
@@ -78782,9 +79452,9 @@ function renderIntimacyActionMenu(npc) {
     
     // Demeanor options
     const demeanorOptions = [
-        { value: "consent", label: "Consent", title: "Normal intimacy - build up naturally" },
-        { value: "submit", label: "Submit", title: "Let NPC lead - do what they want" },
-        { value: "dominate", label: "Dominate", title: "Attempt to dominate - dice roll vs NPC comfort" }
+        { value: "consentual", label: "Consentual", title: "Normal intimacy - build up naturally" },
+        { value: "submissive", label: "Submissive", title: "Let NPC lead - do what they want" },
+        { value: "dominant", label: "Dominant", title: "Attempt to dominate - dice roll vs NPC comfort" }
     ];
     
     demeanorOptions.forEach(opt => {
@@ -78792,7 +79462,7 @@ function renderIntimacyActionMenu(npc) {
         option.value = opt.value;
         option.textContent = opt.label;
         option.title = opt.title;
-        if (opt.value === "consent") option.selected = true;
+        if (opt.value === "consentual") option.selected = true;
         demeanorSelect.appendChild(option);
     });
     
@@ -78800,9 +79470,9 @@ function renderIntimacyActionMenu(npc) {
     
     // Store demeanor mode on NPC intimacy state
     if (!npc.intimacy._demeanorMode) {
-        npc.intimacy._demeanorMode = "consent";
+        npc.intimacy._demeanorMode = "consentual";
     }
-    demeanorSelect.value = npc.intimacy._demeanorMode || "consent";
+    demeanorSelect.value = npc.intimacy._demeanorMode || "consentual";
     
     // Handle demeanor change
     demeanorSelect.addEventListener("change", (e) => {
@@ -78815,13 +79485,13 @@ function renderIntimacyActionMenu(npc) {
             // Add narration for mode change
             let narration = "";
             switch(newMode) {
-                case "consent":
+                case "consentual":
                     narration = "You adopt a cooperative, consenting demeanor.";
                     break;
-                case "submit":
+                case "submissive":
                     narration = "You adopt a submissive demeanor, ready to follow their lead.";
                     break;
-                case "dominate":
+                case "dominant":
                     narration = "You adopt a dominant demeanor, attempting to take control.";
                     break;
             }
@@ -78831,9 +79501,9 @@ function renderIntimacyActionMenu(npc) {
         }
     });
 
-    // Add Submit mode button ("Let NPC Lead")
-    const demeanorMode = npc.intimacy._demeanorMode || "consent";
-    if (demeanorMode === "submit") {
+    // Add Submissive mode button ("Let NPC Lead")
+    const demeanorMode = npc.intimacy._demeanorMode || "consentual";
+    if (demeanorMode === "submissive") {
         const submitBtn = document.createElement("button");
         submitBtn.className = "chat-option-btn intimacy-action-btn submit-btn";
         submitBtn.textContent = "Let NPC Lead";
@@ -79374,9 +80044,9 @@ function renderIntimacyActionMenu(npc) {
                 if (engagedActSet.has(action.id)) btn.classList.add("engaged-act");
                 
                 // Check demeanor mode for special handling
-                const demeanorMode = npc.intimacy && npc.intimacy._demeanorMode ? npc.intimacy._demeanorMode : "consent";
-                const isDominateMode = demeanorMode === "dominate";
-                const isSubmitMode = demeanorMode === "submit";
+                const demeanorMode = npc.intimacy && npc.intimacy._demeanorMode ? npc.intimacy._demeanorMode : "consentual";
+                const isDominateMode = demeanorMode === "dominant";
+                const isSubmitMode = demeanorMode === "submissive";
                 
                 // In Dominate mode: show gated actions with dark red border
                 if (isDominateMode && action.disabled) {
@@ -79417,6 +80087,12 @@ function renderIntimacyActionMenu(npc) {
                         
                         // In Dominate mode: attempt domination for gated actions
                         if (isDominateMode && action.disabled) {
+                            attemptDominateAction(npc, action, btn);
+                            return;
+                        }
+                        
+                        // For actions that require domination check (marked with requiresDominateCheck)
+                        if (action.requiresDominateCheck && isDominateMode) {
                             attemptDominateAction(npc, action, btn);
                             return;
                         }

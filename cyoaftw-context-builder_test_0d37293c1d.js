@@ -1,8 +1,9 @@
+// Warmstone Baths use quiet, professional recovery context.
 // Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
 // cyoaftw-context-builder.js v2026-10-23-003 — Bounded NPC Life short-term/entity recollections, personality and sleeping context.
 // Version identifier for debugging cached files.
 if (typeof window !== "undefined") {
-    window.CONTEXT_BUILDER_VERSION = "2026-10-23-003";
+    window.CONTEXT_BUILDER_VERSION = "2026-10-24-001";
     console.log("[Context Builder] Loaded v" + window.CONTEXT_BUILDER_VERSION);
 }
 
@@ -45,6 +46,13 @@ function deriveRoomContext(room) {
         ctx.privacy = "semi-private";
         ctx.noise = "loud";
         ctx.function = "social";
+    }
+
+    if (is("bathhouse") || is("bathing room") || is("massage room")) {
+        ctx.privacy = "semi-private";
+        ctx.noise = "quiet";
+        ctx.socialExpectation = "professional";
+        ctx.function = "rest";
     }
 
     if (is("back room") || is("private") || is("parlour")) {

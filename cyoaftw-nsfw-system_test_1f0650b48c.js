@@ -5631,14 +5631,10 @@ avoidNote,
     const feminine = /female|woman|futa|herm/.test(gender) ||
       (breasts.sizeCategory && breasts.sizeCategory !== "flat");
     const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
-      || { top: true, bottom: true, undergarments: true };
+      || { top: true, bottom: true };
     const parts = ["mouth"];
     if (!clothing.top) parts.push(feminine ? "boobs" : "chest");
     if (!clothing.bottom) {
-      parts.push(feminine ? "vulva" : "penis");
-      parts.push("butt");
-      parts.push("anus");
-    } else if (!clothing.undergarments) {
       parts.push(feminine ? "vulva" : "penis");
       parts.push("butt");
       parts.push("anus");
@@ -5824,14 +5820,13 @@ avoidNote,
     if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
     const part = String(partKey || "").toLowerCase();
     const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
-      || { top: true, bottom: true, undergarments: true };
+      || { top: true, bottom: true };
     const anatomy = npc.anatomy || {};
     const breasts = anatomy.breasts || {};
     const gender = String(npc.gender || "").toLowerCase();
     const feminine = /female|woman|futa|herm/.test(gender) ||
       (breasts.sizeCategory && breasts.sizeCategory !== "flat");
-    const stateKey = (clothing.top ? "t1" : "t0") + (clothing.bottom ? "b1" : "b0") +
-      (clothing.undergarments ? "u1" : "u0");
+    const stateKey = (clothing.top ? "t1" : "t0") + (clothing.bottom ? "b1" : "b0");
     
     // Get surface-appropriate arousal description (fur, scales, skin, etc.)
     const body = anatomy.body || {};
@@ -5920,9 +5915,9 @@ avoidNote,
     if ((part === "boobs" || part === "vulva") && !feminine) return null;
     if ((part === "chest" || part === "penis") && feminine) return null;
     if ((part === "boobs" || part === "chest") && clothing.top) return null;
-    if ((part === "vulva" || part === "penis") && (clothing.bottom || clothing.undergarments)) return null;
+    if ((part === "vulva" || part === "penis") && clothing.bottom) return null;
     if (part === "butt" && clothing.bottom) return null;
-    if (part === "anus" && clothing.bottom && clothing.undergarments) return null;
+    if (part === "anus" && clothing.bottom) return null;
 
     const posId = npc.intimacy.position && npc.intimacy.position.player;
     let perspective = "";

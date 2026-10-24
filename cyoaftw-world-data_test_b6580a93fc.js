@@ -1,9 +1,10 @@
+// Warmstone Baths: guaranteed three-room Town establishment and practical postwar lore.
 // Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
-// ── cyoaftw-world-data.js v2026-10-23-001 ── Street fixtures (lamppost, cart, market stall, post) get physical templates. Previous: Player-led guide check-ins and bounded intro delivery. Previous: Shop name generator uses zone and trade themes, with stable names shared by storefronts and interiors.
+// ── cyoaftw-world-data.js v2026-10-24-001 ── Street fixtures (lamppost, cart, market stall, post) get physical templates. Previous: Player-led guide check-ins and bounded intro delivery. Previous: Shop name generator uses zone and trade themes, with stable names shared by storefronts and interiors.
 // Previous: Commoner debt dialogue identifies the creditor.
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.WORLD_DATA_VERSION = "2026-10-23-001";
+    window.WORLD_DATA_VERSION = "2026-10-24-001";
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
@@ -826,6 +827,35 @@ const SPECIES_TEMPLATES = [
 
 // ── ROOM TEMPLATES ───────────────────────────────────────────────
 const ROOM_TEMPLATES = [
+    {
+        type: "Bathhouse", zone: "Town", role: "landmark", displayName: "The Warmstone Baths", imageKey: "Inn Common",
+        baseDescription: "A modest stone bathhouse smells of warm linen and rosemary. A keeper's counter faces the street; beyond a door lie the bathing room and massage room. A painted board offers hot baths, assisted washing, shoulder and back massage, and honest work. Laborers, travelers and old soldiers come here to ease the aches the Long War left behind.",
+        allowedZones: ["town"], parentCluster: ["square"], isConnector: false, minNpcs: 1,
+        structural: [
+            { id: "bathhouse-price-board", name: "bathhouse price board", tags: ["information", "commerce"], alwaysShow: true,
+              examineText: "The keeper offers hot baths, assisted washes and shoulder and back massage. Ask about bathhouse services for current prices and work. General attendants carry water, tend fires and wash linen; massage practitioners must pass a supervised practical trial." },
+            { id: "linen-counter", name: "linen counter", tags: ["surface", "work"], anchored: true },
+            { id: "waiting-bench", name: "waiting bench", tags: ["social", "rest"], anchored: true }
+        ]
+    },
+    {
+        type: "Bathing Room", zone: "Town", role: "interior", displayName: "Bathing Room", imageKey: "Guest Room",
+        baseDescription: "Copper tubs stand behind linen screens. A banked furnace warms the water, and shelves hold soap, buckets and folded towels. The keeper arranges baths and attendant work at the front counter.",
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        structural: [
+            { id: "bathing-tubs", name: "screened bathing tubs", tags: ["work", "commerce"], anchored: true, takeable: false },
+            { id: "linen-shelves", name: "clean linen shelves", tags: ["work"], anchored: true }
+        ]
+    },
+    {
+        type: "Massage Room", zone: "Town", role: "interior", displayName: "Massage Room", imageKey: "Guest Room",
+        baseDescription: "A quiet room holds a padded treatment bench, a stool and a shelf of mild herbal oils. Fresh linen covers the bench. Here the bathkeeper supervises practical trials and trained hands ease tired shoulders and backs.",
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        structural: [
+            { id: "massage-bench", name: "padded treatment bench", tags: ["work", "commerce"], anchored: true, takeable: false },
+            { id: "oil-shelf", name: "shelf of herbal oils", tags: ["work"], anchored: true }
+        ]
+    },
     {
         type: "Guest Room",
         zone: "Town",
@@ -2861,6 +2891,15 @@ const BUILDING_BLUEPRINTS = {
             ["cellar", "shrine", "door"]
         ]
     },
+    "Bathhouse": {
+        zone: "Town", entrance: "Bathhouse", front: "baths", frontDoor: "door", back: null, hostilityCap: 25,
+        names: ["The Warmstone Baths"],
+        rooms: [
+            { key: "baths", type: "Bathing Room", floor: 0, at: [0, 0], minNpcs: 0 },
+            { key: "massage", type: "Massage Room", floor: 0, at: [1, 0], minNpcs: 0 }
+        ],
+        links: [["baths", "massage", "door"]]
+    },
     "Inn": {
         zone: "Town",
         entrance: "Inn",
@@ -3091,6 +3130,7 @@ function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alle
     entranceDesc.isBuildingRoom = true;
     entranceDesc.isEntrance = true;
     entranceDesc.floor = 0;
+    if (typeof bp.hostilityCap === "number") entranceDesc.hostilityCap = bp.hostilityCap;
     if (name && getShopNameTrade(bpKey)) applyShopDisplayName(entranceDesc, name);
     if (bp.anchorFor) entranceDesc.anchorFor = bp.anchorFor.slice();
     if (bp.verticalLinks) entranceDesc.verticalLinks = bp.verticalLinks.slice();
@@ -3106,6 +3146,7 @@ function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alle
         });
         if (name && getShopNameTrade(bpKey)) applyShopDisplayName(desc, name);
         if (typeof def.minNpcs === "number") desc.minNpcs = def.minNpcs;
+        if (typeof bp.hostilityCap === "number") desc.hostilityCap = bp.hostilityCap;
         if (def.anchorFor) desc.anchorFor = def.anchorFor.slice();
         if (def.verticalLinks) desc.verticalLinks = def.verticalLinks.slice();
         byKey[def.key] = desc;
@@ -3205,7 +3246,7 @@ function planTownLayout(rngIn) {
     // `east` to the east, so a town has between 3 and 7 slots per side (6 to
     // 14 building plots in all, before empty ones are left as plain wall).
     const west = randInt(1, 3);
-    const east = randInt(1, 3);
+    const east = Math.max(2, randInt(1, 3)); // Space for every essential establishment, including the baths.
     const SPINE_MIN = -(2 * west + 2);
     const SPINE_MAX = 2 * east + 2;
 
@@ -3237,7 +3278,7 @@ function planTownLayout(rngIn) {
     const assignment = [{ type: "Town Hall", slot: hallSlot }];
     // Every town has these. The Guildhall and the Chapel are the guide's
     // lead destinations (see PLAYER_ARCHETYPES), so they are always placed.
-    const MUST_HAVE = ["Tavern", "Inn", "Smithy", "Guildhall", "Chapel"];
+    const MUST_HAVE = ["Tavern", "Inn", "Smithy", "Guildhall", "Chapel", "Bathhouse"];
     MUST_HAVE.forEach((type, i) => { assignment.push({ type: type, slot: rest[i] }); });
     // Every other plot is a house or stays empty. Bigger towns get a second
     // inn now and then. The Tavern (cellar shrine, way down to the dungeon),
@@ -6869,7 +6910,7 @@ const SOCIETY_SHEETS = {
 };
 
 // A staff/trade role's standing in the Realm.
-const REALM_MASTER_ROLES = ["Guildmaster", "Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Healer", "Priest", "Archivist", "Enchanter", "Arcanist", "Reliquarian"];
+const REALM_MASTER_ROLES = ["Bathkeeper", "Guildmaster", "Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Healer", "Priest", "Archivist", "Enchanter", "Arcanist", "Reliquarian"];
 const REALM_TRADE_ROLES = ["Vendor", "Bartender", "Cook", "Scholar", "Merchant", "Trader"];
 const REALM_WAGE_ROLES = ["Servant", "Villager", "Townsfolk", "Miner", "Guard", "Scout", "Stone Guard"];
 

@@ -1139,10 +1139,10 @@ function getObjectPronoun(npc) {
  * Maps equipment slots to intimacy clothing categories (top, bottom, undergarments)
  */
 function getClothingStateForCharacter(character) {
-    if (!character) return { top: true, bottom: true, undergarments: true };
+    if (!character) return { top: true, bottom: true };
     
     // Default to clothed - most characters wear clothes by default
-    const defaultState = { top: true, bottom: true, undergarments: true };
+    const defaultState = { top: true, bottom: true };
     
     // If character has equipped items, use them to determine clothing state
     if (character.equipped) {
@@ -1152,8 +1152,7 @@ function getClothingStateForCharacter(character) {
         
         return {
             top: hasTop,
-            bottom: hasBottom,
-            undergarments: true  // Assume underwear is worn by default
+            bottom: hasBottom
         };
     }
     
@@ -1801,6 +1800,15 @@ function _playerPussyOralActive(npc) {
 function checkActionValidity(actId, npc, player, positionId, clothingState) {
     const act = getAct(actId);
     if (!act) return { valid: false, reason: "unknown action" };
+
+    // Demeanor mode check - actions with requiresDemeanorMode only appear in that demeanor
+    if (act.requiresDemeanorMode) {
+        const demeanorMode = (npc.intimacy && npc.intimacy._demeanorMode) ? String(npc.intimacy._demeanorMode).toLowerCase() : "consentual";
+        const allowedModes = Array.isArray(act.requiresDemeanorMode) ? act.requiresDemeanorMode.map(m => String(m).toLowerCase()) : [String(act.requiresDemeanorMode).toLowerCase()];
+        if (!allowedModes.includes(demeanorMode)) {
+            return { valid: false, reason: "wrong demeanor mode", hidden: true };
+        }
+    }
 
     // Cloaca-bearing NPC checks — these must run before clothing/position
     // checks so hidden actions never surface as disabled entries (which
@@ -3945,9 +3953,9 @@ function handleClothingAction(npc, player, act, clothingState) {
     if (!act.clothingItem && !act.clothingAction) {
         // Bulk undress
         if (act.target === "player") {
-            clothingState.player = { top: false, bottom: false, undergarments: false };
+            clothingState.player = { top: false, bottom: false };
         } else if (act.target === "npc") {
-            clothingState.npc = { top: false, bottom: false, undergarments: false };
+            clothingState.npc = { top: false, bottom: false };
         }
     } else {
         // Specific item action
@@ -5173,10 +5181,10 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
     var _detailBlock = "";
     if (_isPenetrationBeat) {
         _detailBlock = playerIsBottom
-            ? "\nPENETRATION DETAIL - the NPC's cock is entering YOU; spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: the entry, the stretch, the grip, the drag on each withdrawal - what both bodies are actually doing.\n- Vary the camera between beats: your body's response, the depth and rhythm, the sound and feel of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh."
-            : "\nPENETRATION DETAIL - spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: depth on each stroke, speed, grip, drag, friction, flesh against flesh - what both bodies are actually doing.\n- Vary the camera between beats: sometimes your cock and their grip, sometimes their body's response, sometimes the rhythm or the sound of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.";
+            ? "\nPENETRATION DETAIL - the NPC's cock is entering YOU; spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: the entry, the stretch, the grip, the drag on each withdrawal - what both bodies are actually doing.\n- Vary the camera between beats: your body's response, the depth and rhythm, the sound and feel of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.\n- DIALOGUE: During active penetration, NPC speech is limited to moans, grunts, gasps, and broken phrases interspersed with heavy breathing. Full sentences are unlikely - focus on vocalizations like <ah!>, <nngh!>, <hah...>, <so... full...>, <right... there...>. Save coherent speech for non-penetration contexts."
+            : "\nPENETRATION DETAIL - spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: depth on each stroke, speed, grip, drag, friction, flesh against flesh - what both bodies are actually doing.\n- Vary the camera between beats: sometimes your cock and their grip, sometimes their body's response, sometimes the rhythm or the sound of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.\n- DIALOGUE: During active penetration, NPC speech is limited to moans, grunts, gasps, and broken phrases interspersed with heavy breathing. Full sentences are unlikely - focus on vocalizations like <ah!>, <nngh!>, <hah...>, <so... full...>, <right... there...>. Save coherent speech for non-penetration contexts.";
     } else if (_isInsertiveTease) {
-        _detailBlock = "\nINSERTION DETAIL - spend most of the beat on the insertion itself:\n- Show it physically and concretely: the push past the resistance, the grip closing around your fingers or tongue, how their flesh yields and spreads.\n- Vary the camera between beats - the opening, their reaction, your view of it.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.";
+        _detailBlock = "\nINSERTION DETAIL - spend most of the beat on the insertion itself:\n- Show it physically and concretely: the push past the resistance, the grip closing around your fingers or tongue, how their flesh yields and spreads.\n- Vary the camera between beats - the opening, their reaction, your view of it.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.\n- DIALOGUE: During insertion, NPC speech may be slightly more coherent than full penetration, but still limited. Use short phrases, gasps, and broken sentences with heavy breathing. Prefer vocalizations like <ah!>, <mmm...>, <there...> over full sentences.";
     }
 
     var _lengthRule = (_isPenetrationBeat || _isInsertiveTease)
@@ -6552,38 +6560,38 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
 
         if (_species === "goblin") {
             _uncivEnterResponses = [
-                `twists around, sharp face scrunched up, large ears twitching. <Wrong hole. You sure?>`,
-                `lets out a sharp chitter, squinting at you over their shoulder. <Okay. Okay. Goblin try.>`
+                `twists around, sharp face scrunched up, large ears twitching. <Wrong hole! You... sure?>`,
+                `lets out a sharp chitter, squinting at you over their shoulder. <Okay! Okay! Goblin... try.>`
             ];
             _uncivContinueResponses = [
-                `shifts side to side, chittering softly, slowly getting used to the feeling.`,
-                `glances back with a toothy grimace, half doubt, half willingness.`
+                `shifts side to side, chittering softly, breathing heavily. <Hah... hah... mmm...>`,
+                `glances back with a toothy grimace, half doubt, half willingness, letting out a soft "ngh".`
             ];
         } else if (_species === "orc") {
             _uncivEnterResponses = [
-                `grunts, looking over their shoulder with a raised brow. <Wrong hole. You know that, right?>`,
-                `snorts through wide nostrils, tusks catching the light. <Sure about this? ...Hmph.>`
+                `grunts, looking over their shoulder with a raised brow. <Wrong... hole. You... know that... right?>`,
+                `snorts through wide nostrils, tusks catching the light. <Sure... about this? ...Hmph.>`
             ];
             _uncivContinueResponses = [
-                `rumbles low in their chest. <Keep going. I can take it. Not my first strange thing.>`,
+                `rumbles low in their chest, breathing heavily. <Hah... keep going. Orc... can take it.>`,
             ];
         } else if (_species === "lizardfolk") {
             _uncivEnterResponses = [
-                `their head swivels, tongue flicking rapidly, frilled crest twitching. <Wrong hole. Not for breeding. ...You sure?>`,
-                `they bare their teeth in confusion, tail thumping once. <Odd. Odd odd.>`
+                `their head swivels, tongue flicking rapidly, frilled crest twitching. <Wrong... hole. Not... for breeding. ...You... sure?>`,
+                `they bare their teeth in confusion, tail thumping once. <Sss... odd. Odd... odd.>`
             ];
             _uncivContinueResponses = [
-                `a wet hiss, body coiling slightly, adjusting to the strange sensation.`,
-                `their tongue darts out, tasting the air, uncertain but willing.`
+                `a wet hiss, body coiling slightly, adjusting. <Sss... hah... mmm...>`,
+                `their tongue darts out, tasting the air, uncertain but willing, letting out a low "ngh".`
             ];
         } else if (_species === "kobold") {
             _uncivEnterResponses = [
-                `spins around, tail puffing up. <What?! That not breeding hole! That other hole! ...Okay. Kobold try.>`,
-                `a high-pitched squeak of confusion, ears flattening. <Okay maybe yes. Kobold trust you.>`
+                `spins around, tail puffing up. <What?! That... not breeding hole! That... other hole! ...Okay. Kobold... try.>`,
+                `a high-pitched squeak of confusion, ears flattening. <Okay... maybe yes. Kobold... trust you.>`
             ];
             _uncivContinueResponses = [
-                `a rapid chitter, tail curling tight, settling into it.`,
-                `yips softly, looking back, uncertain but going along with it.`
+                `a rapid chitter, tail curling tight, settling into it. <Hah... hah... mmm...>`,
+                `yips softly, looking back, uncertain but going along, letting out a soft "eep".`
             ];
         } else if (_species === "skeleton") {
             _uncivEnterResponses = [
@@ -6591,22 +6599,22 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
                 `it pauses, empty sockets staring. <...you... are... sure...?...>`
             ];
             _uncivContinueResponses = [
-                `a dry whisper, bones creaking. <...strange... sensation...>`,
-                `its ribcage rattles softly, patient and unbothered.`
+                `a dry whisper, bones creaking. <...hah... strange...>`,
+                `its ribcage rattles softly, patient and unbothered. <...mmm...>`
             ];
         } else {
             // Generic uncivilized fallback
             _uncivEnterResponses = [
-                `looks confused. <What are you doing? That's not... okay. Fine.>`,
-                `frowns. <That goes where? Strange. But I'll try.>`,
-                `seems uncertain. <This isn't normal. But... alright.>`,
-                `gives you a puzzled look. <Are you sure? If you say so.>`
+                `looks confused. <What are you...? That's... okay. Fine.>`,
+                `frowns. <That goes... where? ...I'll try.>`,
+                `seems uncertain. <This... isn't normal. But... alright.>`,
+                `gives you a puzzled look. <Are you... sure? If you... say so.>`
             ];
             _uncivContinueResponses = [
-                `shifts uncomfortably. <Strange. But not bad. Keep going.>`,
-                `grunts. <Different. But I'm getting used to it.>`,
-                `seems to be warming up to it. <Hmm. Interesting.>`,
-                `takes a deep breath. <Alright. Keep going.>`
+                `shifts uncomfortably, breathing heavily. <Mmm... keep... going...>`,
+                `grunts softly. <Hah... different... but... mmm...>`,
+                `lets out a low sound, adjusting. <Nngh... interesting...>`,
+                `takes a deep breath. <Ahh... alright... keep...>`
             ];
         }
 
