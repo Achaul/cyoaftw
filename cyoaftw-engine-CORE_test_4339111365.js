@@ -10156,7 +10156,9 @@ function shrineServiceButton(menu, label, action, option, options) {
         if (action === "favor" && !option) { renderFavorMenu(); return { status: "needs_input" }; }
         return requestShrineService(action, option);
     };
-    return createSharedChoiceButton(menu, label, run, Object.assign({}, options || {}, { disabled: !!spec.blockedReason, title: spec.blockedReason || (options || {}).title || "",
+    const description = (options || {}).title || "";
+    const title = description + (spec.blockedReason && !description.includes(spec.blockedReason) ? (description ? " Unavailable: " : "") + spec.blockedReason : "");
+    return createSharedChoiceButton(menu, label, run, Object.assign({}, options || {}, { disabled: !!spec.blockedReason, title: title,
         textChoice: { action: "service", service: action, favor: option ? option.def.id : "" } }));
 }
 function executeTextShrineService(action) {
@@ -11958,7 +11960,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-24-010
+// Core Engine Version: 2026-10-24-011
 // Latest: Voice command fallback infers misheard words: person targets that match no one get a sounds-like best guess (textGuessNPCTarget: "female cancun" -> the female kenku), the AI is told voice input is speech-to-text and to always give a best guess (exits listed), AI plans wrapped in prose, using shorthand keys or verb synonyms are repaired, and in voice play the valid part of a partly bad plan still runs.
 // Previous: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
 // Previous: Trade and economy pass: Traders now carry a real purse (20-50 gold) instead of the 2-10 default; merchants pay at most 1.75x half value so deity tomes and similar cannot be bought and flipped for profit; bone dice wagers move coin to and from the NPC and have a cooldown; sealed goods pay slightly less coin. Previous -007: Hand-in tokens now pay out of the NPC's own coin pouch and are kept if they cannot cover them. Previous -006: Item purpose pass part 2: keepsakes (charms, rings, brooches, scarves) wear on the Neck for +1 Charisma; rivets, nails, pick-heads, sewing kits, twine and cloth mend worn gear; relics, tokens, candles and incense can be left as offerings at a shrine; sealed bales, crates and goods open; spice seasons a meal; pawn tickets, receipts, tally sticks, chits and house tokens are handed in to the right NPC; bone dice wager with friendly NPCs; ledgers, maps and receipts are readable; ink, chalk, parchment and wax tablets count as writing supplies; the ladle and net weight are improvised weapons; clean linen bandages. New "apply" text command.
@@ -12032,7 +12034,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-24-010";
+window.__ENGINE_CORE_VERSION = "2026-10-24-011";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -39147,10 +39149,12 @@ function closeCombatHelpWindow() {
     refreshRoomViewAfterClose();
 }
 
-function showCombatHelpWindow() {
+function showCombatHelpWindow(title) {
     const modal = document.getElementById("combatHelpModal");
     const entriesEl = document.getElementById("combatHelpEntriesEl");
     if (!modal || !entriesEl) return;
+    const heading = document.getElementById("combatHelpTitleEl");
+    if (heading) heading.textContent = typeof title === "string" ? title : "Combat actions";
     entriesEl.innerHTML = "";
     document.querySelectorAll("#chatOptionsEl button.combat-option-btn:not(.combat-help-btn)").forEach(function (btn) {
         const tip = btn.getAttribute("title");
@@ -65830,88 +65834,64 @@ function renderShrinePrayerMenu() {
 
     const player = G.player;
     ensurePlayerDeityState(player);
-
     const room = G.activeRoom;
     const dedicatedId = getShrineDeityId(room);
     const block = getPrayerBlockReason(room, room);
-    const shrineMenu = beginShrineMenu("shrine-prayer", "Shrine services — " + PRAYER_STAMINA_COST + " stamina, " + PRAYER_TURNS + " turns; first prayer chooses a permanent patron. for prayer/favor; other service costs are listed by show shrine services.");
-    const prayButtons = [
-        shrineMenuPrayerButton(shrineMenu, getPrayerButtonLabel(dedicatedId, "Pray to "), null, {
-            disabled: !!block,
-            title: block || `Costs ${PRAYER_STAMINA_COST} stamina and ${PRAYER_TURNS} turns. You cannot pray here again for ${PRAYER_COOLDOWN_TURNS} turns.`
-        })
-    ];
+    const prayerCost = "Costs " + PRAYER_STAMINA_COST + " stamina and " + PRAYER_TURNS + " turns, with a " + PRAYER_COOLDOWN_TURNS + "-turn prayer cooldown here.";
+    const pledge = !player.deity ? " Your first prayer permanently chooses your patron; you will review it before confirming." : " Your existing patron stays the same.";
+    const tip = function (description, reason) { return description + (reason ? " Unavailable: " + reason : ""); };
+    const shrineMenu = beginShrineMenu("shrine-prayer", "Shrine services — prayer costs " + PRAYER_STAMINA_COST + " stamina and " + PRAYER_TURNS + " turns; first prayer chooses a permanent patron. Use show shrine services for other costs and restrictions.");
+    const buttons = [];
     const newcomerState = getNewcomerProtectionState(player);
     if (newcomerState !== "used") {
-        const blessBlock = newcomerState === "none" && roomHasActiveHostile(room) ? "You cannot ask for a blessing with danger nearby." : "";
-        appendCombatGroup(el, "Newcomer's blessing", [
-            shrineServiceButton(shrineMenu, newcomerState === "active" ? "You hold a newcomer's blessing" : "Ask for a newcomer's blessing", "blessing", null, {
-                disabled: newcomerState === "active" || !!blessBlock,
-                title: newcomerState === "active"
-                    ? "It will pull you back from death once, to the shrine where you asked."
-                    : (blessBlock || "Free, once per character, and you pledge nothing. The next time you would die, you wake at this shrine instead, with your gear.")
-            })
-        ]);
+        buttons.push(shrineServiceButton(shrineMenu, newcomerState === "active" ? "Newcomer's blessing held" : "Ask for a newcomer's blessing", "blessing", null, {
+            title: newcomerState === "active"
+                ? "Returns you from death once, to the shrine where you asked, with your gear. You already hold this blessing."
+                : "No stamina cost; takes 1 turn, once per character, without pledging a patron. The next time you would die, you wake at this shrine with your gear."
+        }));
     }
-    appendCombatGroup(el, "Pray", prayButtons);
-
-    const otherButtons = player.knownDeities.filter(id => id !== dedicatedId && getDeityArchetype(id)).map(deityId => {
-        const deity = getDeityArchetype(deityId);
-        return shrineMenuPrayerButton(shrineMenu,
-            `Dedicate the shrine to ${deity.name} and pray` + (!player.deity ? " (pledges you to them for good)" : ""),
-            deityId,
-            { disabled: !!block, title: block || "The shrine's dedication can only be changed as part of a prayer." }
-        );
+    buttons.push(shrineMenuPrayerButton(shrineMenu, "Pray to " + shrinePublicDeity(player, dedicatedId), null, {
+        disabled: !!block,
+        title: tip("Pray to this shrine's deity to strengthen divine power and practise faith. " + prayerCost + pledge, block)
+    }));
+    player.knownDeities.filter(id => id !== dedicatedId && getDeityArchetype(id)).forEach(deityId => {
+        buttons.push(shrineMenuPrayerButton(shrineMenu, "Dedicate to " + getDeityArchetype(deityId).name, deityId, {
+            disabled: !!block,
+            title: tip("Change this shrine's dedication and pray to the chosen deity. Dedication is reviewed before confirming. " + prayerCost + pledge, block)
+        }));
     });
-    if (otherButtons.length) appendCombatGroup(el, "Rededicate", otherButtons);
-
     if (player.deity) {
-        const favorDeity = getDeityArchetype(player.deity);
-        const favorBlock = getFavorRequestBlockReason(room);
-        appendCombatGroup(el, "Favor", [
-            shrineServiceButton(shrineMenu, `Ask ${favorDeity ? favorDeity.name : "your patron"} for a favor...`, "favor", null, {
-                disabled: !!favorBlock,
-                title: favorBlock || "Pray for a blessing or a one-time gift. Your patron decides whether the request is worthy, and it costs them divine power."
-            })
-        ]);
+        const deity = getDeityArchetype(player.deity);
+        buttons.push(shrineServiceButton(shrineMenu, "Ask " + (deity ? deity.name : "your patron") + " for a favor…", "favor", null, {
+            title: "Choose a temporary stat blessing or a one-time gift. Your patron decides whether to grant it and spends divine power if granted. Asking costs " + PRAYER_STAMINA_COST + " stamina and " + PRAYER_TURNS + " turns, with a separate " + PRAYER_COOLDOWN_TURNS + "-turn favor cooldown, whatever the answer."
+        }));
     }
-
-    const defileBlock = getDefileBlockReason(room, room);
-    appendCombatGroup(el, "Defile", [
-        shrineServiceButton(shrineMenu, "Defile the shrine", "defile", null, {
-            disabled: !!defileBlock,
-            title: defileBlock || `Takes ${DIVINE_DEFILE_LOSS} divine power from the shrine's deity. Can be done once every ${DEFILE_COOLDOWN_TURNS} turns.`
-        })
-    ]);
-
-    // Clerics can pray here to renew their mana, on a cooldown measured in
-    // story turns. A patron deity makes the prayer stronger.
+    buttons.push(shrineServiceButton(shrineMenu, "Defile the shrine", "defile", null, {
+        title: "Takes " + DIVINE_DEFILE_LOSS + " divine power from the shrine's deity. Costs 1 turn, no stamina; " + DEFILE_COOLDOWN_TURNS + "-turn cooldown. Can affect faith and cause injury. You will review it before confirming."
+    }));
     if (playerUsesMana(player) && getClassPerk(player, "shrineMana", false)) {
-        const turn = G.story ? (G.story.turnCounter || 0) : 0;
-        const last = typeof player.lastShrinePrayerTurn === "number" ? player.lastShrinePrayerTurn : -Infinity;
-        const waitLeft = Math.max(0, SHRINE_MANA_COOLDOWN_TURNS - (turn - last));
-        const full = player.mana >= getPlayerManaCeiling(player);
-        appendCombatGroup(el, "Devotion", [
-            shrineServiceButton(shrineMenu, "Pray for renewal (restore mana)", "renewal", null, {
-                disabled: full || waitLeft > 0,
-                title: full ? "Your mana is already full."
-                    : (waitLeft > 0 ? `The shrine's blessing has not settled yet (${waitLeft} more turn${waitLeft === 1 ? "" : "s"}).` : "Spend a moment in prayer to renew your mana.")
-            })
-        ]);
+        const path = getFaithPathDef(player);
+        buttons.push(shrineServiceButton(shrineMenu, "Pray for renewal (restore mana)", "renewal", null, {
+            title: "Restore part of your mana through your learned shrine devotion. Costs 2 turns, no stamina; " + SHRINE_MANA_COOLDOWN_TURNS + "-turn cooldown. A patron strengthens the renewal." +
+                (path && path.shrineHpCost > 0 ? " Your path also costs " + path.shrineHpCost + " HP; review before confirming." : "")
+        }));
     }
-
-    // Untrained in divine faith: a quiet devotion is how you start (slowly).
     if (getClassSkillRank(player, "cleric") < 1) {
-        const devotionBlock = getDevotionPracticeBlockReason(G.activeRoom);
-        appendCombatGroup(el, "Devotion", [
-            shrineServiceButton(shrineMenu, "Kneel in quiet devotion (learn the basics)", "devotion", null, {
-                disabled: !!devotionBlock,
-                title: devotionBlock || "Nobody has taught you, but practice can start you on the way."
-            })
-        ]);
+        buttons.push(shrineServiceButton(shrineMenu, "Quiet devotion (learn the basics)", "devotion", null, {
+            title: "Practise the basics of divine faith without a teacher. For untrained clerics; costs " + CLASS_DEVOTION_TURNS + " turns, no stamina, with a " + SHRINE_MANA_COOLDOWN_TURNS + "-turn cooldown."
+        }));
     }
-
-    appendCombatGroup(el, "", [shrineMenuLeaveButton(shrineMenu, "Leave")]);
+    buttons.push(shrineMenuLeaveButton(shrineMenu, "Leave"));
+    // One wrapping action list, without a heading row for every service.
+    const list = document.createElement("div");
+    list.className = "combat-action-group shrine-action-list";
+    buttons.forEach(button => list.appendChild(button));
+    list.appendChild(createCombatButton("Action help", function () { showCombatHelpWindow("Shrine actions"); }, {
+        className: "combat-help-btn combat-help-group",
+        title: "Read the effects, costs and current restrictions for these shrine actions."
+    }));
+    if (el.classList) el.classList.toggle("text-combat-menu", false);
+    el.appendChild(list);
     publishShrineMenu(shrineMenu, el);
 }
 
