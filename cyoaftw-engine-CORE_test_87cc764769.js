@@ -105,7 +105,7 @@ async function executeTextSocialCommand(action) {
     if (!gesture) return textSocialHelp();
     if (!Object.prototype.hasOwnProperty.call(SOCIAL_GESTURES, gesture)) return textModeResult("blocked", "That social gesture is not supported. Type help act for examples.");
     const matches = action.targetRef ? textModeVisibleNPCs().filter(function (npc) { return npc === action.targetRef; })
-        : !args.target && G.activeNPC ? [G.activeNPC] : resolveTextNPCTarget(args.target).matches;
+        : !args.target && G.activeNPC ? [G.activeNPC] : textNPCMatchesOrGuess(args.target, textModeVisibleNPCs());
     if (!matches.length) return textModeResult("blocked", "No visible person matches that description. Type who is here.");
     if (matches.length > 1) return textModeAsk(action, "target", matches, "Who do you mean?");
     const npc = matches[0];
@@ -1510,7 +1510,7 @@ function performSleepingNPCAction(npc, action, item) {
 function executeTextSleepingNPC(action) {
     const args = action.args || {}, query = action.verb === "wake" ? args.target : args.source;
     const candidates = textModeVisibleNPCs().filter(isNPCSleeping);
-    const matches = action.targetRef ? candidates.filter(function (npc) { return npc === action.targetRef; }) : query ? resolveTextNPCTarget(query.replace(/^(?:sleeping|asleep)\s+/i, ""), candidates).matches : G.activeNPC && candidates.includes(G.activeNPC) ? [G.activeNPC] : candidates;
+    const matches = action.targetRef ? candidates.filter(function (npc) { return npc === action.targetRef; }) : query ? textNPCMatchesOrGuess(query.replace(/^(?:sleeping|asleep)\s+/i, ""), candidates, { lenient: true, single: true }) : G.activeNPC && candidates.includes(G.activeNPC) ? [G.activeNPC] : candidates;
     if (!matches.length) return textModeResult("blocked", "No sleeping person matches. Use show sleepers.");
     if (matches.length > 1) return textModeAsk(action, "target", matches, "Which sleeping person do you mean?");
     const npc = matches[0]; action.targetRef = npc;
@@ -2153,7 +2153,7 @@ function parseTextCommand(input) {
     if (combat) return combat;
     match = /^(?:wake(?:\s+up)?|awaken|rouse)(?:\s+(.+))?$/i.exec(raw);
     if (match) return { verb: "wake", args: { target: textCommandUnquote(match[1] || "") } };
-    match = /^(?:talk\s+to|speak\s+to|talk)(?:\s+(.+))?$/i.exec(raw);
+    match = /^(?:(?:talk|speak|chat)\s+(?:to|with)|talk)(?:\s+(.+))?$/i.exec(raw);
     if (match) return { verb: "talk", args: { target: match[1] || "" } };
     match = /^(?:glance|peek)(?:\s+(?:to\s+)?(?:the\s+)?(.+))?$/i.exec(raw);
     if (match) return { verb: "glance", args: { direction: match[1] || "" } };
@@ -2207,6 +2207,55 @@ function validateTextAIPlan(value) {
     return actions;
 }
 
+// Lenient reading of the AI's plan: JSON may arrive wrapped in prose or fences.
+function textAIPlanParse(raw) {
+    const clean = String(raw || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    try { return JSON.parse(clean); } catch (e) {}
+    const start = clean.indexOf("{"), end = clean.lastIndexOf("}");
+    if (start < 0 || end <= start) return null;
+    try { return JSON.parse(clean.slice(start, end + 1)); } catch (e) { return null; }
+}
+// Repairs near-misses before validation: prompt shorthand keys (t -> target)
+// and common verb synonyms (speak -> talk). Only registered verbs and fields
+// can result; validateTextAIPlan still checks everything.
+const TEXT_AI_VERB_SYNONYMS = { speak: "talk", chat: "talk", converse: "talk", greet: "talk", go: "move", walk: "move", head: "move", inspect: "examine", check: "examine", view: "examine", grab: "take", get: "take", hit: "attack", strike: "attack", fight: "attack", awaken: "wake", rouse: "wake" };
+function textAIPlanNormalize(value) {
+    if (!value || !Array.isArray(value.actions)) return value;
+    const fields = Object.create(null);
+    TEXT_COMMANDS.forEach(function (def) { fields[def.id] = def.args || []; });
+    const shorthand = { i: "item", t: "target", s: "source", a: "action", f: "fixture", b: "ability" };
+    return { actions: value.actions.map(function (action) {
+        if (!action || typeof action !== "object") return action;
+        let verb = typeof action.verb === "string" ? action.verb.trim().toLowerCase() : action.verb;
+        if (typeof verb === "string" && !Object.prototype.hasOwnProperty.call(fields, verb) && Object.prototype.hasOwnProperty.call(TEXT_AI_VERB_SYNONYMS, verb) && Object.prototype.hasOwnProperty.call(fields, TEXT_AI_VERB_SYNONYMS[verb])) verb = TEXT_AI_VERB_SYNONYMS[verb];
+        let args = action.args;
+        if (args && typeof args === "object" && !Array.isArray(args) && typeof verb === "string" && Object.prototype.hasOwnProperty.call(fields, verb)) {
+            const next = {};
+            Object.keys(args).forEach(function (key) {
+                const full = Object.prototype.hasOwnProperty.call(shorthand, key) && fields[verb].indexOf(key) < 0 && fields[verb].indexOf(shorthand[key]) >= 0 && !Object.prototype.hasOwnProperty.call(args, shorthand[key]) ? shorthand[key] : key;
+                next[full] = args[key];
+            });
+            args = next;
+        }
+        const out = { verb: verb, args: args };
+        Object.keys(action).forEach(function (key) { if (key !== "verb" && key !== "args") out[key] = action[key]; });
+        return out;
+    }) };
+}
+// Voice play only: keep each action that validates on its own (best guess).
+function textAIPlanSalvage(value) {
+    if (!value || !Array.isArray(value.actions)) return null;
+    const kept = [];
+    value.actions.forEach(function (action) {
+        const one = validateTextAIPlan({ actions: [action] });
+        if (one && kept.length < TEXT_COMMAND_LIMIT) kept.push(one[0]);
+    });
+    const usable = kept.length > 1 ? kept.filter(function (action) { return !/^(help|show)$/.test(action.verb); }) : kept;
+    if (!usable.length) return null;
+    usable.salvaged = true; // a guess: run it, but never learn it as a phrase
+    return usable;
+}
+
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
@@ -2234,13 +2283,24 @@ async function interpretTextCommands(input) {
     let peopleWords = "";
     try { const seen = []; textModeVisibleNPCs().forEach(function (npc) { const w = [npc.gender, npc.species].filter(Boolean).join(" ").toLowerCase(); if (w && seen.indexOf(w) < 0) seen.push(w); }); if (seen.length) peopleWords = "\nhere=" + seen.slice(0, 10).join("|"); } catch (e) {}
     const bathWords = shapes.some(shape => shape.verbs.includes("bathhouse")) ? "\nbathhouse.action=menu|bath|wash|massage|trial|attendant|practitioner." : "";
-    const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\nExpand args keys: i=item,t=target,s=source,a=action,f=fixture,b=ability\n' + schema + combatWords + socialWords + objectWords + bathWords + peopleWords + '\n' + JSON.stringify(input);
+    // Voice play: the words came from speech recognition, so they may be
+    // sound-alikes of what was meant. Ask for a best guess against what is here.
+    let spokenWords = "";
+    if (typeof ttsModeActive === "function" && ttsModeActive()) {
+        let exitWords = "";
+        try { const names = { N: "north", NE: "northeast", E: "east", SE: "southeast", S: "south", SW: "southwest", W: "west", NW: "northwest", U: "up", D: "down" }; exitWords = Object.keys((G.activeRoom && G.activeRoom.exits) || {}).map(function (k) { return names[k] || k; }).join("|"); } catch (e) {}
+        spokenWords = "\nSPOKEN via speech-to-text: words may be misheard sound-alikes (cancun=kenku, clarence north=go north). Map them to the closest here/exits word. Always give your best-guess action; never refuse." + (exitWords ? "\nexits=" + exitWords : "");
+    }
+    const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\nExpand args keys: i=item,t=target,s=source,a=action,f=fixture,b=ability\n' + schema + combatWords + socialWords + objectWords + bathWords + peopleWords + spokenWords + '\n' + JSON.stringify(input);
     try {
         const raw = await textModeAIRequest(instruction, 12000);
         if (!raw) return null;
-        const clean = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-        const plan = validateTextAIPlan(JSON.parse(clean));
-        return plan;
+        const parsed = textAIPlanParse(raw);
+        if (!parsed) return null;
+        const plan = validateTextAIPlan(textAIPlanNormalize(parsed));
+        if (plan) return plan;
+        // Voice play prefers a best guess: keep the actions that are valid.
+        return typeof ttsModeActive === "function" && ttsModeActive() ? textAIPlanSalvage(textAIPlanNormalize(parsed)) : null;
     } catch (err) {
         console.warn("[Text commands] Interpretation unavailable", err);
         return null;
@@ -3736,15 +3796,108 @@ function textLocalTargetMiss(actions) {
     });
 }
 
+// SOUNDS-LIKE PERSON TARGETS (2026-10-24). Voice input mishears unusual words
+// ("female kenku" -> "female cancun"). When an exact lookup finds no one, these
+// helpers make a best guess from the people actually visible: same-sounding or
+// near-spelled words, plus gender words. Lookup only; nothing runs here.
+const TEXT_GUESS_FILLER = /^(?:the|a|an|to|with|at|that|this|those|these|one|ones|person|someone|somebody|there|here|over|please|speak|talk|chat|say|wake|up|look|examine|npc|creature|who|is|me|my|let|lets|let's|go|i|want|would|like|and|of|in)$/;
+const TEXT_GUESS_FEMALE = /^(?:female|woman|women|lady|ladies|girl|gal|she|her|madam|maam|ma'am|feminine|lass)$/;
+const TEXT_GUESS_MALE = /^(?:male|man|men|guy|boy|he|him|gentleman|sir|dude|fellow|lad|masculine)$/;
+function textSoundKey(word) {
+    let w = String(word || "").toLowerCase().replace(/[^a-z]/g, "");
+    if (!w) return "";
+    w = w.replace(/ph/g, "f").replace(/ck/g, "k").replace(/q/g, "k").replace(/x/g, "ks").replace(/c(?=[eiy])/g, "s").replace(/c/g, "k").replace(/z/g, "s").replace(/gh/g, "g").replace(/^kn/, "n").replace(/^wr/, "r").replace(/dg/g, "j").replace(/th/g, "t");
+    const head = /[aeiouy]/.test(w.charAt(0)) ? "a" : w.charAt(0);
+    return (head + w.slice(1).replace(/[aeiouyhw]/g, "")).replace(/(.)\1+/g, "$1");
+}
+function textEditDistance(a, b) {
+    a = String(a); b = String(b);
+    if (a === b) return 0;
+    if (!a.length || !b.length) return Math.max(a.length, b.length);
+    let prev = [];
+    for (let j = 0; j <= b.length; j++) prev.push(j);
+    for (let i = 1; i <= a.length; i++) {
+        const row = [i];
+        for (let j = 1; j <= b.length; j++) row.push(Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1)));
+        prev = row;
+    }
+    return prev[b.length];
+}
+// 0..1: how likely a heard word means a known word.
+function textSoundSimilarity(heard, known) {
+    const a = String(heard || "").toLowerCase(), b = String(known || "").toLowerCase();
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    const stem = function (w) { return w.replace(/(?:es|s)$/, ""); };
+    if (stem(a) === stem(b) && stem(a).length >= 3) return 0.95;
+    if (a.length >= 4 && b.length >= 4 && textEditDistance(a, b) <= 1) return 0.85;
+    const ka = textSoundKey(stem(a) || a), kb = textSoundKey(stem(b) || b);
+    if (ka && ka === kb && ka.length >= 2) return 0.85;
+    if (a.length >= 4 && b.length >= 4 && (a.indexOf(b) === 0 || b.indexOf(a) === 0)) return 0.75;
+    if (ka.length >= 3 && kb.length >= 3 && textEditDistance(ka, kb) <= 1) return 0.7;
+    if (a.length >= 6 && b.length >= 6 && textEditDistance(a, b) <= 2) return 0.7;
+    return 0;
+}
+// Best-guess people for a target no one matched exactly. Returns the top
+// candidates (several when tied, so the caller can ask). opts.lenient also
+// accepts a gender-only match, or the only candidate present.
+function textGuessNPCTarget(selector, candidates, opts) {
+    opts = opts || {};
+    const query = textCommandNormalize(selector);
+    if (!query || /\b(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(?:st|nd|rd|th)?)\b/.test(query)) return [];
+    const tokens = query.split(" ").filter(function (t) { return t && !TEXT_GUESS_FILLER.test(t); });
+    const list = (candidates || textModeVisibleNPCs()).filter(Boolean);
+    if (!list.length) return [];
+    let wantGender = "";
+    const words = tokens.filter(function (t) {
+        if (TEXT_GUESS_FEMALE.test(t)) { wantGender = "female"; return false; }
+        if (TEXT_GUESS_MALE.test(t)) { wantGender = "male"; return false; }
+        return true;
+    });
+    if (!words.length && !wantGender) return opts.lenient && opts.single && list.length === 1 ? list.slice() : [];
+    const scored = [];
+    list.forEach(function (npc) {
+        const gender = String(npc.gender || "").toLowerCase();
+        if (wantGender && gender && gender !== wantGender) return;
+        const vocab = textCommandNormalize([npc.name, npc.descriptorName, npc.species, npc.race, npc.gender, opts.extraWords ? opts.extraWords(npc) : ""].join(" ")).split(" ").filter(Boolean);
+        let score = wantGender && gender === wantGender ? 0.5 : 0, hits = 0;
+        words.forEach(function (word) {
+            let best = 0;
+            vocab.forEach(function (known) { const s = textSoundSimilarity(word, known); if (s > best) best = s; });
+            if (best >= 0.7) { score += best; hits++; }
+        });
+        const strongOk = hits >= 1 && hits * 2 >= words.length;
+        const lenientOk = opts.lenient && (strongOk || hits >= 1 || (wantGender && words.length <= 2) || (opts.single && list.length === 1));
+        if (strongOk || lenientOk) scored.push({ npc: npc, score: score });
+    });
+    if (!scored.length) return [];
+    scored.sort(function (x, y) { return y.score - x.score; });
+    const top = scored[0].score;
+    return scored.filter(function (entry) { return entry.score >= top - 0.05; }).map(function (entry) { return entry.npc; });
+}
+// Exact matches first; otherwise the best guess. Marks guessed results.
+function textNPCMatchesOrGuess(selector, candidates, opts) {
+    const exact = resolveTextNPCTarget(selector, candidates, opts && opts.extraWords).matches;
+    if (exact.length || !String(selector || "").trim()) return exact;
+    const guess = textGuessNPCTarget(selector, candidates, opts);
+    if (guess.length) console.info("[Text commands] Best-guess target for \"" + selector + "\": " + guess.map(function (npc) { return textModeNPCLabel(npc); }).join(", "));
+    return guess;
+}
+// Short spoken list of who is here, for a target that matched no one.
+function textModeWhoIsHereLine(candidates) {
+    const list = (candidates || textModeVisibleNPCs()).slice(0, 6).map(function (npc) { return [npc.gender, npc.species].filter(Boolean).join(" ") || npc.name || "someone"; });
+    return list.length ? " Here: " + list.join(", ") + "." : " No one is here.";
+}
+
 // Resolve public creature descriptions before falling through to item/fixture
 // inspection. Explicit item locations keep their existing selection rules.
 function textModeInspectNPC(action) {
     const args = action.args || {};
     if (action.itemRef || action.fixtureRef || args.scope && args.scope !== "npc") return null;
     if (!args.scope && /^(?:carried|inventory|equipped|worn|floor|ground)\b/i.test(args.item || "")) return null;
-    const matches = action.targetRef ? textModeVisibleNPCs().filter(function (npc) { return npc === action.targetRef; }) : resolveTextNPCTarget(args.item).matches;
+    const matches = action.targetRef ? textModeVisibleNPCs().filter(function (npc) { return npc === action.targetRef; }) : args.scope === "npc" ? textNPCMatchesOrGuess(args.item, textModeVisibleNPCs(), { lenient: true }) : resolveTextNPCTarget(args.item).matches;
     if (!String(args.item || "").trim() && !action.targetRef) return null;
-    if (!matches.length) return args.scope === "npc" || action.targetRef ? textModeResult("blocked", "No visible NPC matches that description. Type who is here.") : null;
+    if (!matches.length) return args.scope === "npc" || action.targetRef ? textModeResult("blocked", "No visible NPC matches that description." + textModeWhoIsHereLine() + " Type who is here.") : null;
     if (!args.scope && !action.targetRef && (resolveTextInventoryItems(args.item, "examine").length || textLootMatch(args.item, textExplorationFixtures(), function (entry) { return entry.label; }).length)) {
         return textModeResult("blocked", "That description matches a creature and an item or fixture. Use examine npc <description>, examine fixture <name>, or examine carried/floor <item>.");
     }
@@ -4085,8 +4238,8 @@ async function executeTextCommand(action) {
         return { status: "completed" };
     }
     if (action.verb === "talk") {
-        const matches = action.targetRef ? textModeVisibleNPCs().filter(function (npc) { return npc === action.targetRef; }) : resolveTextNPCTarget(args.target).matches;
-        if (!matches.length) return textModeResult("blocked", "No visible NPC matches that description. Type who is here.");
+        const matches = action.targetRef ? textModeVisibleNPCs().filter(function (npc) { return npc === action.targetRef; }) : textNPCMatchesOrGuess(args.target, textModeVisibleNPCs(), { lenient: true, single: true });
+        if (!matches.length) return textModeResult("blocked", "No visible NPC matches that description." + textModeWhoIsHereLine() + " Type who is here.");
         if (matches.length > 1) return textModeAsk(action, "target", matches, "Who do you mean?");
         const npc = matches[0];
         if (!canConverseWithNPC(npc)) return textModeResult("blocked", "That creature cannot converse with you.");
@@ -4279,7 +4432,7 @@ async function submitTextModeCommand(raw) {
         if (!aiAvailable()) { textModeResult("blocked", 'That wording is not recognized locally, and AI command help is unavailable. Nothing was attempted. Check Use AI in Preferences and the AI connection, or type help for supported commands.', { systemOnly: true, commandFailure: "ai-unavailable" }); return; }
         textModeState.parsing = true;
         renderTextModeStatus("Interpreting your command...");
-        try { actions = await interpretTextCommands(input); learnedFromAI = !!actions; }
+        try { actions = await interpretTextCommands(input); learnedFromAI = !!actions && !actions.salvaged; }
         finally { textModeState.parsing = false; renderTextModeStatus(); }
         if (!textModeState.enabled || epoch !== textModeState.epoch) return;
         if (!textModeSameScene(scene)) { textModeResult("blocked", "The scene changed while interpreting. Please repeat your command."); return; }
@@ -4288,7 +4441,7 @@ async function submitTextModeCommand(raw) {
     if (!actions) { textModeResult("blocked", 'That wording could not be matched to an available action. Nothing was attempted. The interpreter may have failed or returned an unsupported action. Try help for supported commands, or say "..." when speaking to an NPC.', { systemOnly: true, commandFailure: "unresolved" }); return; }
     // A batch is interpreted in full before any action is allowed to run.
     if (learnedFromAI) textPhrasePrepare(input, actions, phraseContext);
-    if (learnedFromAI || learned) actions.forEach(function (action) { if (action.verb === "attack") action.inferredAttack = true; });
+    if (learnedFromAI || learned || actions.salvaged) actions.forEach(function (action) { if (action.verb === "attack") action.inferredAttack = true; });
     prefetchTextAdjudications(actions);
     textModeState.queue = actions;
     return runTextCommandQueue();
@@ -4562,7 +4715,7 @@ function textCombatResolveOpponent(action) {
     let matches;
     if (action.targetRef) matches = candidates.filter(function (npc) { return npc === action.targetRef; });
     else if (!args.target && G.activeNPC && candidates.indexOf(G.activeNPC) >= 0) matches = [G.activeNPC];
-    else matches = resolveTextNPCTarget(args.target || "", candidates).matches;
+    else matches = inCombat ? textNPCMatchesOrGuess(args.target || "", candidates) : resolveTextNPCTarget(args.target || "", candidates).matches;
     if (!matches.length) return { result: textModeResult("blocked", inCombat ? "No standing opponent matches that target. Type show targets." : "No visible creature matches that target. Type who is here.") };
     if (matches.length > 1) return { result: textModeAsk(action, "target", matches, "Which opponent?") };
     const npc = matches[0];
@@ -4977,7 +5130,7 @@ async function executeTextTradeCommand(action) {
         let matches;
         if (action.targetRef) matches = candidates.filter(function (npc) { return npc === action.targetRef; });
         else if (!String(args.target || "").trim() && G.activeNPC) matches = candidates.filter(function (npc) { return npc === G.activeNPC; });
-        else matches = resolveTextNPCTarget(args.target, candidates, function (npc) { return (npc.role || "") + (/merchant|trader/i.test(npc.role || "") ? " merchant" : ""); }).matches;
+        else matches = textNPCMatchesOrGuess(args.target, candidates, { extraWords: function (npc) { return (npc.role || "") + (/merchant|trader/i.test(npc.role || "") ? " merchant" : ""); } });
         if (!matches.length) return textModeResult("blocked", "No available NPC matches that trader. Type who is here.");
         if (matches.length > 1) return textModeAsk(action, "target", matches, "Who would you like to trade with?");
         const npc = matches[0];
@@ -5996,7 +6149,7 @@ async function executeTextPartyCommand(action) {
     const args = action.args || {};
     if (action.verb === "party") return args.action ? textModeResult("blocked", "That decision is not currently available. Type options or show party.") : textPartyRoster();
     const members = textModeVisibleNPCs().filter(function (npc) { return action.verb === "give" || isCompanionNPC(npc); });
-    const targets = action.targetRef ? members.filter(function (npc) { return npc === action.targetRef; }) : args.target ? resolveTextNPCTarget(args.target, members).matches : G.activeNPC && members.indexOf(G.activeNPC) >= 0 ? [G.activeNPC] : members;
+    const targets = action.targetRef ? members.filter(function (npc) { return npc === action.targetRef; }) : args.target ? textNPCMatchesOrGuess(args.target, members) : G.activeNPC && members.indexOf(G.activeNPC) >= 0 ? [G.activeNPC] : members;
     if (!targets.length) return textModeResult("blocked", "No available NPC/companion matches. Type show party or who is here.");
     if (targets.length > 1) return textModeAsk(action, "target", targets, "Who do you mean?");
     const npc = targets[0]; action.targetRef = npc;
@@ -11358,8 +11511,9 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-24-002
-// Latest: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
+// Core Engine Version: 2026-10-24-005
+// Latest: Voice command fallback infers misheard words: person targets that match no one get a sounds-like best guess (textGuessNPCTarget: "female cancun" -> the female kenku), the AI is told voice input is speech-to-text and to always give a best guess (exits listed), AI plans wrapped in prose, using shorthand keys or verb synonyms are repaired, and in voice play the valid part of a partly bad plan still runs.
+// Previous: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
 // Previous: Trade and economy pass: Traders now carry a real purse (20-50 gold) instead of the 2-10 default; merchants pay at most 1.75x half value so deity tomes and similar cannot be bought and flipped for profit; bone dice wagers move coin to and from the NPC and have a cooldown; sealed goods pay slightly less coin. Previous -007: Hand-in tokens now pay out of the NPC's own coin pouch and are kept if they cannot cover them. Previous -006: Item purpose pass part 2: keepsakes (charms, rings, brooches, scarves) wear on the Neck for +1 Charisma; rivets, nails, pick-heads, sewing kits, twine and cloth mend worn gear; relics, tokens, candles and incense can be left as offerings at a shrine; sealed bales, crates and goods open; spice seasons a meal; pawn tickets, receipts, tally sticks, chits and house tokens are handed in to the right NPC; bone dice wager with friendly NPCs; ledgers, maps and receipts are readable; ink, chalk, parchment and wax tablets count as writing supplies; the ladle and net weight are improvised weapons; clean linen bandages. New "apply" text command.
 // Previous: Item purpose pass part 1: quest trophies take half a unit each and stack; plain shop goods (travel bread, dried meat, tavern meal, warm supper, bitter tonic...) were created with no item type and could not be eaten, now fixed in createNPCTradeGood and covered by name for existing saves; supplies by name (meal, stew, supper, broth, fungus, nectar glaze) are edible.
 // Previous: Speech-ready NPC dialogue pass: TTS clean-up now handles hyphen stutters, ALL-CAPS shouting, emoji, stretched letters, repeated punctuation, ampersands and word/word slashes, turns lowercase stage-direction parentheticals into spoken actions, respells interjections (Hmph, Tch, Grr...), and the AI read-aloud guide bans sound-effect words, stutters and caps.
@@ -11431,7 +11585,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-24-004";
+window.__ENGINE_CORE_VERSION = "2026-10-24-005";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -15974,15 +16128,6 @@ window.advanceStoryTurn = function(steps = 1) {
     if (typeof applyEnvironmentalArousal === "function") {
         applyEnvironmentalArousal(G.roomMap);
     }
-    // NPC-to-NPC arousal interactions (bound scenarios and social interactions)
-    if (typeof processNPCArousalInteractions === "function") {
-        const interactionLines = processNPCArousalInteractions(G.roomMap);
-        if (interactionLines.length > 0) {
-            interactionLines.forEach(line => {
-                if (typeof queueTurnNote === "function") queueTurnNote(line);
-            });
-        }
-    }
     // Grime tick (see the GRIME/HYGIENE block): the player and their gear
     // slowly pick up dirt every GRIME_TURN_TICK turns, faster in dirty
     // environments. Cleared by washing at water/hygiene room objects.
@@ -16022,18 +16167,6 @@ window.advanceStoryTurn = function(steps = 1) {
     if (typeof tickForgeUpgradeJob === "function") tickForgeUpgradeJob(steps);
     if (typeof tickClothierJob === "function") tickClothierJob(steps);
     if (typeof tickGoodsCycle === "function") tickGoodsCycle();
-    
-    // Clean up NPC interaction partner markers for next turn
-    if (typeof processNPCArousalInteractions === "function") {
-        Object.values(G.roomMap || {}).forEach(room => {
-            if (room && Array.isArray(room.creatures)) {
-                room.creatures.forEach(npc => {
-                    if (npc) delete npc._interactionPartner;
-                });
-            }
-        });
-    }
-    
     return G.story.turnCounter;
 };
 
