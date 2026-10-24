@@ -10943,7 +10943,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-23-004";
+window.__ENGINE_CORE_VERSION = "2026-10-23-007";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -18822,7 +18822,7 @@ function confirmSaveMenuAction(message, label, action, name) {
     document.getElementById("saveMenuCard").inert = true;
     const title = document.createElement("h3");
     title.id = "saveMenuConfirmTitle";
-    title.textContent = label === "Load adventure" ? "Load adventure?" : `${label} save`;
+    title.textContent = label === "Load adventure" ? "Load adventure?" : label === "Start new game" ? "Start a new adventure?" : `${label} save`;
     el.appendChild(title);
     const text = document.createElement("p");
     text.id = "saveMenuConfirmMessage";
@@ -18861,6 +18861,7 @@ function refreshSaveMenu(message = "", error = false) {
     document.getElementById("createManualSaveBtn").disabled = !canSave || saveMenuState.busy;
     document.getElementById("exportCurrentSaveBtn").disabled = !canSave || saveMenuState.busy;
     document.getElementById("importSaveBtn").disabled = saveMenuState.busy;
+    syncSaveMenuNavButtons();
     let unreadable = 0;
     try {
         const auto = readSavedGame();
@@ -19024,6 +19025,69 @@ function loadSaveMenuSnapshot(save) {
     }
 }
 
+// Resume / New Game at the top of the save menu. In a game, Resume just closes
+// the menu; on the setup screen it continues the autosave. New Game always asks
+// first when an adventure would be lost (the autosave; manual saves are kept).
+function saveMenuInGame() {
+    const gameEl = document.getElementById("gameWrapper");
+    return !!(gameEl && gameEl.classList.contains("active") && currentAdventureCanSave());
+}
+
+function syncSaveMenuNavButtons() {
+    const resume = document.getElementById("saveMenuResumeBtn");
+    const fresh = document.getElementById("saveMenuNewGameBtn");
+    const canResume = saveMenuInGame() || hasSavedGame();
+    if (resume) {
+        resume.disabled = !canResume || saveMenuState.busy;
+        resume.title = canResume ? (saveMenuInGame() ? "Back to your adventure" : "Continue your autosaved adventure") : "No adventure to resume yet.";
+    }
+    if (fresh) fresh.disabled = saveMenuState.busy;
+}
+
+function resumeFromSaveMenu() {
+    if (saveMenuState.busy) return;
+    if (saveMenuInGame()) { closeSaveMenu(); return; }
+    if (!hasSavedGame()) { syncSaveMenuNavButtons(); return; }
+    closeSaveMenu();
+    resumeSavedGame().catch(function (err) {
+        console.error("Adventure restore failed:", err);
+        hideSpinner();
+        showSetupScreen();
+        openSaveMenu();
+        saveMenuStatus("This adventure could not be restored. Your manual saves are still available.", true);
+    });
+}
+
+function newGameFromSaveMenu() {
+    if (saveMenuState.busy) return;
+    const inGame = saveMenuInGame();
+    if (!inGame && !hasSavedGame()) {
+        // Setup screen with nothing to lose: go to character creation.
+        closeSaveMenu();
+        hideSavedGamePrompt();
+        setupGoTo(1);
+        return;
+    }
+    confirmSaveMenuAction("Start a new adventure? Your autosave will be cleared. Manual saves are kept, so make one first if you want to come back to this adventure.", "Start new game", function () {
+        if (!inGame) {
+            closeSaveMenu();
+            startNewAdventureFromPrompt();
+            return;
+        }
+        // Reload so old timers and AI calls cannot touch the new game; with
+        // no autosave the page opens on character creation.
+        gameSaveReloading = true;
+        if (!clearSavedGame()) { gameSaveReloading = false; throw new Error("Could not clear the autosave. Browser storage may be unavailable."); }
+        try { window.location.reload(); }
+        catch (err) {
+            gameSaveReloading = false;
+            closeSaveMenu();
+            showSetupScreen();
+            startNewAdventureFromPrompt();
+        }
+    });
+}
+
 function openSaveMenu() {
     const modal = document.getElementById("saveMenuModal");
     if (!modal) return;
@@ -19062,6 +19126,8 @@ document.addEventListener("keydown", function (event) {
 
 window.openSaveMenu = openSaveMenu;
 window.closeSaveMenu = closeSaveMenu;
+window.resumeFromSaveMenu = resumeFromSaveMenu;
+window.newGameFromSaveMenu = newGameFromSaveMenu;
 window.cancelSaveMenuConfirmation = cancelSaveMenuConfirmation;
 window.createManualSaveFromMenu = createManualSaveFromMenu;
 window.exportCurrentSaveFromMenu = exportCurrentSaveFromMenu;
@@ -27789,12 +27855,65 @@ function tickWorldBleeding() {
     if (!G || !G.player || G.activeNPCMode === "combat") return;
     const note = applyStoryBleeding(G.player, "You");
     if (note) queueTurnNote(note);
+    tickPlayerBleedFaint();
     const room = G.activeRoom;
     if (!room || !Array.isArray(room.creatures)) return;
     room.creatures.forEach(function (npc) {
         if (!npc || npc.hp <= 1) return;
         applyStoryBleeding(npc, npc.name);
     });
+}
+
+// Fainting from blood loss outside a fight. Story bleeding stops at 1 HP, so a
+// player who woke up (or walked away from a fight) still bleeding used to sit
+// at the brink forever. Now, once they are in fainting range
+// (BLEED_FAINT_HP_RATIO), they get BLEED_FAINT_GRACE_TURNS story turns to stop
+// it (bandage, potion, herb, magic, a healer); if they don't, they collapse
+// and the normal bleed-out (rescue chance, may die) plays. Turns only pass when
+// the player acts, so reading menus never costs them the window.
+const BLEED_FAINT_GRACE_TURNS = 3;
+
+function playerInBleedFaintRange(p) {
+    if (!p || p.hp <= 0 || getTotalBleed(p) <= 0) return false;
+    const hpMax = typeof p.hpMax === "number" && p.hpMax > 0 ? p.hpMax : Math.max(1, p.hp || 1);
+    return (p.hp / hpMax) <= BLEED_FAINT_HP_RATIO;
+}
+
+function tickPlayerBleedFaint() {
+    const p = G && G.player;
+    if (!p) return;
+    const state = p._bleedFaint;
+    if (!playerInBleedFaintRange(p)) {
+        if (state) {
+            p._bleedFaint = null;
+            queueTurnNote(getTotalBleed(p) <= 0 ? "The bleeding stops. The dizziness slowly passes." : "You steady yourself. The dizziness eases for now.");
+        }
+        return;
+    }
+    if (p._collapsing || p._dying || (typeof jailWaitRunning !== "undefined" && jailWaitRunning)) return;
+    const nonFlesh = typeof getCollapseBodyFamily === "function" && getCollapseBodyFamily(p).nonFlesh;
+    const turn = getCurrentStoryTurn();
+    if (!state) {
+        p._bleedFaint = { start: turn, deadline: turn + BLEED_FAINT_GRACE_TURNS };
+        queueTurnNote(nonFlesh
+            ? "Whatever holds you together is draining away, and you feel yourself coming apart at the edges. Stop the loss soon: a bandage, a healing potion, healing magic, or someone's help."
+            : "You have lost a lot of blood. Your head swims and your legs feel distant. Stop the bleeding soon: a bandage, a healing potion or herb, healing magic, or someone's help.");
+        return;
+    }
+    const left = state.deadline - turn;
+    if (left > 0) {
+        queueTurnNote(left === 1
+            ? (nonFlesh ? "You are barely holding together. One more moment." : "Dark spots crowd your sight. You will not stay on your feet much longer.")
+            : (nonFlesh ? "You keep fraying at the edges." : "The world tilts. You are still bleeding."));
+        return;
+    }
+    // Out of time: collapse once the current move or action has drawn its screen.
+    p._bleedFaint = null;
+    setTimeout(function () {
+        if (!G.player || G.player !== p || !playerInBleedFaintRange(p) || p._collapsing || p._dying) return;
+        if (G.activeNPCMode === "combat") return; // the fight's own faint check handles it
+        triggerPlayerCollapse([], {});
+    }, 60);
 }
 
 function healNPCOverTime(npc) {
@@ -42351,6 +42470,96 @@ function startNewGameFromDeath() {
     startNewAdventureFromPrompt();
 }
 
+// -- GOING DOWN: the player sees it happen ---------------------------------
+// Before the screen goes black the finishing line is allowed to finish (typed
+// and, in voice mode, spoken), then a short "slipping" beat plays with the
+// view closing in. Wording follows the player's current body (species or
+// shapeshifted form): hooves skid, a skeleton's bones come loose, a ghost
+// frays. Bleeding out is slower than being struck down; options.sudden (an
+// ambush you never saw) skips straight to black.
+const COLLAPSE_SLIP_MS = { blow: 1900, bleed: 3000 };
+const COLLAPSE_WAIT_NARRATION_MAX_MS = 9000;
+const COLLAPSE_WAIT_SPEECH_MAX_MS = 15000;
+
+// Body families. "flesh" is the default; the others change the wording.
+const COLLAPSE_BODY_FAMILIES = {
+    skeleton: {
+        fall: "Whatever magic holds your bones together slips. Your joints go loose and you clatter to the floor.",
+        fade: "The light in your eye sockets gutters, and goes out...",
+        wake: "Sometime later your bones drag themselves back into place, weak but whole",
+        nonFlesh: true
+    },
+    ghost: {
+        fall: "Your outline frays and thins. You sink toward the floor like settling mist.",
+        fade: "You drift into nothing...",
+        wake: "Sometime later you gather yourself back into a shape, faint but still here",
+        nonFlesh: true
+    },
+    slime: {
+        fall: "Your body slumps and spreads across the floor, too weak to hold its shape.",
+        fade: "Everything fades...",
+        wake: "Sometime later you pull yourself back into a shape, weak but whole",
+        nonFlesh: true
+    },
+    rat: { fall: "Your legs splay out from under you and you roll onto your side." },
+    satyr: { fall: "Your hooves skid out from under you, and the floor rushes up to meet you." },
+    kenku: { fall: "Your feathers flare as you pitch forward. Your small wings can do nothing to break the fall." },
+    catfolk: { fall: "Your ears flatten and your tail goes limp as your legs give way." },
+    wolfkin: { fall: "You drop to all fours, then lower, your ears ringing." },
+    harefolk: { fall: "Your long ears ring, and even your strong legs give out." },
+    ratfolk: { fall: "Your whiskers twitch at nothing as your legs fold beneath you." },
+    dragonborn: { fall: "Your tail drags heavily as your legs give way, and cold creeps into your scaled limbs." },
+    lizardfolk: { fall: "Your tail drags as your legs give way, and a cold sluggishness creeps into your limbs." },
+    kobold: { fall: "Your tail goes slack and your small legs fold beneath you." },
+    flesh: { fall: "Your vision narrows. The floor rushes up to meet you." }
+};
+
+function getCollapseBodyFamily(player) {
+    const key = typeof getPlayerSpeciesKey === "function" ? getPlayerSpeciesKey(player) : "";
+    const family = Object.prototype.hasOwnProperty.call(COLLAPSE_BODY_FAMILIES, key) ? COLLAPSE_BODY_FAMILIES[key] : COLLAPSE_BODY_FAMILIES.flesh;
+    return Object.assign({ fade: "Everything goes dark...", wake: "You wake up sometime later, weak but alive", nonFlesh: false }, family);
+}
+
+// The short line shown while the view closes in.
+function getCollapseSlipLine(player, cause) {
+    const family = getCollapseBodyFamily(player);
+    if (cause === "bleed") {
+        const opener = family.nonFlesh ? "Whatever holds you together is running out." : "You have lost too much blood. The edges of the world grey out and turn cold.";
+        return opener + " " + family.fall;
+    }
+    return family.fall;
+}
+
+// Wait (with caps) until the finishing narration has typed out and any
+// voice-mode speech has finished, so the player sees what brought them down.
+async function waitForCollapseNarration() {
+    const start = Date.now();
+    while (activeCombatNarration && !activeCombatNarration.done && Date.now() - start < COLLAPSE_WAIT_NARRATION_MAX_MS) await wait(100);
+    if (typeof textModeWaitStoryTyping === "function" && typeof textModeState !== "undefined" && textModeState.enabled) {
+        await Promise.race([textModeWaitStoryTyping(), wait(COLLAPSE_WAIT_NARRATION_MAX_MS)]);
+    }
+    const speechStart = Date.now();
+    const speaking = function () { return typeof ttsSpeech !== "undefined" && (ttsSpeech.current || ttsSpeech.queue.length); };
+    while (speaking() && Date.now() - speechStart < COLLAPSE_WAIT_SPEECH_MAX_MS) await wait(150);
+    await wait(500);
+}
+
+function setCollapseVignette(on) {
+    const vignette = document.getElementById("dangerVignetteEl");
+    if (vignette) vignette.classList.toggle("collapsing", !!on);
+}
+
+// The view half-dims with the slip line on it, then goes fully black.
+function setCollapseFadeDimming(on) {
+    const overlay = document.getElementById("collapseFadeOverlay");
+    if (!overlay) return;
+    if (on) {
+        overlay.classList.add("active");
+        void overlay.offsetWidth;
+        overlay.classList.add("dimming");
+    } else overlay.classList.remove("dimming");
+}
+
 // options.defeatedBy: the NPC whose attack (or whose fight caused the
 // bleed-out) brought the player down, if any - used only to decide whether
 // a robbery happens. Guarded by player._collapsing so a caller that also
@@ -42378,7 +42587,10 @@ async function triggerPlayerCollapse(lines, options = {}) {
     // goes dark...") is the one place darkness is mentioned. Without it
     // (bleeding out, a severed-limb collapse) a short physical line stands in.
     const combatLines = Array.isArray(lines) ? lines : [];
-    if (!options.narrated) combatLines.push("Your legs fold and you collapse.");
+    const cause = bleedOutcome ? "bleed" : "blow";
+    const family = getCollapseBodyFamily(player);
+    // Without a narrated finishing blow (bleeding out, a severed limb) the
+    // body-specific fall line below is the description of going down.
 
     // The fight is over the instant the player goes down - nothing should
     // still be clickable (Attack/Escape/etc.) while this plays out.
@@ -42391,9 +42603,24 @@ async function triggerPlayerCollapse(lines, options = {}) {
     renderCombatNarrationLines(combatLines);
     saveGameState();
 
+    // Let the player see it happen: the blow lands, the view closes in, then black.
+    if (!options.sudden) {
+        await waitForCollapseNarration();
+        const slip = getCollapseSlipLine(player, cause);
+        setCollapseVignette(true);
+        setCollapseFadeDimming(true);
+        setCollapseFadeText(slip);
+        if (typeof publishTextModeOutput === "function" && typeof textModeState !== "undefined" && textModeState.enabled) {
+            publishTextModeOutput("narration", slip, { source: "collapse" });
+        }
+        await wait(COLLAPSE_SLIP_MS[cause] || COLLAPSE_SLIP_MS.blow);
+        setCollapseFadeText(null);
+    }
     setCollapseFadeVisible(true);
+    setCollapseFadeDimming(false);
     await wait(1100);
-    setCollapseFadeText("Everything goes dark...");
+    setCollapseVignette(false);
+    setCollapseFadeText(family.fade);
     await wait(1800);
     if (options.survivedFatalBlow) {
         setCollapseFadeText("That was a killing blow. Death reached for you, and for once it missed.");
@@ -42404,6 +42631,7 @@ async function triggerPlayerCollapse(lines, options = {}) {
     player.hp = Math.max(1, Math.ceil(player.hpMax * PLAYER_COLLAPSE_RECOVERY_HP_RATIO));
     player.stamina = Math.max(player.stamina || 0, Math.ceil(staminaMax * PLAYER_COLLAPSE_RECOVERY_STAMINA_RATIO));
     removeStatusEffect(player, "exhausted");
+    player._bleedFaint = null;
 
     // Brought down by a guard: no robbery, they haul you to the jail.
     let jailed = null;
@@ -42414,8 +42642,8 @@ async function triggerPlayerCollapse(lines, options = {}) {
     let wakeText = jailed
         ? jailed.wakeText
         : robbed
-        ? `You wake up sometime later, weak but alive - and lighter by ${robbed} gold. Someone must have gone through your pockets while you were out.`
-        : "You wake up sometime later, weak but alive.";
+        ? `${family.wake} - and lighter by ${robbed} gold. Someone must have gone through your pockets while you were out.`
+        : family.wake + ".";
 
     if (bleedOutcome) {
         wakeText += bleedOutcome.rescuedBy
