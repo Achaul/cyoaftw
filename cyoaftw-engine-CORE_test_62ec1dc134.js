@@ -179,6 +179,52 @@ async function textCommitmentMenuInput(menu,action,input) {
     if(options.length===1)return textRunSharedChoice(menu,options[0]);
     return showSharedChoiceMenu(menu);
 }
+function parseTextBindingCommand(raw) {
+    const release = /^(?:unbind|untie)(?:\s+(.+))?$/i.exec(raw);
+    if (release) return { verb: "unbind", args: { target: textCommandUnquote(release[1] || "") } };
+    let match = /^(bind|tie)(?:\s+up)?(?:\s+(.+))?$/i.exec(raw);
+    if (!match || !match[2] || /^(?:wounds?|bandage)\b/i.test(match[2])) return null;
+    let target = match[2].trim(), part = "full", parts;
+    if (/^(hands|feet|full)$/i.test(target)) return { verb: "bind", args: { target: "", part: target.toLowerCase() } };
+    if ((parts = /^(hands|feet|full|hands\s+(?:and|&)\s+feet)(?:\s+(?:of|on))?\s+(.+)$/i.exec(target))) {
+        part = parts[1]; target = parts[2];
+    } else if ((parts = /^(.+?)\s+(hands|feet|full|hands\s+(?:and|&)\s+feet)$/i.exec(target))) {
+        target = parts[1]; part = parts[2];
+    }
+    return { verb: "bind", args: { target: textCommandUnquote(target), part: /^(hands|feet)$/i.test(part) ? part.toLowerCase() : "full" } };
+}
+
+function textBindingShow(key) {
+    if (!/^(bind|binding|rope belt|bindings)$/.test(key)) return null;
+    const targets = typeof getBindingTargets === "function" ? getBindingTargets() : [];
+    const rows = targets.map(function (entry) {
+        return { target: entry.label, actions: ["hands","feet","full","release"].map(function (part) {
+            return { part: part, command: part === "release" ? "unbind " + entry.label : "bind " + entry.label + " " + part, blockedReason: getBindingBlockReason(entry.target, part) };
+        }) };
+    });
+    return textModeResult("completed", rows.length ? rows.map(function (row) {
+        return row.target + ":\n" + row.actions.map(function (action) { return action.command + (action.blockedReason ? " — " + action.blockedReason : " — free"); }).join("\n");
+    }).join("\n") : "There is no surrendered person or eligible unconscious body here to bind.", { bindings: rows, systemOnly: true });
+}
+
+function executeTextBindingCommand(action) {
+    const args = action.args || {}, all = getBindingTargets();
+    if (action.verb !== "unbind" && !args.target && !args.part) return textBindingShow("bind");
+    const part = action.verb === "unbind" ? "release" : args.part || "full";
+    let matches = action.bindingRef ? all.filter(function (entry) { return entry.target === action.bindingRef.target && entry.room === action.bindingRef.room && entry.source === action.bindingRef.source; }) :
+        args.target ? textLootMatch(args.target, all, function (entry) { return entry.label; }) : all;
+    if (!matches.length) return textModeResult("blocked", "That person is no longer available here.");
+    if (matches.length > 1 && !args.target && G.activeNPC) matches = matches.filter(function (entry) { return entry.target === G.activeNPC; });
+    if (matches.length > 1) return textModeAsk(action, "bindingTarget", matches.map(function (entry) {
+        return Object.assign({}, entry, { run: createBindingAction(entry.target, part) });
+    }), "Whom do you want to bind?");
+    const entry = matches[0];
+    if (action.bindingRef && action.bindingRef.run) return action.bindingRef.run();
+    action.bindingRef = entry;
+    return performBindingAction(entry.target, part);
+}
+
+
 function parseTextInteractionCommand(input) {
     const raw = String(input || "").trim().replace(/^\*+\s*|\s*\*+$/g, "").replace(/[.!?]+$/, "").replace(/^I\s+/i, "");
     if (/^push\s+through\b/i.test(raw)) return null; // Existing door/passage command.
@@ -1959,12 +2005,15 @@ const TEXT_COMMANDS = [
     { id: "give", party: true, args: ["item", "target"], aliases: ["give", "gift"], example: "give sword to dwarf; give potion to second elf; give", description: "Offer one carried item through the normal NPC gift handler; it can be accepted or refused. Worn gear must be removed first. Async reactions finish before later commands and cannot transfer a replaced stack or act on a different NPC/scene. Give without an item opens supported gift choices." },
     { id: "back", args: [], aliases: ["back"], example: "back", description: "Return from a supported choice menu using its normal Back action. Mandatory loot allocations/objections still need an answer." },
     { id: "cancel", args: [], aliases: ["cancel"], example: "cancel", description: "Cancel pending commands and leave a supported optional menu. Mandatory loot decisions remain unresolved until you answer them. Stop cancels queued commands without changing the game decision." },
+    { id: "bind", binding: true, args: ["target", "part"], aliases: ["bind", "tie"], example: "bind goblin hands; bind goblin feet; bind goblin full; tie hands of goblin; show bind; how bind", description: "Restrain a visible surrendered person or eligible unconscious body. One rope belt binds hands or feet; two belts bind both. A full rope can bind both. Remove worn belts first. A second binding can complete a partial one. Uses actual inventory items, no stamina or turn. Use show bind for current actions and requirements." },
+    { id: "unbind", binding: true, args: ["target"], aliases: ["unbind", "untie"], example: "unbind goblin; untie goblin", description: "Release a present bound captive or prepared unconscious binding and recover its stored binding tools. Refused pack transfers leave the actual tools on the floor. No stamina or story turn." },
+    { id: "lootitem", lootDetail: true, args: ["action", "item", "source", "amount"], aliases: ["inspect loot"], example: "inspect sword from chest; examine boots from corpse; equip sword from chest; drop sword from chest; drop 2 arrows from chest; inspect loot sword; show loot; how lootitem", description: "Inspect visible loot in an open container or searched body. The item decision shows description, equipment comparison, Take, Equip and Drop; use options and numbered choices. Drop places the actual item on the floor for companions, without first using pack capacity. Use Back to return to the source. Actions keep native transfer/equipment/party rules." },
     { id: "fixtures", exploration: true, info: true, args: [], aliases: ["fixtures", "landmarks"], example: "show fixtures; fixtures", description: "List visible room fixtures without revealing hidden landmarks. Use look to observe ordinary surroundings, or search room to try discovering hidden fixtures." },
     { id: "interact", exploration: true, args: ["fixture", "action"], aliases: ["interact"], example: "interact with fountain; examine fixture chest", description: "Inspect a visible fixture and list its typed actions and current restrictions. Actions use the same engine handlers as normal cards. Multiple matches ask for a number. Use show fixture <name> for a free view without replacing a pending choice." },
     { id: "sneak", exploration: true, args: [], aliases: ["sneak", "hide"], example: "sneak", description: "Use your learned exploration Sneak ability, with its normal availability, stamina and turn rules." },
     { id: "case", exploration: true, args: [], aliases: ["case", "case the place", "case room"], example: "case the place", description: "Use your learned Case the Place ability to reveal loose hidden belongings and read the room's locks. Uses the existing ability's rules; room fixture discovery is search room." },
     ...["gather", "mine", "scavenge", "read", "warm", "wash", "disarm", "break", "pray", "offer", "enter"].map(function (verb) {
-        const examples = { gather: "gather greenwort; forage", mine: "mine ore vein", scavenge: "scavenge rubble", read: "read notice board", warm: "warm up at hearth", wash: "wash at fountain", disarm: "disarm spike trap", break: "break spike trap", pray: "pray at altar", offer: "offer at altar", enter: "enter waygate; climb stairs" };
+        const examples = { gather: "gather greenwort; harvest moonbloom; gather twisted roots; forage", mine: "mine ore vein", scavenge: "scavenge rubble", read: "read notice board", warm: "warm up at hearth", wash: "wash at fountain; wash at flood of water; wash at stagnant pool; wash at reed beds", disarm: "disarm spike trap", break: "break spike trap", pray: "pray at altar", offer: "offer at altar", enter: "enter waygate; climb stairs" };
         return { id: verb, exploration: true, args: verb === "read" ? ["item", "fixture"] : ["fixture"], aliases: [verb], example: examples[verb], description: "Use " + verb + " on a visible matching fixture through the normal action, preserving costs, rolls, tools, cooldowns and consequences. Omit the name to select among matching fixtures. Type interact with <name> for current actions. Enter asks for portal travel confirmation; disarm/break target traps only." };
     }),
     { id: "fill", exploration: true, args: ["item", "fixture"], aliases: ["fill"], example: "fill bottle from fountain", description: "Fill one empty carried container from a visible clean-water fixture, using the normal one-turn action. Multiple fixtures or bottle types ask numbered questions." },
@@ -2091,6 +2140,7 @@ function parseTextCommand(input) {
     if (match) return { verb: "examine", args: { item: textCommandUnquote(match[1]), scope: "npc" } };
     const social = parseTextSocialCommand(raw); if (social) return social;
     const touch = parseTextTouchCommand(raw); if (touch) return touch;
+    const binding = parseTextBindingCommand(raw); if (binding) return binding;
     const interaction = parseTextInteractionCommand(raw); if (interaction) return interaction;
     if (/^I\s+/i.test(raw)) return parseTextAdjudicationFallback(raw);
     const casting = parseTextCastingCommand(raw); if (casting) return casting;
@@ -2131,6 +2181,7 @@ function parseTextCommand(input) {
     if (goods) return goods;
     const travel = parseTextTravelCommand(raw); if (travel) return travel;
     const nectar = parseTextNectarCommand(raw); if (nectar) return nectar;
+    const lootItem = parseTextLootItemCommand(raw); if (lootItem) return lootItem;
     const party = typeof parseTextPartyCommand === "function" ? parseTextPartyCommand(raw) : null;
     if (party) return party;
     const jobs = typeof parseTextJobsCommand === "function" ? parseTextJobsCommand(raw) : null;
@@ -2259,7 +2310,7 @@ function textAIPlanSalvage(value) {
 async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
-    TEXT_COMMANDS.filter(function (def) { return (!def.bathhouse || !!bathhouseProvider(G.activeRoom)) && !def.tasting && (!def.conversationActions || typeof conversationActionMenuBlock === "function" && !conversationActionMenuBlock(G.activeNPC)) && (!def.service || getNPCServiceOptions(G.activeNPC).length > 0) && (!def.commitment || commitmentIntentAvailable()) && !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    TEXT_COMMANDS.filter(function (def) { return (!def.lootDetail || lootItemDetailAvailable()) && (!def.binding || typeof getBindingTargets === "function" && getBindingTargets().length > 0) && (!def.bathhouse || !!bathhouseProvider(G.activeRoom)) && !def.tasting && (!def.conversationActions || typeof conversationActionMenuBlock === "function" && !conversationActionMenuBlock(G.activeNPC)) && (!def.service || getNPCServiceOptions(G.activeNPC).length > 0) && (!def.commitment || commitmentIntentAvailable()) && !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -3982,6 +4033,7 @@ function textModeHelpContent(topic, show) {
     if (show && /^(taste|tasting)$/.test(key) && typeof textTastingShow === "function") return textTastingShow();
     if (show) { const sleepers = textSleepingNPCShow(key); if (sleepers) return sleepers; }
     if (show) { const tools = worldToolShow(key); if (tools) return tools; }
+    if (show) { const binding = textBindingShow(key); if (binding) return binding; }
     if (show) { const objects = textWorldObjectShow(key); if (objects) return objects; }
     if (/^(phrases|learned phrases)$/.test(key)) return executeTextPhraseCommand({args:{action:"list"}});
     if (/^(available\s+)?(verbs|actions|commands)$/.test(key)) key = "";
@@ -4026,7 +4078,9 @@ function textModeHelpContent(topic, show) {
     if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
     const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "taste", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
-        if (ids.indexOf(def.id) < 0 && !def.bathhouse && !def.conversationActions && !def.service && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !def.commitment && !/^(back|cancel)$/.test(def.id)) return false;
+        if (ids.indexOf(def.id) < 0 && !def.bathhouse && !def.conversationActions && !def.service && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.binding && !def.lootDetail && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !def.commitment && !/^(back|cancel)$/.test(def.id)) return false;
+        if (def.lootDetail && !lootItemDetailAvailable()) return false;
+        if (def.binding && (typeof getBindingTargets !== "function" || !getBindingTargets().length)) return false;
         if (def.conversationActions && (typeof conversationActionMenuBlock !== "function" || conversationActionMenuBlock(G.activeNPC))) return false;
         if (def.service && !getNPCServiceOptions(G.activeNPC).length) return false;
         if (def.commitment && !commitmentIntentAvailable()) return false;
@@ -4224,6 +4278,8 @@ async function executeTextCommand(action) {
         if (objects.length) return executeTextObjectCommand({ verb: "object", args: { action: "take", target: args.item } });
     }
     if (action.verb === "hug") return executeTextInteractionCommand({ verb: "act", targetRef: action.targetRef, args: { family: "contact", action: "give them a hug", target: args.target || "" } });
+    if (def.lootDetail) return executeTextLootItemCommand(action);
+    if (def.binding) return executeTextBindingCommand(action);
     if (def.social) return executeTextSocialCommand(action);
     if (def.casting) return executeTextCastingCommand(action);
     if (def.nsfw && action.verb.match(/^(touch|grab|hug|grope)$/)) return executeTextTouchCommand(action);
@@ -4463,6 +4519,7 @@ async function submitTextModeCommand(raw) {
         else if (pending.kind === "materialFixture") pending.action.materialFixture = pick;
         else if (pending.kind === "materialItem") pending.action.materialItem = pick;
         else if (pending.kind === "environment") pending.action.environmentRef = pick;
+        else if (pending.kind === "bindingTarget") pending.action.bindingRef = pick;
         else if (pending.kind === "fixture") pending.action.fixtureRef = pick;
         else if (pending.kind === "fixtureFill") pending.action.fillRef = pick;
         else if (pending.kind === "fixtureRoute") pending.action.fixtureRoute = pick;
@@ -5361,6 +5418,291 @@ function textLootReady(entry) {
     return entry.kind === "fixture" ? entry.source.opened === true : entry.kind === "body" ? entry.source.bodyLooted === true : true;
 }
 
+// Item details are a shared loot decision, not an automatic transfer.
+let lootItemDetailState = null;
+
+function lootItemDetailAvailable() {
+    return typeof getVisibleRoomFixtures === "function" && typeof isContainerFixture === "function" && typeof isCarryContainerItem === "function" &&
+        textLootSources().some(textLootReady);
+}
+
+function lootItemSourceEntry(source, kind) {
+    return textLootSources().find(function (entry) { return entry.source === source && (!kind || entry.kind === kind); }) || null;
+}
+
+function lootItemGroup(entry, ref) {
+    if (!textLootFresh(entry) || !textLootReady(entry)) return null;
+    return textLootEntries(entry).find(function (group) {
+        return group.slot === ref.slot && group.items.length === ref.items.length &&
+            group.items.every(function (item) { return ref.items.indexOf(item) >= 0; });
+    }) || null;
+}
+
+function lootItemBacking(entry, item, slot) {
+    if (entry.kind === "fixture") return ensureContainerContents(entry.source).items;
+    if (entry.kind === "body") return slot ? null : entry.source.inventory;
+    if ((G.player.inventory || []).includes(item) && getContainerContents(entry.source).includes(item)) return G.player.inventory;
+    return entry.source.packed;
+}
+
+function lootItemBlock(entry, group) {
+    const p = G.player;
+    if (!p || p.hp <= 0 || p.dead || p.unconscious || p._dying || p._collapsing) return "You cannot handle loot right now.";
+    if (hasPendingPartyLoot()) return "Settle the party's loot decision first.";
+    const reason = textLootBlock(entry);
+    if (reason) return reason;
+    if (!textLootReady(entry)) return "Open or search that source first.";
+    if (!group || !lootItemGroup(entry, group)) return "That item changed or is no longer in this source.";
+    return "";
+}
+
+function lootItemQuote(entry, group) {
+    const player = G.player, room = G.activeRoom, actor = G.activeNPC, mode = G.activeNPCMode, object = G.activeObject;
+    const turn = getCurrentStoryTurn(), bodyState = entry.source.bodyState;
+    const sourceInventory = entry.source.inventory, sourceEquipped = entry.source.equipped;
+    const contents = entry.kind === "fixture" ? ensureContainerContents(entry.source) : null;
+    const contentsList = contents && contents.items, packed = entry.source.packed;
+    const stamp = function (item) { return JSON.stringify([choiceItemStamp(item), item.durability, item.armorBroken, item.modifier, item.owner, item.ownerId, item._stolen]); };
+    const items = group.items.slice(), stamps = items.map(stamp), quantity = group.quantity;
+    return function () {
+        const now = lootItemGroup(entry, group);
+        return G.player === player && G.activeRoom === room && G.activeNPC === actor && G.activeNPCMode === mode && G.activeObject === object &&
+            turn === getCurrentStoryTurn() && entry.source.bodyState === bodyState && entry.source.inventory === sourceInventory &&
+            entry.source.equipped === sourceEquipped && entry.source.packed === packed &&
+            (!contents || entry.source.contents === contents && contents.items === contentsList) &&
+            now && now.quantity === quantity && items.every(function (item, i) { return stamp(item) === stamps[i]; }) && !lootItemBlock(entry, group);
+    };
+}
+
+function createLootItemNameButton(entry, group) {
+    const fresh = lootItemQuote(entry, group);
+    const name = labelWithCount(getItemName(group.item), group.quantity) + (group.slot ? " (worn)" : "");
+    const button = createCombatButton(name, function () {
+        if (button.isConnected === false || !fresh()) return sharedChoiceResult("blocked", "That loot list changed. Open it again.");
+        return openLootItemDetail(entry, group);
+    });
+    button.className += " loot-item-name";
+    button.title = "Description, comparison and item actions";
+    return button;
+}
+
+function appendLootItemRows(parent, source, kind) {
+    const entry = lootItemSourceEntry(source, kind);
+    if (!entry) return;
+    textLootEntries(entry).forEach(function (group) {
+        const button = createLootItemNameButton(entry, group);
+        button.style.display = "block";
+        button.style.width = "100%";
+        button.style.textAlign = "left";
+        button.style.whiteSpace = "normal";
+        button.style.margin = "5px 0";
+        parent.appendChild(button);
+    });
+}
+
+function lootItemInfo(entry, group) {
+    const item = group.item, slot = getDirectEquipmentSlot(item);
+    const stats = buildEquipmentExamineLines(item, slot).concat(buildItemEffectLines(item));
+    const comparison = slot === "back" && G.player.rucksack
+        ? ["Compared with your " + getItemName(G.player.rucksack) + ": " + describeExamineDeltas(item, G.player.rucksack).text + "."]
+        : buildEquipmentCompareLines(item, slot, false);
+    return { name: getItemName(item), quantity: group.quantity, source: getEntityName(entry.source),
+        description: item.examineText || item.description || "You look over " + withIndefiniteArticle(getItemName(item)) + ".",
+        stats: stats, comparison: comparison };
+}
+
+function lootItemEquipBlock(entry, group) {
+    if (!getDirectEquipmentSlot(group.item)) return "This item cannot be equipped.";
+    if (group.slot && getItemQuantity(group.item) !== 1) return "Take this worn stack before equipping one unit.";
+    const list = lootItemBacking(entry, group.item, group.slot);
+    return typeof worldObjectEquipBlock === "function" && list ? worldObjectEquipBlock(group.item, list) : "";
+}
+
+// Used only by the shared equipment handler; private references never enter intents.
+function lootItemEquipmentSource(origin, item, list) {
+    const entry = origin && textLootFresh(origin.entry);
+    if (!entry || lootItemBlock(entry, origin.group) || !origin.group.items.includes(item)) return false;
+    if (entry.kind === "body" && origin.group.slot)
+        return entry.source.equipped && entry.source.equipped[origin.group.slot] === item && list.length === 1 && list[0] === item;
+    return lootItemBacking(entry, item, origin.group.slot) === list;
+}
+
+function returnToLootSource(entry) {
+    if (!textLootFresh(entry) || !textLootReady(entry)) return sharedChoiceResult("blocked", "That loot source is no longer available.");
+    if (textModeState.enabled) { textLootSelect(entry); return textLootList(entry); }
+    if (entry.kind === "fixture") openFixtureCard(entry.source);
+    else if (entry.kind === "body") renderRoomObjectActionMenu(entry.source);
+    else openContainerCard(entry.source, "");
+    return { status: "completed" };
+}
+
+function closeLootItemDetail(restore) {
+    const state = lootItemDetailState;
+    if (!state) return;
+    lootItemDetailState = null;
+    if (sharedChoiceState.menu === state.menu) clearSharedChoiceMenu(state.menu);
+    if (!state.textMode && G.player === state.player && G.activeRoom === state.room && G.activeItemModal === state.entry.source) closeItemModal();
+    if (restore && G.player === state.player && G.activeRoom === state.room) return returnToLootSource(state.entry);
+}
+
+function openLootItemDetail(entry, ref) {
+    const group = lootItemGroup(entry, ref), reason = lootItemBlock(entry, group);
+    if (reason) return sharedChoiceResult("blocked", reason);
+    if (sharedChoiceState.menu && sharedChoiceState.menu.kind !== "loot-item") return sharedChoiceResult("blocked", "Finish the current decision first.");
+    closeLootItemDetail(false);
+    const info = lootItemInfo(entry, group), fresh = lootItemQuote(entry, group), textMode = textModeState.enabled;
+    const modal = document.getElementById("itemModal"), actions = textMode ? document.createElement("div") : document.getElementById("itemModalActions");
+    if (!actions || !modal) return sharedChoiceResult("blocked", "The item window is unavailable.");
+    if (!textMode) {
+        if (typeof activeReadingSession !== "undefined" && activeReadingSession) { activeReadingSession.cancel(); activeReadingSession = null; }
+        clearItemModalContents();
+        document.getElementById("itemModalTitle").textContent = labelWithCount(info.name, info.quantity);
+        document.getElementById("itemModalDesc").textContent = info.description;
+        const stats = document.getElementById("itemModalStats");
+        stats.innerHTML = "";
+        info.stats.concat(info.comparison).forEach(function (line) { const row = document.createElement("div"); row.textContent = line; stats.appendChild(row); });
+        stats.style.display = info.stats.length || info.comparison.length ? "block" : "none";
+        actions.innerHTML = "";
+        G.activeItemModal = entry.source;
+    }
+    const menu = beginSharedChoiceMenu("loot-item", null, info.name, function () {
+        if (fresh()) return openLootItemDetail(entry, group);
+        return closeLootItemDetail(true);
+    });
+    menu.preserveView = true;
+    const valid = menu.valid;
+    menu.valid = function () { return valid() && lootItemDetailState && lootItemDetailState.menu === menu && fresh() &&
+        (textMode || modal.classList.contains("active")); };
+    menu.publicData = { narration: info.name + ". " + info.description + " " + info.stats.concat(info.comparison).join(" "), lootItem: info };
+    const take = createSharedChoiceButton(menu, "Take", function () { return performLootItemAction(entry, group, "take"); }, { textChoice: { action: "take" } });
+    actions.appendChild(take);
+    const equipReason = lootItemEquipBlock(entry, group);
+    actions.appendChild(createSharedChoiceButton(menu, "Equip", function () { return performLootItemAction(entry, group, "equip"); },
+        { disabled: !!equipReason, title: equipReason || "Equip one; compare it with your current gear above.", textChoice: { action: "equip" } }));
+    actions.appendChild(createSharedChoiceButton(menu, "Drop", function () { return performLootItemAction(entry, group, "drop"); },
+        { title: "Put this loot on the room floor, where your companions can pick it up.", textChoice: { action: "drop" } }));
+    const back = createSharedChoiceButton(menu, "Back", function () { closeLootItemDetail(true); return { status: "completed", outputPublished: true }; }, { textChoice: { action: "back" } });
+    actions.appendChild(back);
+    lootItemDetailState = { menu: menu, entry: entry, group: group, player: G.player, room: G.activeRoom, textMode: textMode };
+    if (!textMode) {
+        const leave = function () { return runSharedChoice(menu, menu.options[3], { fromButton: true }); };
+        document.getElementById("itemModalClose").onclick = leave;
+        modal.onclick = function (event) { if (event.target === modal) leave(); };
+        modal.classList.add("active");
+        back.focus();
+    }
+    publishSharedChoiceMenu(menu, actions);
+    if (!textMode) publishTextModeOutput("loot-item", info.name + ". " + info.description, { lootItem: info }, false);
+    return { status: "needs_input", outputPublished: true };
+}
+
+function performLootItemAction(entry, ref, action, amount) {
+    const group = lootItemGroup(entry, ref), reason = lootItemBlock(entry, group);
+    if (reason) return sharedChoiceResult("blocked", reason);
+    if (!/^(take|equip|drop)$/.test(action)) return sharedChoiceResult("blocked", "Choose Take, Equip or Drop.");
+    const wanted = action === "equip" ? 1 : amount === undefined || amount === "all" ? group.quantity : Number(amount);
+    if (!Number.isSafeInteger(wanted) || wanted < 1 || wanted > group.quantity || group.slot && action !== "equip" && wanted !== group.quantity)
+        return sharedChoiceResult("blocked", "Choose an available whole amount; worn stacks must move as a whole.");
+    const equipReason = action === "equip" && lootItemEquipBlock(entry, group);
+    if (equipReason) return sharedChoiceResult("blocked", equipReason);
+    const player = G.player, room = G.activeRoom, actor = G.activeNPC, mode = G.activeNPCMode, object = G.activeObject;
+    const sameScene = function () { return G.player === player && G.activeRoom === room && G.activeNPC === actor && G.activeNPCMode === mode && G.activeObject === object && !!textLootFresh(entry); };
+    closeLootItemDetail(false);
+    let moved = 0, message = "", captured = [], result;
+    const previous = textModeState.lootTask, previousItemTask = textModeState.lootItemTask;
+    const task = { entry: entry, messages: captured };
+    if (textModeState.enabled) { textModeState.lootTask = task; textModeState.lootItemTask = task; }
+    try {
+        if (action === "equip") {
+            const list = group.slot ? [group.item] : lootItemBacking(entry, group.item, group.slot);
+            message = equipPlayerItemFromSource(group.item, list, entry.kind === "fixture" ? entry.source : null, { entry: entry, group: group });
+            moved = /^You equip /.test(message) ? 1 : 0;
+            if (moved && entry.kind === "fixture") message += " " + (barCellarTheftAfterTake(entry.source, [getDirectEquipmentSlot(group.item) === "back" ? G.player.rucksack : G.player.equipped[getDirectEquipmentSlot(group.item)]]) || "");
+            if (!textModeState.enabled && sameScene()) { refreshInventoryUi(message); returnToLootSource(entry); }
+        } else if (action === "drop") {
+            let left = wanted;
+            group.items.forEach(function (item) {
+                if (!left || !sameScene()) return;
+                const qty = Math.min(left, getItemQuantity(item));
+                let unit;
+                if (entry.kind === "body" && isCarryContainerItem(item)) packContainerContents(entry.source, item);
+                if (group.slot) { unit = entry.source.equipped[group.slot]; delete entry.source.equipped[group.slot]; }
+                else unit = takeLootUnitsFromList(lootItemBacking(entry, item, group.slot), item, qty);
+                if (!unit) return;
+                delete unit.stowed;
+                unit._partyLootDrop = true;
+                dropItemIntoCurrentRoom(unit);
+                moved += qty; left -= qty;
+                if (entry.kind === "fixture") message += barCellarTheftAfterTake(entry.source, [unit]) || "";
+            });
+            message = "You put " + moved + " " + infoLootItemName(group.item, moved) + " on the room floor." + (message ? " " + message : "");
+            if (!textModeState.enabled && sameScene()) { refreshInventoryUi(message); returnToLootSource(entry); }
+        } else if (entry.kind === "body" && !group.slot && wanted === group.quantity) {
+            takeBodyInventoryGroup(entry.source, group.items);
+            const now = textLootEntries(entry).find(function (row) { return row.key === group.key; });
+            moved = group.quantity - (now ? now.quantity : 0);
+        } else {
+            let left = wanted;
+            for (const item of group.items) {
+                if (!left || !sameScene() || hasPendingPartyLoot()) break;
+                const qty = Math.min(left, getItemQuantity(item)), before = textLootEntries(entry).find(function (row) { return row.key === group.key; });
+                if (entry.kind === "fixture") takeContainerItem(entry.source, ensureContainerContents(entry.source).items.indexOf(item), qty);
+                else if (entry.kind === "body") takeBodyEquippedItem(entry.source, group.slot);
+                else {
+                    for (let i = 0; i < qty; i++) { result = getFromContainer(entry.source, item, { result: true }); if (!result || !result.moved) break; }
+                    if (result && result.message) captured.push(result.message);
+                    else if (typeof result === "string") captured.push(result);
+                }
+                const after = textLootEntries(entry).find(function (row) { return row.key === group.key; });
+                const done = before.quantity - (after ? after.quantity : 0);
+                moved += done; left -= done;
+                if (done < qty) break;
+            }
+            if (entry.kind === "carry" && !textModeState.enabled && sameScene()) { refreshInventoryUi(captured.join(" ")); returnToLootSource(entry); }
+        }
+    } finally { textModeState.lootTask = previous; textModeState.lootItemTask = previousItemTask; }
+    if (hasPendingPartyLoot()) message = captured.join(" ") || message || "The party needs a loot decision before you continue.";
+    else message = message || captured.join(" ") || (moved ? "You take " + moved + " " + infoLootItemName(group.item, moved) + "." : "The item could not be moved.");
+    const interrupted = !sameScene();
+    const data = { lootItemAction: { action: action, source: getEntityName(entry.source), item: getItemName(group.item), quantity: moved, success: moved > 0, turns: 0, staminaCost: 0, committed: moved > 0 } };
+    if (interrupted) { data.systemOnly = true; data.status = "interrupted"; if (G.activeItemModal === entry.source) closeItemModal(); }
+    if (textModeState.enabled && !hasPendingPartyLoot() && !interrupted) publishTextModeOutput("loot-item", message, data);
+    else publishTextModeOutput("loot-item", message, data, false);
+    renderStats(); updateInventoryContextPanels(); saveGameState();
+    return { status: interrupted || hasPendingPartyLoot() ? "interrupted" : moved === wanted ? "completed" : "blocked", outputPublished: true };
+}
+
+function infoLootItemName(item, quantity) {
+    return getItemName(item).toLowerCase() + (quantity === 1 || /s$/i.test(getItemName(item)) ? "" : "s");
+}
+
+function parseTextLootItemCommand(raw) {
+    let match = /^(inspect|examine|equip|drop)\s+(.+)$/i.exec(raw);
+    if (!match) return null;
+    const relation = textLootRelation(match[2], ["from"]);
+    if (relation && /^companion\s+/i.test(relation.source)) return null;
+    const explicit = /^(?:loot|loot item)\s+/i.test(match[2]);
+    if (!relation && !explicit) return null;
+    const count = textLootQuantity(relation ? relation.item : match[2].replace(/^(?:loot item|loot)\s+/i, ""));
+    return { verb: "lootitem", args: { action: /^(inspect|examine)$/i.test(match[1]) ? "inspect" : match[1].toLowerCase(),
+        item: count.item, amount: count.amount, source: relation ? relation.source : "" } };
+}
+
+function executeTextLootItemCommand(action) {
+    const resolved = textLootResolve(action);
+    if (resolved.result) return resolved.result;
+    const entry = resolved.entry, args = action.args || {};
+    let groups = textLootEntries(entry);
+    groups = action.lootItemRef ? groups.filter(function (group) { return group.key === action.lootItemRef.key && group.items.length === action.lootItemRef.items.length && group.items.every(function (item) { return action.lootItemRef.items.includes(item); }); }) :
+        textLootMatch(args.item || "", groups, function (group) { return getItemName(group.item); });
+    if (!groups.length) return textModeResult("blocked", "No visible item matches in this open or searched source.");
+    if (groups.length > 1) return textModeAsk(action, "lootItem", groups, "Which item do you mean?");
+    action.lootItemRef = groups[0];
+    textLootSelect(entry);
+    return !args.action || args.action === "inspect" ? openLootItemDetail(entry, groups[0]) : performLootItemAction(entry, groups[0], args.action, args.amount || undefined);
+}
+
+
 function textLootEntries(entry) {
     if (!textLootReady(entry)) return [];
     const rows = entry.kind === "body" ? getBodyLootRows(entry.source) : (entry.kind === "fixture" ? ensureContainerContents(entry.source).items : getContainerContents(entry.source)).map(function (item) { return { item: item, source: "inventory" }; });
@@ -5386,7 +5728,7 @@ function textLootList(entry, select) {
     if (select !== false) textLootSelect(entry);
     if (!textLootReady(entry)) return textModeResult("blocked", entry.kind === "body" ? "Search this body first: search " + getEntityName(entry.source) + "." : "This container is closed. Use open <container>; a locked chest needs unlock, pick, or force first.");
     const groups = textLootEntries(entry), coins = textLootCoins(entry);
-    return textModeResult("completed", "Contents of " + getEntityName(entry.source) + ":\n" + (groups.length ? groups.map(function (group, i) { return (i + 1) + ". " + group.label; }).join("\n") : "No visible items.") + (coins > 0 ? "\nCoins: " + coins + "g." : "") + "\nUse take <item>, take coins, or take all. Store with put <item> in <container>. Type close to leave this view.", { loot: { source: getEntityName(entry.source), kind: entry.kind, location: entry.location, coins: coins, items: groups.map(function (group, index) { return { number: index + 1, name: getItemName(group.item), quantity: group.quantity, slot: group.slot || null }; }) } });
+    return textModeResult("completed", "Contents of " + getEntityName(entry.source) + ":\n" + (groups.length ? groups.map(function (group, i) { return (i + 1) + ". " + group.label; }).join("\n") : "No visible items.") + (coins > 0 ? "\nCoins: " + coins + "g." : "") + "\nInspect with inspect <item> from <source>, then choose Take, Equip or Drop. Direct take <item>, take coins and take all remain available. Store with put <item> in <container>. Type close to leave this view.", { loot: { source: getEntityName(entry.source), kind: entry.kind, location: entry.location, coins: coins, items: groups.map(function (group, index) { return { number: index + 1, name: getItemName(group.item), quantity: group.quantity, slot: group.slot || null }; }) } });
 }
 
 function textLootShow(topic) {
@@ -5640,7 +5982,7 @@ function textFixtureActions(fixture) {
     if (fixture.id === "grindstone") add("hone", workbenchBlock("hone", fixture), function () { return selfHoneAtGrindstone(fixture); }, FORGE_SELF_HONE_STAMINA + " stamina, 1 turn, no coins");
     if (fixture.id === "anvil") add("anvil", workbenchBlock("inspect", fixture), function () { return inspectWeaponAtAnvil(fixture); }, "equipped weapon inspection, free");
     if (noticeIsBoard(fixture)) add("post", getNoticeBoardAccessBlockReason(fixture, room), function () { return openNoticePostEditor(fixture); }, "review a signed notice; posting costs 1 sheet and 1 turn");
-    if (isForageFixture(fixture)) add("gather", getForageBlockReason(fixture, room), function () { gatherForageFixture(fixture); }, FORAGE_STAMINA_COST + " stamina, 1 turn");
+    if (isForageFixture(fixture)) add("gather", getForageBlockReason(fixture, room), function () { return gatherForageFixture(fixture); }, FORAGE_STAMINA_COST + " stamina, 1 turn");
     if (FIXTURE_ORE_SOURCES[fixture.id]) add("scavenge", getScavengeBlockReason(fixture, room), function () { scavengeFixture(fixture); }, PROSPECT_STAMINA_COST + " stamina, 1 turn");
     if (MINING_ENABLED && MINING_SOURCES[fixture.id]) add("mine", getMiningBlockReason(fixture, room), function () { mineFixture(fixture); }, MINING_STAMINA_COST + " stamina, 1 turn; needs a pickaxe");
     if (isReadableFixture(fixture)) add("read", getReadBlockReason(fixture, room), function () { readFixture(fixture); }, "1 turn");
@@ -5651,7 +5993,7 @@ function textFixtureActions(fixture) {
     } else if (isFoulWaterFixture(fixture)) add("drink", "The water is foul. You would not touch it.", null);
     if (isCauldronFixture(fixture)) add("drink", getCauldronTasteBlockReason(fixture, room), function () { tasteCauldron(fixture); }, "may have unknown effects");
     if (isWarmthFixture(fixture)) add("warm", getWarmBlockReason(room), function () { warmUpAtFixture(fixture); }, "1 turn");
-    if (isWashableRoomObject(fixture)) add("wash", "", function () { performWash(); });
+    if (isWashableRoomObject(fixture)) add("wash", getWashBlockReason(fixture, room), createWashAction(fixture, room), getWashActionNote(fixture));
     if (isTrapFixture(fixture)) {
         const reason = fixture.trapState === "armed" ? "" : "That trap is no longer armed.";
         add("disarm", reason, function () { attemptTrapAction(fixture, "disarm"); }, "Flexibility, 1 turn");
@@ -5809,7 +6151,10 @@ async function executeTextExplorationCommand(action) {
         if (!action.portalQuote || action.portalQuote.returning !== quote.returning || action.portalQuote.cost !== quote.cost || action.portalQuote.tier !== quote.tier) return textModeResult("blocked", "The portal destination or fee changed. Repeat enter to review it.");
         await textExplorationRun(entry, function () { return isTownReturnWaygate(fixture) ? returnThroughTownPortal(quote.tier) : performTownPortal(); });
         return textModeResult("interrupted", "Travel resolved. Pending commands are paused; use look to check your surroundings.");
-    } else await textExplorationRun(entry, selected.run);
+    } else {
+        const result = await textExplorationRun(entry, selected.run);
+        if (result && /^(blocked|interrupted)$/.test(result.status)) return result;
+    }
     if (!textModeSameScene(scene) || roomHasActiveHostile(G.activeRoom) || textModeInterruptReason()) return textModeResult("interrupted", "The situation changed during that action. Completed effects are preserved; pending commands are paused.");
     if (!textExplorationFresh(entry)) return textModeResult("interrupted", "The fixture changed or is no longer visible. Pending commands are paused.");
     if ((verb === "disarm" || verb === "break") && fixture.trapState === "armed") return textModeResult("blocked", "The trap remains armed. Another attempt must be explicit.");
@@ -5940,7 +6285,7 @@ async function runSharedChoice(menu, choice, how) {
     if (result && result.outputPublished) return result;
     if (result && result.status === "needs_input" && (/^(notice|material|shrine)-/.test(menu.kind) || menu.kind === "structure-magic" || menu.kind === "gift" || /^(nectar|travel|synergy|casting)-/.test(menu.kind))) return result;
     if (result && result.status && result.status !== "completed") return sharedChoiceResult(result.status, result.message || "The choice could not finish. Pending commands are paused.");
-    if (result && result.accepted === false) return sharedChoiceResult("blocked", "The gift was refused; you keep it. Pending commands are paused.");
+    if (result && result.accepted === false) return sharedChoiceResult("blocked", "The gift was refused; you keep it.");
     return { status: "completed" };
 }
 
@@ -6124,6 +6469,11 @@ async function textRunSharedChoice(menu, choice) {
 }
 
 async function textSharedChoiceInput(input, action) {
+    if (sharedChoiceState.menu && sharedChoiceState.menu.kind === "loot-item" && action && /^(close|leave|back|cancel)$/.test(action.verb)) {
+        const menu = sharedChoiceState.menu;
+        await textRunSharedChoice(menu, menu.options.find(function (choice) { return choice.meta.action === "back"; }));
+        return true;
+    }
     const menu = sharedChoiceState.menu;
     if (menu && /^bathhouse-/.test(menu.kind) && (action && /^(bathhouse|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textBathhouseMenuInput(menu, action, input); return true; }
     if (menu && /^conversation-actions(?:-root)?$/.test(menu.kind) && (splitTextCommands(input || "").parts || []).length > 1) {
@@ -6235,7 +6585,7 @@ async function executeTextPartyCommand(action) {
         if (!result) return textModeResult("needs_input", "The gift needs another choice in its normal controls. Pending commands are paused.");
         if (result.status !== "completed") return textModeResult(result.status, result.message || "The gift could not finish. Pending commands are paused.");
         publishTextModeOutput("gift", result.accepted ? "Gift accepted." : "Gift refused.", { gift: { target: textModeNPCLabel(npc), name: getItemName(items[0].item), accepted: !!result.accepted } }, false);
-        return result.accepted ? { status: "completed" } : textModeResult("blocked", "The gift was refused; you keep it. Pending commands are paused.");
+        return result.accepted ? { status: "completed" } : textModeResult("blocked", "The gift was refused; you keep it.");
     }
     if (!G.activeNPC) selectNPC(npc);
     if (G.activeNPC !== npc || !isCompanionNPC(npc) || G.activeNPCMode === "combat") return textModeResult("interrupted", "That companion is no longer available.");
@@ -11578,7 +11928,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-24-007
+// Core Engine Version: 2026-10-24-010
 // Latest: Voice command fallback infers misheard words: person targets that match no one get a sounds-like best guess (textGuessNPCTarget: "female cancun" -> the female kenku), the AI is told voice input is speech-to-text and to always give a best guess (exits listed), AI plans wrapped in prose, using shorthand keys or verb synonyms are repaired, and in voice play the valid part of a partly bad plan still runs.
 // Previous: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
 // Previous: Trade and economy pass: Traders now carry a real purse (20-50 gold) instead of the 2-10 default; merchants pay at most 1.75x half value so deity tomes and similar cannot be bought and flipped for profit; bone dice wagers move coin to and from the NPC and have a cooldown; sealed goods pay slightly less coin. Previous -007: Hand-in tokens now pay out of the NPC's own coin pouch and are kept if they cannot cover them. Previous -006: Item purpose pass part 2: keepsakes (charms, rings, brooches, scarves) wear on the Neck for +1 Charisma; rivets, nails, pick-heads, sewing kits, twine and cloth mend worn gear; relics, tokens, candles and incense can be left as offerings at a shrine; sealed bales, crates and goods open; spice seasons a meal; pawn tickets, receipts, tally sticks, chits and house tokens are handed in to the right NPC; bone dice wager with friendly NPCs; ledgers, maps and receipts are readable; ink, chalk, parchment and wax tablets count as writing supplies; the ladle and net weight are improvised weapons; clean linen bandages. New "apply" text command.
@@ -11652,7 +12002,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-24-007";
+window.__ENGINE_CORE_VERSION = "2026-10-24-010";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -36128,15 +36478,7 @@ function openContainerCard(container, message) {
             empty.textContent = "Nothing visible here.";
             listEl.appendChild(empty);
         }
-        contents.filter(isLootItemVisible).forEach(function (it) {
-            const label = formatInventoryItemLabel(it, getItemQuantity(it)) + (tieIds[it.stowed] ? " (tied on)" : "");
-            const buttons = [{ label: onFloor ? "Take" : "Get", onClick: function () { refresh(getFromContainer(container, it)); } }];
-            if (getDirectEquipmentSlot(it)) buttons.push({ label: "Equip", onClick: function () {
-                const list = (G.player.inventory || []).includes(it) ? G.player.inventory : container.packed;
-                refresh(equipPlayerItemFromSource(it, list));
-            } });
-            addItemModalRow(listEl, label, it.description || "", buttons);
-        });
+        appendLootItemRows(listEl, container, "carry");
         const entries = buildPlayerInventoryEntries(G.player).filter(function (e) {
             return e.item !== container && contents.indexOf(e.item) < 0 && !containerHoldsItem(e.item, container);
         });
@@ -36702,7 +37044,7 @@ function tickDrunkBlackoutWake() {
             if (Math.random() < chance) {
                 const aftermath = wakeDrunkBlackoutBody(body, room);
                 if (here) {
-                    const baseWake = body.bound && body.captiveProne
+                    const baseWake = body.bindingParts && body.bound ? body.name + " wakes, " + getNPCBoundNote(body) + "." : body.bound && body.captiveProne
                         ? `${body.name} groans and stirs — then thrashes against the ropes binding them, still hog-tied and prone.`
                         : `${body.name} groans, stirs, and drags themselves upright - awake, and clearly regretting the last round.`;
                     setNarration(aftermath ? `${baseWake} ${aftermath}` : baseWake);
@@ -36728,8 +37070,8 @@ function wakeDrunkBlackoutBody(body, room) {
 
     clearUnconsciousBodyState(body);
     body.hp = Math.max(body.hp || 1, Math.ceil((body.hpMax || 10) * 0.25));
-    const bindMode = applyPendingBodyBind(body);
-    body.action = bindMode === "prone"
+    const bindMode = applyPendingBodyBind(body, room);
+    body.action = body.bindingParts ? "is " + getNPCBoundNote(body) : bindMode === "prone"
         ? "is bound hand and foot, lying prone and helpless"
         : (bindMode === "follow" ? "is bound, wrists lashed to a neck rope" : "is upright again, squinting at the world");
     body.description = "";
@@ -37330,20 +37672,23 @@ function getDirectEquipmentSlot(item) {
 
 // Equip without first finding pack space. Only the displaced piece needs
 // storage; if it cannot fit, set it down with any contents still inside.
-function equipPlayerItemFromSource(item, list, fixture) {
+function equipPlayerItemFromSource(item, list, fixture, lootOrigin) {
     const player = G.player;
     const slot = getDirectEquipmentSlot(item);
     if (!player || !slot || !Array.isArray(list) || !list.includes(item)) return "That item is no longer available.";
     const accessible = getAccessibleEquipmentSources(player, true).some(function (source) { return source.item === item && source.list === list; });
     const room = G.activeRoom;
     const inFixture = fixture && room && (room.structural || []).includes(fixture) && fixture.opened && !fixture.concealed && ensureContainerContents(fixture).items === list;
-    if (!accessible && !inFixture) return "That item is no longer available.";
+    const inLoot = lootOrigin && lootItemEquipmentSource(lootOrigin, item, list);
+    if (!accessible && !inFixture && !inLoot) return "That item is no longer available.";
     if (typeof worldObjectEquipBlock === "function") {
         const physicalBlock = worldObjectEquipBlock(item, list);
         if (physicalBlock) return physicalBlock;
     }
     ensurePlayerEquipmentState(player);
+    if (inLoot && lootOrigin.entry.kind === "body" && isCarryContainerItem(item)) packContainerContents(lootOrigin.entry.source, item);
     const unit = splitOneUnit(list, item);
+    if (inLoot && lootOrigin.group.slot) delete lootOrigin.entry.source.equipped[lootOrigin.group.slot];
     delete unit.stowed;
     const old = slot === "back" ? player.rucksack : player.equipped[slot];
     if (slot === "back") player.rucksack = unit;
@@ -38833,9 +39178,9 @@ function getEffectiveItemCharisma(item) {
 
 function getHygieneLabel(entity) {
     const hygiene = entity && typeof entity.hygiene === "number" ? entity.hygiene : 100;
-    if (hygiene < HYGIENE_TIER_REPULSIVE) return "Filthy";
-    if (hygiene < HYGIENE_TIER_FILTHY) return "Grimy";
-    if (hygiene < HYGIENE_TIER_GRIMY) return "Travel-worn";
+    if (hygiene < HYGIENE_TIER_REPULSIVE) return "Repulsive";
+    if (hygiene < HYGIENE_TIER_FILTHY) return "Filthy";
+    if (hygiene < HYGIENE_TIER_GRIMY) return "Grimy";
     return "Fresh";
 }
 
@@ -38862,72 +39207,138 @@ function addEntityGrime(entity, amount) {
     }
 }
 
-// A room object offers washing when its tags include "water" or "hygiene"
-// (see the room templates in cyoaftw-world-data.js: Guest Room's wash-basin,
-// Square's fountain). This is the grime-clearing counterpart to
-// addEntityGrime and the turn/combat accrual hooks.
-function isWashableRoomObject(item) {
-    if (!item || Array.isArray(item)) return false;
-    const tags = Array.isArray(item.tags) ? item.tags.map(tag => String(tag || "").toLowerCase()) : [];
-    // Hazardous (stagnant) or ritual (mirror pool) water is not for washing.
-    if (tags.includes("hazard") || tags.includes("ritual")) return false;
-    return tags.includes("water") || tags.includes("hygiene");
+// Washing keeps its source: foul water and muddy reeds cannot silently use a
+// different clean fixture. ID fallbacks also cover fixtures in existing saves.
+function getRoomObjectWashQuality(item) {
+    if (!item || Array.isArray(item)) return null;
+    const tags = Array.isArray(item.tags) ? item.tags.map(function (tag) { return String(tag || "").toLowerCase(); }) : [];
+    if (item.liquidType) return item.liquidType === "water" ? "clean" : null;
+    if (item.id === "stagnant-pool") return "filthy";
+    // The same legacy ID also names sleeping mats; those are not marsh water.
+    if (item.id === "reed-beds" && !tags.includes("rest")) return "muddy";
+    if (item.id === "puddle" || item.id === "quench-trough") return "clean";
+    return tags.includes("water") || tags.includes("hygiene") ? "clean" : null;
 }
 
-// First washable fixture in the room (from room.structural or loose room
-// items), or null. Used by the Interact menu's "Wash up" entry.
+function isWashableRoomObject(item) {
+    return !!getRoomObjectWashQuality(item);
+}
+
+function getWashBlockReason(item, room) {
+    if (!room || room !== G.activeRoom || !G.player || !isWashableRoomObject(item)) return "There is no washing source here.";
+    if (G.player.dead || G.player.hp <= 0 || G.player.unconscious || G.player._dying || G.player._collapsing) return "You cannot wash while incapacitated.";
+    if (G.activeNPC || G.activeNPCMode === "combat" || G.combatEncounter || roomHasActiveHostile(room)) return "There is no safe moment to wash right now.";
+    if (typeof isRoomCollapsed === "function" && isRoomCollapsed(room)) return "The rubble prevents you from reaching the water.";
+    if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Settle the party's loot decision first.";
+    const structural = Array.isArray(room.structural) && room.structural.indexOf(item) >= 0;
+    const loose = Array.isArray(room.items) && room.items.indexOf(item) >= 0;
+    if ((!structural && !loose) || item.hidden || item.isHidden || item.concealed && !item.revealed ||
+        structural && !isFixtureVisible(item, room) || item.destroyed || item.burntOut) return "That washing source is no longer visible here.";
+    if (item.reachable === false || item.occupied || item.inUse) return "You cannot reach the water safely.";
+    if (typeof isFixtureBurning === "function" && isFixtureBurning(item)) return "The flames prevent you from washing there.";
+    if (item.liquidType === "water") {
+        const water = room.liquids && room.liquids.water;
+        if (!water || !(water.volume > 0)) return "There is no water left to wash with.";
+        if (water.frozenAt) return "The water is frozen. Thaw it before washing.";
+        if (typeof isRoomLiquidBurning === "function" && isRoomLiquidBurning(room)) return "The flames prevent you from washing there.";
+    }
+    return "";
+}
+
+function getWashActionNote(item) {
+    const quality = getRoomObjectWashQuality(item);
+    return quality === "filthy" ? "free; washes off residue, then leaves you Filthy with two points less charisma" : quality === "muddy" ? "free; washes off residue, then leaves a one-point hygiene penalty to charisma" : "free; washes you and worn clothes";
+}
+
+// Prefer a clean usable source for the general room button. Explicit fixture
+// buttons and typed commands retain the exact source the player selected.
 function findWashableInRoom(room) {
     if (!room) return null;
     if (typeof ensureRoomFixtureState === "function") ensureRoomFixtureState(room);
-    const pools = [room.structural, room.items];
-    for (let p = 0; p < pools.length; p++) {
-        const list = Array.isArray(pools[p]) ? pools[p] : [];
-        for (let i = 0; i < list.length; i++) {
-            if (pools[p] === room.structural && !isFixtureVisible(list[i], room)) continue;
-            if (isWashableRoomObject(list[i])) return list[i];
-        }
-    }
-    return null;
+    const candidates = (Array.isArray(room.structural) ? room.structural : []).concat(Array.isArray(room.items) ? room.items : []);
+    return candidates.filter(function (item) { return !getWashBlockReason(item, room); }).sort(function (a, b) {
+        const rank = { clean: 0, muddy: 1, filthy: 2 };
+        return rank[getRoomObjectWashQuality(a)] - rank[getRoomObjectWashQuality(b)];
+    })[0] || null;
+}
+
+function createWashAction(item, room) {
+    const player = G.player, source = room && (Array.isArray(room.structural) && room.structural.indexOf(item) >= 0 ? room.structural : room.items);
+    const quality = getRoomObjectWashQuality(item);
+    return function () {
+        if (G.player !== player || G.activeRoom !== room || !source || source !== room.structural && source !== room.items ||
+            source.indexOf(item) < 0 || getRoomObjectWashQuality(item) !== quality) return sharedChoiceResult("blocked", "That washing source changed. Inspect it again.");
+        return performWash(item);
+    };
 }
 
 function washAtRoomObject(item) {
-    performWash();
-    renderRoomObjectActionMenu(item);
+    const result = performWash(item);
+    if (result && result.status === "completed") renderRoomObjectActionMenu(item);
+    return result;
 }
 
 function cleanEntityAfterWashing(player) {
     player.hygiene = 100;
     delete player.smellNotes;
+    delete player._slimedParts;
+    delete player._slimed;
+    delete player._slimedUntil;
+    delete player._nectarPourContext;
+    player.burning = null;
+    // Only externally washable effects come off in water. Ingested poisons,
+    // wounds, fatigue and ordinary buffs keep their own treatment rules.
+    if (Array.isArray(player.statusEffects) && typeof removeStatusEffect === "function") {
+        player.statusEffects.slice().forEach(function (effect) {
+            const def = typeof STATUS_EFFECT_DEFINITIONS !== "undefined" && STATUS_EFFECT_DEFINITIONS[effect.key];
+            if (effect.washable === true || def && def.washable === true) removeStatusEffect(player, effect.key);
+        });
+    }
     if (player.equipped && typeof player.equipped === "object") {
         Object.keys(player.equipped).forEach(slot => {
             const equippedItem = player.equipped[slot];
+            if (!equippedItem || Array.isArray(equippedItem)) return;
             if (equippedItem && typeof equippedItem.grime === "number" && equippedItem.grime > 0) {
                 equippedItem.grime = 0;
             }
+            delete equippedItem.smellNotes;
+            delete equippedItem._slimed;
+            delete equippedItem._slimedUntil;
+            delete equippedItem.poison;
+            delete equippedItem.poisonHits;
         });
     }
 }
 
-function performWash() {
-    const player = G.player;
-    if (!player) return;
-
+function performWash(item) {
+    const player = G.player, room = G.activeRoom;
+    if (!player) return { status: "blocked" };
+    const source = item || findWashableInRoom(room);
+    const block = getWashBlockReason(source, room);
+    if (block) return sharedChoiceResult("blocked", block);
+    const quality = getRoomObjectWashQuality(source), name = getEntityName(source);
     const wasGrimy = getHygieneCharismaPenalty(player) !== 0 ||
         (player.equipped && typeof player.equipped === "object" &&
-            Object.keys(player.equipped).some(slot =>
-                getItemGrimeCharismaPenalty(player.equipped[slot]) !== 0));
-
-    // Washing scrubs the person and the clothes they are wearing. Spare
-    // clothes in the pack keep their grime until worn and washed. It also
-    // clears lingering smell notes (see addSmellMark in
-    // nsfw/intimacy-system.js).
+            Object.keys(player.equipped).some(function (slot) { return getItemGrimeCharismaPenalty(player.equipped[slot]) !== 0; }));
     cleanEntityAfterWashing(player);
-
+    let text;
+    if (quality === "filthy") {
+        player.hygiene = HYGIENE_TIER_FILTHY - 1;
+        text = "You wash away the old residue in the " + name + ", but its foul water leaves its own muck behind. You are now filthy, with two points less charisma from hygiene.";
+    } else {
+        if (quality === "muddy") {
+            player.hygiene = HYGIENE_TIER_GRIMY - 1;
+            text = "You rinse away the old residue among the " + name + ". The muddy water leaves you grimy, with one point less charisma from hygiene.";
+        } else text = wasGrimy
+            ? "You wash at the " + name + ", cleaning the road dust, sweat and blood from yourself and your worn clothes. You feel presentable again."
+            : "You freshen up at the " + name + ", though you were already fairly clean.";
+    }
     renderStats();
-    setNarration(wasGrimy
-        ? "You wash off the road dust, sweat and blood - yourself and your worn clothes both - and feel presentable again."
-        : "You freshen up with a quick wash, though you were already fairly clean.");
+    setNarration(text);
+    publishTextModeOutput("exploration", text, { source: "engine", wash: { source: name, quality: quality, hygiene: player.hygiene,
+        condition: getHygieneLabel(player), hygieneCharismaPenalty: getHygieneCharismaPenalty(player), clearedResidue: true, staminaCost: 0, turns: 0 } }, false);
     saveGameState();
+    return { status: "completed" };
 }
 
 // Charisma from WORN clothing (equipped slots only - carrying loot in the
@@ -42444,8 +42855,8 @@ function canNPCHandleGear(npc) {
     return true;
 }
 
-function isFloorGearCandidate(item, room) {
-    if (!item || typeof item !== "object" || item._playerDropped) return false;
+function isFloorGearCandidate(item, room, npc) {
+    if (!item || typeof item !== "object" || item._playerDropped && (!item._partyLootDrop || npc && !isCompanionNPC(npc))) return false;
     if (item.hidden || item.isHidden || item.concealed || item.visible === false || item.objectType === "body") return false;
     if (item.owner || item.ownerId || item.quest || item.questItem || item.isQuestItem || item.infinite || item._stolen) return false;
     if (item.fixed === true || item.takeable === false || item.stationary || item.anchored || item.isFixture || item.fixtureType) return false;
@@ -42516,6 +42927,7 @@ function tickNPCGearPickup() {
             if (Math.random() >= NPC_GEAR_PICKUP_CHANCE) continue;
             let best = null, bestGain = 0;
             floor.forEach(function (item) {
+                if (!isFloorGearCandidate(item, room, npc)) return;
                 const slot = getNPCGearUpgradeSlot(npc, item);
                 if (!slot) return;
                 const worn = npc.equipped && npc.equipped[slot];
@@ -48093,6 +48505,146 @@ function refuseNPCSurrender(npc) {
 // system appends captive-action groups after the player has examined the
 // captive (same reveal pattern as unconscious bodies).
 
+// SFW binding materials: one belt restrains one pair, while a full rope can
+// restrain both. Worn belts must first be removed through normal equipment.
+function bindingToolCapacity(item) {
+    if (!item || item.hidden || item.isHidden || item.broken || item.ruined ||
+        item.durability && item.durability.hp <= 0) return 0;
+    if (Array.isArray(item.packed) && item.packed.length) return 0;
+    const id = String(item.id || "").trim().toLowerCase(), name = String(item.name || "").trim().toLowerCase();
+    if (/\brope[\s-]+belt\b/.test(name) || /^rope-belt(?:-|$)/.test(id)) return 1;
+    return id === "rope" || id.indexOf("rope-") === 0 || name === "rope" ? 2 : 0;
+}
+
+function getBindingParts(target) {
+    if (target && target.bindingParts) return { hands: !!target.bindingParts.hands, feet: !!target.bindingParts.feet };
+    return { hands: !!(target && (target.bound || target.bodyBind)),
+        feet: !!(target && (target.captiveProne || target.bodyBind === "prone")) };
+}
+
+function getBindingTargets() {
+    const room = G.activeRoom;
+    if (!room) return [];
+    const people = (room.creatures || []).filter(function (npc) { return isHeldCaptive(npc); });
+    const bodies = (room.items || []).filter(function (body) { return body && body.bodyState === "unconscious" && !body._wasPartyMember && body.isHumanoid !== false &&
+        !(typeof isSlimeEntity === "function" && isSlimeEntity(body)) && !(typeof isEntityIncorporeal === "function" && isEntityIncorporeal(body)) &&
+        !body.hidden && !body.isHidden && (!body.concealed || body.revealed); });
+    return people.concat(bodies).map(function (target) {
+        return { target: target, room: room, source: people.indexOf(target) >= 0 ? room.creatures : room.items,
+            label: target.name || target.originalName || "the captive" };
+    });
+}
+
+function getBindingPlan(target, part) {
+    const state = getBindingParts(target), missing = [];
+    if ((part === "hands" || part === "full") && !state.hands) missing.push("hands");
+    if ((part === "feet" || part === "full") && !state.feet) missing.push("feet");
+    const items = [], inventory = G.player && G.player.inventory || [];
+    let need = missing.length;
+    const candidates = inventory.filter(function (item) { return bindingToolCapacity(item) &&
+        !Object.values(G.player.equipped || {}).includes(item); }).sort(function (a, b) {
+        return missing.length === 2 ? bindingToolCapacity(b) - bindingToolCapacity(a) : bindingToolCapacity(a) - bindingToolCapacity(b);
+    });
+    candidates.forEach(function (item) {
+        for (let i = 0; i < getItemQuantity(item) && need > 0; i++) {
+            items.push(item); need -= bindingToolCapacity(item);
+        }
+    });
+    return { part: part, missing: missing, items: items, enough: need <= 0 };
+}
+
+function getBindingBlockReason(target, part) {
+    if (!G.player || G.player.dead || G.player.hp <= 0 || G.player.unconscious || G.player._dying || G.player._collapsing) return "You cannot bind someone right now.";
+    if (!/^(hands|feet|full|release)$/.test(part)) return "Choose hands, feet or full binding.";
+    const entry = getBindingTargets().find(function (entry) { return entry.target === target; });
+    if (!entry) return "That person is no longer available here.";
+    if (G.activeNPC && G.activeNPC !== target || G.activeNPCMode === "combat" || G.combatEncounter || roomHasActiveHostile(entry.room)) return "There is no safe opportunity to bind them.";
+    if (typeof isRoomCollapsed === "function" && isRoomCollapsed(entry.room)) return "The rubble prevents you from reaching them.";
+    if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Settle the party's loot decision first.";
+    if (part === "release") {
+        const state = getBindingParts(target);
+        return state.hands || state.feet ? "" : "They are not bound.";
+    }
+    const plan = getBindingPlan(target, part);
+    if (!plan.missing.length) return "Those limbs are already bound.";
+    if (!plan.enough) return plan.missing.length === 2 ? "Full binding needs one rope or two rope belts." : "You need one rope or one rope belt. Remove a worn belt first.";
+    return "";
+}
+
+function createBindingAction(target, part) {
+    const player = G.player, room = G.activeRoom, inventory = player && player.inventory;
+    const actor = G.activeNPC, mode = G.activeNPCMode, turn = getCurrentStoryTurn();
+    const storedTools = target && target.bindingTools;
+    const entry = getBindingTargets().find(function (entry) { return entry.target === target; });
+    const state = JSON.stringify(getBindingParts(target)), plan = getBindingPlan(target, part);
+    const quantities = plan.items.map(function (item) { return getItemQuantity(item); });
+    return function () {
+        const now = getBindingTargets().find(function (row) { return row.target === target; }), next = getBindingPlan(target, part);
+        if (G.player !== player || G.activeRoom !== room || player.inventory !== inventory || G.activeNPC !== actor || G.activeNPCMode !== mode || getCurrentStoryTurn() !== turn || !entry || !now || now.source !== entry.source ||
+            JSON.stringify(getBindingParts(target)) !== state || part === "release" && target.bindingTools !== storedTools || plan.items.length !== next.items.length ||
+            plan.items.some(function (item, i) { return item !== next.items[i] || getItemQuantity(item) !== quantities[i]; }))
+            return sharedChoiceResult("blocked", "That binding choice changed. Choose it again.");
+        return performBindingAction(target, part);
+    };
+}
+
+function performBindingAction(target, part) {
+    const block = getBindingBlockReason(target, part);
+    if (block) return sharedChoiceResult("blocked", block);
+    if (part === "release") {
+        const name = target.name || target.originalName || "the captive";
+        if (target.bodyState === "unconscious") {
+            returnBindingTools(target);
+            target.bound = false;
+            refreshInventoryUi("You untie " + name + " and recover the binding tools.");
+            renderRoomObjectActionMenu(target);
+        } else unbindCaptive(target);
+        publishTextModeOutput("binding", "You release " + name + " from the bindings.", { source: "engine", binding: { target: name, hands: false, feet: false, released: true, staminaCost: 0, turns: 0 } }, false);
+        saveGameState();
+        return { status: "completed" };
+    }
+    const plan = getBindingPlan(target, part), state = getBindingParts(target), tools = [];
+    plan.items.forEach(function (item) { const tool = splitOneUnit(G.player.inventory, item); delete tool.stowed; tools.push(tool); });
+    plan.missing.forEach(function (limb) { state[limb] = true; });
+    target.bindingParts = state;
+    target.bindingTools = (target.bindingTools || []).concat(tools);
+    const body = target.bodyState === "unconscious", name = target.name || target.originalName || "the captive";
+    if (body) target.bodyBind = state.feet ? "prone" : "follow";
+    else {
+        target.bound = true;
+        target.captiveProne = state.feet;
+        if (state.feet) {
+            if ((G.partyMembers || []).includes(target)) removeFromParty(target);
+            if ((G.sessionFollowers || []).includes(target)) removeSessionFollower(target);
+            delete target._boundCaptiveFollower;
+        } else addToParty(target);
+    }
+    const text = "You bind " + name + "'s " + (plan.missing.length === 2 ? "hands and feet" : plan.missing[0]) +
+        " with " + tools.map(function (item) { return getItemName(item); }).join(" and ") + "." +
+        (state.feet ? " They stay here, unable to walk away." : body ? " Their hands are restrained when they wake." : " They can walk and follow you.");
+    refreshInventoryUi(text);
+    publishTextModeOutput("binding", text, { source: "engine", binding: { target: name, hands: state.hands, feet: state.feet,
+        tools: tools.map(function (item) { return getItemName(item); }), staminaCost: 0, turns: 0 } }, false);
+    rememberStoryEvent("combat", (G.player.name || "The player") + " bound " + name + "'s " + plan.missing.join(" and ") + ".", 4);
+    saveGameState();
+    if (body) renderRoomObjectActionMenu(target);
+    else if (!textModeState.enabled) renderCaptorMenu(target);
+    return { status: "completed" };
+}
+
+function returnBindingTools(target) {
+    const tools = target.bindingTools || [];
+    delete target.bindingTools;
+    delete target.bindingParts;
+    delete target.bodyBind;
+    target.captiveProne = false;
+    delete target._boundCaptiveFollower;
+    tools.forEach(function (tool) {
+        const got = addToPlayerPack(tool);
+        if (got && got.refused) { G.activeRoom.items = G.activeRoom.items || []; G.activeRoom.items.push(tool); }
+    });
+}
+
 function isHeldCaptive(npc) {
     return !!(npc && npc.surrendered && !npc.enslaved && npc.objectType !== "body" &&
         !npc.dead && !npc.unconscious && !npc.isUnconsciousBody &&
@@ -48100,16 +48652,8 @@ function isHeldCaptive(npc) {
 }
 
 function findRopeInInventory() {
-    if (!Array.isArray(G.player.inventory)) return null;
-    // Loot/merchant rope goes through cloneLootTemplate, which seeds the id
-    // as "rope-<random>"; match the plain id, the seeded copies, and the name
-    // (trimmed, so stray whitespace in save data cannot hide a rope).
-    return G.player.inventory.find(entry => {
-        if (!entry) return false;
-        const id = String(entry.id || "").trim().toLowerCase();
-        const name = String(entry.name || "").trim().toLowerCase();
-        return id === "rope" || id.indexOf("rope-") === 0 || name === "rope";
-    }) || null;
+    if (!G.player || !Array.isArray(G.player.inventory)) return null;
+    return G.player.inventory.find(function (item) { return bindingToolCapacity(item) === 2; }) || null;
 }
 
 function renderCaptorMenu(npc) {
@@ -48125,30 +48669,19 @@ function renderCaptorMenu(npc) {
         createCombatButton("Search their gear", () => renderCaptiveLootMenu(npc)),
         createCombatButton("Give an item", () => renderCaptiveGiveMenu(npc))
     ];
-    if (npc.bound) {
-        captiveButtons.push(createCombatButton("Bound with rope", () => {}, { disabled: true }));
-    } else {
-        // Always visible so the bind path is discoverable; disabled with the
-        // reason when the player has no rope (the actions themselves also
-        // narrate the missing rope if invoked).
+    if (npc.bound) captiveButtons.push(createCombatButton(getNPCBoundNote(npc) || "Bound", () => {}, { disabled: true }));
+    ["hands", "feet", "full"].forEach(function (part) {
+        if (!getBindingPlan(npc, part).missing.length) return;
+        const reason = getBindingBlockReason(npc, part);
+        captiveButtons.push(createCombatButton(part === "full" ? "Bind hands and feet" : "Bind " + part,
+            createBindingAction(npc, part), { disabled: !!reason, title: reason || (part === "full" ? "One rope or two rope belts; one belt suffices to finish a partial binding." : "One rope belt or one rope.") }));
+    });
+    if (npc.bound) captiveButtons.push(createCombatButton("Untie", createBindingAction(npc, "release")));
+    if (!npc.bound) {
         const hasRope = !!findRopeInInventory();
-        captiveButtons.push(createCombatButton("Bind hands (they follow)", () => bindCaptiveWithRope(npc), {
-            disabled: !hasRope,
-            title: hasRope
-                ? "Wrists tied; they follow you until released."
-                : "Requires rope."
-        }));
-        captiveButtons.push(createCombatButton("Tie up prone (leave them here)", () => tieCaptiveProne(npc), {
-            disabled: !hasRope,
-            title: hasRope
-                ? "Hog-tie them and leave them helpless in this room."
-                : "Requires rope."
-        }));
         captiveButtons.push(createCombatButton("Collar as slave (joins you)", () => enslaveCaptive(npc), {
             disabled: !hasRope,
-            title: hasRope
-                ? "A rope collar: they join your party, cannot leave, and do as they are told."
-                : "Requires rope."
+            title: hasRope ? "A rope collar: they join your party, cannot leave, and do as they are told." : "Requires rope."
         }));
     }
     if (!npc.bound && !(G.sessionFollowers || []).includes(npc)) {
@@ -48211,48 +48744,14 @@ function examineCaptive(npc) {
 }
 
 function bindCaptiveWithRope(npc) {
-    if (!isHeldCaptive(npc) || npc.bound) return;
-    const rope = findRopeInInventory();
-    if (!rope) {
-        setNarration("You have no rope to bind them with.");
-        renderCaptorMenu(npc);
-        return;
-    }
-
-    const idx = G.player.inventory.indexOf(rope);
-    if (idx >= 0) G.player.inventory.splice(idx, 1);
-
-    npc.bound = true;
-    // Bound captives travel with the player as party members (persisted);
-    // the companions bar shows their Unbind button.
-    addToParty(npc);
-    renderCaptorMenu(npc);
-    refreshInventoryUi(`You lash ${npc.name || "the captive"}'s wrists together with the rope. Bound, they have no choice but to follow you.`);
-    rememberStoryEvent("combat", `${G.player.name} bound ${npc.name || "a surrendered opponent"} with rope; they now follow as a captive.`, 6);
-    saveGameState();
+    return performBindingAction(npc, "hands");
 }
 
 // Hog-tied and left prone in the room: not in the party, thoroughly
 // helpless. Interacted with via the captor menu like any bound captive —
 // the NSFW captive-action groups apply once they have been examined.
 function tieCaptiveProne(npc) {
-    if (!isHeldCaptive(npc) || npc.bound) return;
-    const rope = findRopeInInventory();
-    if (!rope) {
-        setNarration("You have no rope to tie them with.");
-        renderCaptorMenu(npc);
-        return;
-    }
-
-    const idx = G.player.inventory.indexOf(rope);
-    if (idx >= 0) G.player.inventory.splice(idx, 1);
-
-    npc.bound = true;
-    npc.captiveProne = true;
-    renderCaptorMenu(npc);
-    refreshInventoryUi(`You hog-tie ${npc.name || "the captive"}, wrists to ankles, and leave them prone on the ground of this room, thoroughly helpless.`);
-    rememberStoryEvent("combat", `${G.player.name} tied ${npc.name || "a surrendered opponent"} up prone and left them in the room.`, 6);
-    saveGameState();
+    return performBindingAction(npc, "full");
 }
 
 // ── Binding unconscious bodies ────────────────────────────────────
@@ -48266,39 +48765,24 @@ function tieCaptiveProne(npc) {
 //              prone and helpless in the room, interacted with via the
 //              captor menu.
 function bindUnconsciousBody(item, mode) {
-    if (!item || item.bodyState !== "unconscious" || item.bodyBind) return;
-    if (mode !== "follow" && mode !== "prone") return;
-    const rope = findRopeInInventory();
-    if (!rope) {
-        setNarration("You have no rope to bind them with.");
-        renderRoomObjectActionMenu(item);
-        return;
-    }
-
-    const idx = G.player.inventory.indexOf(rope);
-    if (idx >= 0) G.player.inventory.splice(idx, 1);
-    item.inventory = Array.isArray(item.inventory) ? item.inventory : [];
-    item.inventory.push(rope);
-
-    item.bodyBind = mode;
-    const name = item.originalName || item.name || "the body";
-    if (mode === "follow") {
-        refreshInventoryUi(`You lash ${name}'s wrists together and run the rope up to a snug loop around their neck. Bound hand and neck, they'll have no choice but to follow you when they wake.`);
-        rememberStoryEvent("combat", `${G.player.name} bound ${name} hand and neck while they were unconscious.`, 6);
-    } else {
-        refreshInventoryUi(`You lash ${name}'s wrists to their ankles, cinching the hog-tie tight. When they wake, they'll stay right here — prone, and thoroughly helpless.`);
-        rememberStoryEvent("combat", `${G.player.name} hog-tied ${name} while they were unconscious.`, 6);
-    }
-    saveGameState();
-    renderRoomObjectActionMenu(item);
+    return performBindingAction(item, mode === "prone" ? "full" : mode === "follow" ? "hands" : mode);
 }
 
 // Apply a bind prepared while the NPC was an unconscious body (see
 // bindUnconsciousBody). Called from the wake paths right after the body is
 // converted back into a room creature. Returns the applied mode
 // ("follow" | "prone"), or null when no bind was pending.
-function applyPendingBodyBind(npc) {
+function applyPendingBodyBind(npc, room) {
     if (!npc || !npc.bodyBind) return null;
+    if (npc.bindingParts) {
+        const parts = getBindingParts(npc);
+        delete npc.bodyBind;
+        npc.bound = true;
+        npc.surrendered = true;
+        npc.captiveProne = parts.feet;
+        if (parts.hands && !parts.feet && room === G.activeRoom) addToParty(npc);
+        return parts.feet ? (parts.hands ? "prone" : "feet") : "hands";
+    }
     const mode = npc.bodyBind;
     delete npc.bodyBind;
     npc.bound = true;
@@ -48383,6 +48867,9 @@ const BOUND_WAKE_REACTION_LINES = {
 let boundWakeSpeakSeq = 0;
 
 function getWakeReactionLine(npc, opts) {
+    if (npc && npc.bindingParts && !(npc.bindingParts.hands && npc.bindingParts.feet)) {
+        return npc.bindingParts.feet ? "My feet are tied. Untie me." : "My hands are tied. Untie me.";
+    }
     const mode = opts && opts.bindMode ? opts.bindMode : "used";
     const tone = typeof getInitiativeTone === "function" ? getInitiativeTone(npc) : "plain";
     const table = BOUND_WAKE_REACTION_LINES[mode] || BOUND_WAKE_REACTION_LINES.used;
@@ -48400,7 +48887,9 @@ function getWakeReactionLine(npc, opts) {
 function buildWakeReactionInstruction(npc, opts) {
     opts = opts || {};
     let text = "You have just woken from unconsciousness after a fight you lost";
-    if (opts.bindMode === "prone") {
+    if (npc && npc.bindingParts) {
+        text += " - and found yourself " + getNPCBoundNote(npc) + ", held captive by the player";
+    } else if (opts.bindMode === "prone") {
         text += " - and found yourself hog-tied, wrists lashed to your ankles, lying prone on the ground and unable to rise, held captive by the player who is right there";
     } else if (opts.bindMode === "follow") {
         text += " - and found yourself with wrists lashed to a rope lead around your neck, forced to follow the player wherever they go";
@@ -48534,6 +49023,10 @@ function applyWakeAftermath(npc, room, baseLine, bindMode) {
 // (cyoaftw-context-builder.js).
 function getNPCBoundNote(npc) {
     if (!npc || !npc.bound) return "";
+    if (npc.bindingParts) {
+        const parts = getBindingParts(npc);
+        return parts.feet ? (parts.hands ? "bound at the hands and feet, unable to walk" : "bound at the feet, with hands free and unable to walk") : "bound at the hands, with feet free";
+    }
     let note;
     if (npc.captiveProne) note = "hog-tied with rope, wrists lashed to their ankles, prone on the ground";
     else if (npc._boundCaptiveFollower) note = "leashed by rope, wrists lashed to a loop around their neck";
@@ -48615,6 +49108,13 @@ function releaseCaptive(npc) {
 // player's power.
 function unbindCaptive(npc) {
     if (!npc || !npc.bound) return;
+    const storedBindings = !!npc.bindingParts;
+    if (npc.bindingParts) {
+        const reason = getBindingBlockReason(npc, "release");
+        if (reason) return sharedChoiceResult("blocked", reason);
+        if ((G.sessionFollowers || []).includes(npc)) removeSessionFollower(npc);
+        returnBindingTools(npc);
+    }
     npc.bound = false;
     removeFromParty(npc);
     const wasCaptive = npc.surrendered;
@@ -48629,7 +49129,8 @@ function unbindCaptive(npc) {
             actionTag: "freed"
         });
     }
-    setNarration(`You cut ${npc.name || "the captive"}'s ropes. They rub their raw wrists, watching you, free to go.`);
+    setNarration(storedBindings ? "You untie " + (npc.name || "the captive") + " and recover the binding tools. They are free to go."
+        : `You cut ${npc.name || "the captive"}'s ropes. They rub their raw wrists, watching you, free to go.`);
     rememberStoryEvent("combat", `${G.player.name} untied ${npc.name || "their captive"} and set them loose.`, 5);
     saveGameState();
     renderCompanionsBar();
@@ -53332,6 +53833,7 @@ function clearNarration() {
 }
 
 function setNarration(text) {
+    if (typeof textModeState !== "undefined" && textModeState.enabled && textModeState.lootItemTask) { textModeState.lootItemTask.messages.push(String(text || "")); return; }
     syncCombatLayout();
     const el = document.getElementById("narrationEl");
     const extra = takeTurnNotes();
@@ -53880,6 +54382,7 @@ function renderRoomObservations(parent, room, layout) {
 }
 
 function renderNarrationWithRoomObservations(room, leadText, layout, deferOutput) {
+    if (typeof textModeState !== "undefined" && textModeState.enabled && textModeState.lootItemTask) { textModeState.lootItemTask.messages.push(String(leadText || "")); return; }
     const el = document.getElementById("narrationEl");
     if (!el) return;
 
@@ -63464,8 +63967,8 @@ const INTERACT_MENU_ACTIONS = [
         id: "wash",
         label: "Wash up",
         visible: function (room) { return !!findWashableInRoom(room); },
-        disabledReason: function () { return ""; },
-        title: "Wash off grime from yourself and your worn clothes.",
+        disabledReason: function (room) { return findWashableInRoom(room || G.activeRoom) ? "" : "There is no usable washing source here."; },
+        title: "Wash at the best available source. Stagnant water leaves you filthy; muddy reeds leave a one-point hygiene penalty to charisma.",
         run: function () { closeInteractMenu(); performWash(); }
     },
     {
@@ -65201,7 +65704,7 @@ const HEALING_HERBS = {
     "silverroot": { name: "Silverroot", value: 18, heal: 9, stopBleed: true, curePoison: true,
         hint: "a silvery-leafed shrub",
         description: "A pale, silvery root, rare and prized by healers. Eat it to heal a great deal and stop bleeding." },
-    "moonbloom": { name: "Moonbloom", value: 4, stamina: 4,
+    "moonbloom": { name: "Moonbloom flower", value: 4, stamina: 4,
         hint: "pale glowing flowers",
         description: "Pale, luminous flowers that glow faintly in darkness. Their sweet nectar can be extracted at an alchemy table." },
     // Brewed at an alchemy table (see ALCHEMY TABLE); never grown or foraged.
@@ -67027,8 +67530,15 @@ const FORAGE_HERB_TABLES = {
 };
 const FORAGE_HERB_ROOM_CHANCE = { "Marsh": 0.5, "Witch's Lair": 0.4, "Broken Ground": 0.4, "Cavern": 0.35 };
 const CONTAINER_HERB_CHANCE = 0.12;
-function getForageDef(key) { return POISON_INGREDIENTS[key] || HEALING_HERBS[key] || null; }
-function createForageItem(key) { return POISON_INGREDIENTS[key] ? createPoisonIngredient(key) : createHerbItem(key); }
+const FORAGE_MATERIALS = {
+    "twisted-root": { name: "Twisted root", value: 1, unitSize: 1, material: "wood", type: ["misc", "flora", "material"],
+        description: "A tough, twisted root harvested from the marsh. Ordinary plant material, with no known medicinal effect." }
+};
+function getForageDef(key) { return POISON_INGREDIENTS[key] || HEALING_HERBS[key] || FORAGE_MATERIALS[key] || null; }
+function createForageItem(key) {
+    if (FORAGE_MATERIALS[key]) return cloneLootTemplate(Object.assign({ id: key }, FORAGE_MATERIALS[key]));
+    return POISON_INGREDIENTS[key] ? createPoisonIngredient(key) : createHerbItem(key);
+}
 // Per zone: chance a room grows a patch, and the weights of what grows.
 const FORAGE_ZONE_TABLES = {
     "Swamp": { chance: 0.6, weights: { "nightshade": 3, "numbroot": 3, "wilting-thistle": 3, "deathcap": 2 } },
@@ -67109,8 +67619,15 @@ function seedRoomHerbs(room) {
     });
 }
 
+function getFixtureForageIngredient(fixture) {
+    if (!fixture) return null;
+    if (fixture.forageIngredient) return fixture.forageIngredient;
+    if (/^moonbloom-(?:patch|grove|cluster)$/.test(fixture.id || "")) return "moonbloom";
+    return fixture.id === "twisted-roots" ? "twisted-root" : null;
+}
+
 function isForageFixture(fixture) {
-    return !!(fixture && fixture.forageIngredient && getForageDef(fixture.forageIngredient));
+    return !!getForageDef(getFixtureForageIngredient(fixture));
 }
 
 function getForageCharges(fixture) {
@@ -67123,11 +67640,19 @@ function getForageCharges(fixture) {
     return fixture.forageCharges;
 }
 
-function getForageBlockReason(fixture, room) {
-    if (!room || !G.player) return "Nothing to gather.";
+function getForageBlockReason(fixture, room, spent) {
+    if (!room || room !== G.activeRoom || !G.player || !isForageFixture(fixture) ||
+        !Array.isArray(room.structural) || room.structural.indexOf(fixture) < 0 || !isFixtureVisible(fixture, room) ||
+        fixture.hidden || fixture.isHidden || fixture.destroyed || fixture.burntOut) return "Nothing visible to gather here.";
+    if (fixture.reachable === false || fixture.occupied || fixture.inUse) return "You cannot reach that growth safely.";
+    if (typeof isFixtureBurning === "function" && isFixtureBurning(fixture)) return "The growth is burning.";
+    if (G.activeNPC || G.activeNPCMode === "combat" || G.combatEncounter || G.player.dead || G.player.hp <= 0 || G.player.unconscious ||
+        G.player._dying || G.player._collapsing) return "You cannot gather right now.";
+    if (typeof isRoomCollapsed === "function" && isRoomCollapsed(room)) return "The rubble prevents you from gathering.";
+    if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Settle the party's loot decision first.";
     if (getForageCharges(fixture) <= 0) return "Stripped bare. It will take a long while to grow back.";
     if (roomHasActiveHostile(room)) return "Too dangerous right now.";
-    if (isEntityExhausted(G.player) || (typeof G.player.stamina === "number" && G.player.stamina < FORAGE_STAMINA_COST)) {
+    if (!spent && (isEntityExhausted(G.player) || (typeof G.player.stamina === "number" && G.player.stamina < FORAGE_STAMINA_COST))) {
         return "You're too worn out to go crawling through the undergrowth.";
     }
     return "";
@@ -67136,22 +67661,34 @@ function getForageBlockReason(fixture, room) {
 function gatherForageFixture(fixture) {
     const room = G.activeRoom;
     const player = G.player;
-    if (!room || !player || !isForageFixture(fixture)) return;
+    if (!room || !player || !isForageFixture(fixture)) return sharedChoiceResult("blocked", "Nothing visible to gather here.");
     const block = getForageBlockReason(fixture, room);
-    if (block) { setNarration(block); return; }
+    if (block) return sharedChoiceResult("blocked", block);
 
-    const ingId = fixture.forageIngredient;
+    const ingId = getFixtureForageIngredient(fixture);
     const def = getForageDef(ingId);
-    const isHerbPlant = !!HEALING_HERBS[ingId];
+    const isHerbPlant = !POISON_INGREDIENTS[ingId];
     const name = getEntityName(fixture);
-    const lines = [];
+    const lines = [], source = room.structural, inventory = player.inventory, equipped = player.equipped;
+    const actor = G.activeNPC, mode = G.activeNPCMode, object = G.activeObject, modal = G.activeItemModal;
+    const epoch = typeof textModeState !== "undefined" ? textModeState.epoch : null;
+    const stamp = JSON.stringify([fixture.forageIngredient, fixture.forageMax, fixture.forageCharges, fixture.forageEmptyTurn]);
     spendEntityStamina(player, FORAGE_STAMINA_COST, lines, { isPlayer: true });
     advanceStoryTurn(1);
+    if (G.player !== player || G.activeRoom !== room || room.structural !== source || source.indexOf(fixture) < 0 ||
+        player.inventory !== inventory || player.equipped !== equipped || G.activeNPC !== actor || G.activeNPCMode !== mode ||
+        G.activeObject !== object || G.activeItemModal !== modal || epoch !== (typeof textModeState !== "undefined" ? textModeState.epoch : null) ||
+        stamp !== JSON.stringify([fixture.forageIngredient, fixture.forageMax, fixture.forageCharges, fixture.forageEmptyTurn]) ||
+        getForageBlockReason(fixture, room, true)) {
+        publishTextModeOutput("exploration", "Gathering stops as the situation changes. The effort and time already spent are kept.",
+            { systemOnly: true, status: "interrupted", gather: { source: name, committed: false, staminaCost: FORAGE_STAMINA_COST, turns: 1 } });
+        return { status: "interrupted" };
+    }
 
     // Rogues know their poisons: an easier check with rank.
     const dc = isHerbPlant ? Math.max(5, FORAGE_DC - 1) : Math.max(5, FORAGE_DC - Math.min(3, getRogueRank(player)));
     const check = rollStatCheck(player, "flexibility", dc);
-    let lead;
+    let lead, harvested = 0, left = 0;
     if (check.success) {
         let qty = randInt(FORAGE_YIELD_MIN, FORAGE_YIELD_MAX);
         if (check.critSuccess) qty += 1;
@@ -67164,11 +67701,12 @@ function gatherForageFixture(fixture) {
             stored += 1;
         }
         const leftBehind = qty - stored;
+        harvested = stored; left = leftBehind;
         qty = stored;
         fixture.forageCharges = getForageCharges(fixture) - 1;
         if (fixture.forageCharges <= 0) fixture.forageEmptyTurn = getCurrentStoryTurn();
         lead = qty > 0
-            ? `You carefully gather from the ${name}: ${qty} x ${def.name.toLowerCase()}.`
+            ? `You carefully gather ${qty} ${def.name.toLowerCase()}${qty === 1 ? "" : "s"} from the ${name}.`
             : `You carefully gather from the ${name}, but you have nowhere to put any of it.`;
         if (qty > 0 && leftBehind > 0) lead += " You have no room for the rest and leave it behind.";
         if (!isHerbPlant && typeof gainClassSkillXP === "function" && getRogueRank(player) >= 1) gainClassSkillXP("rogue", 1, lines);
@@ -67187,8 +67725,13 @@ function gatherForageFixture(fixture) {
 
     renderStats();
     if (typeof updateInventoryContextPanels === "function") updateInventoryContextPanels();
-    renderNarrationWithRoomObservations(room, [lead].concat(lines).join(" "));
+    renderNarrationWithRoomObservations(room, [lead].concat(lines).join(" "), undefined, true);
+    publishTextModeOutput("exploration", lead, { source: "engine", gather: { source: name, item: def.name, quantity: harvested, leftBehind: left,
+        success: !!check.success && harvested > 0, committed: true, staminaCost: FORAGE_STAMINA_COST, turns: 1,
+        roll: { die: check.roll, bonus: check.bonus, total: check.total, dc: check.dc, stat: "flexibility" } } },
+        typeof textModeState !== "undefined" && textModeState.enabled ? undefined : false);
     saveGameState();
+    return { status: check.success && harvested > 0 ? "completed" : "blocked" };
 }
 
 function rollPoisonContainerLoot(room, fixture) {
@@ -74552,12 +75095,7 @@ function openFixtureCard(fixture, cardOptions) {
             const stash = ensureContainerContents(fixture);
             const listEl = getItemModalContentsEl();
             if (listEl) {
-                stash.items.forEach(function (item, index) {
-                    if (!isLootItemVisible(item)) return;
-                    const buttons = [{ label: "Take", onClick: function () { takeContainerItem(fixture, index); } }];
-                    if (getDirectEquipmentSlot(item)) buttons.push({ label: "Equip", onClick: function () { equipContainerItem(fixture, item); } });
-                    addItemModalRow(listEl, containerItemLabel(item), item.description || "", buttons);
-                });
+                appendLootItemRows(listEl, fixture, "fixture");
                 if (stash.coins > 0) {
                     addItemModalRow(listEl, `${stash.coins} coin${stash.coins === 1 ? "" : "s"}`, "", [
                         { label: "Take", onClick: function () { takeContainerCoins(fixture); } }
@@ -74755,7 +75293,7 @@ function openFixtureCard(fixture, cardOptions) {
     if (isTrainingDummyFixture(fixture)) addAction("Training", function () { closeItemModal(); return trainingDummyMenu(fixture); }, { keepOpen: true });
 
     if (isWashableRoomObject(fixture)) {
-        addAction("Wash up", () => performWash(), { primary: true });
+        addAction("Wash up", createWashAction(fixture, room), { primary: true, disabledReason: getWashBlockReason(fixture, room), title: getWashActionNote(fixture) });
     }
 
     if (tags.includes("rest")) {
@@ -74939,6 +75477,10 @@ function addItemModalRow(listEl, label, title, buttons) {
 }
 
 function closeItemModal() {
+    if (typeof lootItemDetailState !== "undefined" && lootItemDetailState) {
+        const state = lootItemDetailState; lootItemDetailState = null;
+        if (sharedChoiceState.menu === state.menu) clearSharedChoiceMenu(state.menu);
+    }
     const modal = document.getElementById("itemModal");
     if (modal) modal.classList.remove("active");
     clearItemModalContents();
@@ -74964,6 +75506,7 @@ function dismissItemModal() {
 }
 
 function leaveItemModal() {
+    if (typeof lootItemDetailState !== "undefined" && lootItemDetailState) { closeLootItemDetail(true); return; }
     closeItemModal();
     refreshRoomViewAfterClose();
     saveGameState();
@@ -75227,20 +75770,14 @@ function renderRoomObjectActionMenu(item) {
             // hands & neck lets them follow once awake; hands & feet keeps
             // them prone. Not offered for downed companions (their wake path
             // rejoins the party instead of applying the bind).
-            if (!item.bodyBind && !item._wasPartyMember) {
-                const hasRope = !!findRopeInInventory();
-                buttons.push(createCombatButton("Bind (hands & neck)", () => bindUnconsciousBody(item, "follow"), {
-                    disabled: !hasRope,
-                    title: hasRope
-                        ? "Lash their wrists to a neck loop — when they wake, they must follow you."
-                        : "Requires rope."
-                }));
-                buttons.push(createCombatButton("Bind (hands & feet)", () => bindUnconsciousBody(item, "prone"), {
-                    disabled: !hasRope,
-                    title: hasRope
-                        ? "Hog-tie them — they stay prone even after waking."
-                        : "Requires rope."
-                }));
+            if (!item._wasPartyMember) {
+                ["hands", "feet", "full"].forEach(function (part) {
+                    if (!getBindingPlan(item, part).missing.length) return;
+                    const reason = getBindingBlockReason(item, part);
+                    buttons.push(createCombatButton(part === "full" ? "Bind hands and feet" : "Bind " + part,
+                        createBindingAction(item, part), { disabled: !!reason, title: reason || "One rope belt per pair of limbs, or one full rope for both." }));
+                });
+                if (getBindingParts(item).hands || getBindingParts(item).feet) buttons.push(createCombatButton("Untie", createBindingAction(item, "release")));
             }
             buttons.push(createCombatButton("Finish off", () => finishOffBody(item), { className: "danger" }));
         }
@@ -75404,14 +75941,8 @@ function renderBodyLootGroup(body, el) {
     const coins = getCoinValue(body);
     const lootButtons = [];
 
-    const invRows = rows.filter(row => row.source === "inventory");
-    groupItemsForDisplay(invRows.map(row => row.item)).forEach(group => {
-        const label = `Take ${labelWithCount(getItemName(group.item), group.count)}`;
-        lootButtons.push(createCombatButton(label, () => takeBodyInventoryGroup(body, group.items)));
-    });
-    rows.filter(row => row.source !== "inventory").forEach(row => {
-        lootButtons.push(createCombatButton(`Take ${getItemName(row.item)}`, () => takeBodyEquippedItem(body, row.slot)));
-    });
+    const entry = lootItemSourceEntry(body, "body");
+    if (entry) textLootEntries(entry).forEach(function (group) { lootButtons.push(createLootItemNameButton(entry, group)); });
 
     if (coins > 0) {
         lootButtons.push(createCombatButton(`Take ${coins}g`, () => takeBodyCoins(body)));
@@ -75838,9 +76369,9 @@ function naturallyWakeBody(body, room) {
     if (at >= 0) room.items.splice(at, 1);
     clearUnconsciousBodyState(body);
     // A leash bind needs the player there to hold it; away from them it is a hog-tie.
-    if (!here && body.bodyBind && body.bodyBind !== "prone") body.bodyBind = "prone";
-    const bindMode = applyPendingBodyBind(body);
-    body.action = bindMode === "prone" ? "is bound hand and foot, lying prone and helpless"
+    if (!here && body.bodyBind && !body.bindingParts && body.bodyBind !== "prone") body.bodyBind = "prone";
+    const bindMode = applyPendingBodyBind(body, room);
+    body.action = body.bindingParts ? "is " + getNPCBoundNote(body) : bindMode === "prone" ? "is bound hand and foot, lying prone and helpless"
         : (bindMode ? "is bound, wrists lashed to a neck rope" : "is back on their feet, battered and unsteady");
     if (body.memory) body.memory.lastMood = "shaken";
     if (typeof generateNPCBehavior === "function") body.behavior = generateNPCBehavior(body);
@@ -76006,9 +76537,9 @@ function wakeUnconsciousBody(item) {
     // A bind prepared while they were unconscious (bindUnconsciousBody)
     // turns this into a captive wake: no mercy swing, and they either
     // follow (hands & neck) or stay prone (hands & feet).
-    const bindMode = applyPendingBodyBind(item);
+    const bindMode = applyPendingBodyBind(item, room);
     if (bindMode) {
-        item.action = bindMode === "prone"
+        item.action = item.bindingParts ? "is " + getNPCBoundNote(item) : bindMode === "prone"
             ? "is bound hand and foot, lying prone and helpless"
             : "is bound, wrists lashed to a neck rope";
         room.creatures.push(item);
@@ -76022,11 +76553,11 @@ function wakeUnconsciousBody(item) {
             actionTag: "bound-on-wake"
         });
         selectNPC(item);
-        const boundWake = bindMode === "prone"
+        const boundWake = item.bindingParts ? item.name + " wakes, " + getNPCBoundNote(item) + "." : bindMode === "prone"
             ? `${item.name} comes to and thrashes against the ropes lashing wrists to ankles — but the hog-tie holds. They stay prone on the ground, thoroughly helpless.`
             : `${item.name} comes to with a start and goes rigid at the rope holding their wrists to their neck. Bound, they have no choice but to follow you.`;
         setNarration(applyWakeAftermath(item, room, boundWake, bindMode));
-        rememberStoryEvent("combat", `${G.player.name} woke ${item.name} — bound${bindMode === "prone" ? " hand and foot, prone" : " hand and neck, following"}.`, 5);
+        rememberStoryEvent("combat", G.player.name + " woke " + item.name + ", " + getNPCBoundNote(item) + ".", 5);
         saveGameState();
         return;
     }
@@ -80029,14 +80560,28 @@ function renderIntimacyActionMenu(npc) {
         
         // Filter sections based on NPC anatomy - only show tabs for body parts the NPC actually has
         function shouldShowSection(sectionLabel) {
-            const result = !(
-                (sectionLabel === "Cock" && !hasCock) ||
-                (sectionLabel === "Pussy" && !hasPussy) ||
-                (sectionLabel === "Cloaca" && !hasCloaca) ||
-                (sectionLabel === "Breasts" && !hasBreasts)
-            );
-            console.log(`[DEBUG] shouldShowSection("${sectionLabel}") = ${result} (hasCock=${hasCock}, hasPussy=${hasPussy}, hasCloaca=${hasCloaca}, hasBreasts=${hasBreasts})`);
-            return result;
+            const label = String(sectionLabel || "");
+            
+            // Gender-specific body parts
+            if (label === "Cock" && !hasCock) return false;
+            if (label === "Pussy" && !hasPussy) return false;
+            if (label === "Breasts" && !hasBreasts) return false;
+            if (label === "Cloaca" && !hasCloaca) return false;
+            
+            // Tail - only for species with tails
+            if (label === "Tail") {
+                const hasTail = npcAnatomy.tail || npcSpecies.includes("cat") || npcSpecies.includes("wolf") || 
+                               npcSpecies.includes("fox") || npcSpecies.includes("rat") || npcSpecies.includes("lizard");
+                if (!hasTail) return false;
+            }
+            
+            // Anus - all humanoids have one, but filter for non-humanoids if needed
+            if (label === "Anus" && !npc.isHumanoid) {
+                return false;
+            }
+            
+            // Default: show the section
+            return true;
         }
         
         // Collect all section labels with actions and valid anatomy
@@ -80048,6 +80593,9 @@ function renderIntimacyActionMenu(npc) {
         
         const sectionsWithActions = sectionItems
             .filter(item => {
+                // Filter out Player tab - intimacy actions should only target NPC
+                const label = String(item.label || "").toLowerCase();
+                if (label === "player") return false;
                 if (!item.actions || item.actions.length === 0) return false;
                 if (!shouldShowSection(item.label)) return false;
                 

@@ -1,10 +1,10 @@
 // Bathhouses use generated, persistent business names suited to the town.
 // Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
-// ── cyoaftw-world-data.js v2026-10-24-002 ── Generated bathhouse names and stable saved-building names. Previous: Street fixtures get physical templates; player-led guide check-ins and bounded intro delivery; zone/trade shop names.
+// ── cyoaftw-world-data.js v2026-10-24-003 ── Washable puddles/troughs and authored moonbloom/root harvesting. Previous: Generated bathhouse names and stable saved-building names; street fixture physical templates; guide check-ins and zone/trade shop names.
 // Previous: Commoner debt dialogue identifies the creditor.
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.WORLD_DATA_VERSION = "2026-10-24-002";
+    window.WORLD_DATA_VERSION = "2026-10-24-003";
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
@@ -981,7 +981,7 @@ const ROOM_TEMPLATES = [
             { id: "forge-fire",    name: "forge fire",    tags: ["heat", "light", "forge"] },
             { id: "anvil",         name: "anvil",         tags: ["work", "forge"] },
             { id: "grindstone",    name: "grindstone",    tags: ["work", "forge"] },
-            { id: "quench-trough", name: "quench trough", tags: ["work", "forge"] },
+            { id: "quench-trough", name: "quench trough", tags: ["work", "forge", "hygiene"] },
             { id: "ore-bin",       name: "ore bin",       tags: ["storage", "loot"] },
             { id: "commission-board", name: "commission board", tags: ["information", "commerce"], alwaysShow: true }
         ],
@@ -1149,7 +1149,7 @@ const ROOM_TEMPLATES = [
         isConnector: true,
         structural: [
             { id: "support-beam", name: "support beam",     tags: ["structural"] },
-            { id: "puddle",       name: "puddle",           tags: ["hazard"] }
+            { id: "puddle",       name: "puddle",           tags: ["hazard", "hygiene"] }
         ],
         imageKey: "Tunnel"
     },
@@ -1390,7 +1390,7 @@ const ROOM_TEMPLATES = [
             { id: "stalagmites",  name: "stalagmites",  tags: ["cover", "hazard"] },
             { id: "glowing-fungi",name: "glowing fungi",tags: ["light", "landmark"] },
             { id: "underground-pool", name: "underground pool", tags: ["water"] },
-            { id: "moonbloom-grove", name: "grove of moonbloom flowers", tags: ["flora", "gather", "light"] }
+            { id: "moonbloom-grove", name: "grove of moonbloom flowers", tags: ["flora", "gather", "light"], forageIngredient: "moonbloom", forageMax: 2 }
         ],
         imageKey: "Cavern"
     },
@@ -1423,7 +1423,7 @@ const ROOM_TEMPLATES = [
             { id: "forge-fire",    name: "deep-fed forge", tags: ["heat", "light", "forge"] },
             { id: "anvil",         name: "anvil",          tags: ["work", "forge"] },
             { id: "grindstone",    name: "grindstone",     tags: ["work", "forge"] },
-            { id: "quench-trough", name: "quench trough",  tags: ["work", "forge"] },
+            { id: "quench-trough", name: "quench trough",  tags: ["work", "forge", "hygiene"] },
             { id: "ore-bin",       name: "ore bin",        tags: ["storage", "loot"] },
             { id: "commission-board", name: "commission board", tags: ["information", "commerce"], alwaysShow: true }
         ],
@@ -1508,9 +1508,9 @@ const ROOM_TEMPLATES = [
         parentCluster: ["marsh"],
         isConnector: true,
         structural: [
-            { id: "twisted-roots", name: "twisted roots", tags: ["hazard", "cover"] },
+            { id: "twisted-roots", name: "twisted roots", tags: ["hazard", "cover", "forage"], forageIngredient: "twisted-root", forageMax: 2 },
             { id: "reed-bed",      name: "reed bed",      tags: ["cover"] },
-            { id: "moonbloom-patch", name: "pale moonbloom flowers", tags: ["flora", "gather"] }
+            { id: "moonbloom-patch", name: "pale moonbloom flowers", tags: ["flora", "gather"], forageIngredient: "moonbloom", forageMax: 2 }
         ],
         imageKey: "Marsh"
     },
@@ -1526,7 +1526,7 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "heaved-slabs",  name: "heaved slabs of peat", tags: ["hazard", "cover"] },
             { id: "stagnant-pool", name: "stagnant pool",        tags: ["water", "hazard"] },
-            { id: "moonbloom-cluster", name: "cluster of glowing moonblooms", tags: ["flora", "gather", "light"] }
+            { id: "moonbloom-cluster", name: "cluster of glowing moonblooms", tags: ["flora", "gather", "light"], forageIngredient: "moonbloom", forageMax: 2 }
         ],
         imageKey: "Broken Ground"
     },
