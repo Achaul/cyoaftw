@@ -1,8 +1,8 @@
-// Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
+// NPC Life W1/W2: bounded short-term/entity memory, delivered-reply annotations and compatible behavior syntax. Shared species appearance retained.
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-23-001";
+    window.NPC_DATA_VERSION = "2026-10-23-004";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -1526,6 +1526,189 @@ function _npcMemoryEvict(npc, list) {
     }
 }
 
+// W1: bounded recent recollections alongside the unchanged long-term API.
+const NPC_SHORT_MEMORY_MAX = 50;
+const NPC_MEMORY_HALF_LIFE = 40;
+const NPC_ENTITY_MEMORY_MAX = 12; // other NPCs; the player has a reserved slot
+const npcMemoryLifeValidated = new WeakSet();
+
+function getNPCMemoryWeight(entry, now) {
+    const turn = typeof now === "number" ? now : _npcMemoryNow();
+    return (Number(entry && entry.importance) || 1) - Math.max(0, turn - (Number(entry && entry.turn) || 0)) / NPC_MEMORY_HALF_LIFE;
+}
+
+function npcMemorySubjectId(subject) {
+    if (!subject || typeof G === "undefined" || subject === G.player) return "player";
+    return subject.id && subject.isHumanoid === true ? "npc:" + String(subject.id).slice(0, 80) : "";
+}
+
+function npcMemoryLifeEntry(entry) {
+    if (!entry || typeof entry.text !== "string" || !entry.text.trim()) return null;
+    const id = typeof entry.id === "string" ? entry.id.slice(0, 60) : "";
+    if (!id) return null;
+    return { id: id, subjectId: entry.subjectId === "player" || /^npc:.{1,80}$/.test(entry.subjectId || "") ? entry.subjectId : "player",
+        text: _npcMemoryClip(entry.text, 140), tags: _npcMemoryTags(entry.tags).map(function (t) { return t.slice(0, 24); }),
+        importance: Math.max(1, Math.min(10, Math.round(Number(entry.importance)) || 2)),
+        turn: Math.max(0, Math.min(_npcMemoryNow(), Number(entry.turn) || 0)),
+        count: Math.max(1, Math.min(1000000, Math.round(Number(entry.count)) || 1)),
+        references: Math.max(0, Math.min(1000000, Math.round(Number(entry.references)) || 0)) };
+}
+
+function ensureNPCMemoryLife(npc) {
+    if (!npc || npc.isHumanoid !== true) return null;
+    ensureNPCMemoryEntries(npc);
+    const m = npc.memory;
+    if (npcMemoryLifeValidated.has(m) && Array.isArray(m.shortTerm) && m.entities && typeof m.entities === "object") return m;
+    m.shortTerm = (Array.isArray(m.shortTerm) ? m.shortTerm : []).slice(-50).map(npcMemoryLifeEntry).filter(Boolean);
+    const old = m.entities && typeof m.entities === "object" && !Array.isArray(m.entities) ? m.entities : {};
+    m.entities = Object.create(null);
+    const keys = Object.keys(old).filter(function (key) { return /^npc:.{1,80}$/.test(key); }).slice(0, 12);
+    if (Object.prototype.hasOwnProperty.call(old, "player")) keys.unshift("player");
+    keys.forEach(function (key) {
+        const r = old[key];
+        if (!r || typeof r !== "object" || Array.isArray(r)) return;
+        m.entities[key] = { id: key, label: typeof r.label === "string" ? _npcMemoryClip(r.label, 80) : "someone",
+            timesMet: Math.max(0, Math.min(1000000, Math.round(Number(r.timesMet)) || 0)),
+            firstTurn: Math.max(0, Math.min(_npcMemoryNow(), Number(r.firstTurn) || 0)),
+            lastTurn: Math.max(0, Math.min(_npcMemoryNow(), Number(r.lastTurn) || 0)),
+            nameKnown: r.nameKnown === true, openPromises: key === "player" && typeof getNPCOpenCommitmentIds === "function" ? getNPCOpenCommitmentIds(npc) : [],
+            summary: typeof r.summary === "string" ? _npcMemoryClip(r.summary, 300) : "",
+            notable: (Array.isArray(r.notable) ? r.notable : []).filter(function (s) { return typeof s === "string" && s.trim(); }).slice(0, 4).map(function (s) { return _npcMemoryClip(s, 80); }),
+            feeling: ["warm", "friendly", "neutral", "wary", "cold", "hostile"].indexOf(r.feeling) >= 0 ? r.feeling : "neutral",
+            revision: Math.max(0, Math.min(1000000, Math.round(Number(r.revision)) || 0)),
+            encounterKey: typeof r.encounterKey === "string" ? r.encounterKey.slice(0, 80) : "" };
+    });
+    m.memoryLifeSeq = Math.max(0, Math.min(1000000000, Math.round(Number(m.memoryLifeSeq)) || 0));
+    m.memoryLifeSeen = m.memoryLifeSeen === true || m.metPlayer === true;
+    m.memoryLifeVersion = 1;
+    npcMemoryLifeValidated.add(m);
+    return m;
+}
+
+function ensureNPCEntityMemory(npc, subject) {
+    const m = ensureNPCMemoryLife(npc), id = npcMemorySubjectId(subject);
+    if (!m || !id || subject === npc) return null;
+    if (!m.entities[id]) {
+        const others = Object.keys(m.entities).filter(function (key) { return key !== "player"; });
+        if (id !== "player" && others.length >= NPC_ENTITY_MEMORY_MAX) {
+            others.sort(function (a, b) { return m.entities[a].lastTurn - m.entities[b].lastTurn; });
+            const forgotten = others[0];
+            // Drop the least recently encountered person's bounded history.
+            // This bound applies to recollections, never to engine commitments.
+            m.shortTerm = m.shortTerm.filter(function (entry) { return entry.subjectId !== forgotten; });
+            delete m.entities[forgotten];
+        }
+        m.entities[id] = { id: id, label: id === "player" ? "the player" : _npcMemoryClip(subject.name || "someone", 80),
+            timesMet: 0, firstTurn: _npcMemoryNow(), lastTurn: _npcMemoryNow(), nameKnown: false, openPromises: [],
+            summary: "", notable: [], feeling: "neutral", revision: 0, encounterKey: "" };
+    }
+    return m.entities[id];
+}
+
+function recordNPCEntityEncounter(npc, subject, options) {
+    const r = ensureNPCEntityMemory(npc, subject);
+    if (!r) return null;
+    const o = options || {};
+    const key = typeof o.encounterKey === "string" ? o.encounterKey.slice(0, 80) : "turn:" + _npcMemoryNow();
+    if (r.encounterKey !== key) { r.timesMet = Math.min(1000000, r.timesMet + 1); r.encounterKey = key; }
+    r.lastTurn = _npcMemoryNow();
+    if (o.nameKnown === true) { r.nameKnown = true; r.label = _npcMemoryClip(subject && subject.name || r.label, 80); }
+    r.revision += 1;
+    return r;
+}
+
+function foldNPCEntityMemory(npc, subjectId, entries) {
+    const m = ensureNPCMemoryLife(npc);
+    const r = m && m.entities[subjectId];
+    if (!r || !Array.isArray(entries) || !entries.length) return null;
+    const ordered = entries.filter(function (e) { return e && typeof e.text === "string"; }).map(function (e, index) { return { entry: e, index: index }; }).sort(function (a, b) {
+        return b.entry.turn - a.entry.turn || b.index - a.index;
+    }).map(function (row) { return row.entry; });
+    if (!ordered.length) return r;
+    const fresh = ordered.slice(0, 2).map(function (e) { return e.text; }).join(" ");
+    r.summary = _npcMemoryClip(fresh + (r.summary && r.summary.indexOf(fresh) !== 0 ? " Earlier: " + r.summary : ""), 300);
+    const important = ordered.filter(function (e) { return e.importance >= 5 || e.count >= 3 || e.references >= 2; })
+        .sort(function (a, b) { return b.importance - a.importance || b.turn - a.turn; }).map(function (e) { return _npcMemoryClip(e.text, 80); });
+    r.notable = important.concat(r.notable).filter(function (s, i, all) { return all.indexOf(s) === i; }).slice(0, 4);
+    if (subjectId === "player") {
+        const favor = npc.memory.favorability || 0, hostility = npc.hostility || 0;
+        r.feeling = hostility >= 70 ? "hostile" : hostility >= 45 ? "wary" : favor <= -20 ? "cold" : favor >= 40 ? "warm" : favor >= 10 ? "friendly" : "neutral";
+    }
+    r.revision += 1;
+    return r;
+}
+
+function forgetNPCShortTermEntries(npc, entries, force) {
+    const groups = Object.create(null);
+    entries.forEach(function (entry) { (groups[entry.subjectId] || (groups[entry.subjectId] = [])).push(entry); });
+    Object.keys(groups).forEach(function (id) {
+        foldNPCEntityMemory(npc, id, groups[id]); // durable fallback before any AI work
+        if (typeof queueNPCMemoryFold === "function") queueNPCMemoryFold(npc, id, groups[id], force === true);
+    });
+}
+
+function promoteNPCShortTermMemory(npc, entry) {
+    if (entry.importance < 7 && entry.count < 3 && entry.references < 2) return;
+    if (npc.memory.memoryEntries.some(function (e) { return e.id === entry.id; })) return;
+    addNPCMemory(npc, { id: "life:" + entry.id, text: entry.text, tags: entry.tags,
+        importance: Math.max(4, entry.importance), shortTerm: false });
+}
+
+function addNPCShortTermMemory(npc, entry) {
+    if (!npc || !entry || npc.isHumanoid !== true || !npc.memory || !(npc.memory.metPlayer || npc.memory.memoryLifeSeen || entry.conversation === true)) return null;
+    const m = ensureNPCMemoryLife(npc), r = ensureNPCEntityMemory(npc, entry.subject);
+    if (!r) return null;
+    m.memoryLifeSeen = true;
+    const clean = npcMemoryLifeEntry(Object.assign({}, entry, { id: entry.id || "recent-" + (++m.memoryLifeSeq), subjectId: r.id, turn: _npcMemoryNow() }));
+    if (!clean) return null;
+    r.lastTurn = _npcMemoryNow(); r.revision += 1;
+    const existing = m.shortTerm.find(function (e) { return e.subjectId === clean.subjectId && (e.id === clean.id || e.text === clean.text); });
+    if (existing) {
+        existing.text = clean.text; existing.turn = clean.turn;
+        existing.count = Math.min(1000000, existing.count + 1);
+        existing.importance = Math.max(existing.importance, clean.importance);
+        existing.tags = _npcMemoryTags(existing.tags.concat(clean.tags));
+        m.shortTerm.splice(m.shortTerm.indexOf(existing), 1); m.shortTerm.push(existing);
+        if (entry.promote !== false) promoteNPCShortTermMemory(npc, existing);
+        return existing;
+    }
+    m.shortTerm.push(clean);
+    if (entry.promote !== false) promoteNPCShortTermMemory(npc, clean);
+    while (m.shortTerm.length > NPC_SHORT_MEMORY_MAX) {
+        let victim = m.shortTerm[0];
+        m.shortTerm.forEach(function (e) { if (getNPCMemoryWeight(e) < getNPCMemoryWeight(victim)) victim = e; });
+        m.shortTerm.splice(m.shortTerm.indexOf(victim), 1);
+        forgetNPCShortTermEntries(npc, [victim], false);
+    }
+    return clean;
+}
+
+function getNPCShortTermMemories(npc, wantedTags, max, subjectIds) {
+    const list = npc && npc.memory && Array.isArray(npc.memory.shortTerm) ? npc.memory.shortTerm : [];
+    const wanted = Array.isArray(wantedTags) ? wantedTags : [];
+    const subjects = Array.isArray(subjectIds) ? subjectIds : ["player"];
+    return list.filter(function (e) { return e && e.text && subjects.indexOf(e.subjectId || "player") >= 0; }).slice().sort(function (a, b) {
+        const score = function (e) { return getNPCMemoryWeight(e) + (e.tags || []).filter(function (t) { return wanted.indexOf(t) >= 0; }).length * 3; };
+        return score(b) - score(a) || b.turn - a.turn;
+    }).slice(0, typeof max === "number" ? max : 4);
+}
+
+function referenceNPCShortTermMemory(npc, tags) {
+    if (!npc || !npc.memory || !Array.isArray(npc.memory.shortTerm) || !Array.isArray(tags) || !tags.length) return;
+    const entry = getNPCShortTermMemories(npc, tags, 1)[0];
+    if (entry && (entry.tags || []).some(function (t) { return tags.indexOf(t) >= 0; })) {
+        entry.references = Math.min(1000000, (entry.references || 0) + 1);
+        promoteNPCShortTermMemory(npc, entry);
+    }
+}
+
+function trimNPCShortTermMemory(npc) {
+    if (!npc || !npc.memory || !Array.isArray(npc.memory.shortTerm) || !npc.memory.shortTerm.length) return;
+    const m = ensureNPCMemoryLife(npc), entries = m.shortTerm.slice();
+    m.shortTerm.length = 0;
+    forgetNPCShortTermEntries(npc, entries, true);
+}
+
 // Adds or merges one memory. Returns the stored entry, or null when this NPC
 // cannot remember (not humanoid, or the entry is empty).
 function addNPCMemory(npc, entry) {
@@ -1542,6 +1725,7 @@ function addNPCMemory(npc, entry) {
     const rawImportance = Math.round(Number(entry.importance));
     const importance = Math.min(10, Math.max(1, isNaN(rawImportance) ? NPC_MEMORY_IMPORTANCE_DEFAULT : rawImportance));
     const tags = _npcMemoryTags(entry.tags);
+    if (entry.shortTerm !== false) addNPCShortTermMemory(npc, { id: id, text: text, importance: importance, tags: tags, subject: entry.subject, promote: false });
 
     const at = list.findIndex(function (e) { return e && e.id === id; });
     if (at >= 0) {
@@ -1572,7 +1756,8 @@ function registerNPCToldMemory(npc, key, text, opts) {
         tags: ["told"].concat(o.tags || []),
         text: text,
         importance: typeof o.importance === "number" ? o.importance : 4,
-        pinned: o.pinned === true
+        pinned: o.pinned === true,
+        shortTerm: o.shortTerm
     });
 }
 
@@ -1612,7 +1797,12 @@ function getNPCToldMemories(npc, max) {
 
 function serializeNPCMemory(npc) {
     const list = npc && npc.memory && Array.isArray(npc.memory.memoryEntries) ? npc.memory.memoryEntries : [];
-    return JSON.parse(JSON.stringify({ tier: npc && npc.memory ? npc.memory.memoryTier || "" : "", entries: list }));
+    const data = { tier: npc && npc.memory ? npc.memory.memoryTier || "" : "", entries: list };
+    if (npc && npc.memory && npc.memory.memoryLifeVersion) {
+        const m = ensureNPCMemoryLife(npc);
+        data.life = { version: 1, seen: m.memoryLifeSeen, seq: m.memoryLifeSeq, shortTerm: m.shortTerm, entities: m.entities };
+    }
+    return JSON.parse(JSON.stringify(data));
 }
 
 function loadNPCMemory(npc, data) {
@@ -1629,6 +1819,13 @@ function loadNPCMemory(npc, data) {
         });
     });
     if (NPC_MEMORY_TIER_ORDER.indexOf(data.tier) >= 0) npc.memory.memoryTier = data.tier;
+    ["shortTerm", "entities", "memoryLifeSeq", "memoryLifeSeen", "memoryLifeVersion"].forEach(function (key) { delete npc.memory[key]; });
+    npcMemoryLifeValidated.delete(npc.memory);
+    if (data.life && data.life.version === 1) {
+        npc.memory.shortTerm = data.life.shortTerm; npc.memory.entities = data.life.entities;
+        npc.memory.memoryLifeSeq = data.life.seq; npc.memory.memoryLifeSeen = data.life.seen === true;
+        ensureNPCMemoryLife(npc);
+    }
     return true;
 }
 
@@ -1665,7 +1862,7 @@ function recordNPCConversationMemory(npc, choice) {
             id: "said-" + _npcMemoryNow() + "-" + _npcMemoryTypedSeq,
             tags: ["said"].concat(getNPCTagsForText(said)),
             text: "The player said: \"" + _npcMemoryClip(said, 100) + "\"",
-            importance: typeof spec.importance === "number" ? spec.importance : 2
+            importance: typeof spec.importance === "number" ? spec.importance : 2, shortTerm: false
         });
     }
 
@@ -1679,8 +1876,45 @@ function recordNPCConversationMemory(npc, choice) {
         id: "did-" + (typeof spec.id === "string" && spec.id ? spec.id : optionId),
         tags: [intent || "talk"].concat(Array.isArray(spec.tags) ? spec.tags : [], getNPCOptionTags(optionId), NPC_INTENT_MEMORY_KINDS[intent] || []),
         text: text,
-        importance: typeof spec.importance === "number" ? spec.importance : _npcMemoryImportanceFromImpact(choice.relationshipImpact)
+        importance: typeof spec.importance === "number" ? spec.importance : _npcMemoryImportanceFromImpact(choice.relationshipImpact), shortTerm: false
     });
+}
+
+// Annotations from an ordinary reply that was actually spoken. These describe
+// conversation, never settled world facts or completed offers. The engine owns
+// validation/execution of future commitments; offer/agree are deliberately unused.
+function recordNPCReplyMemory(npc, choice, extras, playerInput, responseText) {
+    if (!npc || !choice || !extras || !responseText) return;
+    if (choice.action === "intimacy" || choice.startEncounter || choice.intimacyAction) return;
+    if (choice.memory && choice.memory.skip === true) return;
+    const tags = extras.mem && Array.isArray(extras.mem.tags) ? extras.mem.tags.slice(0, 3) : [];
+    const topics = typeof getNPCTagsForText === "function" ? getNPCTagsForText(playerInput) : [];
+    referenceNPCShortTermMemory(npc, topics);
+    const session = npc.memory && npc.memory.conversationState;
+    const player = typeof G !== "undefined" && G.player;
+    const playerName = player && typeof player.name === "string" ? player.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
+    const introduced = playerName && new RegExp("\\b(?:my name is|i am|i'm|call me)\\s+" + playerName + "(?=$|[\\s,.!?])", "i").test(String(playerInput || ""));
+    recordNPCEntityEncounter(npc, player, { encounterKey: session ? "talk:" + session.sessionNumber : "turn:" + _npcMemoryNow(), nameKnown: !!introduced });
+    addNPCShortTermMemory(npc, { conversation: true, text: "Player: " + _npcMemoryClip(playerInput, 60) + " / Replied: " + _npcMemoryClip(responseText, 60),
+        tags: ["said"].concat(tags.length ? tags : topics), importance: extras.mem ? extras.mem.importance : 2 });
+    if (Array.isArray(extras.told)) extras.told.slice(0, 2).forEach(function (text) {
+        if (typeof text !== "string" || !text.trim()) return;
+        const clean = _npcMemoryClip(text, 140);
+        // Stable compact key: the same summary survives cache/save round trips
+        // as one told entry instead of growing an unbounded fact dictionary.
+        const canonical = clean.toLowerCase().replace(/[.!?]+$/, "").trim();
+        let hash = 2166136261;
+        for (let i = 0; i < canonical.length; i++) hash = Math.imul(hash ^ canonical.charCodeAt(i), 16777619);
+        registerNPCToldMemory(npc, "reply-" + (hash >>> 0).toString(36), "Said: " + clean, { importance: 4, tags: tags, shortTerm: false });
+    });
+    if (extras.mem && typeof extras.mem.importance === "number" && Number.isFinite(extras.mem.importance)) {
+        const list = ensureNPCMemoryEntries(npc);
+        let id;
+        do { id = "reply-" + _npcMemoryNow() + "-" + (++_npcMemoryTypedSeq); }
+        while (list.some(function (entry) { return entry.id === id; }));
+        addNPCMemory(npc, { id: id, importance: extras.mem.importance, tags: ["said"].concat(tags), shortTerm: false,
+            text: "Player: " + _npcMemoryClip(playerInput, 60) + " / Replied: " + _npcMemoryClip(responseText, 60) });
+    }
 }
 
 function _npcHasNamedFlags(source, required) {
@@ -5375,6 +5609,7 @@ function ensureNPCSocial(npc) {
 function socialFactAvailable(npc, key) {
     const social = ensureNPCSocial(npc);
     if (!social || !SOCIAL_FACT_QUESTIONS[key]) return false;
+    if (key === "need" && typeof ensureNPCNeeds === "function" && typeof commitmentSceneBlock === "function") return !commitmentSceneBlock(npc) && (ensureNPCNeeds(npc).some(function(n){return /^(offered|accepted)$/.test(n.state);}) || (G.commitments||[]).some(function(c){return c.state==="accepted" && c.personId===npc.id;}));
     if (key === "standing") { if (social.standingKnown || !social.group) return false; }
     else if (key === "ties") { if (npc.tiesKnown || !npc.ties || !npc.ties.length || !getNPCTiesAnswer(npc)) return false; }
     else if (!social[key] || social[key].known) return false;
@@ -5397,6 +5632,7 @@ function _socialStandingPhrase(social) {
 function getSocialFactLabel(npc, key) {
     const social = ensureNPCSocial(npc);
     const q = SOCIAL_FACT_QUESTIONS[key];
+    if (key === "need" && typeof ensureNPCNeeds === "function") return "Requests and promises";
     if (key === "standing") return _socialStandingPhrase(social).label;
     return q ? q.label : "";
 }
@@ -5434,6 +5670,11 @@ function getSocialLivingAnswer(npc) {
 }
 
 // What the NPC says (scripted fallback, and the canonical record of what was told).
+function getNPCSocialFactRecord(npc, key) {
+    const social=ensureNPCSocial(npc);if(!social)return null;
+    if(key==="need" && Array.isArray(social.need))return social.need.find(function(n){return n && /^(offered|accepted)$/.test(n.state);}) || social.need[0] || social.legacyNeed || null;
+    return social[key] || null;
+}
 function getSocialFactAnswer(npc, key) {
     const social = ensureNPCSocial(npc);
     if (!social) return "";
@@ -5442,7 +5683,8 @@ function getSocialFactAnswer(npc, key) {
         if (social.caste === "commoner") return getSocialLivingAnswer(npc);
         return "I am " + getSocialIdentity(npc) + "." + (social.standing ? " " + social.standing : "");
     }
-    return social[key] ? social[key].text : "";
+    const record=getNPCSocialFactRecord(npc,key);
+    return record ? record.text : "";
 }
 
 // The facts handed to the live AI so it can voice a social answer in the
@@ -5477,8 +5719,8 @@ function getNPCSocialPromptLines(npc) {
     if (!social) return "";
     const lines = [];
     if (social.rank) lines.push("- Your place: " + getSocialIdentity(npc) + (social.master ? " (bonded to " + social.master + ")" : "") + (social.standing ? ". In your own words: \"" + social.standing + "\"" : ""));
-    const told = ["need", "worry", "liking", "secret"].filter(function (k) { return social[k] && social[k].known; }).slice(0, 2)
-        .map(function (k) { return k + ": " + social[k].text; });
+    const told = ["need", "worry", "liking", "secret"].filter(function (k) { const record=getNPCSocialFactRecord(npc,k);return record && record.known; }).slice(0, 2)
+        .map(function (k) { return k + ": " + getNPCSocialFactRecord(npc,k).text; });
     if (told.length) lines.push("- You have already told the player (stay consistent): " + told.join(" | "));
     return lines.join("\n");
 }
@@ -7910,13 +8152,13 @@ function generateNPCBehavior(npc) {
 
     ensureNPCRelationshipState(npc);
 
-    const hostility   = npc.hostility ?? 50;
-    const mood        = npc.memory?.lastMood || "neutral";
-    const favor       = npc.memory?.favorability ?? 0;
-    const attraction  = npc.memory?.attraction ?? 0;
-    const arousal     = npc.memory?.arousal ?? 0;
+    const hostility   = npc.hostility == null ? 50 : npc.hostility;
+    const mood        = npc.memory && npc.memory.lastMood || "neutral";
+    const favor       = npc.memory && npc.memory.favorability != null ? npc.memory.favorability : 0;
+    const attraction  = npc.memory && npc.memory.attraction != null ? npc.memory.attraction : 0;
+    const arousal     = npc.memory && npc.memory.arousal != null ? npc.memory.arousal : 0;
     const disposition = getCurrentNPCDisposition(npc);
-    const traits      = npc.personalityProfile?.traits || npc.personalityTraits || ["neutral"];
+    const traits      = npc.personalityProfile && npc.personalityProfile.traits || npc.personalityTraits || ["neutral"];
 
     const behaviorMatrix = {
         calm:       ["Appears calm", "Appears collected", "Is relaxed", "Seems at ease"],

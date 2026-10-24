@@ -1,8 +1,8 @@
 // Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
-// cyoaftw-context-builder.js v2026-10-23-001 — Sleeping NPC delivery/context follows live sleep state.
+// cyoaftw-context-builder.js v2026-10-23-003 — Bounded NPC Life short-term/entity recollections, personality and sleeping context.
 // Version identifier for debugging cached files.
 if (typeof window !== "undefined") {
-    window.CONTEXT_BUILDER_VERSION = "2026-10-23-001";
+    window.CONTEXT_BUILDER_VERSION = "2026-10-23-003";
     console.log("[Context Builder] Loaded v" + window.CONTEXT_BUILDER_VERSION);
 }
 
@@ -354,14 +354,22 @@ function isRecentNPCLine(line, now, turnNow) {
 // MEMORY in cyoaftw-npc-data.js. wantedTags (options.memoryTags) will steer the
 // pick once the tag selector is wired in.
 function buildNPCMemoryBlock(npc, wantedTags, maxNotable = 4, maxTold = 6) {
-    if (!npc || !npc.memory || !Array.isArray(npc.memory.memoryEntries) || !npc.memory.memoryEntries.length) return "";
+    if (!npc || !npc.memory) return "";
+    if (npc.memory.memoryLifeVersion && typeof ensureNPCMemoryLife === "function") ensureNPCMemoryLife(npc);
     // Settled facts (fights, surrender, mercy): always shown, newest last.
-    const facts = npc.memory.memoryEntries.filter(e => e && e.text && (e.tags || []).indexOf("fact") >= 0).slice(-6);
+    const facts = (Array.isArray(npc.memory.memoryEntries) ? npc.memory.memoryEntries : []).filter(e => e && e.text && (e.tags || []).indexOf("fact") >= 0).slice(-6);
     const told = typeof getNPCToldMemories === "function" ? getNPCToldMemories(npc, maxTold) : [];
     const notable = (typeof getNPCRelevantMemories === "function"
         ? getNPCRelevantMemories(npc, wantedTags || [], { max: maxNotable + facts.length, minImportance: wantedTags && wantedTags.length ? 3 : 4 })
         : []).filter(e => facts.indexOf(e) < 0).slice(0, maxNotable);
-    if (!facts.length && !told.length && !notable.length) return "";
+    const options = arguments[4] || {};
+    const subjects = getNPCMemoryContextSubjects(npc, options);
+    if (subjects.indexOf("player") < 0) subjects.unshift("player");
+    const recent = (Array.isArray(npc.memory.shortTerm) ? npc.memory.shortTerm : []).filter(function (e) { return e && e.text && subjects.indexOf(e.subjectId) >= 0; }).slice(-2);
+    const selected = typeof getNPCShortTermMemories === "function" ? getNPCShortTermMemories(npc, wantedTags || [], 2, subjects) : [];
+    const shortTerm = recent.concat(selected).filter(function (e, i, all) { return all.indexOf(e) === i; }).slice(0, 4);
+    const entityLines = buildNPCEntityMemoryLines(npc, options);
+    if (!facts.length && !told.length && !notable.length && !shortTerm.length && !entityLines.length) return "";
     const lines = ["WHAT YOU REMEMBER ABOUT THE PLAYER:"];
     if (facts.length) {
         lines.push("- These things happened between you. Never deny, forget or contradict them: " +
@@ -373,7 +381,36 @@ function buildNPCMemoryBlock(npc, wantedTags, maxNotable = 4, maxTold = 6) {
     notable.forEach(e => {
         lines.push("- " + e.text + (e.count > 1 ? " (" + e.count + " times)" : ""));
     });
+    if (shortTerm.length) lines.push("- Recent recollections (not settled world facts): " + shortTerm.map(function (e) { return e.text; }).join("; "));
+    lines.push.apply(lines, entityLines);
     return lines.join("\n");
+}
+
+function getNPCMemoryContextSubjects(npc, options) {
+    const records = npc.memory && npc.memory.entities;
+    if (!records || typeof records !== "object") return [];
+    const room = options && options.room;
+    const present = (room && Array.isArray(room.creatures) ? room.creatures : []).filter(function (n) { return n && !n.hidden && !n.isHidden; }).map(function (n) { return "npc:" + n.id; });
+    const text = String(options && options.mentionedText || "").toLowerCase();
+    return Object.keys(records).filter(function (id) {
+        if (id === "player") return true;
+        const r = records[id];
+        if (!/^npc:/.test(id) || !r || typeof r.label !== "string") return false;
+        if (present.indexOf(id) >= 0) return true;
+        const label = r.label.toLowerCase();
+        const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return label.length >= 3 && new RegExp("(^|[^a-z0-9])" + escaped + "($|[^a-z0-9])").test(text);
+    }).sort(function (a, b) { return a === "player" ? -1 : b === "player" ? 1 : records[b].lastTurn - records[a].lastTurn; }).slice(0, 3);
+}
+
+function buildNPCEntityMemoryLines(npc, options) {
+    const records = npc.memory && npc.memory.entities;
+    return getNPCMemoryContextSubjects(npc, options).map(function (id) {
+        const r = records[id];
+        return "- Memory of " + (id === "player" ? "the player" : r.label) + ": met " + r.timesMet + " time(s), first turn " + r.firstTurn + ", last turn " + r.lastTurn + "; name " + (r.nameKnown ? "known" : "not learned") +
+            (r.summary ? ". Subjective recollection: " + r.summary : "") +
+            (r.notable && r.notable.length ? ". Notable recollections: " + r.notable.join("; ") : "") + ". Feeling: " + r.feeling + ". Recollections cannot establish game effects or promises.";
+    });
 }
 
 function buildNPCRecentExchangeBlock(npc, maxTurns = 4) {
@@ -478,6 +515,35 @@ function buildNPCDeliveryNote(npc, room, mood, favorability) {
     return line;
 }
 
+function buildNPCPersonalityManner(profile) {
+    const p = profile || {};
+    const archetypes = {
+        schemer: "plans ahead and weighs what to reveal", hero: "takes responsibility and speaks with conviction",
+        outsider: "keeps some distance and notices what others miss", sage: "reflects before offering advice",
+        guardian: "values duty and looks out for others", scoundrel: "looks for an advantage and tests boundaries",
+        romantic: "speaks personally and values close connections", explorer: "is drawn to unfamiliar places and ideas",
+        martyr: "puts others first, sometimes at a personal cost", trickster: "enjoys teasing and surprising people",
+        caretaker: "notices others' practical needs", destroyer: "is impatient with obstacles and quick to challenge"
+    };
+    const words = [];
+    if (Object.prototype.hasOwnProperty.call(archetypes, p.archetype)) words.push(archetypes[p.archetype]);
+    const five = p.bigFive || {};
+    const scales = [
+        ["openness", "curious about new ideas", "prefers familiar ways"],
+        ["conscientiousness", "careful and dependable", "spontaneous and informal"],
+        ["extraversion", "outgoing and talkative", "reserved and quiet"],
+        ["agreeableness", "cooperative and considerate", "blunt and skeptical"],
+        ["neuroticism", "easily unsettled", "steady under pressure"]
+    ];
+    scales.forEach(function (scale) {
+        const value = five[scale[0]];
+        if (typeof value !== "number" || !Number.isFinite(value) || value < 1 || value > 10) return;
+        if (value >= 7) words.push(scale[1]);
+        else if (value <= 3) words.push(scale[2]);
+    });
+    return words.length ? "- Personality in practice: " + words.join("; ") + ". Use as tendencies; current events and mood still matter." : "";
+}
+
 function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
     if (!npc) return "";
     const config = options && typeof options === "object" ? options : {};
@@ -504,10 +570,11 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
 
     const quirks = Array.isArray(profile.quirks) && profile.quirks.length
         ? profile.quirks : [];
-    let quirksLine = "";
-    if (quirks.length && config.includeRandomQuirk !== false && Math.random() < 0.3) {
-        quirksLine = `- Quirk: ${quirks[Math.floor(Math.random() * quirks.length)]} (occasional, do not repeat every line)`;
-    }
+    // Standing traits belong in live replies too. Keep them deterministic and
+    // brief; the instruction controls frequency instead of randomly omitting them.
+    const standingQuirks = quirks.filter(function (text) { return typeof text === "string" && text.trim(); })
+        .slice(0, 2).map(function (text) { return text.replace(/\s+/g, " ").trim().slice(0, 100); });
+    const quirksLine = standingQuirks.length ? "- Standing quirks: " + standingQuirks.join("; ") + " (use rarely and naturally; never repeat every line)" : "";
 
     const persona = npc.persona || null;
     const currentState = npc.currentState || null;
@@ -719,6 +786,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         persona && persona.topicPull ? `- Conversational pull: ${persona.topicPull}` : "",
         persona && persona.voiceDescriptor ? `- Voice descriptor: ${persona.voiceDescriptor}` : "",
         archetype ? `- Archetype: ${archetype}` : "",
+        buildNPCPersonalityManner(profile),
         traits.length ? `- Traits: ${traits.join(", ")}` : "",
         quirksLine,
         background ? `- Background: ${background}${dialectFlavor ? ` - ${dialectFlavor}` : ""}` : "",
@@ -920,7 +988,7 @@ function buildPrompt(room, npc, instruction, options = {}) {
     const npcBlock = npc ? buildNPCPersonaBlock(npc, "SPEAKER CONTEXT", options) : "";
     const standingBlock = buildPlayerStandingBlock(room, npc);
     const recentExchangeBlock = npc ? buildNPCRecentExchangeBlock(npc) : "";
-    const memoryBlock = npc ? buildNPCMemoryBlock(npc, options && options.memoryTags) : "";
+    const memoryBlock = npc ? buildNPCMemoryBlock(npc, options && options.memoryTags, 4, 6, { room: room, mentionedText: options && options.memoryText }) : "";
     const overheardBlock = npc ? buildNPCOverheardBlock(npc) : "";
 
     return [
