@@ -1,4 +1,4 @@
-// Warmstone Baths use quiet, professional recovery context.
+// Bathhouses use quiet, professional recovery context.
 // Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
 // cyoaftw-context-builder.js v2026-10-23-003 — Bounded NPC Life short-term/entity recollections, personality and sleeping context.
 // Version identifier for debugging cached files.

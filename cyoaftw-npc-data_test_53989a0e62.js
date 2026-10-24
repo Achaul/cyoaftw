@@ -1,9 +1,9 @@
-// Warmstone Baths: public bathkeeper services, profession, routine and workplace ties.
+// Bathhouses: public bathkeeper services, profession, routine and workplace ties.
 // NPC Life W1/W2: bounded short-term/entity memory, delivered-reply annotations and compatible behavior syntax. Shared species appearance retained.
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-24-003";
+    window.NPC_DATA_VERSION = "2026-10-24-004";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -20,7 +20,8 @@ const PERSONALITY_TRAITS = [
     "cheerful", "moody", "serious", "joker", "flirt",
     "grump", "studious", "helpful", "aloof", "dramatic",
     "sarcastic", "excitable", "shy", "calm", "paranoid",
-    "proud", "humble", "reckless", "patient", "bitter"
+    "proud", "humble", "reckless", "patient", "bitter",
+    "promiscuous"
 ];
 
 const QUIRKS = [
@@ -1116,7 +1117,7 @@ const NPC_ROUTINE_DEFAULT = {
     pastime: "resting, and swapping news with neighbours"
 };
 const NPC_ROUTINES = {
-    Bathkeeper: { duties: "running The Warmstone Baths, tending hot water and linen, offering washes and shoulder and back massage, and supervising practical trials", pay: "customer fees, with wages paid to attendants and qualified practitioners", shifts: ["warming water and setting out clean linen", "serving bathers and supervising staff", "finishing treatments and washing linen", "home"], pastime: "a quiet cup of herbal tea and news from travelers" },
+    Bathkeeper: { duties: "running the bathhouse, tending hot water and linen, offering washes and shoulder and back massage, and supervising practical trials", pay: "customer fees, with wages paid to attendants and qualified practitioners", shifts: ["warming water and setting out clean linen", "serving bathers and supervising staff", "finishing treatments and washing linen", "home"], pastime: "a quiet cup of herbal tea and news from travelers" },
     Innkeeper: { duties: "running the inn: rooms, the common room, the cellar and keeping order", pay: "what guests pay for rooms and meals; you answer for the till", shifts: ["lighting the fires and starting the cooking", "settling rooms and keeping stock", "the common room fills and you keep the peace", "closing up, then bed"], pastime: "talking with regulars and tallying the week's takings" },
     Bartender: { duties: "pouring drinks, keeping the bar clean and watching the room", pay: "wages from the house plus whatever tips come over the bar", shifts: ["home", "cleaning and stocking the bar", "pouring for the evening crowd", "last pours, then clearing up"], pastime: "listening to the room's gossip" },
     Cook: { duties: "cooking for the house and keeping the pantry stocked", pay: "wages and your own meals from the kitchen", shifts: ["baking and prepping", "cooking the midday meal", "the supper rush", "scrubbing pots, then home"], pastime: "trying small changes to old recipes" },
@@ -8395,6 +8396,429 @@ function decayNPCAffect(npc, steps = 1) {
     const amount = Math.max(1, Math.floor(steps || 1));
     npc.memory.arousal = Math.max(0, (npc.memory.arousal || 0) - amount * 4);
     return npc;
+}
+
+// Update fertility/heat cycles for NPCs with biological cycles
+// Called from the engine's advanceStoryTurn
+function updateNPCFertilityCycles(roomMap, steps = 1) {
+    if (!roomMap || typeof roomMap !== "object") return;
+    
+    const stepCount = Math.max(1, Math.floor(steps || 1));
+    
+    Object.values(roomMap).forEach(room => {
+        if (!room || !Array.isArray(room.creatures)) return;
+        
+        room.creatures.forEach(npc => {
+            if (!npc) return;
+            
+            // Initialize fertility tracking if needed
+            if (!npc._fertility) {
+                npc._fertility = { counter: 0, inCycle: false, cycleTurns: 0 };
+            }
+            
+            // Get species template to check for fertility cycle
+            const species = npc.species;
+            if (!species) return;
+            
+            const template = typeof getSpeciesTemplate === "function" 
+                ? getSpeciesTemplate(species) 
+                : null;
+            
+            if (!template || !template.fertilityCycle || !template.fertilityCycle.hasCycle) {
+                // No fertility cycle for this species
+                return;
+            }
+            
+            const cycle = template.fertilityCycle;
+            
+            // Skip if NPC is too young (if age tracking exists)
+            if (cycle.minAge && typeof npc.age === "number") {
+                const ageInMonths = npc.age; // Assuming age is in months for these species
+                if (ageInMonths < cycle.minAge) {
+                    return;
+                }
+            }
+            
+            // Only process humanoids or creatures with fertility cycles
+            // (non-humanoids like rats, humanoids like wolfkin/catfolk)
+            if (npc.isHumanoid === false && !cycle.hasCycle) {
+                return;
+            }
+            
+            // Advance the cycle counter
+            npc._fertility.counter += stepCount;
+            
+            // Check if entering cycle phase
+            if (!npc._fertility.inCycle && npc._fertility.counter >= cycle.cycleLength) {
+                npc._fertility.counter = 0;
+                npc._fertility.inCycle = true;
+                npc._fertility.cycleTurns = cycle.duration;
+                
+                // Only set arousal if NPC has memory (some creatures might not)
+                if (npc.memory) {
+                    ensureNPCRelationshipState(npc);
+                    npc.memory.arousal = Math.min(100, (npc.memory.arousal || 0) + cycle.arousalBoost);
+                }
+            }
+            
+            // If in cycle, count down duration
+            if (npc._fertility.inCycle) {
+                npc._fertility.cycleTurns -= stepCount;
+                
+                if (npc._fertility.cycleTurns <= 0) {
+                    npc._fertility.inCycle = false;
+                    // Optional: Add a small cooldown or just let it continue to next cycle
+                }
+            }
+        });
+    });
+}
+
+// Apply environmental arousal based on room tags and conditions
+// Called from the engine's advanceStoryTurn
+function applyEnvironmentalArousal(roomMap) {
+    if (!roomMap || typeof roomMap !== "object") return;
+    
+    Object.values(roomMap).forEach(room => {
+        if (!room || !room.tags || !Array.isArray(room.creatures)) return;
+        
+        const tags = room.tags || [];
+        const hasHeat = tags.includes("heat");
+        const hasSocial = tags.includes("social");
+        const creatureCount = room.creatures ? room.creatures.length : 0;
+        
+        room.creatures.forEach(npc => {
+            if (!npc || !npc.isHumanoid || !npc.memory) return;
+            
+            ensureNPCRelationshipState(npc);
+            
+            let arousalChange = 0;
+            
+            // Heat sources: forges, fireplaces, hearths increase arousal for warm-blooded creatures
+            if (hasHeat) {
+                // Base arousal from heat
+                arousalChange += 1;
+                
+                // Extra for species that are particularly affected by warmth
+                const species = (npc.species || "").toLowerCase();
+                if (species === "catfolk" || species === "ratfolk" || species === "rat") {
+                    arousalChange += 1;
+                }
+            }
+            
+            // Social environments: taverns, gathering places
+            if (hasSocial && creatureCount > 1) {
+                // More NPCs = more social stimulation
+                const socialBoost = Math.floor((creatureCount - 1) / 3);
+                arousalChange += Math.min(socialBoost, 3); // Cap at 3
+                
+                // Extra for social species
+                const species = (npc.species || "").toLowerCase();
+                if (species === "halfling" || species === "harefolk" || species === "satyr") {
+                    arousalChange += 1;
+                }
+            }
+            
+            // Apply the change if any
+            if (arousalChange > 0 && Math.random() < 0.4) { // 40% chance to apply
+                npc.memory.arousal = Math.min(100, (npc.memory.arousal || 0) + arousalChange);
+            }
+        });
+    });
+}
+
+// Check if an NPC is inhibited from romantic/social advances
+// Returns true if the NPC is too inhibited to act on arousal
+function isNPCInhibited(npc) {
+    if (!npc || !npc.memory) return true;
+    
+    // Check for promiscuous trait - bypasses inhibition
+    const traits = npc.personalityTraits || [];
+    if (traits.includes("promiscuous")) return false;
+    
+    // Check disinhibition level - high disinhibition overcomes inhibition
+    const disinhibition = npc.memory.disinhibition || 0;
+    if (disinhibition >= 70) return false; // Very disinhibited
+    if (disinhibition >= 40) return Math.random() < 0.5; // Moderately disinhibited, 50% chance
+    
+    // Default: inhibited if disinhibition is low
+    return disinhibition < 20;
+}
+
+// Check if NPC1 finds NPC2 attractive based on various factors
+function doesNPCFindAttractive(npc1, npc2) {
+    if (!npc1 || !npc2) return false;
+    if (!npc1.isHumanoid || !npc2.isHumanoid) return false; // Only humanoids have preferences
+    
+    // Check sexual orientation compatibility
+    const orient1 = (npc1.relationship && npc1.relationship.orientation) || "bi";
+    const orient2 = (npc2.relationship && npc2.relationship.orientation) || "bi";
+    const gender2 = (npc2.gender || "").toLowerCase();
+    
+    // Simple orientation check
+    if (orient1 === "straight" && gender2 !== "female" && gender2 !== "male") return false;
+    if (orient1 === "gay") {
+        const gender1 = (npc1.gender || "").toLowerCase();
+        if (gender1 === gender2) return true;
+        return false;
+    }
+    // bi or any other value: assume compatible
+    
+    // Check species compatibility
+    const species1 = (npc1.species || "").toLowerCase();
+    const species2 = (npc2.species || "").toLowerCase();
+    
+    // Same species bonus
+    if (species1 === species2) return true;
+    
+    // Compatible species pairs
+    const compatiblePairs = [
+        ["catfolk", "ratfolk"], ["catfolk", "harefolk"],
+        ["wolfkin", "harefolk"], ["wolfkin", "ratfolk"],
+        ["wolfkin", "catfolk"], ["satyr", "catfolk"],
+        ["satyr", "harefolk"], ["ratfolk", "harefolk"]
+    ];
+    
+    if (compatiblePairs.some(pair => 
+        (pair[0] === species1 && pair[1] === species2) ||
+        (pair[0] === species2 && pair[1] === species1))) {
+        return true;
+    }
+    
+    // Personality trait compatibility
+    const traits1 = npc1.personalityTraits || [];
+    const traits2 = npc2.personalityTraits || [];
+    
+    if (traits1.includes("flirt") || traits2.includes("flirt")) return true;
+    if (traits1.includes("promiscuous") || traits2.includes("promiscuous")) return true;
+    
+    // Default: 30% chance for any humanoid pairing
+    return Math.random() < 0.3;
+}
+
+// Check if NPC1 would initiate with NPC2 (gender-specific logic)
+function wouldNPCInitiate(npc1, npc2) {
+    if (!npc1 || !npc2) return false;
+    if (!npc1.memory || !npc2.memory) return false;
+    
+    const gender1 = (npc1.gender || "").toLowerCase();
+    const gender2 = (npc2.gender || "").toLowerCase();
+    
+    // Check if NPC2 is bound and eligible
+    const targetBound = npc2.bound === true;
+    
+    // For bound NPC scenarios: different logic for male vs female initiators
+    if (targetBound) {
+        // Male initiator: less picky, will take advantage if orientation matches
+        if (gender1 === "male") {
+            const orient1 = (npc1.relationship && npc1.relationship.orientation) || "bi";
+            
+            // Check orientation compatibility
+            if (orient1 === "straight" && gender2 !== "female") return false;
+            if (orient1 === "gay" && gender2 !== "male") return false;
+            
+            // Male is aroused and disinhibited enough
+            if ((npc1.memory.arousal || 0) >= 30 && !isNPCInhibited(npc1)) {
+                return true;
+            }
+            return false;
+        }
+        
+        // Female initiator: needs to be more selective
+        if (gender1 === "female") {
+            // Female needs: aroused, bold (not shy), finds target attractive
+            const traits = npc1.personalityTraits || [];
+            const temperament = (npc1.temperament || "").toLowerCase();
+            
+            if (temperament === "shy" && !traits.includes("promiscuous")) return false;
+            
+            if ((npc1.memory.arousal || 0) < 50) return false;
+            
+            if (!doesNPCFindAttractive(npc1, npc2)) return false;
+            
+            if (isNPCInhibited(npc1)) return false;
+            
+            return true;
+        }
+    }
+    
+    // Normal interaction (not bound target)
+    // Both NPCs must not be inhibited
+    if (isNPCInhibited(npc1)) return false;
+    
+    // Check arousal levels
+    if ((npc1.memory.arousal || 0) < 20) return false;
+    if ((npc2.memory.arousal || 0) < 20) return false;
+    
+    // Check mutual attraction
+    if (!doesNPCFindAttractive(npc1, npc2)) return false;
+    if (!doesNPCFindAttractive(npc2, npc1)) return false;
+    
+    // Check relationship status
+    // If NPC1 has a partner/established relationship, less likely to initiate with others
+    if (npc1.memory.partnerId && !traits.includes("promiscuous")) {
+        if (npc1.memory.partnerId !== npc2.id) return false;
+    }
+    
+    return true;
+}
+
+// Process bound NPC scenarios where free NPCs take advantage
+function processBoundNPCScenarios(room) {
+    if (!room || !Array.isArray(room.creatures)) return [];
+    
+    const lines = [];
+    const boundNPCs = room.creatures.filter(n => n && n.bound === true && n.isHumanoid);
+    
+    boundNPCs.forEach(boundNPC => {
+        // Find potential initiators
+        const potentialInitiators = room.creatures.filter(n => 
+            n && !n.bound && n.isHumanoid && n !== boundNPC && 
+            wouldNPCInitiate(n, boundNPC)
+        );
+        
+        if (potentialInitiators.length === 0) return;
+        
+        // Pick a random initiator
+        const initiator = potentialInitiators[Math.floor(Math.random() * potentialInitiators.length)];
+        const gender1 = (initiator.gender || "").toLowerCase();
+        const gender2 = (boundNPC.gender || "").toLowerCase();
+        
+        // Generate appropriate text
+        let line = "";
+        if (gender1 === "male") {
+            // Male taking advantage - more direct
+            const verb = Math.random() < 0.5 ? "uses" : "takes advantage of";
+            line = `${initiator.name || "The " + initiator.species} ${verb} ${boundNPC.name || "the bound " + boundNPC.species} for their own satisfaction.`;
+        } else {
+            // Female - more selective
+            const verb = Math.random() < 0.5 ? "releases" : "helps";
+            line = `${initiator.name || "The " + initiator.species} ${verb} ${boundNPC.name || "the bound " + boundNPC.species} from their bonds, taking a moment for themselves.`;
+        }
+        
+        lines.push(line);
+        
+        // Apply state changes
+        initiator.memory.arousal = Math.min(100, (initiator.memory.arousal || 0) + 15);
+        boundNPC.memory.arousal = Math.min(100, (boundNPC.memory.arousal || 0) + 10);
+        
+        // Increase disinhibition for both
+        initiator.memory.disinhibition = Math.min(100, (initiator.memory.disinhibition || 0) + 5);
+        boundNPC.memory.disinhibition = Math.min(100, (boundNPC.memory.disinhibition || 0) + 3);
+        
+        // Track this interaction
+        if (!initiator.memory.partners) initiator.memory.partners = [];
+        if (!boundNPC.memory.partners) boundNPC.memory.partners = [];
+        
+        // Only track if they don't have many partners already (unless promiscuous)
+        const traits = initiator.personalityTraits || [];
+        if (traits.includes("promiscuous") || initiator.memory.partners.length < 3) {
+            if (!initiator.memory.partners.includes(boundNPC.id)) {
+                initiator.memory.partners.push(boundNPC.id);
+            }
+            if (!boundNPC.memory.partners.includes(initiator.id)) {
+                boundNPC.memory.partners.push(initiator.id);
+            }
+        }
+    });
+    
+    return lines;
+}
+
+// Process NPC-to-NPC social/romantic interactions in a room
+function processNPCToNPCInteractions(room) {
+    if (!room || !Array.isArray(room.creatures)) return [];
+    
+    const lines = [];
+    const humanoids = room.creatures.filter(n => n && n.isHumanoid && !n.bound && !n.dead && !n.unconscious);
+    
+    if (humanoids.length < 2) return lines;
+    
+    // Shuffle for randomness
+    for (let i = humanoids.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [humanoids[i], humanoids[j]] = [humanoids[j], humanoids[i]];
+    }
+    
+    // Try to form pairs
+    for (let i = 0; i < humanoids.length - 1; i++) {
+        for (let j = i + 1; j < humanoids.length; j++) {
+            const npc1 = humanoids[i];
+            const npc2 = humanoids[j];
+            
+            // Skip if already processed
+            if (npc1._interactionPartner || npc2._interactionPartner) continue;
+            
+            // Check if they would interact
+            if (!wouldNPCInitiate(npc1, npc2)) continue;
+            
+            // Mark them as paired
+            npc1._interactionPartner = npc2.id;
+            npc2._interactionPartner = npc1.id;
+            
+            // Generate interaction text
+            const traits1 = npc1.personalityTraits || [];
+            const traits2 = npc2.personalityTraits || [];
+            const hasPromiscuous = traits1.includes("promiscuous") || traits2.includes("promiscuous");
+            
+            let line;
+            if (hasPromiscuous) {
+                line = `${npc1.name || "The " + npc1.species} and ${npc2.name || "the " + npc2.species} share an intimate moment together.`;
+            } else {
+                const verbs = ["flirt", "chat closely", "whisper to", "share a smile with"];
+                const verb = verbs[Math.floor(Math.random() * verbs.length)];
+                line = `${npc1.name || "The " + npc1.species} ${verb} ${npc2.name || "the " + npc2.species}.`;
+            }
+            
+            lines.push(line);
+            
+            // Apply state changes based on interaction intensity
+            const arousalGain = hasPromiscuous ? 8 : 4;
+            const disinhibitionGain = hasPromiscuous ? 4 : 2;
+            
+            npc1.memory.arousal = Math.min(100, (npc1.memory.arousal || 0) + arousalGain);
+            npc2.memory.arousal = Math.min(100, (npc2.memory.arousal || 0) + arousalGain);
+            
+            npc1.memory.disinhibition = Math.min(100, (npc1.memory.disinhibition || 0) + disinhibitionGain);
+            npc2.memory.disinhibition = Math.min(100, (npc2.memory.disinhibition || 0) + disinhibitionGain);
+            
+            // Track relationship
+            if (!npc1.memory.attractionTo || typeof npc1.memory.attractionTo !== "object") {
+                npc1.memory.attractionTo = {};
+            }
+            if (!npc2.memory.attractionTo || typeof npc2.memory.attractionTo !== "object") {
+                npc2.memory.attractionTo = {};
+            }
+            
+            npc1.memory.attractionTo[npc2.id] = Math.min(100, (npc1.memory.attractionTo[npc2.id] || 0) + 5);
+            npc2.memory.attractionTo[npc1.id] = Math.min(100, (npc2.memory.attractionTo[npc1.id] || 0) + 5);
+            
+            break; // Move to next NPC after finding a pair
+        }
+    }
+    
+    return lines;
+}
+
+// Main function to process all NPC-to-NPC arousal scenarios
+function processNPCArousalInteractions(roomMap) {
+    if (!roomMap || typeof roomMap !== "object") return [];
+    
+    const allLines = [];
+    
+    Object.values(roomMap).forEach(room => {
+        if (!room || !room.creatures || !Array.isArray(room.creatures)) return;
+        
+        // Process bound NPC scenarios first (more urgent)
+        const boundLines = processBoundNPCScenarios(room);
+        allLines.push(...boundLines);
+        
+        // Process normal NPC-to-NPC interactions
+        const interactionLines = processNPCToNPCInteractions(room);
+        allLines.push(...interactionLines);
+    });
+    
+    return allLines;
 }
 
 function decayNPCStatesInWorld(roomMap, steps = 1) {

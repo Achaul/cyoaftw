@@ -1,10 +1,10 @@
-// Warmstone Baths: guaranteed three-room Town establishment and practical postwar lore.
+// Bathhouses use generated, persistent business names suited to the town.
 // Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
-// ── cyoaftw-world-data.js v2026-10-24-001 ── Street fixtures (lamppost, cart, market stall, post) get physical templates. Previous: Player-led guide check-ins and bounded intro delivery. Previous: Shop name generator uses zone and trade themes, with stable names shared by storefronts and interiors.
+// ── cyoaftw-world-data.js v2026-10-24-002 ── Generated bathhouse names and stable saved-building names. Previous: Street fixtures get physical templates; player-led guide check-ins and bounded intro delivery; zone/trade shop names.
 // Previous: Commoner debt dialogue identifies the creditor.
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.WORLD_DATA_VERSION = "2026-10-24-001";
+    window.WORLD_DATA_VERSION = "2026-10-24-002";
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
@@ -426,6 +426,14 @@ const SPECIES_TEMPLATES = [
         speechStyle: "broken",
         lore: "Rats follow food, warmth, and danger-scent. A lone rat is usually a sign that a larger hidden ecology is nearby.",
         articulation: "A tiny mouth built for gnawing, not speech - words come out as a thin, urgent squeak-and-chitter blend, half-formed but understandable in context.",
+        // Biological fertility cycle for autonomous arousal
+        fertilityCycle: {
+            hasCycle: true,
+            cycleLength: 36,       // turns between estrus cycles
+            duration: 6,          // turns the estrus state lasts
+            arousalBoost: 25,      // +arousal during estrus
+            minAge: 4             // months ( Rats reach sexual maturity around 4-5 weeks)
+        },
         anatomyProfile: {
             morphology: { ears: "one pair of rounded rodent ears high on the sides of the head", face: "a pointed rat muzzle with whiskers and prominent incisors", bodyPlan: "a small quadrupedal rodent body", feet: "four small clawed paws", tail: "a long bare rat tail" },
             // Reader-facing wording for the parts above ("" = not worth mentioning).
@@ -598,6 +606,14 @@ const SPECIES_TEMPLATES = [
         hasTail: true,
         lore: "Catfolk are lithe, curious wanderers who travel in family troupes and caravans, trading small luxuries, stories and favours. They prize freedom, independence and a clever bargain, bow to no throne, and hold grudges and debts with equal care. A catfolk who stays in one place has usually been given a very good reason.",
         articulation: "A short muzzle and sharp canines give words a soft, purring roll on the r's, with the occasional trill when amused.",
+        // Biological fertility cycle for autonomous arousal
+        fertilityCycle: {
+            hasCycle: true,
+            cycleLength: 40,       // turns between estrus cycles (cats: ~2-3 weeks)
+            duration: 5,          // turns the estrus state lasts
+            arousalBoost: 25,      // +arousal during estrus
+            minAge: 6             // months (catfolk reach maturity around 6-12 months)
+        },
         anatomyProfile: {
             morphology: { ears: "one pair of triangular furred cat ears on top of the head", face: "a feline face with a short muzzle, whiskers and slit pupils", bodyPlan: "an upright furred humanoid body", hands: "padded hands with retractable claws", feet: "padded feline feet", tail: "a long furred cat tail", absent: ["human ears", "a second pair of ears"] },
             // Reader-facing wording for the parts above ("" = not worth mentioning).
@@ -631,6 +647,14 @@ const SPECIES_TEMPLATES = [
         hasTail: true,
         lore: "Wolfkin live and hunt in packs, and the pack is everything: its hunt, its territory, its word. They are loyal to a fault and slow to trust outsiders, but once you are counted pack they will follow you into the dark. A lone wolfkin is an exile, a scout, or a hunter on a long trail.",
         articulation: "A long muzzle shapes words into a low, rumbling growl at the edges, and the occasional half-howl slips out when emotions run high.",
+        // Biological fertility cycle for autonomous arousal
+        fertilityCycle: {
+            hasCycle: true,
+            cycleLength: 60,       // turns between estrus cycles (wolves: ~6 months)
+            duration: 8,          // turns the estrus state lasts
+            arousalBoost: 30,      // +arousal during estrus
+            minAge: 16            // months (wolfkin reach maturity around 1-2 years)
+        },
         anatomyProfile: {
             morphology: { ears: "one pair of upright furred wolf ears on top of the head", face: "a lupine face with a long muzzle and fangs", bodyPlan: "an upright furred humanoid body capable of running on all fours", hands: "heavy clawed hands", feet: "padded lupine feet", tail: "a bushy wolf tail", absent: ["human ears", "a second pair of ears"] },
             // Reader-facing wording for the parts above ("" = not worth mentioning).
@@ -664,6 +688,14 @@ const SPECIES_TEMPLATES = [
         hasTail: true,
         lore: "Satyrs are horned, goat-legged revellers who live for wine, music and the next good prank. They are mischievous, quick-witted and fickle, and they treat rules as suggestions. Most are harmless tricksters; a few take the joke too far. Their circles gather wherever there is a party to start or a stuffy neighbour to unsettle.",
         articulation: "Words come out in a lilting, sing-song rhythm, quick to laughter and prone to bleating when startled or when a joke lands.",
+        // Biological fertility cycle for autonomous arousal
+        fertilityCycle: {
+            hasCycle: true,
+            cycleLength: 28,       // turns between estrus cycles (goats: ~every 3-4 weeks)
+            duration: 6,          // turns the estrus state lasts
+            arousalBoost: 35,      // +arousal during estrus (satyrs are particularly libidinous)
+            minAge: 8             // months (satyrs reach maturity around 1-2 years)
+        },
         anatomyProfile: {
             morphology: { ears: "one pair of furred goat-shaped ears projecting from the sides of the head", face: "a humanlike face with curved goat horns", bodyPlan: "a humanlike upper body above shaggy goat legs", feet: "cloven hooves instead of human feet", tail: "a short tufted goat tail", absent: ["elf ears", "human feet", "bare human legs"] },
             // Reader-facing wording for the parts above ("" = not worth mentioning).
@@ -734,6 +766,14 @@ const SPECIES_TEMPLATES = [
         hasTail: true,
         lore: "Harefolk live in warrens of linked burrows and hidden halls, and they survive by hearing trouble before it arrives. They are quick, warm, chatty and easily startled, fond of a full larder and a crowded hearth, and they trade news faster than any road can carry it. A harefolk who stands their ground has decided something is worth more than their own safety, and that is not a decision they make lightly.",
         articulation: "A split lip and quick breath make words tumble out in rapid little bursts, with a soft thump of a hind foot when they mean it.",
+        // Biological fertility cycle for autonomous arousal
+        fertilityCycle: {
+            hasCycle: true,
+            cycleLength: 30,       // turns between estrus cycles (hares: ~every 3-4 weeks)
+            duration: 4,          // turns the estrus state lasts
+            arousalBoost: 20,      // +arousal during estrus
+            minAge: 4             // months (harefolk reach maturity quickly)
+        },
         anatomyProfile: {
             morphology: { ears: "one pair of very long upright hare ears on top of the head", face: "a furred hare face with a twitching nose and split upper lip", bodyPlan: "an upright humanoid body with powerful hind legs", hands: "soft furred hands", feet: "long furred hind feet", tail: "a short fluffy hare tail", absent: ["human ears", "a second pair of ears"] },
             // Reader-facing wording for the parts above ("" = not worth mentioning).
@@ -767,6 +807,14 @@ const SPECIES_TEMPLATES = [
         hasTail: true,
         lore: "Ratfolk make their homes in the gaps other people leave: drains, cellars, tunnels and the undersides of cities. They are clever, crowded, quick with a bargain and quicker with salvage, and nothing is ever wasted among them. They are used to being looked down on and have learned to profit from it, but they remember a kindness for years and an insult for longer.",
         articulation: "A pointed snout and long front teeth give words a quick, whistling edge, with the occasional chitter when something pleases them.",
+        // Biological fertility cycle for autonomous arousal
+        fertilityCycle: {
+            hasCycle: true,
+            cycleLength: 32,       // turns between estrus cycles (similar to rats)
+            duration: 6,          // turns the estrus state lasts
+            arousalBoost: 22,      // +arousal during estrus
+            minAge: 5             // months (ratfolk reach maturity around 6-8 months)
+        },
         anatomyProfile: {
             morphology: { ears: "one pair of rounded rodent ears high on the sides of the head", face: "a pointed rat muzzle with long whiskers and prominent incisors", bodyPlan: "a very short upright furred humanoid body of roughly kobold height", hands: "small clawed hands", feet: "small clawed rodent feet", tail: "a long bare rat tail", absent: ["human ears", "elf ears", "a second pair of ears"] },
             // Reader-facing wording for the parts above ("" = not worth mentioning).
@@ -828,7 +876,7 @@ const SPECIES_TEMPLATES = [
 // ── ROOM TEMPLATES ───────────────────────────────────────────────
 const ROOM_TEMPLATES = [
     {
-        type: "Bathhouse", zone: "Town", role: "landmark", displayName: "The Warmstone Baths", imageKey: "Inn Common",
+        type: "Bathhouse", zone: "Town", role: "landmark", displayName: "Bathhouse", imageKey: "Inn Common",
         baseDescription: "A modest stone bathhouse smells of warm linen and rosemary. A keeper's counter faces the street; beyond a door lie the bathing room and massage room. A painted board offers hot baths, assisted washing, shoulder and back massage, and honest work. Laborers, travelers and old soldiers come here to ease the aches the Long War left behind.",
         allowedZones: ["town"], parentCluster: ["square"], isConnector: false, minNpcs: 1,
         structural: [
@@ -2726,6 +2774,7 @@ const SHOP_NAME_ZONE_WORDS = {
     "ruins": { adjectives: ["Ashen", "Weathered", "Lost", "Broken", "Faded", "Old", "Dusty", "Fallen"], nouns: ["Crown", "Arch", "Tower", "Relic", "Raven", "Bell", "Laurel", "Keystone"] }
 };
 const SHOP_NAME_TRADES = {
+    bathhouse: { words: ["Willow", "Rosemary", "Linen", "Spring", "Lavender", "Basin"], endings: ["Baths", "Bathhouse"] },
     smithy: { words: ["Hammer", "Anvil", "Tongs", "Steel", "Spark", "Horseshoe"], endings: ["Forge", "Smithy", "Ironworks"] },
     clothier: { words: ["Needle", "Spindle", "Thread", "Thimble", "Shuttle", "Bobbin"], endings: ["Clothiers", "Tailors", "Outfitters"] },
     alchemist: { words: ["Retort", "Vial", "Mortar", "Sage", "Crucible", "Alembic"], endings: ["Apothecary", "Alchemical Supplies", "Remedies"] },
@@ -2738,6 +2787,7 @@ const SHOP_NAME_TRADES = {
 
 function getShopNameTrade(shopType) {
     const type = String(shopType || "").trim().toLowerCase();
+    if (/bathhouse|bathkeeper|\bspa\b/.test(type)) return "bathhouse";
     if (/smith|forge|blacksmith/.test(type)) return "smithy";
     if (/clothier|tailor|outfitter|clothing/.test(type)) return "clothier";
     if (/alchem|apothecar|herbalist/.test(type)) return "alchemist";
@@ -2771,12 +2821,15 @@ function generateShopName(zoneName, shopType, rngIn, usedNames) {
     return name;
 }
 
+// Former default is recognised only for one-time saved-building migration.
+const LEGACY_BATHHOUSE_NAME = "The Warmstone Baths";
+
 function applyShopDisplayName(room, shopName) {
     const template = getRoomTemplate(room.type);
     const ordinaryName = template && template.displayName || room.type;
-    const oldName = room.buildingName;
+    const oldName = room.buildingName || (getShopNameTrade(room.buildingType || room.type) === "bathhouse" ? LEGACY_BATHHOUSE_NAME : null);
     room.buildingName = shopName;
-    if (!room.displayName || room.displayName === ordinaryName || room.displayName === room.type || room.displayName === oldName || room.displayName === room.shopDisplayName) {
+    if (!room.displayName || room.displayName === ordinaryName || room.displayName === room.type || room.displayName === oldName || room.displayName === oldName + " — " + ordinaryName || room.displayName === room.shopDisplayName) {
         const label = room.isBuildingRoom && !room.isEntrance ? shopName + " — " + ordinaryName : shopName;
         room.name = label;
         room.displayName = label;
@@ -2798,10 +2851,14 @@ function ensureShopNamesForRoomMap(roomMap) {
         groups.get(key).push(room);
     });
     groups.forEach(function (rooms) {
-        const named = rooms.find(function (room) { return !!room.buildingName; });
         const first = rooms[0];
+        const bathhouse = getShopNameTrade(first.buildingType || first.type) === "bathhouse";
+        const named = rooms.find(function (room) { return !!room.buildingName && !(bathhouse && room.buildingName === LEGACY_BATHHOUSE_NAME); });
         const name = named ? named.buildingName : generateShopName(first.zone, first.buildingType || first.type, Math.random, used);
-        rooms.forEach(function (room) { applyShopDisplayName(room, name); });
+        rooms.forEach(function (room) {
+            applyShopDisplayName(room, name);
+            if (bathhouse) (room.creatures || []).forEach(function (npc) { if (npc && npc.role === "Bathkeeper" && npc.shopName === LEGACY_BATHHOUSE_NAME) npc.shopName = name; });
+        });
     });
 }
 
@@ -2893,7 +2950,7 @@ const BUILDING_BLUEPRINTS = {
     },
     "Bathhouse": {
         zone: "Town", entrance: "Bathhouse", front: "baths", frontDoor: "door", back: null, hostilityCap: 25,
-        names: ["The Warmstone Baths"],
+        names: [],
         rooms: [
             { key: "baths", type: "Bathing Room", floor: 0, at: [0, 0], minNpcs: 0 },
             { key: "massage", type: "Massage Room", floor: 0, at: [1, 0], minNpcs: 0 }
