@@ -355,6 +355,203 @@
                    " React in character as " + name + " would: melt into their touch if very attracted, blush and step back if modest, or slap their hand away if angry. Consider your temperament (" + temp + "). Your existing attraction/lust/disinhibition stats are already in your persona block.";
         },
         nsfw: true
+    },
+    // ========================================================================
+    // BATHHOUSE NSFW SERVICES
+    // ========================================================================
+    {
+        id: "ask-about-private-services",
+        label: "Ask about private services",
+        text: "You ask about more... personal services available at the bathhouse.",
+        playerText: "You ask about more... personal services available at the bathhouse.",
+        priority: 5,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof isBathhouseRoom === 'function' && isBathhouseRoom(ctx.room) &&
+                       (typeof bathhouseProvider === 'function' && bathhouseProvider(ctx.room));
+            }
+        },
+        isInquiry: true,
+        action: "bathhouse-inquiry",
+        nsfw: true,
+        bathhouse: true
+    },
+    
+    // Manual Services (Handjob/Fingering)
+    {
+        id: "bath_manual_stress",
+        label: function(ctx) { return "Dungeon Delver's Rub - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost('bath_manual_stress') : '40') + " gold"; },
+        text: "A skilled hand rub to work out the deepest tension.",
+        playerText: "A skilled hand rub to work out the deepest tension.",
+        priority: 15,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof npcOffersPrivateServices === 'function' && npcOffersPrivateServices(npc) &&
+                       typeof canAffordService === 'function' && canAffordService(ctx.player, 'bath_manual_stress');
+            }
+        },
+        action: "intimacy",
+        intimacyAction: "bathhouseService",
+        serviceId: "bath_manual_stress",
+        startEncounter: true,
+        nsfw: true,
+        bathhouse: true
+    },
+    {
+        id: "bath_manual_oil",
+        label: function(ctx) { return "Herbal Oil Release - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost('bath_manual_oil') : '50') + " gold"; },
+        text: "Herbal oils make the skin slick as expert hands work out all tension.",
+        playerText: "Herbal oils make the skin slick as expert hands work out all tension.",
+        priority: 15,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof npcOffersPrivateServices === 'function' && npcOffersPrivateServices(npc) &&
+                       typeof canAffordService === 'function' && canAffordService(ctx.player, 'bath_manual_oil');
+            }
+        },
+        action: "intimacy",
+        intimacyAction: "bathhouseService",
+        serviceId: "bath_manual_oil",
+        startEncounter: true,
+        nsfw: true,
+        bathhouse: true
+    },
+    {
+        id: "bath_manual_tension",
+        label: function(ctx) { return "Adventurer's Ease - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost('bath_manual_tension') : '60') + " gold"; },
+        text: "A knowing touch finds and works out tension you didn't realize you carried.",
+        playerText: "A knowing touch finds and works out tension you didn't realize you carried.",
+        priority: 15,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof npcOffersPrivateServices === 'function' && npcOffersPrivateServices(npc) &&
+                       typeof canAffordService === 'function' && canAffordService(ctx.player, 'bath_manual_tension');
+            }
+        },
+        action: "intimacy",
+        intimacyAction: "bathhouseService",
+        serviceId: "bath_manual_tension",
+        startEncounter: true,
+        nsfw: true,
+        bathhouse: true
+    },
+    
+    // Oral Services
+    {
+        id: "bath_oral_deep",
+        label: function(ctx) { return "Delver's Deep Relief - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost('bath_oral_deep') : '100') + " gold"; },
+        text: "Some aches can't be reached with hands alone - skilled mouth provides complete relief.",
+        playerText: "Some aches can't be reached with hands alone - skilled mouth provides complete relief.",
+        priority: 20,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof npcOffersPrivateServices === 'function' && npcOffersPrivateServices(npc) &&
+                       typeof canAffordService === 'function' && canAffordService(ctx.player, 'bath_oral_deep');
+            }
+        },
+        action: "intimacy",
+        intimacyAction: "bathhouseService",
+        serviceId: "bath_oral_deep",
+        startEncounter: true,
+        nsfw: true,
+        bathhouse: true
+    },
+    {
+        id: "bath_oral_comprehensive",
+        label: function(ctx) { return "Full Exploration - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost('bath_oral_comprehensive') : '120') + " gold"; },
+        text: "Every inch receives attention before the thorough oral release.",
+        playerText: "Every inch receives attention before the thorough oral release.",
+        priority: 20,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof npcOffersPrivateServices === 'function' && npcOffersPrivateServices(npc) &&
+                       typeof canAffordService === 'function' && canAffordService(ctx.player, 'bath_oral_comprehensive');
+            }
+        },
+        action: "intimacy",
+        intimacyAction: "bathhouseService",
+        serviceId: "bath_oral_comprehensive",
+        startEncounter: true,
+        nsfw: true,
+        bathhouse: true
+    },
+    {
+        id: "bath_oral_traveler",
+        label: function(ctx) { return "Road-Worn Solace - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost('bath_oral_traveler') : '130') + " gold"; },
+        text: "For road-weary travelers - the kind of comfort that can't be bought at an inn.",
+        playerText: "For road-weary travelers - the kind of comfort that can't be bought at an inn.",
+        priority: 20,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof npcOffersPrivateServices === 'function' && npcOffersPrivateServices(npc) &&
+                       typeof canAffordService === 'function' && canAffordService(ctx.player, 'bath_oral_traveler');
+            }
+        },
+        action: "intimacy",
+        intimacyAction: "bathhouseService",
+        serviceId: "bath_oral_traveler",
+        startEncounter: true,
+        nsfw: true,
+        bathhouse: true
+    },
+    
+    // Intercourse Services
+    {
+        id: "bath_intercourse_full",
+        label: function(ctx) { return "Complete Unburdening - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost('bath_intercourse_full') : '150') + " gold"; },
+        text: "Private chamber, clean linen, and understanding silence - the most primal relief.",
+        playerText: "Private chamber, clean linen, and understanding silence - the most primal relief.",
+        priority: 25,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof npcOffersPrivateServices === 'function' && npcOffersPrivateServices(npc) &&
+                       typeof canAffordService === 'function' && canAffordService(ctx.player, 'bath_intercourse_full');
+            }
+        },
+        action: "intimacy",
+        intimacyAction: "bathhouseService",
+        serviceId: "bath_intercourse_full",
+        startEncounter: true,
+        nsfw: true,
+        bathhouse: true
+    },
+    {
+        id: "bath_intercourse_evening",
+        label: function(ctx) { return "Moonlit Respite - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost('bath_intercourse_evening') : '170') + " gold"; },
+        text: "After hours, when the bathhouse is quiet - full, lingering attention.",
+        playerText: "After hours, when the bathhouse is quiet - full, lingering attention.",
+        priority: 25,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof npcOffersPrivateServices === 'function' && npcOffersPrivateServices(npc) &&
+                       typeof canAffordService === 'function' && canAffordService(ctx.player, 'bath_intercourse_evening');
+            }
+        },
+        action: "intimacy",
+        intimacyAction: "bathhouseService",
+        serviceId: "bath_intercourse_evening",
+        startEncounter: true,
+        nsfw: true,
+        bathhouse: true
+    },
+    {
+        id: "bath_intercourse_adventurer",
+        label: function(ctx) { return "Adventurer's Respite - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost('bath_intercourse_adventurer') : '200') + " gold"; },
+        text: "For those carrying scars no healer can touch - relief that heals body and soul.",
+        playerText: "For those carrying scars no healer can touch - relief that heals body and soul.",
+        priority: 25,
+        conditions: {
+            custom: function(npc, ctx) {
+                return typeof npcOffersPrivateServices === 'function' && npcOffersPrivateServices(npc) &&
+                       typeof canAffordService === 'function' && canAffordService(ctx.player, 'bath_intercourse_adventurer');
+            }
+        },
+        action: "intimacy",
+        intimacyAction: "bathhouseService",
+        serviceId: "bath_intercourse_adventurer",
+        startEncounter: true,
+        nsfw: true,
+        bathhouse: true
     }
   ];
 

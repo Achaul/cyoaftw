@@ -905,6 +905,26 @@ const ROOM_TEMPLATES = [
         ]
     },
     {
+        type: "Bathhouse Changeroom", zone: "Town", role: "interior", displayName: "Changeroom", imageKey: "Guest Room",
+        baseDescription: "A small private room with wooden lockers for staff and workers. Clean bathhouse uniforms hang ready for use, and a full-length mirror allows final adjustments before stepping onto the floor.",
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        structural: [
+            { id: "lockers", name: "wooden staff lockers", tags: ["storage"], anchored: true, takeable: false },
+            { id: "uniform-rack", name: "uniform rack", tags: ["work"], anchored: true, takeable: false },
+            { id: "changeroom-mirror", name: "full-length mirror", tags: ["social"], anchored: true, takeable: false }
+        ]
+    },
+    {
+        type: "Private Chamber", zone: "Town", role: "interior", displayName: "Private Chamber", imageKey: "Guest Room",
+        baseDescription: "A secluded private chamber with warm lighting and soft padding. A treatment bench draped in fresh linen occupies the center, with small tables holding oils and towels. The air carries the scent of herbs and warm stone.",
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        structural: [
+            { id: "private-bench", name: "padded treatment bench", tags: ["work", "rest", "commerce"], anchored: true, takeable: false },
+            { id: "private-oil-shelf", name: "shelf of premium oils", tags: ["work"], anchored: true },
+            { id: "linen-stand", name: "linen towel stand", tags: ["work"], anchored: true }
+        ]
+    },
+    {
         type: "Guest Room",
         zone: "Town",
         role: "interior",

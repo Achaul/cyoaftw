@@ -21,7 +21,9 @@ const PERSONALITY_TRAITS = [
     "grump", "studious", "helpful", "aloof", "dramatic",
     "sarcastic", "excitable", "shy", "calm", "paranoid",
     "proud", "humble", "reckless", "patient", "bitter",
-    "promiscuous"
+    "promiscuous",
+    // Bathhouse-specific traits
+    "professional", "flirty", "dominant"
 ];
 
 const QUIRKS = [
@@ -190,6 +192,43 @@ const NPC_SPEECH_PROFILES = {
         languageNotes: "uses minimal language, may include archaic or mournful phrasing",
         cues: ["sounds hushed", "stays concise", "treats silence as useful"],
         avoid: ["stagey suspense", "breathy seduction", "atmospheric rambling"]
+    },
+    // ========================================================================
+    // BATHHOUSE-SPECIFIC SPEECH STYLES
+    // Used by bathhouse staff and regulars for context-appropriate dialogue
+    // ========================================================================
+    bathhouse_professional: {
+        sample: "Yes, we offer that service. The private chamber is available now if you'd like to book.",
+        sentenceLength: "medium",
+        vocabulary: "precise service-oriented words",
+        cadence: "measured and courteous",
+        tone: "polite and businesslike",
+        styleDescription: "polished, service-focused delivery",
+        languageNotes: "uses courteous professional language, refers to services and appointments",
+        cues: ["maintains professional boundaries", "speaks with quiet confidence", "uses service terminology"],
+        avoid: ["overly familiar language", "crude suggestions", "personal opinions"]
+    },
+    bathhouse_flirty: {
+        sample: "Oh, I'm sure we could find something to ease your tension... the oils are warm today.",
+        sentenceLength: "medium",
+        vocabulary: "playful suggestive words",
+        cadence: "teasing and inviting",
+        tone: "warm and flirtatious",
+        styleDescription: "playful, inviting delivery with subtle suggestion",
+        languageNotes: "uses innuendo and playful teasing, maintains plausible deniability",
+        cues: ["smiles often", "uses warm tones", "makes the guest feel welcome"],
+        avoid: ["explicit language", "overt propositions", "vulgarity"]
+    },
+    bathhouse_dominant: {
+        sample: "You'll do as I say in my chamber. Remove your clothes and lie on the bench.",
+        sentenceLength: "medium",
+        vocabulary: "direct authoritative words",
+        cadence: "commanding and confident",
+        tone: "firm and controlling",
+        styleDescription: "assertive, controlling delivery",
+        languageNotes: "uses imperative language, expects obedience, maintains professional detachment",
+        cues: ["gives clear instructions", "speaks with authority", "maintains control"],
+        avoid: ["hesitation", "apologies", "uncertainty"]
     }
 };
 
@@ -432,7 +471,14 @@ const SPEECH_STYLE_ALIASES = {
     snarl: "broken",
     squeak: "broken",
     whisper: "whisper",
-    whispered: "whisper"
+    whispered: "whisper",
+    // Bathhouse-specific aliases
+    bathhouse_professional: "bathhouse_professional",
+    bathhouse_flirty: "bathhouse_flirty",
+    bathhouse_dominant: "bathhouse_dominant",
+    professional: "bathhouse_professional",
+    flirty: "bathhouse_flirty",
+    dominant: "bathhouse_dominant"
 };
 
 const SPEECH_STYLES = Object.keys(NPC_SPEECH_PROFILES);
@@ -1152,7 +1198,12 @@ const NPC_ROUTINES = {
     Scholar: { duties: "studying, copying and arguing over texts", pay: "a stipend or a patron's coin", shifts: ["reading before the day starts", "in the stacks", "talking the day's reading over with a drink", "candlelit reading, then bed"], pastime: "arguing over footnotes" },
     Wanderer: { duties: "drifting from place to place and taking odd work", pay: "odd coin for odd jobs", shifts: ["breaking camp", "walking or working", "at the tavern for supper and a drink", "a rough bed"], pastime: "road songs and stories" },
     Townsfolk: { duties: "everyday work in the town, whatever trade the day brings", pay: "a day's wage for a day's work, nothing more", shifts: ["rising and doing chores", "at your day's work", "at the tavern with neighbours, if you feel like a drink", "home"], pastime: "a drink and chat with neighbours at the tavern" },
-    Villager: { duties: "everyday work in the village, tending animals, crops and home", pay: "you live on what you grow and sell", shifts: ["chores and feeding animals", "at the day's work", "at the tavern with neighbours, if you feel like a drink", "home"], pastime: "a drink and chat with neighbours" }
+    Villager: { duties: "everyday work in the village, tending animals, crops and home", pay: "you live on what you grow and sell", shifts: ["chores and feeding animals", "at the day's work", "at the tavern with neighbours, if you feel like a drink", "home"], pastime: "a drink and chat with neighbours" },
+    // ========================================================================
+    // BATHHOUSE WORKER ROLES
+    // ========================================================================
+    BathhouseAttendant: { duties: "assisting bathers, maintaining cleanliness, preparing oils and linens, and guiding guests to treatments", pay: "wages from bathhouse fees plus occasional tips from satisfied customers", shifts: ["preparing clean linens and fresh oils", "attending to bathers and maintaining facilities", "assisting with treatments and cleaning up", "home"], pastime: "relaxing with herbal tea and listening to traveler's stories" },
+    BathhousePractitioner: { duties: "providing specialized treatments, massage, and private services to bathhouse guests", pay: "a percentage of service fees plus generous tips from regulars", shifts: ["preparing treatment chambers and oils", "providing services to booked guests", "resting between appointments", "home"], pastime: "studying anatomy and new techniques, or socializing with bathhouse regulars" }
 };
 // What each people eats, in a few plain words.
 const NPC_SPECIES_FOOD = {
@@ -4754,6 +4805,187 @@ const NPC_CONVERSATION_CATALOGUE = [
         },
         contextNote: (npc, ctx) => `Player is in dominant demeanor mode and forces ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to their knees. Respond in character.`
     },
+    // ========================================================================
+    // BATHHOUSE SERVICES - SFW CONVERSATION OPTIONS
+    // ========================================================================
+    {
+        id: "ask_about_private_services",
+        priority: 35,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: (npc, ctx) => {
+            if (npc && npc.role === "BathhouseAttendant") return "Ask about private services";
+            if (npc && npc.role === "BathhousePractitioner") return "Ask about private treatments";
+            if (npc && npc.role === "Bathkeeper") return "Inquire about special services";
+            return "Ask about private bathhouse services";
+        },
+        textVariants: [
+            "You subtly ask if they offer any... private services beyond the regular baths.",
+            "You inquire about special treatments, wondering if there are services not on the public menu.",
+            "You carefully ask about private bathhouse services, keeping your tone discreet."
+        ],
+        intent: "inquiry",
+        isInquiry: true,
+        kind: "topic",
+        relationshipImpact: { mood: 0, favor: 0, hostility: 0, intent: "inquiry" },
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show if NPC is bathhouse staff or the player is in a bathhouse
+                if (!npc) return false;
+                if (npc.role === "BathhouseAttendant" || npc.role === "BathhousePractitioner" || npc.role === "Bathkeeper") {
+                    return true;
+                }
+                // Check if we're in a bathhouse room
+                if (ctx && ctx.room && typeof isBathhouseRoom === "function" && isBathhouseRoom(ctx.room)) {
+                    return true;
+                }
+                // Check if NPC knows about bathhouse services (rumor system)
+                if (npc.bathhouseAware === true) {
+                    return true;
+                }
+                return false;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            let note = "This NPC";
+            if (npc.role === "BathhouseAttendant" || npc.role === "BathhousePractitioner" || npc.role === "Bathkeeper") {
+                note += " works at the bathhouse. They ";
+                if (npc.traits && (npc.traits.includes("professional") || npc.traits.includes("flirty") || npc.traits.includes("dominant"))) {
+                    note += "have a " + (npc.traits.includes("dominant") ? "firm, controlling manner" : npc.traits.includes("flirty") ? "playful, teasing manner" : "professional, courteous manner") + " when discussing services.";
+                } else {
+                    note += "can provide information about available services.";
+                }
+            } else if (npc.bathhouseAware) {
+                note += " has heard rumors about bathhouse private services through word of mouth.";
+            } else {
+                note += " may not know about private services.";
+            }
+            note += " Answer in character. If you provide private services yourself, describe what you offer and your manner. If you don't, you might refer them to someone who does, or simply be unaware.";
+            return note;
+        }
+    },
+    // ========================================================================
+    // PLAYER AS BATHHOUSE PROVIDER - SERVICE REQUESTS
+    // ========================================================================
+    {
+        id: "offer_bathhouse_service",
+        priority: 40,
+        repeat: "session",
+        label: (npc, ctx) => {
+            // Only show when NPC wants to request service from player
+            if (npc._bathhouseRequestToPlayer) {
+                const request = npc._bathhouseRequestToPlayer;
+                return "Accept " + (request.serviceName || "service request") + " - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost(request.serviceId) : '?') + " gold";
+            }
+            return "Offer bathhouse service";
+        },
+        textVariants: [
+            (npc, ctx) => {
+                const request = npc._bathhouseRequestToPlayer;
+                if (request) {
+                    return "You accept " + (npc.name || "their") + " request for " + (request.serviceName || "a private service") + " at " + request.finalPrice + " gold.";
+                }
+                return "You offer your services as a bathhouse provider.";
+            }
+        ],
+        intent: "service",
+        action: "bathhouse_accept",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show if NPC has a pending request to player
+                if (!npc || !npc._bathhouseRequestToPlayer) return false;
+                const request = npc._bathhouseRequestToPlayer;
+                // Check if player can accept
+                if (ctx.player) {
+                    return canPlayerAcceptBathhouseRequest(ctx.player, request);
+                }
+                return true;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            const request = npc._bathhouseRequestToPlayer;
+            if (!request) return "This NPC has requested a bathhouse service from you.";
+            return "NPC " + (npc.name || "") + " is requesting " + request.serviceName + 
+                   " service. Price: " + request.finalPrice + " gold. " +
+                   "As the provider, describe your professional acceptance and preparation. " +
+                   "Mention your manner (" + request.providerStyle + ") and any preparation needed.";
+        }
+    },
+    {
+        id: "decline_bathhouse_service",
+        priority: 40,
+        repeat: "session",
+        label: (npc, ctx) => {
+            if (npc._bathhouseRequestToPlayer) {
+                return "Decline the service request";
+            }
+            return "Decline service";
+        },
+        textVariants: [
+            (npc, ctx) => {
+                const request = npc._bathhouseRequestToPlayer;
+                if (request) {
+                    return "You politely decline " + (npc.name || "their") + " request for " + (request.serviceName || "service") + ".";
+                }
+                return "You decline to provide services at this time.";
+            }
+        ],
+        intent: "refusal",
+        action: "bathhouse_decline",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show if NPC has a pending request to player
+                return !!(npc && npc._bathhouseRequestToPlayer);
+            }
+        },
+        relationshipImpact: { mood: -1, favor: -2, hostility: +1, intent: "refusal" },
+        contextNote: (npc, ctx) => {
+            const request = npc._bathhouseRequestToPlayer;
+            if (!request) return "This NPC has requested a service from you.";
+            return "NPC " + (npc.name || "") + " requested " + request.serviceName + 
+                   " service. Respond to their request with a polite refusal. " +
+                   "Mention your reason (busy, tired, not interested) in character.";
+        }
+    },
+    {
+        id: "negotiate_bathhouse_price",
+        priority: 38,
+        repeat: "session",
+        label: (npc, ctx) => {
+            if (npc._bathhouseRequestToPlayer) {
+                return "Negotiate the price";
+            }
+            return "Negotiate price";
+        },
+        textVariants: [
+            (npc, ctx) => {
+                const request = npc._bathhouseRequestToPlayer;
+                if (request) {
+                    return "You attempt to negotiate the price for " + (request.serviceName || "the service") + ".";
+                }
+                return "You discuss pricing for services.";
+            }
+        ],
+        intent: "negotiation",
+        action: "bathhouse_negotiate",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show if NPC has a pending request and player has high charisma
+                if (!npc || !npc._bathhouseRequestToPlayer) return false;
+                if (ctx.player && ctx.player.stats && ctx.player.stats.CHA >= 12) {
+                    return true;
+                }
+                return false;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            const request = npc._bathhouseRequestToPlayer;
+            if (!request) return "Negotiate the price for services.";
+            return "NPC " + (npc.name || "") + " is offering " + request.finalPrice + " gold for " +
+                   request.serviceName + ". As a skilled negotiator (high charisma), " +
+                   "attempt to secure a better price. Describe your persuasion in character.";
+        }
+    },
     
     // ===== NSFW OPTIONS =====
     // NSFW catalogue entries (flirt / seduce / touch_intimately /
@@ -6124,10 +6356,10 @@ const NPC_TIE_LOVER_CHANCE = 0.10;
 const NPC_TIE_RECIPROCAL = { spouse: "spouse", parent: "child", child: "parent", sibling: "sibling", friend: "friend", coworker: "coworker", employer: "employee", employee: "employer", lover: "lover" };
 const NPC_TIE_FAMILY = ["spouse", "parent", "child", "sibling"];
 // Roles that are staff of the building they stand in (a place of work).
-const NPC_TIE_WORK_ROLES = ["Bathkeeper", "Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
+const NPC_TIE_WORK_ROLES = ["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
 // Employers in a building and who they plausibly employ there.
 const NPC_TIE_EMPLOYER_ROLES = ["Bathkeeper", "Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
-const NPC_TIE_EMPLOYEE_ROLES = ["Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk"];
+const NPC_TIE_EMPLOYEE_ROLES = ["Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk", "BathhouseAttendant", "BathhousePractitioner"];
 // Roles that work in teams across a zone rather than in one building.
 const NPC_TIE_TEAM_ROLES = ["Town Guard", "Stone Guard", "Miner", "Scout", "Raider", "Scavenger", "Cultist"];
 
@@ -9062,6 +9294,975 @@ function generatePostureOrAction(temperament) {
     return _rand(actions);
 }
 
+// ============================================================================
+// BATHHOUSE PROCEDURAL REGULARS AND RUMORS SYSTEM
+// ============================================================================
+
+// Bathhouse regular frequency patterns (how often they visit)
+const BATHHOUSE_REGULAR_FREQUENCY = [
+    { id: "daily", label: "Daily", chance: 0.15, daysBetween: 1, description: "visits every day" },
+    { id: "every_other_day", label: "Every Other Day", chance: 0.25, daysBetween: 2, description: "visits every 2 days" },
+    { id: "twice_weekly", label: "Twice Weekly", chance: 0.30, daysBetween: 3, description: "visits twice a week" },
+    { id: "weekly", label: "Weekly", chance: 0.20, daysBetween: 7, description: "visits once a week" },
+    { id: "biweekly", label: "Bi-weekly", chance: 0.10, daysBetween: 14, description: "visits every 2 weeks" }
+];
+
+// Bathhouse regular service preferences (what services they typically request)
+const BATHHOUSE_REGULAR_PREFERENCES = [
+    { id: "massage_only", label: "Massage Only", chance: 0.20, services: ["bath_manual_stress", "bath_manual_oil", "bath_manual_tension"], description: "prefers therapeutic massage services" },
+    { id: "manual_only", label: "Manual Stimulation", chance: 0.15, services: ["bath_manual_stress", "bath_manual_oil", "bath_manual_tension"], description: "enjoys hand-based tension relief" },
+    { id: "oral_enthusiast", label: "Oral Enthusiast", chance: 0.20, services: ["bath_oral_deep", "bath_oral_comprehensive", "bath_oral_traveler"], description: "loves oral services" },
+    { id: "full_experience", label: "Full Experience", chance: 0.25, services: ["bath_intercourse_full", "bath_intercourse_evening", "bath_intercourse_adventurer"], description: "prefers complete intercourse services" },
+    { id: "mixed_tier2", label: "Mixed Tier 2", chance: 0.10, services: ["bath_manual_oil", "bath_oral_deep", "bath_oral_comprehensive"], description: "enjoys both manual and oral" },
+    { id: "mixed_all", label: "All Services", chance: 0.10, services: ["bath_manual_stress", "bath_oral_deep", "bath_intercourse_full"], description: "takes advantage of everything available" }
+];
+
+// Bathhouse rumor types for word-of-mouth discovery
+const BATHHOUSE_RUMOR_TYPES = [
+    { id: "heard_from_friend", chance: 0.40, text: "heard from a friend", credibility: 0.8 },
+    { id: "overheard_tavern", chance: 0.30, text: "overheard at the tavern", credibility: 0.6 },
+    { id: "seen_people_coming", chance: 0.20, text: "seen people looking relaxed after visiting", credibility: 0.7 },
+    { id: "traveler_recommendation", chance: 0.10, text: "recommended by a traveler", credibility: 0.9 }
+];
+
+// Generate a bathhouse regular profile for an NPC
+function generateBathhouseRegularProfile(npc) {
+    if (!npc) return null;
+    
+    // Determine if this NPC should be a regular (about 30% of eligible NPCs)
+    if (Math.random() < 0.7) return null;
+    
+    // Select frequency
+    const frequency = selectByChance(BATHHOUSE_REGULAR_FREQUENCY);
+    
+    // Select preferences based on NPC temperament
+    let preference = selectByChance(BATHHOUSE_REGULAR_PREFERENCES);
+    
+    // Adjust preferences based on traits
+    if (npc.traits) {
+        if (npc.traits.includes("promiscuous")) {
+            // More likely to prefer full services
+            preference = BATHHOUSE_REGULAR_PREFERENCES.find(p => p.id === "full_experience") || preference;
+        }
+        if (npc.traits.includes("professional")) {
+            // More likely to prefer massage
+            preference = BATHHOUSE_REGULAR_PREFERENCES.find(p => p.id === "massage_only") || preference;
+        }
+        if (npc.traits.includes("flirty")) {
+            // More likely to prefer oral or mixed
+            const flirtyPrefs = BATHHOUSE_REGULAR_PREFERENCES.filter(p => 
+                p.id === "oral_enthusiast" || p.id === "mixed_tier2" || p.id === "mixed_all");
+            preference = flirtyPrefs.length ? flirtyPrefs[Math.floor(Math.random() * flirtyPrefs.length)] : preference;
+        }
+        if (npc.traits.includes("dominant")) {
+            // More likely to prefer full control (intercourse)
+            preference = BATHHOUSE_REGULAR_PREFERENCES.find(p => p.id === "full_experience") || preference;
+        }
+    }
+    
+    // Generate a stable ID for this regular
+    const regularId = "regular-" + (npc.id || npc.name || Math.random().toString(36).slice(2, 8));
+    
+    return {
+        id: regularId,
+        npcId: npc.id || npc.name,
+        frequency: frequency.id,
+        frequencyLabel: frequency.label,
+        daysBetween: frequency.daysBetween,
+        preference: preference.id,
+        preferenceLabel: preference.label,
+        preferredServices: preference.services,
+        lastVisitTurn: 0,
+        totalVisits: 0,
+        tipPercentage: Math.floor(Math.random() * 16) + 5, // 5-20%
+        // Personality when at bathhouse
+        bathhousePersonality: getBathhouseRegularPersonality(npc)
+    };
+}
+
+// Select an item from an array based on chance weights
+function selectByChance(array) {
+    if (!array || !array.length) return null;
+    
+    const total = array.reduce((sum, item) => sum + (item.chance || 0), 0);
+    if (total <= 0) return array[0];
+    
+    let random = Math.random() * total;
+    for (const item of array) {
+        random -= item.chance || 0;
+        if (random <= 0) return item;
+    }
+    return array[0];
+}
+
+// Get personality descriptor for bathhouse regulars
+function getBathhouseRegularPersonality(npc) {
+    if (!npc) return "quiet and discrete";
+    
+    const personalities = [
+        "quiet and discrete",
+        "friendly and chatty",
+        "businesslike and efficient",
+        "relaxed and content",
+        "appreciative and generous",
+        "shy but curious",
+        "experienced and knowing",
+        "playful and teasing",
+        "serious and focused",
+        "grateful and polite"
+    ];
+    
+    // Adjust based on traits
+    if (npc.traits) {
+        if (npc.traits.includes("flirty")) return "playful and teasing";
+        if (npc.traits.includes("professional")) return "businesslike and efficient";
+        if (npc.traits.includes("dominant")) return "experienced and knowing";
+        if (npc.traits.includes("shy")) return "shy but curious";
+    }
+    
+    return personalities[Math.floor(Math.random() * personalities.length)];
+}
+
+// Generate bathhouse rumor for an NPC to discover services
+function generateBathhouseRumor(npc, ctx) {
+    if (!npc) return null;
+    
+    // Check if NPC already knows about bathhouse
+    if (npc.bathhouseAware) return null;
+    
+    // Determine if this NPC should learn about bathhouse (based on social connections)
+    const chance = 0.05; // 5% chance per eligible interaction
+    if (Math.random() >= chance) return null;
+    
+    // Select rumor type
+    const rumorType = selectByChance(BATHHOUSE_RUMOR_TYPES);
+    
+    // Determine who told them (if applicable)
+    let source = null;
+    if (rumorType.id === "heard_from_friend" && ctx && ctx.room && ctx.room.creatures) {
+        // Find a potential source NPC who already knows
+        const potentialSources = ctx.room.creatures.filter(c => 
+            c && c !== npc && c.bathhouseAware && !c.dead && c.hp > 0);
+        if (potentialSources.length) {
+            source = potentialSources[Math.floor(Math.random() * potentialSources.length)];
+        }
+    }
+    
+    return {
+        id: "rumor-" + (npc.id || npc.name || "") + "-" + Date.now(),
+        type: rumorType.id,
+        typeLabel: rumorType.text,
+        credibility: rumorType.credibility,
+        source: source ? { id: source.id, name: source.name } : null,
+        turnDiscovered: ctx && ctx.storyTurn ? ctx.storyTurn : 0,
+        roomId: ctx && ctx.room ? ctx.room.coords : null
+    };
+}
+
+// Check if NPC should visit bathhouse today
+function shouldNPCVisitBathhouseToday(npc, currentTurn) {
+    if (!npc || !npc.bathhouseRegular) return false;
+    
+    const regular = npc.bathhouseRegular;
+    const lastVisit = regular.lastVisitTurn || 0;
+    const daysBetween = regular.daysBetween || 7;
+    
+    // Check if enough time has passed
+    const daysSinceLastVisit = currentTurn - lastVisit;
+    if (daysSinceLastVisit < daysBetween) return false;
+    
+    // Additional random chance to visit even if not due (for variety)
+    if (Math.random() < 0.2) return true;
+    
+    return true;
+}
+
+// Mark NPC as having visited bathhouse today
+function markBathhouseVisit(npc, currentTurn) {
+    if (!npc || !npc.bathhouseRegular) return;
+    
+    npc.bathhouseRegular.lastVisitTurn = currentTurn;
+    npc.bathhouseRegular.totalVisits = (npc.bathhouseRegular.totalVisits || 0) + 1;
+}
+
+// ============================================================================
+// NPC-to-NPC BATHHOUSE SERVICE REQUESTS & PLAYER AS PROVIDER
+// ============================================================================
+
+// Service provider types
+const BATHHOUSE_PROVIDER_TYPES = {
+    STAFF: "staff",           // BathhouseAttendant, BathhousePractitioner, Bathkeeper
+    PLAYER: "player",         // Player working at bathhouse
+    FREELANCE: "freelance"   // NPC providing services independently
+};
+
+// Service request states
+const BATHHOUSE_REQUEST_STATES = {
+    PENDING: "pending",       // Request made, waiting for response
+    ACCEPTED: "accepted",     // Provider accepted, service in progress
+    DECLINED: "declined",     // Provider declined
+    COMPLETED: "completed",   // Service finished
+    CANCELLED: "cancelled"   // Request cancelled
+};
+
+// Generate a service request from one NPC to another (or player)
+function generateBathhouseServiceRequest(requester, provider, ctx) {
+    if (!requester || !provider) return null;
+    
+    // Determine if requester can make this request
+    if (!canNPCRequestBathhouseService(requester)) return null;
+    
+    // Determine if provider can accept requests
+    if (!canNPCProvideBathhouseService(provider)) return null;
+    
+    // Select appropriate service based on preferences
+    const service = selectServiceForNPC(requester, provider);
+    if (!service) return null;
+    
+    // Generate request ID
+    const requestId = "bath-request-" + (requester.id || requester.name || "req") + "-" + 
+                      (provider.id || provider.name || "prov") + "-" + (ctx.storyTurn || 0);
+    
+    // Determine price (provider may have different rates)
+    const basePrice = getBathhouseServiceCost(service);
+    const finalPrice = applyProviderPriceModifier(provider, basePrice);
+    
+    return {
+        id: requestId,
+        requesterId: requester.id || requester.name,
+        requesterName: requester.name,
+        requesterGender: requester.gender,
+        requesterSpecies: requester.species,
+        providerId: provider.id || provider.name,
+        providerName: provider.isPlayer ? "You" : (provider.name || "Someone"),
+        providerType: getProviderType(provider),
+        serviceId: service,
+        serviceName: getBathhouseServiceName(service),
+        basePrice: basePrice,
+        finalPrice: finalPrice,
+        bathhouseCut: Math.round(finalPrice * 0.30), // 30% to bathhouse
+        providerEarnings: finalPrice - Math.round(finalPrice * 0.30), // 70% to provider
+        state: BATHHOUSE_REQUEST_STATES.PENDING,
+        turnCreated: ctx.storyTurn || 0,
+        turnAccepted: 0,
+        turnCompleted: 0,
+        location: ctx.room ? ctx.room.coords : null,
+        tipAmount: 0,
+        tipPercentage: 0,
+        // Personality context for narration
+        requesterMood: getRequesterMood(requester),
+        providerStyle: getProviderStyle(provider),
+        // Gender/orientation compatibility
+        isCompatible: checkServiceCompatibility(requester, provider, service),
+        compatibilityNote: getCompatibilityNote(requester, provider, service)
+    };
+}
+
+// Check if NPC can request bathhouse services
+function canNPCRequestBathhouseService(npc) {
+    if (!npc || npc.dead || npc.hp <= 0 || npc.unconscious) return false;
+    
+    // Must be humanoid
+    if (npc.isHumanoid !== true) return false;
+    
+    // Must have arousal/need (or be a regular)
+    if (npc.bathhouseRegular) return true;
+    if (npc.bathhouseAware) return true;
+    
+    // Check if they have high arousal or need for release
+    if (npc.arousal && npc.arousal >= 50) return true;
+    
+    // Check if they have tension/stress that could use massage
+    if (npc.stress || npc.tension) return true;
+    
+    return false;
+}
+
+// Check if NPC can provide bathhouse services
+function canNPCProvideBathhouseService(npc) {
+    if (!npc) return false;
+    
+    // Player is always a potential provider if qualified
+    if (npc.isPlayer) {
+        // Player must be qualified or working at bathhouse
+        return true; // Will be checked more specifically in engine
+    }
+    
+    // Must be humanoid and alive
+    if (npc.isHumanoid !== true || npc.dead || npc.hp <= 0 || npc.unconscious) return false;
+    
+    // Staff roles can always provide
+    if (npc.role === "BathhouseAttendant" || npc.role === "BathhousePractitioner" || npc.role === "Bathkeeper") {
+        return true;
+    }
+    
+    // Freelance providers (marked as such)
+    if (npc.bathhouseProvider === true) return true;
+    
+    // NPCs with relevant traits might provide independently
+    if (npc.traits && (npc.traits.includes("promiscuous") || npc.traits.includes("flirty"))) {
+        return Math.random() < 0.5; // 50% chance they provide services
+    }
+    
+    return false;
+}
+
+// Select appropriate service for NPC based on preferences
+function selectServiceForNPC(requester, provider) {
+    // If requester has regular profile, use their preferences
+    if (requester.bathhouseRegular && requester.bathhouseRegular.preferredServices) {
+        const preferred = requester.bathhouseRegular.preferredServices;
+        const available = getAvailableServices(provider);
+        
+        // Find intersection of preferred and available
+        const matching = preferred.filter(s => available.includes(s));
+        if (matching.length) return matching[Math.floor(Math.random() * matching.length)];
+    }
+    
+    // Fall back to random available service from provider
+    const available = getAvailableServices(provider);
+    if (available.length) return available[Math.floor(Math.random() * available.length)];
+    
+    return null;
+}
+
+// Get services available from a provider
+function getAvailableServices(provider) {
+    // All bathhouse services
+    const allServices = [
+        "bath_manual_stress", "bath_manual_oil", "bath_manual_tension",
+        "bath_oral_deep", "bath_oral_comprehensive", "bath_oral_traveler",
+        "bath_intercourse_full", "bath_intercourse_evening", "bath_intercourse_adventurer"
+    ];
+    
+    // Staff can provide all services
+    if (provider.role === "BathhousePractitioner" || provider.role === "Bathkeeper") {
+        return allServices;
+    }
+    
+    // Attendants can only provide manual services
+    if (provider.role === "BathhouseAttendant") {
+        return ["bath_manual_stress", "bath_manual_oil", "bath_manual_tension"];
+    }
+    
+    // Player can provide based on their training/qualification
+    if (provider.isPlayer) {
+        // Check if player is qualified for massage
+        const qualified = typeof bathhouseQualified === "function" ? bathhouseQualified(provider.currentRoom) : false;
+        if (qualified) {
+            return allServices;
+        }
+        return ["bath_manual_stress", "bath_manual_oil", "bath_manual_tension"];
+    }
+    
+    // Freelance providers - limit based on their skills
+    return allServices.slice(0, 3); // Only manual services for non-staff
+}
+
+// Get provider type
+function getProviderType(provider) {
+    if (!provider) return BATHHOUSE_PROVIDER_TYPES.FREELANCE;
+    
+    if (provider.isPlayer) return BATHHOUSE_PROVIDER_TYPES.PLAYER;
+    
+    if (provider.role === "BathhouseAttendant" || provider.role === "BathhousePractitioner" || 
+        provider.role === "Bathkeeper") {
+        return BATHHOUSE_PROVIDER_TYPES.STAFF;
+    }
+    
+    return BATHHOUSE_PROVIDER_TYPES.FREELANCE;
+}
+
+// Get service cost (placeholder - will use actual function if available)
+function getBathhouseServiceCost(serviceId) {
+    if (typeof window !== "undefined" && typeof window.getBathhouseServiceCost === "function") {
+        return window.getBathhouseServiceCost(serviceId);
+    }
+    
+    // Default prices matching NSFW definitions
+    const prices = {
+        bath_manual_stress: 40,
+        bath_manual_oil: 50,
+        bath_manual_tension: 60,
+        bath_oral_deep: 100,
+        bath_oral_comprehensive: 120,
+        bath_oral_traveler: 130,
+        bath_intercourse_full: 150,
+        bath_intercourse_evening: 170,
+        bath_intercourse_adventurer: 200
+    };
+    return prices[serviceId] || 100;
+}
+
+// Get service name
+function getBathhouseServiceName(serviceId) {
+    const names = {
+        bath_manual_stress: "Dungeon Delver's Rub",
+        bath_manual_oil: "Herbal Oil Release",
+        bath_manual_tension: "Adventurer's Ease",
+        bath_oral_deep: "Delver's Deep Relief",
+        bath_oral_comprehensive: "Full Exploration",
+        bath_oral_traveler: "Road-Worn Solace",
+        bath_intercourse_full: "Complete Unburdening",
+        bath_intercourse_evening: "Moonlit Respite",
+        bath_intercourse_adventurer: "Adventurer's Respite"
+    };
+    return names[serviceId] || serviceId;
+}
+
+// Apply provider's price modifier
+function applyProviderPriceModifier(provider, basePrice) {
+    if (!provider) return basePrice;
+    
+    // Staff follow standard pricing
+    if (provider.role === "BathhouseAttendant" || provider.role === "BathhousePractitioner" || 
+        provider.role === "Bathkeeper") {
+        return basePrice;
+    }
+    
+    // Player might charge differently based on charisma
+    if (provider.isPlayer && provider.stats) {
+        const charisma = provider.stats.CHA || 10;
+        if (charisma >= 15) return Math.round(basePrice * 1.10); // 10% premium for high charisma
+        if (charisma <= 8) return Math.round(basePrice * 0.90); // 10% discount for low charisma
+    }
+    
+    // Freelance providers might adjust prices
+    if (provider.bathhouseProvider === true) {
+        // Random variation: 80-120% of base
+        return Math.round(basePrice * (0.8 + Math.random() * 0.4));
+    }
+    
+    return basePrice;
+}
+
+// Get requester mood description
+function getRequesterMood(npc) {
+    if (!npc) return "polite";
+    
+    const arousal = npc.arousal || 0;
+    const tension = npc.tension || npc.stress || 0;
+    
+    if (arousal >= 80) return "urgent and needy";
+    if (arousal >= 60) return "eager and flushed";
+    if (arousal >= 40) return "interested and curious";
+    if (tension >= 70) return "tense and stressed";
+    if (tension >= 40) return "weary and sore";
+    
+    return "polite and casual";
+}
+
+// Get provider style description
+function getProviderStyle(provider) {
+    if (!provider) return "professional";
+    
+    if (provider.traits) {
+        if (provider.traits.includes("dominant")) return "firm and commanding";
+        if (provider.traits.includes("flirty")) return "playful and teasing";
+        if (provider.traits.includes("professional")) return "polished and businesslike";
+    }
+    
+    if (provider.role === "BathhousePractitioner" || provider.role === "Bathkeeper") {
+        return "skilled and experienced";
+    }
+    
+    return "welcoming and warm";
+}
+
+// Check service compatibility (gender/orientation aware)
+function checkServiceCompatibility(requester, provider, serviceId) {
+    if (!requester || !provider) return true;
+    
+    const service = getBathhouseServiceDefinition(serviceId);
+    if (!service) return true;
+    
+    // Manual services are always compatible
+    if (service.tier === 'manual') return true;
+    
+    // For oral and intercourse, check gender compatibility
+    if (service.compatibleWith) {
+        const gender = String(requester.gender || "male").toLowerCase();
+        if (!service.compatibleWith.includes(gender)) {
+            return false;
+        }
+    }
+    
+    // Check anatomy and orientation if NSFW system available
+    if (typeof window !== "undefined" && typeof window.isServiceCompatible === "function") {
+        const result = window.isServiceCompatible(serviceId, requester, provider);
+        return result.compatible;
+    }
+    
+    // SFW fallback: assume compatible
+    return true;
+}
+
+// Get detailed compatibility check with reasons
+function getServiceCompatibilityDetails(serviceId, requester, provider) {
+    if (!requester || !provider) {
+        return { compatible: true, reason: "no_data", narration: "" };
+    }
+    
+    const service = getBathhouseServiceDefinition(serviceId);
+    if (!service) {
+        return { compatible: false, reason: "unknown_service", narration: "Unknown service." };
+    }
+    
+    // Manual services are always compatible
+    if (service.tier === 'manual') {
+        return { compatible: true, reason: "manual_service", narration: "" };
+    }
+    
+    // Check gender compatibility
+    if (service.compatibleWith) {
+        const gender = String(requester.gender || "male").toLowerCase();
+        if (!service.compatibleWith.includes(gender)) {
+            return {
+                compatible: false,
+                reason: "gender_incompatible",
+                narration: requester.name + "'s gender is not suitable for this service."
+            };
+        }
+    }
+    
+    // Use NSFW compatibility if available
+    if (typeof window !== "undefined" && typeof window.getServiceCompatibilityDetails === "function") {
+        return window.getServiceCompatibilityDetails(serviceId, requester, provider);
+    }
+    
+    return { compatible: true, reason: "compatible", narration: "" };
+}
+
+// Get bathhouse service definition
+function getBathhouseServiceDefinition(serviceId) {
+    // Try to get from window first (NSFW loaded)
+    if (typeof window !== "undefined" && window.BATHHOUSE_SERVICES && window.BATHHOUSE_SERVICES[serviceId]) {
+        return window.BATHHOUSE_SERVICES[serviceId];
+    }
+    
+    // Fallback to local definition
+    const localServices = {
+        bath_manual_stress: { tier: 'manual', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_manual_oil: { tier: 'manual', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_manual_tension: { tier: 'manual', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_oral_deep: { tier: 'oral', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_oral_comprehensive: { tier: 'oral', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_oral_traveler: { tier: 'oral', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_intercourse_full: { tier: 'intercourse', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_intercourse_evening: { tier: 'intercourse', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_intercourse_adventurer: { tier: 'intercourse', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] }
+    };
+    
+    return localServices[serviceId] || null;
+}
+
+// Get compatibility note for narration
+function getCompatibilityNote(requester, provider, serviceId) {
+    const details = getServiceCompatibilityDetails(serviceId, requester, provider);
+    if (!details.compatible) {
+        return details.narration;
+    }
+    return "";
+}
+
+// ============================================================================
+// BATHHOUSE REPUTATION AND CLIENT RELATIONSHIP SYSTEM
+// ============================================================================
+
+// Bathhouse reputation levels
+const BATHHOUSE_REPUTATION_LEVELS = {
+    UNKNOWN: { id: 'unknown', label: 'Unknown', value: 0, description: 'Has not visited yet' },
+    NEWCOMER: { id: 'newcomer', label: 'Newcomer', value: 1, description: 'First visit' },
+    REGULAR: { id: 'regular', label: 'Regular', value: 2, description: 'Visits occasionally' },
+    FREQUENT: { id: 'frequent', label: 'Frequent Guest', value: 3, description: 'Visits often' },
+    PREFERRED: { id: 'preferred', label: 'Preferred Client', value: 4, description: 'Frequent visitor, gets priority' },
+    VIP: { id: 'vip', label: 'VIP', value: 5, description: 'Very important patron' }
+};
+
+// Client satisfaction levels
+const CLIENT_SATISFACTION_LEVELS = {
+    DISSATISFIED: { id: 'dissatisfied', label: 'Dissatisfied', value: 1, mood: -10, description: 'Very unhappy with service' },
+    UNSATISFIED: { id: 'unsatisfied', label: 'Unsatisfied', value: 2, mood: -5, description: 'Not happy with service' },
+    NEUTRAL: { id: 'neutral', label: 'Neutral', value: 3, mood: 0, description: 'Service was adequate' },
+    SATISFIED: { id: 'satisfied', label: 'Satisfied', value: 4, mood: 5, description: 'Happy with service' },
+    VERY_SATISFIED: { id: 'very_satisfied', label: 'Very Satisfied', value: 5, mood: 10, description: 'Extremely pleased' }
+};
+
+// Get reputation level from value
+function getReputationLevel(value) {
+    const levels = Object.values(BATHHOUSE_REPUTATION_LEVELS);
+    for (let i = levels.length - 1; i >= 0; i--) {
+        if (value >= levels[i].value) {
+            return levels[i];
+        }
+    }
+    return BATHHOUSE_REPUTATION_LEVELS.UNKNOWN;
+}
+
+// Get satisfaction level from value
+function getSatisfactionLevel(value) {
+    const levels = Object.values(CLIENT_SATISFACTION_LEVELS);
+    for (let i = levels.length - 1; i >= 0; i--) {
+        if (value >= levels[i].value) {
+            return levels[i];
+        }
+    }
+    return CLIENT_SATISFACTION_LEVELS.NEUTRAL;
+}
+
+// Update client reputation and satisfaction after service
+function updateClientRelationship(npc, provider, serviceId, satisfactionRating) {
+    if (!npc || !provider) return;
+    
+    // Initialize bathhouse profile if doesn't exist
+    npc.bathhouseProfile = npc.bathhouseProfile || {};
+    
+    // Update visit count
+    npc.bathhouseProfile.totalVisits = (npc.bathhouseProfile.totalVisits || 0) + 1;
+    
+    // Update reputation based on visits
+    const visits = npc.bathhouseProfile.totalVisits;
+    if (visits === 1) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.NEWCOMER.value;
+    } else if (visits >= 2 && visits < 5) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.REGULAR.value;
+    } else if (visits >= 5 && visits < 10) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.FREQUENT.value;
+    } else if (visits >= 10 && visits < 20) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.PREFERRED.value;
+    } else if (visits >= 20) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.VIP.value;
+    }
+    
+    // Update satisfaction rating
+    const currentSatisfaction = npc.bathhouseProfile.satisfaction || CLIENT_SATISFACTION_LEVELS.NEUTRAL.value;
+    const satisfaction = Math.min(5, Math.max(1, currentSatisfaction + (satisfactionRating || 0)));
+    npc.bathhouseProfile.satisfaction = satisfaction;
+    
+    // Track provider-specific relationship
+    if (!provider.isPlayer) {
+        // For NPC providers, track on the client
+        npc.bathhouseProfile.providerRelationships = npc.bathhouseProfile.providerRelationships || {};
+        const providerId = provider.id || provider.name;
+        npc.bathhouseProfile.providerRelationships[providerId] = {
+            visits: (npc.bathhouseProfile.providerRelationships[providerId]?.visits || 0) + 1,
+            satisfaction: satisfaction,
+            lastService: serviceId,
+            lastVisit: npc.bathhouseProfile.lastVisit || 0
+        };
+    } else {
+        // For player provider, track separately
+        npc.bathhouseProfile.playerProvider = {
+            visits: (npc.bathhouseProfile.playerProvider?.visits || 0) + 1,
+            satisfaction: satisfaction,
+            lastService: serviceId,
+            lastVisit: npc.bathhouseProfile.lastVisit || 0
+        };
+    }
+    
+    // Update last visit
+    npc.bathhouseProfile.lastVisit = getCurrentStoryTurn ? getCurrentStoryTurn() : 0;
+    
+    // Apply mood bonus based on satisfaction
+    const satisfactionLevel = getSatisfactionLevel(satisfaction);
+    if (satisfactionLevel.mood) {
+        // Apply temporary mood boost
+        if (npc.memory) {
+            npc.memory.mood = Math.max(0, Math.min(100, (npc.memory.mood || 50) + satisfactionLevel.mood));
+        }
+    }
+}
+
+// Get client discount based on reputation
+function getClientDiscount(npc) {
+    if (!npc || !npc.bathhouseProfile) return 0;
+    
+    const reputation = npc.bathhouseProfile.reputation || 0;
+    const satisfaction = npc.bathhouseProfile.satisfaction || 3;
+    
+    // Reputation-based discount
+    let discount = 0;
+    if (reputation >= BATHHOUSE_REPUTATION_LEVELS.PREFERRED.value) {
+        discount = 10; // 10% discount for preferred/VIP
+    } else if (reputation >= BATHHOUSE_REPUTATION_LEVELS.FREQUENT.value) {
+        discount = 5; // 5% discount for frequent guests
+    }
+    
+    // Satisfaction bonus
+    if (satisfaction >= CLIENT_SATISFACTION_LEVELS.VERY_SATISFIED.value) {
+        discount += 5; // Additional 5% for very satisfied clients
+    }
+    
+    return Math.min(20, discount); // Cap at 20%
+}
+
+// Get service with client discount applied
+function getDiscountedServicePrice(serviceId, npc) {
+    const basePrice = getBathhouseServiceCost(serviceId);
+    const discount = getClientDiscount(npc);
+    return Math.round(basePrice * (1 - discount / 100));
+}
+
+// Get client preference description
+function getClientPreferenceDescription(npc) {
+    if (!npc || !npc.bathhouseProfile) return "";
+    
+    const profile = npc.bathhouseProfile;
+    const reputation = getReputationLevel(profile.reputation);
+    const satisfaction = getSatisfactionLevel(profile.satisfaction);
+    
+    const desc = [];
+    desc.push("Reputation: " + reputation.label);
+    desc.push("Satisfaction: " + satisfaction.label);
+    
+    if (profile.totalVisits) {
+        desc.push("Total Visits: " + profile.totalVisits);
+    }
+    
+    return desc.join(", ");
+}
+
+// Check if client gets priority service
+function clientGetsPriority(npc) {
+    if (!npc || !npc.bathhouseProfile) return false;
+    
+    const reputation = npc.bathhouseProfile.reputation || 0;
+    const satisfaction = npc.bathhouseProfile.satisfaction || 3;
+    
+    // VIP or preferred clients with high satisfaction get priority
+    return reputation >= BATHHOUSE_REPUTATION_LEVELS.PREFERRED.value &&
+           satisfaction >= CLIENT_SATISFACTION_LEVELS.SATISFIED.value;
+}
+
+// ============================================================================
+// BATHHOUSE STAFF SCHEDULING SYSTEM
+// ============================================================================
+
+// Staff shift types
+const BATHHOUSE_SHIFT_TYPES = {
+    MORNING: { id: 'morning', label: 'Morning Shift', startHour: 6, endHour: 12, description: '6 AM to 12 PM' },
+    AFTERNOON: { id: 'afternoon', label: 'Afternoon Shift', startHour: 12, endHour: 18, description: '12 PM to 6 PM' },
+    EVENING: { id: 'evening', label: 'Evening Shift', startHour: 18, endHour: 24, description: '6 PM to 12 AM' },
+    NIGHT: { id: 'night', label: 'Night Shift', startHour: 0, endHour: 6, description: '12 AM to 6 AM' }
+};
+
+// Staff work status
+const STAFF_STATUS = {
+    OFF_DUTY: 'off_duty',
+    ON_DUTY: 'on_duty',
+    ON_BREAK: 'on_break',
+    BUSY: 'busy'
+};
+
+// Initialize staff schedule for NPC
+function initializeBathhouseStaffSchedule(npc) {
+    if (!npc || !isBathhouseStaff(npc)) return null;
+    
+    // Generate schedule based on role
+    const schedule = generateStaffSchedule(npc);
+    
+    // Set initial status
+    npc.bathhouseSchedule = schedule;
+    npc.bathhouseOnDuty = false;
+    npc.bathhouseStatus = STAFF_STATUS.OFF_DUTY;
+    
+    return schedule;
+}
+
+// Check if NPC is bathhouse staff
+function isBathhouseStaff(npc) {
+    if (!npc) return false;
+    return npc.role === "Bathkeeper" || 
+           npc.role === "BathhouseAttendant" || 
+           npc.role === "BathhousePractitioner" ||
+           npc.bathhouseProvider === true;
+}
+
+// Generate staff schedule
+function generateStaffSchedule(npc) {
+    if (!npc) return null;
+    
+    // Staff work different shifts based on role
+    let shifts = [];
+    
+    if (npc.role === "Bathkeeper") {
+        // Bathkeeper works all day
+        shifts = [
+            { day: 0, shift: BATHHOUSE_SHIFT_TYPES.MORNING.id, onDuty: true },
+            { day: 0, shift: BATHHOUSE_SHIFT_TYPES.AFTERNOON.id, onDuty: true },
+            { day: 0, shift: BATHHOUSE_SHIFT_TYPES.EVENING.id, onDuty: true },
+            { day: 1, shift: BATHHOUSE_SHIFT_TYPES.MORNING.id, onDuty: true },
+            { day: 1, shift: BATHHOUSE_SHIFT_TYPES.AFTERNOON.id, onDuty: true },
+            { day: 1, shift: BATHHOUSE_SHIFT_TYPES.EVENING.id, onDuty: true },
+            { day: 2, shift: BATHHOUSE_SHIFT_TYPES.MORNING.id, onDuty: false } // Day off
+        ];
+    } else if (npc.role === "BathhousePractitioner") {
+        // Practitioners work specific shifts
+        const startDay = Math.floor(Math.random() * 3); // Random start day
+        shifts = [];
+        for (let day = 0; day < 3; day++) {
+            const dayOfWeek = (startDay + day) % 3;
+            shifts.push(
+                { day: dayOfWeek, shift: BATHHOUSE_SHIFT_TYPES.AFTERNOON.id, onDuty: true },
+                { day: dayOfWeek, shift: BATHHOUSE_SHIFT_TYPES.EVENING.id, onDuty: true }
+            );
+        }
+    } else {
+        // Attendants work varied shifts
+        shifts = [];
+        for (let day = 0; day < 7; day++) {
+            const shiftType = Object.values(BATHHOUSE_SHIFT_TYPES)[Math.floor(Math.random() * 3)];
+            shifts.push({ day: day % 3, shift: shiftType.id, onDuty: Math.random() < 0.7 }); // 70% chance on duty
+        }
+    }
+    
+    return { shifts: shifts, lastUpdated: 0 };
+}
+
+// Check if staff is on duty at current time
+function isStaffOnDuty(npc, turnOfDay) {
+    if (!npc || !npc.bathhouseSchedule || !isBathhouseStaff(npc)) return false;
+    
+    // Get current day and shift
+    const day = getCurrentDayFromTurn(turnOfDay);
+    const shift = getCurrentShiftFromTurn(turnOfDay);
+    
+    // Check schedule
+    const scheduleEntry = npc.bathhouseSchedule.shifts.find(
+        entry => entry.day === day && entry.shift === shift
+    );
+    
+    return !!(scheduleEntry && scheduleEntry.onDuty);
+}
+
+// Get current day (0-2 for 3-day cycle)
+function getCurrentDayFromTurn(turn) {
+    if (typeof getTurnOfDay === "function") {
+        const turnOfDay = typeof turn === "number" ? turn : getTurnOfDay();
+        // Simplified: 0-7 = day 0, 8-15 = day 1, 16-23 = day 2
+        return Math.floor((turnOfDay || 0) / 8) % 3;
+    }
+    return Math.floor((turn || 0) / 8) % 3;
+}
+
+// Get current shift from turn of day
+function getCurrentShiftFromTurn(turn) {
+    const turnOfDay = typeof turn === "number" ? turn : (typeof getTurnOfDay === "function" ? getTurnOfDay() : 12);
+    
+    if (turnOfDay >= 6 && turnOfDay < 12) return BATHHOUSE_SHIFT_TYPES.MORNING.id;
+    if (turnOfDay >= 12 && turnOfDay < 18) return BATHHOUSE_SHIFT_TYPES.AFTERNOON.id;
+    if (turnOfDay >= 18 && turnOfDay < 24) return BATHHOUSE_SHIFT_TYPES.EVENING.id;
+    return BATHHOUSE_SHIFT_TYPES.NIGHT.id;
+}
+
+// Update staff duty status
+function updateStaffDutyStatus(npc, turnOfDay) {
+    if (!npc || !isBathhouseStaff(npc)) return;
+    
+    const onDuty = isStaffOnDuty(npc, turnOfDay);
+    npc.bathhouseOnDuty = onDuty;
+    npc.bathhouseStatus = onDuty ? STAFF_STATUS.ON_DUTY : STAFF_STATUS.OFF_DUTY;
+    
+    return onDuty;
+}
+
+// Get staff availability description
+function getStaffAvailabilityDescription(npc) {
+    if (!npc || !isBathhouseStaff(npc)) return "";
+    
+    if (!npc.bathhouseSchedule) {
+        initializeBathhouseStaffSchedule(npc);
+    }
+    
+    const schedule = npc.bathhouseSchedule;
+    const onDuty = npc.bathhouseOnDuty;
+    
+    if (onDuty) {
+        return "Currently on duty at the bathhouse.";
+    }
+    
+    return "Currently off duty from the bathhouse.";
+}
+
+// Get staff schedule description
+function getStaffScheduleDescription(npc) {
+    if (!npc || !isBathhouseStaff(npc) || !npc.bathhouseSchedule) return "";
+    
+    const schedule = npc.bathhouseSchedule;
+    const days = ['First Day', 'Second Day', 'Third Day'];
+    
+    const desc = [];
+    desc.push(npc.name + "'s Bathhouse Schedule:");
+    
+    schedule.shifts.forEach(entry => {
+        const dayName = days[entry.day] || "Day " + entry.day;
+        const shift = BATHHOUSE_SHIFT_TYPES[entry.shift] || { label: entry.shift };
+        const status = entry.onDuty ? "On Duty" : "Off Duty";
+        desc.push("  " + dayName + " " + shift.label + ": " + status);
+    });
+    
+    return desc.join("\n");
+}
+
+// Player as bathhouse provider mechanics
+function setupPlayerAsBathhouseProvider(player) {
+    if (!player) return false;
+    
+    // Mark player as bathhouse provider
+    player.bathhouseProvider = true;
+    player.bathhouseProviderRole = "practitioner"; // or "attendant" based on qualification
+    player.bathhouseEarnings = player.bathhouseEarnings || 0;
+    player.bathhouseServicesProvided = player.bathhouseServicesProvided || 0;
+    player.bathhouseTipsReceived = player.bathhouseTipsReceived || 0;
+    
+    return true;
+}
+
+// Record player earnings from bathhouse service
+function recordBathhouseEarnings(player, amount, serviceId, isTip) {
+    if (!player) return;
+    
+    if (isTip) {
+        player.bathhouseTipsReceived = (player.bathhouseTipsReceived || 0) + amount;
+    } else {
+        player.bathhouseEarnings = (player.bathhouseEarnings || 0) + amount;
+    }
+    player.bathhouseServicesProvided = (player.bathhouseServicesProvided || 0) + 1;
+    
+    // Track last service for narration context
+    player.lastBathhouseService = serviceId;
+    player.lastBathhouseServiceTurn = player.storyTurn || 0;
+}
+
+// Check if player can accept a service request
+function canPlayerAcceptBathhouseRequest(player, request) {
+    if (!player || !request) return false;
+    
+    // Must be alive and conscious
+    if (player.dead || player.hp <= 0 || player.unconscious) return false;
+    
+    // Must be qualified for the service tier
+    const serviceTier = getServiceTier(request.serviceId);
+    if (serviceTier === "manual") return true; // All providers can do manual
+    if (serviceTier === "oral" || serviceTier === "intercourse") {
+        // Need qualification check
+        if (typeof bathhouseQualified === "function") {
+            return bathhouseQualified(player.currentRoom);
+        }
+        return false;
+    }
+    
+    return true;
+}
+
+// Get service tier
+function getServiceTier(serviceId) {
+    if (serviceId.startsWith("bath_manual_")) return "manual";
+    if (serviceId.startsWith("bath_oral_")) return "oral";
+    if (serviceId.startsWith("bath_intercourse_")) return "intercourse";
+    return "manual";
+}
+
 // Export function to window for NSFW system access (catalogue already exported above)
 if (typeof window !== "undefined") {
     window.queryConversationCatalogue = queryConversationCatalogue;
@@ -9093,4 +10294,52 @@ if (typeof window !== "undefined") {
     window.getNPCFactRecords = getNPCFactRecords;
     window.selectNPCFacts = selectNPCFacts;
     window.getNPCFactSelection = getNPCFactSelection;
+    // Bathhouse system exports
+    window.generateBathhouseRegularProfile = generateBathhouseRegularProfile;
+    window.generateBathhouseRumor = generateBathhouseRumor;
+    window.shouldNPCVisitBathhouseToday = shouldNPCVisitBathhouseToday;
+    window.markBathhouseVisit = markBathhouseVisit;
+    window.BATHHOUSE_REGULAR_FREQUENCY = BATHHOUSE_REGULAR_FREQUENCY;
+    window.BATHHOUSE_REGULAR_PREFERENCES = BATHHOUSE_REGULAR_PREFERENCES;
+    // NPC-to-NPC service requests and player as provider
+    window.generateBathhouseServiceRequest = generateBathhouseServiceRequest;
+    window.canNPCRequestBathhouseService = canNPCRequestBathhouseService;
+    window.canNPCProvideBathhouseService = canNPCProvideBathhouseService;
+    window.selectServiceForNPC = selectServiceForNPC;
+    window.getAvailableServices = getAvailableServices;
+    window.getBathhouseServiceCost = getBathhouseServiceCost;
+    window.getBathhouseServiceName = getBathhouseServiceName;
+    window.getProviderType = getProviderType;
+    window.getRequesterMood = getRequesterMood;
+    window.getProviderStyle = getProviderStyle;
+    window.checkServiceCompatibility = checkServiceCompatibility;
+    window.getCompatibilityNote = getCompatibilityNote;
+    window.setupPlayerAsBathhouseProvider = setupPlayerAsBathhouseProvider;
+    window.recordBathhouseEarnings = recordBathhouseEarnings;
+    window.canPlayerAcceptBathhouseRequest = canPlayerAcceptBathhouseRequest;
+    window.getServiceTier = getServiceTier;
+    window.BATHHOUSE_PROVIDER_TYPES = BATHHOUSE_PROVIDER_TYPES;
+    window.BATHHOUSE_REQUEST_STATES = BATHHOUSE_REQUEST_STATES;
+    // Reputation and client relationship system
+    window.BATHHOUSE_REPUTATION_LEVELS = BATHHOUSE_REPUTATION_LEVELS;
+    window.CLIENT_SATISFACTION_LEVELS = CLIENT_SATISFACTION_LEVELS;
+    window.getReputationLevel = getReputationLevel;
+    window.getSatisfactionLevel = getSatisfactionLevel;
+    window.updateClientRelationship = updateClientRelationship;
+    window.getClientDiscount = getClientDiscount;
+    window.getDiscountedServicePrice = getDiscountedServicePrice;
+    window.getClientPreferenceDescription = getClientPreferenceDescription;
+    window.clientGetsPriority = clientGetsPriority;
+    // Staff scheduling system
+    window.BATHHOUSE_SHIFT_TYPES = BATHHOUSE_SHIFT_TYPES;
+    window.STAFF_STATUS = STAFF_STATUS;
+    window.initializeBathhouseStaffSchedule = initializeBathhouseStaffSchedule;
+    window.isBathhouseStaff = isBathhouseStaff;
+    window.generateStaffSchedule = generateStaffSchedule;
+    window.isStaffOnDuty = isStaffOnDuty;
+    window.getCurrentDayFromTurn = getCurrentDayFromTurn;
+    window.getCurrentShiftFromTurn = getCurrentShiftFromTurn;
+    window.updateStaffDutyStatus = updateStaffDutyStatus;
+    window.getStaffAvailabilityDescription = getStaffAvailabilityDescription;
+    window.getStaffScheduleDescription = getStaffScheduleDescription;
 }
