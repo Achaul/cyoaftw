@@ -3,7 +3,7 @@
 // cyoaftw-context-builder.js v2026-10-23-003 — Bounded NPC Life short-term/entity recollections, personality and sleeping context.
 // Version identifier for debugging cached files.
 if (typeof window !== "undefined") {
-    window.CONTEXT_BUILDER_VERSION = "2026-10-25-001";
+    window.CONTEXT_BUILDER_VERSION = "2026-10-25-002";
     console.log("[Context Builder] Loaded v" + window.CONTEXT_BUILDER_VERSION);
 }
 
@@ -377,7 +377,7 @@ function buildNPCMemoryBlock(npc, wantedTags, maxNotable = 4, maxTold = 6) {
     const selected = typeof getNPCShortTermMemories === "function" ? getNPCShortTermMemories(npc, wantedTags || [], 2, subjects) : [];
     const shortTerm = recent.concat(selected).filter(function (e, i, all) { return all.indexOf(e) === i; }).slice(0, 4);
     const entityLines = buildNPCEntityMemoryLines(npc, options);
-    const worldMemory = typeof buildNPCWorldReactionMemory === "function" ? buildNPCWorldReactionMemory(npc) : "";
+    const worldMemory = [typeof buildNPCWorldReactionMemory === "function" ? buildNPCWorldReactionMemory(npc) : "", typeof buildNPCSocialMemory === "function" ? buildNPCSocialMemory(npc, options) : ""].filter(Boolean).join("\n");
     if (!facts.length && !told.length && !notable.length && !shortTerm.length && !entityLines.length) return worldMemory;
     const lines = ["WHAT YOU REMEMBER ABOUT THE PLAYER:"];
     if (facts.length) {
