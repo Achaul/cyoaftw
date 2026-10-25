@@ -44067,6 +44067,24 @@ function renderNPCActionMenu(npc) {
     const actions = [];
     if (isNPCSleeping(npc)) {
         const room = G.activeRoom, player = G.player, turn = getCurrentStoryTurn();
+        
+        // Check if intimacy system is available and NPC is eligible for sleeping intimacy
+        const isEligible = typeof window.startIntimacyEncounter === "function" && isNsfwBodyEligible(npc);
+        
+        if (isEligible) {
+            // Create Interact button for sleeping NPCs
+            const interactBtn = createCombatButton("Interact", function () {
+                if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== "menu" || getCurrentStoryTurn() !== turn || !(room.creatures || []).includes(npc) || !isNPCSleeping(npc)) {
+                    return sharedChoiceResult("blocked", "That person is no longer asleep.");
+                }
+                startSleepingIntimacy(npc);
+                return { status: "completed" };
+            }, { title: "Interact with them while they sleep using the intimacy system - may wake them!" });
+            
+            el.appendChild(interactBtn);
+        }
+        
+        // Standard sleeping actions
         [ { label: "Search quietly", action: "search", reason: sleepingNPCBlock(npc, "search") }, { label: "Wake", action: "wake", reason: sleepingNPCBlock(npc, "wake") }, { label: "Attack", action: "attack", reason: "", title: "Sleeping target: +4 to hit and double opening damage before armour." }, { label: "Step away", action: "disengage", reason: "" } ].forEach(function (option) {
             const btn = createCombatButton(option.label, function () {
                 if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== "menu" || getCurrentStoryTurn() !== turn || !(room.creatures || []).includes(npc) || !isNPCSleeping(npc)) return sharedChoiceResult("blocked", "That sleeping action changed. Look at them again.");
@@ -44076,6 +44094,43 @@ function renderNPCActionMenu(npc) {
         });
         return;
     }
+    
+    // Handle unconscious NPCs - route to intimacy menu
+    if (npc.unconscious || npc.bodyState === "unconscious" || npc.isUnconsciousBody) {
+        const room = G.activeRoom, player = G.player, turn = getCurrentStoryTurn();
+        
+        // Check if intimacy system is available and NPC is eligible
+        if (typeof window.startIntimacyEncounter === "function" && isNsfwBodyEligible(npc)) {
+            // Create Interact button for unconscious NPCs
+            const interactBtn = createCombatButton("Interact", function () {
+                if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== "menu" || getCurrentStoryTurn() !== turn || !(room.creatures || []).includes(npc) || !(npc.unconscious || npc.bodyState === "unconscious" || npc.isUnconsciousBody)) {
+                    return sharedChoiceResult("blocked", "That person is no longer unconscious.");
+                }
+                startUnconsciousIntimacy(npc);
+                return { status: "completed" };
+            }, { title: "Interact with their unconscious body using the intimacy system" });
+            
+            el.appendChild(interactBtn);
+        }
+        
+        // Add basic actions for unconscious NPCs
+        actions.push(
+            { label: "Try to wake", action: "wake" },
+            { label: "Step away", action: "disengage" }
+        );
+        
+        actions.forEach(option => {
+            const btn = document.createElement("button");
+            btn.className = `chat-option-btn npc-action-btn${option.className ? " " + option.className : ""}`;
+            if (option.disabled) btn.disabled = true;
+            if (option.title) btn.title = option.title;
+            btn.textContent = option.label;
+            btn.onclick = () => chooseNPCAction(option.action);
+            el.appendChild(btn);
+        });
+        return;
+    }
+    
     if (canConverseWithNPC(npc)) {
         actions.push({ label: "Talk", action: "talk" });
     }
@@ -55315,55 +55370,100 @@ function startEncounterFromConversation(npc, choice, replyText) {
 }
 
 /**
- * Start an intimacy encounter with an unconscious body
- * This routes unconscious body interactions to the main intimacy system
+ * Start an intimacy encounter with a sleeping NPC
+ * Similar to unconscious but with wake-up chance and different behavior
+ */
+function startSleepingIntimacy(npc) {
+    if (!npc || !isNPCSleeping(npc)) return;
+    
+    // Check if intimacy system is available
+    if (typeof window.startIntimacyEncounter !== "function") {
+        console.error("[Engine] startIntimacyEncounter not available");
+        return;
+    }
+    
+    // Check eligibility
+    if (!isNsfwBodyEligible(npc)) {
+        console.log("[Engine] startSleepingIntimacy: NPC not eligible");
+        return;
+    }
+    
+    // Set up the NPC for intimacy encounter
+    if (!npc.intimacy) {
+        npc.intimacy = {};
+    }
+    
+    // Mark as sleeping encounter with wake-up tracking
+    npc.intimacy.encounter = npc.intimacy.encounter || {};
+    npc.intimacy.encounter.active = true;
+    npc.intimacy.encounter.isSleepingEncounter = true;
+    
+    // Track wake-up state
+    // These will be used by the intimacy system to determine wake-up chances
+    npc.intimacy.encounter._isIntoxicated = typeof getDrunkTier === "function" ? getDrunkTier(npc) >= 2 : false;
+    npc.intimacy.encounter._isExhausted = typeof isEntityExhausted === "function" ? isEntityExhausted(npc) : (npc.stamina <= 0);
+    
+    // Default position for sleeping encounters
+    const defaultPosition = "Missionary"; // Or could be "Sleeping" if that exists
+    
+    console.log("[Engine] Starting sleeping intimacy encounter with", npc.name || "NPC", 
+                "- Intoxicated:", npc.intimacy.encounter._isIntoxicated,
+                "- Exhausted:", npc.intimacy.encounter._isExhausted);
+    
+    // Start the intimacy encounter
+    window.startIntimacyEncounter(npc, G.player, defaultPosition);
+    
+    // Bring up the intimacy action menu
+    if (typeof window.renderIntimacyActionMenu === "function") {
+        window.renderIntimacyActionMenu(npc);
+    }
+}
+
+/**
+ * Start an intimacy encounter with an unconscious body or NPC
+ * This routes unconscious body/NPC interactions to the main intimacy system
  * instead of the old appendUnconsciousBodyActions system.
  */
-function startUnconsciousIntimacy(body) {
-    if (!body) return;
+function startUnconsciousIntimacy(target) {
+    if (!target) return;
     
-    // Verify this is a body and is unconscious
-    const isBody = body && body.isBody === true;
-    const isEligible = isBody && body.nsfwActionsRevealed && isNsfwBodyEligible(body);
+    // Check if this is an eligible target (body or NPC)
+    const isEligible = isNsfwBodyEligible(target);
     
     if (!isEligible) {
-        console.log("[Engine] startUnconsciousIntimacy: body not eligible for intimacy");
+        console.log("[Engine] startUnconsciousIntimacy: target not eligible for intimacy");
         return;
     }
     
     // Check if the intimacy system is available
     if (typeof window.startIntimacyEncounter !== "function") {
         console.error("[Engine] startIntimacyEncounter not available — intimacy-system.js may have failed to load.");
-        // Fall back to old system if available
-        if (typeof window.appendUnconsciousBodyActions === "function") {
-            window.appendUnconsciousBodyActions(body);
-        }
         return;
     }
     
-    // Set up the body for intimacy encounter
+    // Set up the target for intimacy encounter
     // Ensure intimacy state exists
-    if (!body.intimacy) {
-        body.intimacy = {};
+    if (!target.intimacy) {
+        target.intimacy = {};
     }
     
     // Mark as unconscious encounter
-    body.intimacy.encounter = body.intimacy.encounter || {};
-    body.intimacy.encounter.active = true;
-    body.intimacy.encounter.isUnconsciousEncounter = true;
+    target.intimacy.encounter = target.intimacy.encounter || {};
+    target.intimacy.encounter.active = true;
+    target.intimacy.encounter.isUnconsciousEncounter = true;
     
-    // Default to "Unconscious On Back" position for unconscious bodies
+    // Default to "Unconscious On Back" position for unconscious targets
     // The intimacy system will handle unconscious-specific acts and reactions
     const defaultPosition = "Unconscious On Back";
     
-    console.log("[Engine] Starting unconscious intimacy encounter with", body.name || "body", "in position:", defaultPosition);
+    console.log("[Engine] Starting unconscious intimacy encounter with", target.name || "target", "in position:", defaultPosition);
     
     // Start the intimacy encounter
-    window.startIntimacyEncounter(body, G.player, defaultPosition);
+    window.startIntimacyEncounter(target, G.player, defaultPosition);
     
     // Bring up the intimacy action menu
     if (typeof window.renderIntimacyActionMenu === "function") {
-        window.renderIntimacyActionMenu(body);
+        window.renderIntimacyActionMenu(target);
     }
 }
 

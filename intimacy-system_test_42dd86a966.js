@@ -1768,6 +1768,97 @@ function _actDisinhibitionGrantDelta(act) {
 }
 
 /**
+ * Generate wake-up reaction for a sleeping NPC who was disturbed
+ * Returns reaction object with narration, reaction type, and whether to end encounter
+ */
+function generateSleepingWakeUpReaction(npc, player, actId) {
+    if (!npc) {
+        return { 
+            narration: "They wake up!", 
+            reaction: "startled", 
+            shouldEndEncounter: true 
+        };
+    }
+    
+    const act = getAct(actId);
+    const actName = act ? act.label || actId : actId;
+    const npcName = npc.name || "the NPC";
+    const playerName = player.name || "you";
+    
+    // Determine reaction based on act intensity and NPC personality
+    let reactionType = "startled";
+    let shouldEnd = true;
+    let baseNarration = "";
+    
+    // Categorize act by intensity
+    const isGentleAct = act && (act.type === ACT_TYPES.TEASE || act.type === ACT_TYPES.CLOTHING);
+    const isIntimateAct = act && (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE);
+    const isImpactAct = act && act.type === ACT_TYPES.IMPACT;
+    
+    // Determine NPC disposition
+    const favor = npc.memory && typeof npc.memory.favorability === "number" ? npc.memory.favorability : 0;
+    const hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
+    const disinhibition = npc.intimacy && npc.intimacy.disinhibition ? npc.intimacy.disinhibition : 0;
+    
+    // Roll for reaction
+    const reactionRoll = Math.random();
+    
+    // Intoxicated NPCs are more disinhibited
+    const isIntoxicated = (npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter._isIntoxicated) || 
+                         (typeof getDrunkTier === "function" ? getDrunkTier(npc) >= 2 : false);
+    
+    // Determine if NPC goes with it or resists
+    const goWithItChance = Math.min(0.9, 0.1 + (favor / 200) + (disinhibition / 200) + (isIntoxicated ? 0.3 : 0));
+    const goesWithIt = reactionRoll < goWithItChance;
+    
+    if (isGentleAct) {
+        if (goesWithIt) {
+            reactionType = "accepting";
+            shouldEnd = false;
+            baseNarration = `${npcName} stirs and mumbles sleepily, but doesn't fully wake. Their eyes flutter as ${playerName} ${actName.toLowerCase()}, a small smile playing on their lips.`;
+        } else {
+            reactionType = favor > 30 ? "surprised" : "annoyed";
+            shouldEnd = true;
+            baseNarration = `${npcName} wakes with a start, blinking in confusion. "W-what are you...?" They ${favor > 30 ? "rub their eyes" : "pull away"}, ${favor > 50 ? "smiling" : favor > 0 ? "frowning" : "glancing around angrily"}.`;
+        }
+    } else if (isIntimateAct) {
+        if (goesWithIt) {
+            reactionType = "aroused";
+            shouldEnd = false;
+            baseNarration = `${npcName} gasps as they wake, their body responding before their mind catches up. "Mmm..." they murmur, arching into ${playerName}'s touch, their sleep-addled mind slow to protest.`;
+        } else {
+            reactionType = hostility > 50 ? "angry" : favor > 20 ? "shocked" : "furious";
+            shouldEnd = true;
+            baseNarration = `${npcName} wakes with a shout, pushing ${playerName} away! "Get off!" They scramble back, ${hostility > 50 ? "drawing a weapon" : favor > 20 ? "looking startled" : "eyes wide with outrage"}.`;
+        }
+    } else if (isImpactAct) {
+        reactionType = Math.random() < 0.8 ? "angry" : "shocked";
+        shouldEnd = true;
+        baseNarration = `${npcName} jolts awake with a cry! "Ow! What the-?" They ${reactionType === "angry" ? "leap to their feet, ready to fight" : "stare in disbelief"} at ${playerName}.`;
+    } else {
+        reactionType = goesWithIt ? "accepting" : "startled";
+        shouldEnd = !goesWithIt;
+        baseNarration = `${npcName} wakes up, ${goesWithIt ? "yawning and stretching" : "bolting upright"} as ${playerName} ${actName.toLowerCase()}.`;
+    }
+    
+    // Add flavor based on intoxication
+    if (isIntoxicated) {
+        baseNarration = baseNarration.replace("wakes", "groggily stirs").replace("wake", "stir");
+        if (goesWithIt) {
+            baseNarration += " Their drunk haze makes them slow to realize what's happening.";
+        } else {
+            baseNarration += " Even through their drunk fog, they sense something is wrong.";
+        }
+    }
+    
+    return {
+        narration: baseNarration,
+        reaction: reactionType,
+        shouldEndEncounter: shouldEnd
+    };
+}
+
+/**
  * Check if action is valid and return reason if not
  * Returns { valid: boolean, reason?: string } for an action
  */
@@ -1802,13 +1893,48 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     if (!act) return { valid: false, reason: "unknown action" };
 
     // UNCONSCIOUS ACTION CHECK
+    // Check if NPC is unconscious
+    const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                       (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+    
+    // Check if NPC is sleeping
+    const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+                     (npc && npc.currentState && npc.currentState.sleeping);
+    
     // If this is an unconscious-only action, verify the NPC is unconscious
     if (act.unconsciousOnly === true) {
-        // Check if NPC is unconscious using context helper
-        const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
-                           (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
         if (!isUnconscious) {
             return { valid: false, reason: "not unconscious", hidden: true };
+        }
+    }
+    
+    // If NPC is unconscious, hide all NPC-actor actions (playerIsBottom: true)
+    // since the unconscious NPC cannot participate or respond
+    if (isUnconscious && act.playerIsBottom === true) {
+        return { valid: false, reason: "NPC is unconscious", hidden: true };
+    }
+    
+    // SLEEPING ACTION CHECK
+    // For sleeping NPCs, only allow safe sleeping acts or all acts if intoxicated
+    if (isSleeping) {
+        const intimacyState = npc.intimacy || {};
+        const encounter = intimacyState.encounter || {};
+        const isIntoxicated = encounter._isIntoxicated === true;
+        const isExhausted = encounter._isExhausted === true;
+        
+        // If NPC is sleeping and this is an NPC-actor action, hide it
+        // (sleeping NPC cannot participate)
+        if (act.playerIsBottom === true) {
+            return { valid: false, reason: "NPC is sleeping", hidden: true };
+        }
+        
+        // For player-actor actions on sleeping NPCs:
+        // - If act is marked as safe for sleeping (sleepingSafe: true), allow it
+        // - If NPC is intoxicated, allow all player-actor actions (lower inhibition)
+        // - If NPC is exhausted, allow all player-actor actions (treats like unconscious initially)
+        // - Otherwise, only allow sleeping-safe acts
+        if (act.sleepingSafe !== true && !isIntoxicated && !isExhausted) {
+            return { valid: false, reason: "act not safe for sleeping NPC", hidden: true };
         }
     }
 
@@ -3547,6 +3673,71 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     if (!isActionValid(actId, npc, player, currentPosition, clothingState)) {
         console.warn(`[Intimacy] Action ${actId} is not valid in current state`);
         return null;
+    }
+    
+    // WAKE-UP ROLL FOR SLEEPING NPCS
+    // Check if this is a sleeping encounter and roll for wake-up chance
+    const encounter = intimacy.encounter || {};
+    const isSleeping = encounter.isSleepingEncounter === true;
+    
+    if (isSleeping && act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.END) {
+        // Determine wake-up chance based on NPC state
+        let wakeUpChance = 0.7; // 70% base chance to wake from an act
+        
+        // Modify chance based on NPC state
+        if (encounter._isIntoxicated === true) {
+            wakeUpChance = 0.3; // 30% chance if intoxicated (drunk)
+            console.log(`[Intimacy] Intoxicated sleeping NPC - reduced wake-up chance to ${wakeUpChance}`);
+        }
+        if (encounter._isExhausted === true) {
+            wakeUpChance = 0.15; // 15% chance if exhausted (no stamina)
+            console.log(`[Intimacy] Exhausted sleeping NPC - reduced wake-up chance to ${wakeUpChance}`);
+        }
+        
+        // Roll for wake-up
+        const rolledWakeUp = Math.random() < wakeUpChance;
+        
+        if (rolledWakeUp) {
+            console.log(`[Intimacy] Sleeping NPC WAKE-UP! (rolled ${Math.random().toFixed(2)} < ${wakeUpChance})`);
+            
+            // NPC wakes up - end the sleeping encounter
+            encounter.isSleepingEncounter = false;
+            encounter.active = false;
+            
+            // Clear sleeping state from NPC
+            if (npc.currentState) {
+                npc.currentState.sleeping = false;
+            }
+            
+            // Generate wake-up reaction based on NPC personality
+            const reaction = generateSleepingWakeUpReaction(npc, player, actId);
+            
+            // Return a special result that includes the wake-up narration
+            return {
+                action: actId,
+                type: "wakeup",
+                responseText: reaction.narration,
+                npcWokeUp: true,
+                npcReaction: reaction.reaction,
+                shouldEndEncounter: reaction.shouldEndEncounter
+            };
+        } else {
+            console.log(`[Intimacy] Sleeping NPC stays asleep (rolled ${Math.random().toFixed(2)} >= ${wakeUpChance})`);
+            
+            // Add stamina recovery for exhausted NPCs during acts
+            if (encounter._isExhausted === true && typeof npc.stamina === "number") {
+                // Recover a bit of stamina each act
+                const staminaRecovered = Math.min(5, Math.ceil(npc.staminaMax * 0.05));
+                npc.stamina = Math.min(npc.staminaMax, npc.stamina + staminaRecovered);
+                console.log(`[Intimacy] Exhausted NPC recovered ${staminaRecovered} stamina`);
+                
+                // If stamina recovers above 0, they're no longer exhausted
+                if (npc.stamina > 0 && typeof isEntityExhausted === "function" && !isEntityExhausted(npc)) {
+                    encounter._isExhausted = false;
+                    console.log(`[Intimacy] NPC no longer exhausted - stamina recovered`);
+                }
+            }
+        }
     }
     
     // Check cooldown for male characters (penetration and ejaculation actions)
