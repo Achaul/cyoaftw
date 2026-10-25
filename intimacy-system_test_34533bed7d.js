@@ -2537,6 +2537,23 @@ function generateAllActionsWithStatus(npc, player, positionId = null) {
     if (!npc || !player) return { valid: [], invalid: [] };
     
     const intimacy = npc.intimacy || initializeIntimacyState(npc);
+    
+    // Ensure position object exists
+    if (!intimacy.position) {
+        intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
+    
+    // Ensure clothing object exists
+    if (!intimacy.clothing) {
+        intimacy.clothing = {
+            player: {},
+            npc: {}
+        };
+    }
+    
     const clothingState = intimacy.clothing;
     const currentPosition = positionId || intimacy.position.player;
     const stage = getIntimacyStage(clothingState);
@@ -3139,6 +3156,15 @@ function maybeNpcIntercourseRequest(npc, player, act, intimacy) {
     // Candidate targets in preference order: vagina (female NPCs first),
     // then anus (any NPC). Validity is the full menu gate — disinhibition,
     // gender, position, clothing, lube.
+    
+    // Ensure position object exists
+    if (!intimacy.position) {
+        intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
+    
     var position = (intimacy.position && intimacy.position.player) || null;
     var clothing = intimacy.clothing || null;
     var candidates = [];
@@ -3703,6 +3729,23 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     
     const act = getAct(actId);
     const intimacy = npc.intimacy || initializeIntimacyState(npc);
+    
+    // Ensure position object exists
+    if (!intimacy.position) {
+        intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
+    
+    // Ensure clothing object exists
+    if (!intimacy.clothing) {
+        intimacy.clothing = {
+            player: {},
+            npc: {}
+        };
+    }
+    
     const clothingState = intimacy.clothing;
     const currentPosition = positionId || intimacy.position.player;
 
