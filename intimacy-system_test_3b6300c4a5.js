@@ -1419,6 +1419,31 @@ function startIntimacyEncounter(npc, player, positionId = null) {
         initializeIntimacyState(npc);
     }
     
+    // Ensure position object exists
+    if (!npc.intimacy.position) {
+        npc.intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
+    
+    // Ensure clothing object exists
+    if (!npc.intimacy.clothing) {
+        npc.intimacy.clothing = {
+            player: {},
+            npc: {}
+        };
+    }
+    
+    // Ensure encounter object exists
+    if (!npc.intimacy.encounter) {
+        npc.intimacy.encounter = {
+            active: false,
+            startedAt: null,
+            lastActivityAt: null
+        };
+    }
+    
     // Set position
     const pos = positionId || DEFAULT_POSITION;
     npc.intimacy.position.player = pos;
@@ -1458,6 +1483,15 @@ function startIntimacyEncounter(npc, player, positionId = null) {
  */
 function endIntimacyEncounter(npc) {
     if (!npc || !npc.intimacy) return false;
+    
+    // Ensure encounter object exists
+    if (!npc.intimacy.encounter) {
+        npc.intimacy.encounter = {
+            active: false,
+            startedAt: null,
+            lastActivityAt: null
+        };
+    }
     
     npc.intimacy.encounter.active = false;
     npc.intimacy.encounter.startedAt = null;
@@ -1545,6 +1579,16 @@ function endIntimacyEncounter(npc) {
  */
 function updateLastActivity(npc) {
     if (!npc || !npc.intimacy) return;
+    
+    // Ensure encounter object exists
+    if (!npc.intimacy.encounter) {
+        npc.intimacy.encounter = {
+            active: false,
+            startedAt: null,
+            lastActivityAt: null
+        };
+    }
+    
     npc.intimacy.encounter.lastActivityAt = Date.now();
 }
 
@@ -10024,6 +10068,14 @@ function changePosition(npc, player, newPositionId, options = {}) {
     if (!npc || !npc.intimacy) return { success: false, error: "No intimacy state" };
     if (!hasPosition(newPositionId)) return { success: false, error: "Invalid position" };
     
+    // Ensure position object exists
+    if (!npc.intimacy.position) {
+        npc.intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
+    
     const oldPosition = npc.intimacy.position.player;
     const oldPositionObj = getPosition(oldPosition);
     const newPositionObj = getPosition(newPositionId);
@@ -11540,6 +11592,14 @@ function enhanceActionLabel(npc, label, context = {}) {
  */
 function getSuggestedPositions(npc) {
     if (!npc || !npc.intimacy) return [];
+    
+    // Ensure position object exists
+    if (!npc.intimacy.position) {
+        npc.intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
     
     const currentPosition = npc.intimacy.position.player;
     const allPositions = getAllPositionIds();
