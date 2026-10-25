@@ -206,6 +206,34 @@ function canPenetrate(room, targetNpc, npc) {
     return canStartIntimacy(room, targetNpc);
 }
 
+/**
+ * Check if NPC is in an unconscious state (unconscious body or isUnconsciousBody flag)
+ */
+function isNPCUnconscious(npc) {
+    if (!npc) return false;
+    // Check for unconscious body objects
+    if (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true) {
+        return true;
+    }
+    // Check for unconscious flag on regular NPCs
+    if (npc.unconscious === true || npc.hp <= 0) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Check if action is eligible for unconscious NPC
+ * Unconscious NPCs can only receive one-sided, non-consensual actions
+ */
+function isActionValidForUnconscious(act, npc) {
+    if (!act || !npc) return false;
+    // Action must be marked for unconscious use
+    if (act.unconsciousOnly !== true) return false;
+    // Additional checks can be added here for species compatibility, etc.
+    return true;
+}
+
 // ============================================================================
 // NATURAL LABEL MAPPING
 // Maps clinical act IDs to natural, immersive display text
@@ -467,7 +495,9 @@ if (typeof module !== 'undefined' && module.exports) {
         canUndress,
         canPenetrate,
         filterActionsByPhase,
-        getNaturalLabel
+        getNaturalLabel,
+        isNPCUnconscious,
+        isActionValidForUnconscious
     };
 }
 
@@ -487,4 +517,6 @@ if (typeof window !== 'undefined') {
     window.canPenetrate = canPenetrate;
     window.filterActionsByPhase = filterActionsByPhase;
     window.getNaturalLabel = getNaturalLabel;
+    window.isNPCUnconscious = isNPCUnconscious;
+    window.isActionValidForUnconscious = isActionValidForUnconscious;
 }

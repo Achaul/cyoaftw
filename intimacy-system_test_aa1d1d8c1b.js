@@ -1801,6 +1801,17 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     const act = getAct(actId);
     if (!act) return { valid: false, reason: "unknown action" };
 
+    // UNCONSCIOUS ACTION CHECK
+    // If this is an unconscious-only action, verify the NPC is unconscious
+    if (act.unconsciousOnly === true) {
+        // Check if NPC is unconscious using context helper
+        const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                           (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+        if (!isUnconscious) {
+            return { valid: false, reason: "not unconscious", hidden: true };
+        }
+    }
+
     // Demeanor mode check - actions with requiresDemeanorMode only appear in that demeanor
     if (act.requiresDemeanorMode) {
         const demeanorMode = (npc.intimacy && npc.intimacy._demeanorMode) ? String(npc.intimacy._demeanorMode).toLowerCase() : "consentual";
@@ -5419,6 +5430,126 @@ function getArousalDescriptor(level) {
 }
 
 /**
+ * Build reflexive-only reaction for unconscious NPC
+ * Unconscious bodies cannot give conscious verbal responses - only physical reflexes.
+ * Reactions are purely involuntary: muscle twitches, breathing changes, etc.
+ */
+function buildUnconsciousReaction(npc, player, act, intimacy) {
+    if (!npc || !act) return "";
+    
+    const target = (act.target || "").toLowerCase();
+    const tool = (act.tool || "").toLowerCase();
+    const subjectPronoun = getSubjectPronoun(npc) || "They";
+    const possessivePronoun = getPossessivePronoun(npc) || "their";
+    
+    // Define reflexive reaction pools by body part/target
+    const UNCONSCIOUS_REACTIONS = {
+        // Oral actions
+        mouth: [
+            `<drops ${possessivePronoun} jaw slackly, drooling slightly.>`,
+            `<makes a soft, involuntary gagging sound.>`,
+            `<swallows reflexively, ${possessivePronoun} throat working on its own.>`,
+            `<lets out a quiet, unresponsive exhale through ${possessivePronoun} nose.>`,
+            `<lies still, mouth hanging open slightly.>`
+        ],
+        lips: [
+            `<part ${possessivePronoun} lips slightly under pressure but offer no response.>`,
+            `<stay motionless, lips slack and unresponsive.>`,
+            `<breath shallowly through ${possessivePronoun} nose.>`
+        ],
+        // Breast/nipple actions
+        breasts: [
+            `<breathe slowly, ${possessivePronoun} chest rising and falling with each unconscious breath.>`,
+            `<have ${possessivePronoun} nipples stiffen slightly from the stimulation.>`,
+            `<lie still, ${possessivePronoun} breasts heavy and limp.>`
+        ],
+        nipples: [
+            `<have ${possessivePronoun} nipples pebble and harden under attention.>`,
+            `<twitch slightly as ${possessivePronoun} nipples respond reflexively.>`,
+            `<breathe with faint changes in rhythm from the nipple stimulation.>`
+        ],
+        // Female genital actions
+        vagina: [
+            `<have a faint clench around the intrusion, purely reflexive.>`,
+            `<show a slight hip twitch, the only response from ${possessivePronoun} limp body.>`,
+            `<grow slightly flush under prolonged attention, an involuntary response.>`,
+            `<lie completely still, offering no resistance or participation.>`
+        ],
+        pussy: [
+            `<have a faint clench around the intrusion, purely reflexive.>`,
+            `<show a slight hip twitch, the only response from ${possessivePronoun} limp body.>`,
+            `<grow slightly flush under prolonged attention, an involuntary response.>`
+        ],
+        clitoris: [
+            `<have a subtle twitch at the contact, pure reflex.>`,
+            `<show a faint clitoral response, the only sign of sensation.>`
+        ],
+        clit: [
+            `<have a subtle twitch at the contact, pure reflex.>`,
+            `<show a faint response, the only sign of sensation.>`
+        ],
+        // Cloaca actions (reptilian species)
+        cloaca: [
+            `<have ${possessivePronoun} vent clench tightly, resisting entry.>`,
+            `<show a faint slickening under prolonged stimulation.>`,
+            `<twitch slightly as the vent is stimulated.>`,
+            `<lie still, the smooth-scaled opening offering no cooperation.>`
+        ],
+        // Male genital actions
+        penis: [
+            `<have ${possessivePronoun} cock stiffen slightly, pure reflex.>`,
+            `<twitch once or twice as ${possessivePronoun} hips buck involuntarily.>`,
+            `<lie slack, only ${possessivePronoun} cock showing any response.>`
+        ],
+        cock: [
+            `<have ${possessivePronoun} cock stiffen slightly, pure reflex.>`,
+            `<twitch once or twice as ${possessivePronoun} hips buck involuntarily.>`
+        ],
+        testicles: [
+            `<have ${possessivePronoun} balls tighten slightly, a reflexive protection.>`,
+            `<show no conscious response, only instinctive muscle tension.>`
+        ],
+        balls: [
+            `<have ${possessivePronoun} balls tighten slightly, a reflexive protection.>`
+        ],
+        // Anal actions
+        anus: [
+            `<clench tightly, the sphincter resisting involuntarily.>`,
+            `<show a faint twitch from the stimulation, pure reflex.>`,
+            `<offer no relaxation, the body staying tense and unresisting.>`,
+            `<grip the intrusion with a reflexive clench.>`
+        ],
+        ass: [
+            `<clench slightly at the contact, pure reflex.>`,
+            `<show a faint muscle response, the only reaction.>`
+        ],
+        buttocks: [
+            `<stay limp and unresponsive under the touch.>`,
+            `<show no conscious tension, only the weight of ${possessivePronoun} unconscious body.>`
+        ],
+        butt: [
+            `<stay limp and unresponsive under the touch.>`
+        ],
+        // General/body actions
+        body: [
+            `<lie completely still, a dead weight.>`,
+            `<show no reaction whatsoever.>`,
+            `<breathe slowly and regularly, oblivious to the touch.>`,
+            `<remain utterly limp and unresponsive.>`
+        ],
+        general: [
+            `<show no conscious response.>`,
+            `<lie still, completely unaware.>`,
+            `<breathe slowly, the only sign of life.>`
+        ]
+    };
+    
+    // Get reactions for this target, or fall back to general
+    const reactions = UNCONSCIOUS_REACTIONS[target] || UNCONSCIOUS_REACTIONS.general;
+    return pickRandom(reactions);
+}
+
+/**
  * Convert arousal from 0-800 scale to 0-100 scale.
  * The intimacy system stores arousal on a 0-800 scale (ORGASM_THRESHOLD=800),
  * but the reaction/dialogue helper functions use 0-100 thresholds.
@@ -6004,6 +6135,263 @@ var BODY_PART_REACTIONS = {
     }
 };
 
+// ============================================================================
+// BOUND CAPTIVE VOCAL REACTIONS
+// ============================================================================
+// Vocal reactions for bound/conscious captives. These are spoken lines that
+// express the NPC's feelings about being used while restrained.
+// Reactions vary by:
+// - Temperament: gruff (resistant/angry), plain (neutral), warm (pleading/accepting)
+// - Species: Some species like orcs respect strength and may be excited/aroused
+//   by being taken by a stronger opponent after a proper fight
+// - Demeanor mode: dominant/submissive/consentual affects tone
+//
+// Structure: { temperament: { actionType: [reactions] } }
+// Action types: "general", "tease", "penetrate", "continue", "climax"
+
+var BOUND_CAPTIVE_REACTIONS = {
+    // GRUFF temperament - angry, resistant, threatening
+    gruff: {
+        general: [
+            `"Get your hands off me!"`,
+            `"Unhand me, you bastard!"`,
+            `"I'll make you pay for this!"`,
+            `"When I get free, you die!"`,
+            `"This doesn't change anything!"`
+        ],
+        tease: [
+            `"Stop that!"`,
+            `"Don't you dare!"`,
+            `"I'll kill you for this!"`,
+            `"This is an outrage!"`
+        ],
+        penetrate: [
+            `"NO! Get out! GET OUT!"`,
+            `"You'll regret this!"`,
+            `"I swear I'll end you!"`,
+            `"Fuck you! Fuck you!"`
+        ],
+        continue: [
+            `"Stop... please stop..."`,
+            `"I hate you... I hate you..."`,
+            `"This changes nothing!"`,
+            `"I'll remember this..."`
+        ],
+        climax: [
+            `"..."`,
+            `"I hope you rot..."`,
+            `"This means nothing..."`
+        ]
+    },
+    // PLAIN temperament - neutral, matter-of-fact
+    plain: {
+        general: [
+            `"What do you think you're doing?"`,
+            `"This is unnecessary."`,
+            `"I don't appreciate this."`,
+            `"Please, just let me go."`
+        ],
+        tease: [
+            `"That's... that's not appropriate."`,
+            `"I'd rather you didn't."`,
+            `"This isn't right."`
+        ],
+        penetrate: [
+            `"Oh... oh no..."`,
+            `"Please don't..."`,
+            `"This isn't... this isn't what I wanted..."`
+        ],
+        continue: [
+            `"It... it feels..."`,
+            `"I can't... I can't stop you..."`,
+            `"Please, just finish..."`
+        ],
+        climax: [
+            `"...it's over?"`,
+            `"That's... that's that then."`
+        ]
+    },
+    // WARM temperament - pleading, accepting, submissive
+    warm: {
+        general: [
+            `"Please, don't do this..."`,
+            `"I'll be good, I promise!"`,
+            `"Please, have mercy..."`,
+            `"I'm scared... please don't hurt me..."`
+        ],
+        tease: [
+            `"That's... please, don't..."`,
+            `"I don't want this..."`,
+            `"Please, just let me go..."`
+        ],
+        penetrate: [
+            `"NO! Please no!"`,
+            `"It hurts... please stop..."`,
+            `"I'm begging you... don't..."`
+        ],
+        continue: [
+            `"Please... please be gentle..."`,
+            `"I can't... I can't fight..."`,
+            `"Just... just get it over with..."`
+        ],
+        climax: [
+            `"...it's done..."`,
+            `"Please... please untie me now..."`
+        ]
+    }
+};
+
+// Species-specific overrides for bound captive reactions
+// Some species have different cultural attitudes toward being taken/captured
+var BOUND_CAPTIVE_SPECIES_REACTIONS = {
+    // Orcs and similar strength-respecting species: being taken by a stronger
+    // opponent after a proper fight is a sign of respect, even exciting
+    orc: {
+        gruff: {
+            general: [
+                `"Hah! Strong arm!"`,
+                `"Good fight... now prove you can handle me!"`,
+                `"A worthy opponent takes what they win!"`,
+                `"Show me your strength, then!"`
+            ],
+            tease: [
+                `"Teasing? Take me properly if you dare!"`,
+                `"Is that all you've got?"`,
+                `"Hmph. Not afraid of a little touch."`
+            ],
+            penetrate: [
+                `"HAAH! There it is!"`,
+                `"About time! Show me you earned this!"`,
+                `"Take me then! Prove your victory!"`
+            ],
+            continue: [
+                `"Yes! Like that!"`,
+                `"Don't hold back! You won fair and square!"`,
+                `"More! I want to feel the strength that beat me!"`
+            ],
+            climax: [
+                `"HAH! Good... good!"`,
+                `"A proper ending to a proper fight!"`,
+                `"Well taken... well taken..."`
+            ]
+        },
+        plain: {
+            general: [
+                `"You fought well... I respect that."`,
+                `"A strong arm deserves its reward."`,
+                `"I yield. Do as you will."`
+            ],
+            penetrate: [
+                `"A fair victory... I accept this."`,
+                `"The strong take what they earn."`
+            ],
+            continue: [
+                `"Mmm... yes..."`,
+                `"Strength... feels good..."`
+            ],
+            climax: [
+                `"A fine ending..."`,
+                `"Well done, warrior..."`
+            ]
+        },
+        warm: {
+            general: [
+                `"Please... be strong for me..."`,
+                `"I want to feel... the strength that defeated me..."`
+            ],
+            penetrate: [
+                `"Yes! Take me! I want to feel your victory!"`,
+                `"Mmm... so strong... so powerful..."`
+            ],
+            continue: [
+                `"More... please more..."`,
+                `"You're so strong... I can't resist..."`,
+                `"Yes! Claim your prize!"`
+            ],
+            climax: [
+                `"Ahhh... so good..."`,
+                `"I... I'm yours..."`
+            ]
+        }
+    },
+    // Similar for other strength-based species
+    goblin: {
+        gruff: {
+            general: [
+                `"Sneaky bastard!"`,
+                `"Cheap trick! But... I respect cunning too."`,
+                `"Fine! Take what you won!"`
+            ],
+            penetrate: [
+                `"Hah! You got me! Now prove you can keep me!"`
+            ]
+        },
+        warm: {
+            general: [
+                `"Please... be nice..."`,
+                `"I surrender... do what you want..."`
+            ],
+            penetrate: [
+                `"Mmm... strong..."`
+            ]
+        }
+    }
+};
+
+// Temperament helper - map NPC temperament to reaction pool
+function getCaptiveReactionTemperament(npc) {
+    if (!npc) return "plain";
+    const temp = (npc.temperament || "").toLowerCase();
+    if (temp.includes("gruff") || temp.includes("aggressive") || temp.includes("angry") || temp.includes("hostile")) {
+        return "gruff";
+    }
+    if (temp.includes("warm") || temp.includes("friendly") || temp.includes("kind") || temp.includes("gentle")) {
+        return "warm";
+    }
+    return "plain";
+}
+
+// Get vocal reaction for a bound captive
+function getBoundCaptiveVocalReaction(npc, act, actionType = null) {
+    if (!npc || !act) return "";
+    
+    // Don't vocalize for unconscious actions
+    if (act.unconsciousOnly === true || act.nonConsensual === true) {
+        return "";
+    }
+    
+    // Check if NPC is bound and surrendered (conscious captive)
+    if (!(npc.bound && npc.surrendered)) return "";
+    
+    // Determine action type from act
+    const type = actionType || act.type || "general";
+    
+    // Get base temperament
+    const temperament = getCaptiveReactionTemperament(npc);
+    
+    // Get species
+    const species = (npc.species || "").toLowerCase();
+    
+    // Check for species-specific reactions first
+    const speciesReactions = BOUND_CAPTIVE_SPECIES_REACTIONS[species];
+    if (speciesReactions && speciesReactions[temperament] && speciesReactions[temperament][type]) {
+        return pickRandom(speciesReactions[temperament][type]);
+    }
+    
+    // Fall back to temperament-based reactions
+    const baseReactions = BOUND_CAPTIVE_REACTIONS[temperament];
+    if (baseReactions && baseReactions[type]) {
+        return pickRandom(baseReactions[type]);
+    }
+    
+    // Final fallback
+    if (baseReactions && baseReactions.general) {
+        return pickRandom(baseReactions.general);
+    }
+    
+    return "";
+}
+
 /**
  * Build a CoT-style narrative response for an intimacy action
  * Incorporates:
@@ -6181,6 +6569,25 @@ function buildMaleClimaxNarration(npc, player, act, intimacy) {
 function buildIntimacyResponse(npc, player, act, intimacy) {
     if (!npc || !act) {
         return pickRandom(BODY_PART_REACTIONS.general.moderate);
+    }
+    
+    // ── UNCONSCIOUS ACTIONS ────────────────────────────────────
+    // Unconscious NPCs cannot give conscious reactions - only reflexive physical
+    // responses are possible. Use dedicated reflexive reaction pool.
+    if (act.unconsciousOnly === true || act.nonConsensual === true) {
+        return buildUnconsciousReaction(npc, player, act, intimacy);
+    }
+    
+    // ── BOUND CAPTIVE VOCAL REACTIONS ──────────────────────────
+    // Bound captives who are conscious can speak - they yell, insult, plead,
+    // or (for some species) express excitement at being taken by a stronger foe.
+    // Check if NPC is bound and surrendered (conscious captive)
+    if (npc.bound && npc.surrendered && !act.unconsciousOnly) {
+        const vocalReaction = getBoundCaptiveVocalReaction(npc, act, act.type);
+        if (vocalReaction) {
+            // Return vocal reaction, which may be combined with physical reaction
+            return vocalReaction;
+        }
     }
     
     // ── RECEIVE ACTIONS (playerIsBottom) ───────────────────────

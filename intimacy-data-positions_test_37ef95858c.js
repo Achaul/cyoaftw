@@ -344,6 +344,68 @@ var INTIMACY_POSITIONS = {
         analFriendly: false,
         description: "Player kneeling before the standing NPC",
         promptNote: "The player kneels before the standing NPC, mouth at groin height; the NPC's hands rest on the player's head and shoulders."
+    },
+
+    // ===== UNCONSCIOUS BODY POSITIONS =====
+    "Unconscious On Back": {
+        label: "on back (unconscious)",
+        playerRole: "over",
+        npcRole: "on back",
+        furniture: ["floor"],
+        accessibleTargets: {
+            player: ["face", "mouth", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "anus", "back", "arms", "legs", "thighs"],
+            npc: ["face", "mouth", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "anus", "back", "arms", "legs", "thighs"]
+        },
+        validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina", "anus", "breasts"],
+        analFriendly: false,
+        description: "NPC lying unconscious on their back",
+        promptNote: "The NPC lies motionless on their back. Arms flop to the sides, legs fall open by gravity, head lolls to one side. You can position their limp limbs as needed.",
+        unconsciousOnly: true
+    },
+    "Unconscious On Face": {
+        label: "on face (unconscious)",
+        playerRole: "behind",
+        npcRole: "on face",
+        furniture: ["floor"],
+        accessibleTargets: {
+            player: ["face", "mouth", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "anus", "back", "arms", "legs", "thighs"],
+            npc: ["face", "mouth", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "anus", "back", "arms", "legs", "thighs"]
+        },
+        validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina", "anus", "breasts"],
+        analFriendly: true,
+        description: "NPC on face, knees splayed, butt raised",
+        promptNote: "The NPC lies face-down, chest and knees on floor. Legs splayed wide by gravity, buttocks raised and exposed. You can spread their cheeks or adjust position - no resistance.",
+        unconsciousOnly: true
+    },
+    "Unconscious On Side": {
+        label: "on side (unconscious)",
+        playerRole: "beside",
+        npcRole: "on side",
+        furniture: ["floor"],
+        accessibleTargets: {
+            player: ["face", "mouth", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "anus", "back", "arms", "legs", "thighs"],
+            npc: ["face", "mouth", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "anus", "back", "arms", "legs", "thighs"]
+        },
+        validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina", "anus", "breasts"],
+        analFriendly: false,
+        description: "NPC lying unconscious on their side",
+        promptNote: "The NPC lies on their side, one arm under, one flopped out. Top leg falls forward, bottom leg back, giving partial access. Gravity helps hold position.",
+        unconsciousOnly: true
+    },
+    "Unconscious Doggy": {
+        label: "doggy position (unconscious)",
+        playerRole: "behind",
+        npcRole: "on all fours",
+        furniture: ["floor"],
+        accessibleTargets: {
+            player: ["face", "mouth", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "anus", "back", "arms", "legs", "thighs"],
+            npc: ["face", "mouth", "chest", "hips", "groin", "vagina", "clitoris", "penis", "testicles", "breasts", "buttocks", "anus", "back", "arms", "legs", "thighs"]
+        },
+        validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina", "anus", "breasts"],
+        analFriendly: true,
+        description: "NPC in doggy position, unconscious",
+        promptNote: "The NPC is positioned on hands and knees, face down. Arms barely support chest, knees spread wide, buttocks raised and exposed. Unconscious - no resistance to positioning.",
+        unconsciousOnly: true
     }
 
 };
