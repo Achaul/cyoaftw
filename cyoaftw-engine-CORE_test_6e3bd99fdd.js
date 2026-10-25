@@ -56945,7 +56945,7 @@ function handleIntimacyConversationChoice(npc, choice) {
         }
         let playerNarrative;
         if (typeof generateIntimacyNarrative === "function") {
-            const _arousalLevel = npc.intimacy ? (npc.intimacy.arousal && npc.intimacy.arousal.npc) || 0 : 0;
+            const _arousalLevel = (npc.intimacy && npc.intimacy.arousal && typeof npc.intimacy.arousal.npc === 'number') ? npc.intimacy.arousal.npc : 0;
             playerNarrative = generateIntimacyNarrative(npc, choice.intimacyAction, {
                 player: G.player,
                 arousalLevel: _arousalLevel,
@@ -83226,7 +83226,7 @@ function updatePlayerIntimacyArousalBar() {
     }
     
     const playerIntimacy = player.intimacy;
-    const playerArousal = playerIntimacy.arousal ? playerIntimacy.arousal.player : 0;
+    const playerArousal = (playerIntimacy.arousal && typeof playerIntimacy.arousal.player === 'number') ? playerIntimacy.arousal.player : 0;
     const orgasmThreshold = window.AROUSAL_CONFIG ? window.AROUSAL_CONFIG.ORGASM_THRESHOLD : 800;
     const playerArousalPercent = Math.min(100, Math.floor((playerArousal / orgasmThreshold) * 100));
     
@@ -83308,7 +83308,7 @@ function renderPlayerIntimacyStateIndicators() {
     container.appendChild(heading);
     
     // Player arousal bar
-    const playerArousal = playerIntimacy.arousal ? playerIntimacy.arousal.player : 0;
+    const playerArousal = (playerIntimacy.arousal && typeof playerIntimacy.arousal.player === 'number') ? playerIntimacy.arousal.player : 0;
     const orgasmThreshold = window.AROUSAL_CONFIG ? window.AROUSAL_CONFIG.ORGASM_THRESHOLD : 800;
     const playerArousalPercent = Math.min(100, Math.floor((playerArousal / orgasmThreshold) * 100));
     
@@ -84784,6 +84784,9 @@ function _runNpcAwayFinish(npc) {
     addIntimacyNarration(climaxLine, { msPerChar: 35 });
     // Climax bookkeeping through the intimacy system's own handler.
     if (npc.intimacy) {
+        if (!npc.intimacy.arousal) {
+            npc.intimacy.arousal = { player: 0, npc: 0 };
+        }
         npc.intimacy.arousal.player = 800; // at threshold: handleClimax drops it
         if (typeof window.handleClimax === "function") {
             window.handleClimax(npc, G.player, { id: "ejaculate_away", consequence: "external_semen", triggersClimax: true }, npc.intimacy);
@@ -84888,7 +84891,7 @@ function _pleasureLoopClimaxAct(npc, currentActId) {
 
 function _pickNpcPleasureLoopAct(npc, currentActId) {
     const intimacy = npc.intimacy;
-    const arousalNow = (intimacy && intimacy.arousal && intimacy.arousal.player) || 0;
+    const arousalNow = (intimacy && intimacy.arousal && typeof intimacy.arousal.player === 'number') ? intimacy.arousal.player : 0;
     // Near the edge: finish him with a proper climax act.
     if (arousalNow >= NPC_PLEASURE_LOOP_CLIMAX_AROUSAL) {
         const finish = _pleasureLoopClimaxAct(npc, currentActId);
@@ -85151,7 +85154,7 @@ function continueAllEngagedActs(npc, engagedIds) {
     // contact and penetration acts as a full staged re-entry, both of which
     // read as a scene restart mid-continue. Receive acts keep their own
     // continue flavor via buildReceiveNarrative.
-    const arousalLevel = intimacy.arousal ? (intimacy.arousal.npc || 0) : 0;
+    const arousalLevel = (intimacy.arousal && typeof intimacy.arousal.npc === 'number') ? intimacy.arousal.npc : 0;
     const parts = [];
     engagedIds.forEach(actId => {
         let narrative = null;
@@ -85528,7 +85531,7 @@ function chooseIntimacyAction(npc, actId) {
     let playerNarrative;
     if (typeof generateIntimacyNarrative === "function") {
         // Get arousal level from intimacy state for richer descriptions
-        const arousalLevel = npc.intimacy ? npc.intimacy.arousal.npc || 0 : 0;
+        const arousalLevel = (npc.intimacy && npc.intimacy.arousal && typeof npc.intimacy.arousal.npc === 'number') ? npc.intimacy.arousal.npc : 0;
         playerNarrative = generateIntimacyNarrative(npc, actId, { 
             player: G.player,
             arousalLevel: arousalLevel,

@@ -9366,12 +9366,12 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     
     // Define the new body-part-only sections in order
     const BODY_PART_SECTIONS = [
-        { id: "Clothing", label: "Clothing", isSpecial: true, bgColor: "#e6f2ff" },
+        { id: "Clothing", label: "Clothing", isSpecial: true, bgColor: null },
         { id: "Head", label: "Head", isSpecial: false, bgColor: null },
         { id: "Upper Body", label: "Upper Body", isSpecial: false, bgColor: null },
         { id: "Midsection", label: "Midsection", isSpecial: false, bgColor: null },
         { id: "Lower Body", label: "Lower Body", isSpecial: false, bgColor: null },
-        { id: "Requests", label: "Requests", isSpecial: true, bgColor: "#f0e6ff" }
+        { id: "Requests", label: "Requests", isSpecial: true, bgColor: null }
     ];
     
     // Get menu section based on action's target body part
