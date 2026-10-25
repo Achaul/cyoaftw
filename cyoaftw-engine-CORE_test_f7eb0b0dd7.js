@@ -44072,14 +44072,14 @@ function renderNPCActionMenu(npc) {
         const isEligible = typeof window.startIntimacyEncounter === "function" && isNsfwBodyEligible(npc);
         
         if (isEligible) {
-            // Create Interact button for sleeping NPCs
-            const interactBtn = createCombatButton("Interact", function () {
+            // Create "Act While Asleep" button for sleeping NPCs
+            const interactBtn = createCombatButton("Act While Asleep", function () {
                 if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== "menu" || getCurrentStoryTurn() !== turn || !(room.creatures || []).includes(npc) || !isNPCSleeping(npc)) {
                     return sharedChoiceResult("blocked", "That person is no longer asleep.");
                 }
                 startSleepingIntimacy(npc);
                 return { status: "completed" };
-            }, { title: "Interact with them while they sleep using the intimacy system - may wake them!" });
+            }, { title: "Act on their sleeping body - may wake them depending on the act" });
             
             el.appendChild(interactBtn);
         }
@@ -44101,14 +44101,14 @@ function renderNPCActionMenu(npc) {
         
         // Check if intimacy system is available and NPC is eligible
         if (typeof window.startIntimacyEncounter === "function" && isNsfwBodyEligible(npc)) {
-            // Create Interact button for unconscious NPCs
-            const interactBtn = createCombatButton("Interact", function () {
+            // Create "Act on Impulse" button for unconscious NPCs
+            const interactBtn = createCombatButton("Act on Impulse", function () {
                 if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== "menu" || getCurrentStoryTurn() !== turn || !(room.creatures || []).includes(npc) || !(npc.unconscious || npc.bodyState === "unconscious" || npc.isUnconsciousBody)) {
                     return sharedChoiceResult("blocked", "That person is no longer unconscious.");
                 }
                 startUnconsciousIntimacy(npc);
                 return { status: "completed" };
-            }, { title: "Interact with their unconscious body using the intimacy system" });
+            }, { title: "Act on their unconscious body - they cannot resist or respond" });
             
             el.appendChild(interactBtn);
         }
@@ -44230,6 +44230,12 @@ function renderNPCActionMenu(npc) {
         }
     }
     
+    // Add Examine option for unconscious/sleeping NPCs to expose intimacy menu
+    if (npc.unconscious || npc.bodyState === "unconscious" || npc.isUnconsciousBody || 
+        (npc.currentState && npc.currentState.sleeping)) {
+        actions.push({ label: "Examine", action: "examine", title: "Look them over carefully" });
+    }
+    
     actions.push(
         { label: "Attack", action: "attack", className: "danger" },
         { label: "Step away", action: "disengage" }
@@ -44250,7 +44256,32 @@ function chooseNPCAction(action) {
     const npc = G.activeNPC;
     if (!npc) return;
     if (action === "wake" || action === "search") return performSleepingNPCAction(npc, action);
-    if (npc.currentState && npc.currentState.sleeping && !/^(attack|disengage)$/.test(action)) return sharedChoiceResult("blocked", "They are asleep. Wake them first.");
+    
+    // Check for sleeping NPC - block most actions but allow examine, attack, disengage
+    if (npc.currentState && npc.currentState.sleeping) {
+        const allowedActions = /^(attack|disengage|examine)$/;
+        if (!allowedActions.test(action)) {
+            return sharedChoiceResult("blocked", "They are asleep. Wake them first.");
+        }
+        // For examine action on sleeping NPC, just re-render the menu (which now includes Act While Asleep)
+        if (action === "examine") {
+            renderNPCActionMenu(npc);
+            return;
+        }
+    }
+    
+    // Check for unconscious NPC - block most actions but allow examine, attack, disengage, wake
+    if (npc.unconscious || npc.bodyState === "unconscious" || npc.isUnconsciousBody) {
+        const allowedActions = /^(attack|disengage|examine|wake)$/;
+        if (!allowedActions.test(action)) {
+            return sharedChoiceResult("blocked", "They are unconscious and cannot respond.");
+        }
+        // For examine action on unconscious NPC, just re-render the menu (which now includes Act on Impulse)
+        if (action === "examine") {
+            renderNPCActionMenu(npc);
+            return;
+        }
+    }
 
     if (action === "talk") {
         startNPCConversation(npc);
@@ -77819,9 +77850,9 @@ function renderRoomObjectActionMenu(item) {
     if (isBody && item.nsfwActionsRevealed && isNsfwBodyEligible(item)) {
         // Try the new intimacy system first - if it can handle unconscious bodies
         if (typeof window.startIntimacyEncounter === "function") {
-            // Add an "Interact" button that starts the intimacy encounter
-            buttons.push(createCombatButton("Interact", () => startUnconsciousIntimacy(item),
-                { title: "Interact with their unconscious body using the intimacy system" }));
+            // Add an "Act on Impulse" button that starts the intimacy encounter
+            buttons.push(createCombatButton("Act on Impulse", () => startUnconsciousIntimacy(item),
+                { title: "Act on their unconscious body - they cannot resist or respond" }));
         }
         // Fallback to old system if new one isn't available
         else if (typeof window.appendUnconsciousBodyActions === "function") {
