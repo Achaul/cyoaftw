@@ -3,7 +3,7 @@
 // cyoaftw-context-builder.js v2026-10-23-003 — Bounded NPC Life short-term/entity recollections, personality and sleeping context.
 // Version identifier for debugging cached files.
 if (typeof window !== "undefined") {
-    window.CONTEXT_BUILDER_VERSION = "2026-10-24-001";
+    window.CONTEXT_BUILDER_VERSION = "2026-10-25-001";
     console.log("[Context Builder] Loaded v" + window.CONTEXT_BUILDER_VERSION);
 }
 
@@ -377,7 +377,8 @@ function buildNPCMemoryBlock(npc, wantedTags, maxNotable = 4, maxTold = 6) {
     const selected = typeof getNPCShortTermMemories === "function" ? getNPCShortTermMemories(npc, wantedTags || [], 2, subjects) : [];
     const shortTerm = recent.concat(selected).filter(function (e, i, all) { return all.indexOf(e) === i; }).slice(0, 4);
     const entityLines = buildNPCEntityMemoryLines(npc, options);
-    if (!facts.length && !told.length && !notable.length && !shortTerm.length && !entityLines.length) return "";
+    const worldMemory = typeof buildNPCWorldReactionMemory === "function" ? buildNPCWorldReactionMemory(npc) : "";
+    if (!facts.length && !told.length && !notable.length && !shortTerm.length && !entityLines.length) return worldMemory;
     const lines = ["WHAT YOU REMEMBER ABOUT THE PLAYER:"];
     if (facts.length) {
         lines.push("- These things happened between you. Never deny, forget or contradict them: " +
@@ -391,6 +392,7 @@ function buildNPCMemoryBlock(npc, wantedTags, maxNotable = 4, maxTold = 6) {
     });
     if (shortTerm.length) lines.push("- Recent recollections (not settled world facts): " + shortTerm.map(function (e) { return e.text; }).join("; "));
     lines.push.apply(lines, entityLines);
+    if (worldMemory) lines.push(worldMemory);
     return lines.join("\n");
 }
 

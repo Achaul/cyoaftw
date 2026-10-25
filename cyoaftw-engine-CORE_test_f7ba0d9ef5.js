@@ -2774,6 +2774,7 @@ function textNPCServicesShow() {
 const TEXT_COMMANDS = [
     { id: "bathhouse", bathhouse: true, args: ["action"], aliases: ["bathhouse", "baths", "spa", "take a bath", "get bathed", "get a massage", "massage trial", "audition massage", "trial shift"], example: "bathhouse; bathhouse bath; get bathed; get a massage; bathhouse trial; bathhouse attendant; bathhouse practitioner; show baths; how bathhouse", description: "Visit a bathhouse and ask the available bathkeeper for services. Hot bath: 4 gold/2 turns/up to 3 stamina; assisted wash: 7 gold/3 turns/up to 5 stamina; massage: 9 gold/3 turns/up to 7 stamina. Prices scale with town tier. Bath and wash clean you and worn gear; massage does not. Treatments do not heal wounds or replace sleep. A practical massage trial costs 1 stamina and 2 turns and uses flexibility against difficulty 11; failure can be retried tomorrow. Ordinary attendant work needs no trial. Qualified massage work pays more and may earn tips. Work uses the existing job system: leave the conversation, go to the stated site, work, collect pay. Answer menus one step at a time; back/cancel/leave are free; continue resumes an older batch explicitly." },
     { id: "actions", conversationActions: true, args: ["group"], aliases: ["actions", "conversation actions"], example: "actions; actions services; actions food; actions company; actions interactions; show conversation actions; how conversation actions", description: "Open grouped conversation actions through the same current callbacks as the buttons. Services/trade, food/drink, travel/company and interactions are separate menus. Choose one numbered option at a time. Back returns to conversation; leave steps away; cancel closes the menu and cancels later commands. Resume older batches explicitly with continue." },
+    {id:'communication',communication:true,args:['action','style','target'],aliases:['communication','greet','manner','address','title'],example:'greet normally; greet formally; greet silently; greet with a bow; ask address; ask title; manner formal; manner ordinary; show greetings; show address; how manner',description:'Choose an ordinary, formal or nonverbal initial greeting using the same native greeting and cost. Greet with a nod/bow/salute is nonverbal. Ask address/title gets a grounded answer; no title or rank is invented. Manner formal/ordinary changes only your current conversation, freely, without rewards. Known preferred addresses can be used as public target aliases. Speak formally/normally are aliases; quoted say remains literal. Show greetings/manner/address/communication gives free public availability without revealing an unknown address. Greetings and questions use normal conversation exchanges; repeated variants cannot reopen the greeting gate. Finish other interactions first.'},
     { id: "service", service: true, args: ["service"], aliases: ["service", "services", "inquire about rooms", "order drink", "ask for menu", "see wares", "ask about healing services", "ask about forge services"], example: "show services; service rooms; order a drink; ask for the menu; see wares; service forge; how service", description: "While talking to an obvious provider, choose any available service without greeting first. Blacksmiths offer wares and forge work separately; innkeepers offer rooms, drinks and a menu. Service healing opens supplies for sale. Menus retain native prices, checks and costs. Choices pause later commands; continue explicitly after finishing." },
     { id: "commitment", commitment: true, args: ["action","target"], aliases: ["tasks","requests","commitments","promises","promise","ask-for","accept task","decline task","deliver task","break promise"], example: "tasks; accept task; deliver task; commitments; promise bread; promise 2 coins", description: "Review real NPC requests, accept or decline their current terms, settle tasks with real items or coin, or review a player-made promise. Accepting costs one turn. Promised coin rewards are reserved from the giver. Breaking a promise costs trust; cancelling is free." },
     { id: "tool", jobs: true, args: ["action", "target", "item"], aliases: ["tools", "tool use", "pry", "lever", "wedge", "jam", "brace", "unwedge", "force obstruction"], example: "pry packing board with iron pry bar; wedge chair under north door; unwedge north door; force obstruction north door; tools; show tools", description: "Use real objects together. Pry exposed nailed/pegged fittings with a sound rigid lever; wedge suitable furniture or a solid object against a real door. Material, shape, size, condition, reach and stats determine eligibility and dice difficulty. Pry/wedge cost 1 stamina and 1 turn; forcing a brace costs 2 stamina and 1 turn; removing your reachable brace costs 1 turn. Failures spend costs and pause later commands. A brace stays in place, blocks both sides and cannot be picked up until released. Unwedging does not unlock a lock. Show tools lists current combinations; tools opens the same choices as native controls. Options/back/cancel/leave work; explicitly continue older queued commands." },
@@ -2808,7 +2809,7 @@ const TEXT_COMMANDS = [
     ...["jobs", "quests"].map(function (verb) { return { id: verb, jobs: true, args: ["action", "target"], aliases: [verb], example: "jobs; quests; accept job clean kitchen; accept quest goblins; work; collect pay; hand in quest goblins; abandon quest goblins", description: "Browse job postings or your quest log. During a conversation, jobs opens the NPC's work and bounties. Accept job/quest <name>, work one shift, collect pay (takes wages and stops the job), hand in quest <name> at a board or its giver, or abandon quest <name> (normal standing/favor penalty). Use options/choose, back/cancel; show jobs or show quests reviews progress without replacing choices. Sleep at the end of a workday and carry on working next morning." }; }),
     { id: "trophy", jobs: true, args: ["source", "ability"], aliases: ["trophy"], example: "cut trophy from goblin body; cut trophy from orc body with <spell>", description: "Collect quest proof from one visible eligible corpse using the native blade or learned cutting spell action. Costs one turn and any spell mana; normal restrictions and witness reactions apply. Each body yields proof only once. Type show loot for body names." },
     { id: "party", party: true, info: true, args: ["action", "target"], aliases: ["party", "companions"], example: "party; keep it; give loot to second dwarf; compromise", description: "List visible companions or answer the current party loot vote, allocation or objection. Type options for numbered choices. Keep it, keep the rest, give loot to <companion>, agree, compromise and stand firm use the normal party rules. Choices leave later commands paused until continue." },
-    { id: "companion", party: true, args: ["target", "action", "item"], aliases: ["companion"], example: "companion dwarf; show companion dwarf; equip sword on dwarf; equip best for dwarf; take sword from companion dwarf", description: "Inspect/manage a present companion's real gear using the normal equipment menu actions. Type options and choose a number, back or cancel. Equipment swaps are free. Name ambiguity and stale choices cannot silently retarget another item or companion." },
+    { id: "companion", party: true, args: ["target", "action", "item"], aliases: ["companion"], example: "companion dwarf; show companion dwarf; equip sword on dwarf; equip best for dwarf; take sword from companion dwarf; companion quiet dwarf; companion resume dwarf; show companion talk", description: "Ask a present companion for some quiet with companion quiet <name>, or welcome chatter with companion resume <name>. Ask <name> to talk less/talk again are aliases; show companion talk lists current public availability. These free requests can be refused by an upset/proud companion and otherwise last 60 turns; they grant no relationship bonus. Bare quiet/stop talking retain speech controls, and quoted say stays speech. Inspect/manage a present companion's real gear using the normal equipment menu actions. Type options and choose a number, back or cancel. Equipment swaps are free. Name ambiguity and stale choices cannot silently retarget another item or companion." },
     { id: "give", party: true, args: ["item", "target"], aliases: ["give", "gift"], example: "give sword to dwarf; give potion to second elf; give", description: "Offer one carried item through the normal NPC gift handler; it can be accepted or refused. Worn gear must be removed first. Async reactions finish before later commands and cannot transfer a replaced stack or act on a different NPC/scene. Give without an item opens supported gift choices." },
     { id: "back", args: [], aliases: ["back"], example: "back", description: "Return from a supported choice menu using its normal Back action. Mandatory loot allocations/objections still need an answer." },
     { id: "cancel", args: [], aliases: ["cancel"], example: "cancel", description: "Cancel pending commands and leave a supported optional menu. Mandatory loot decisions remain unresolved until you answer them. Stop cancels queued commands without changing the game decision." },
@@ -2950,6 +2951,7 @@ function parseTextCommand(input) {
     const fireCommand = parseTextFireCommand(raw); if (fireCommand) return fireCommand;
     match = /^(?:look\s+at|examine|inspect|x)\s+(?:npc|creature|person)\s+(.+)$/i.exec(raw);
     if (match) return { verb: "examine", args: { item: textCommandUnquote(match[1]), scope: "npc" } };
+    const communication=typeof parseTextCommunication==='function'?parseTextCommunication(raw):null;if(communication)return communication;
     const social = parseTextSocialCommand(raw); if (social) return social;
     const touch = parseTextTouchCommand(raw); if (touch) return touch;
     const binding = parseTextBindingCommand(raw); if (binding) return binding;
@@ -3127,7 +3129,7 @@ async function interpretTextCommands(input) {
         if(def.id==='uniform')return !!G.activeRoom&&G.activeRoom.type==='Bathhouse Changeroom';
         if(def.id==='bathhouse_requests')return isBathhouseRoom(G.activeRoom)||!!(G.player&&G.player._bathhouseRequestsFromNPCs&&G.player._bathhouseRequestsFromNPCs.length);
         return true;
-    }).filter(function (def) { return (!def.lootDetail || lootItemDetailAvailable()) && (!def.binding || typeof getBindingTargets === "function" && getBindingTargets().length > 0) && (!def.bathhouse || !!bathhouseProvider(G.activeRoom)) && !def.tasting && (!def.conversationActions || typeof conversationActionMenuBlock === "function" && !conversationActionMenuBlock(G.activeNPC)) && (!def.service || getNPCServiceOptions(G.activeNPC).length > 0) && (!def.commitment || commitmentIntentAvailable()) && !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    }).filter(function (def) { return !def.communication && (!def.lootDetail || lootItemDetailAvailable()) && (!def.binding || typeof getBindingTargets === "function" && getBindingTargets().length > 0) && (!def.bathhouse || !!bathhouseProvider(G.activeRoom)) && !def.tasting && (!def.conversationActions || typeof conversationActionMenuBlock === "function" && !conversationActionMenuBlock(G.activeNPC)) && (!def.service || getNPCServiceOptions(G.activeNPC).length > 0) && (!def.commitment || commitmentIntentAvailable()) && !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -4706,7 +4708,7 @@ function resolveTextNPCTarget(selector, candidates, extraWords) {
     const visible = candidates || textModeVisibleNPCs();
     const matches = visible.filter(function (npc) {
         // Given names stay private until the existing engine reveals them.
-        const words = textCommandNormalize([npc.name, npc.descriptorName, npc.species, npc.gender, extraWords ? extraWords(npc) : ""].join(" ")).split(" ");
+        const words = textCommandNormalize([npc.name, npc.descriptorName, npc.species, npc.gender, typeof publicNPCAddress==='function'?publicNPCAddress(npc).form:"", extraWords ? extraWords(npc) : ""].join(" ")).split(" ");
         return tokens.every(function (token) { return words.indexOf(token) >= 0; });
     });
     if (ordinal !== null) return { matches: ordinal > 0 && ordinal <= matches.length ? [matches[ordinal - 1]] : [] };
@@ -4844,6 +4846,7 @@ function textModeInspectNPC(action) {
 
 function textModeHelpContent(topic, show) {
     let key = textCommandNormalize(topic).replace(/^(?:to|use)\s+/, "");
+    if(show&&/^(communication|greet|greeting|greetings|manner|address|title)$/.test(key)&&typeof showNPCCommunication==='function')return showNPCCommunication();
     if (key === "conversation actions") return show ? textConversationActionsShow() : textModeResult("completed", textCommandDefinition("actions").example + ". Choose one current action at a time; back returns to conversation, leave steps away, and continue resumes older commands explicitly.");
     if (show && /^(bathhouse|baths|spa|massage|massage trial)$/.test(key)) return textBathhouseShow();
     if (show && /^(service|services)$/.test(key)) return textNPCServicesShow();
@@ -5057,6 +5060,7 @@ async function executeTextCommand(action) {
     const def = textCommandDefinition(action.verb);
     if (!def) return textModeResult("blocked", "That command is not supported. Type how for examples.");
     if (/^(help|show)$/.test(action.verb)) return textModeHelp(args.topic, action.verb === "show");
+    if (action.verb === 'communication') return executeTextCommunication(action);
     if (action.verb === "actions") return showConversationActionMenu(G.activeNPC, args.group || "");
     if (action.verb === "service") {
         if (!args.service) return textNPCServicesShow();
@@ -5194,10 +5198,12 @@ async function executeTextCommand(action) {
         if (!choices || !textModeSameScene(choices.scene)) return textModeResult("blocked", "Type options to list the current conversation choices first.");
         const selected = choices.options[number - 1];
         if (!selected || !Number.isInteger(number) || number < 1) return textModeResult("blocked", "Choose a number from the options list.");
+        if(selected.action==='communication'&&typeof npcCommunicationCaptureFresh==='function'&&!npcCommunicationCaptureFresh(selected.communicationCapture,G.activeNPC,false)){textModeState.choices=null;return textModeResult('blocked','Those conversation choices changed. Ask for current options.');}
         const current = getChatOptions(G.activeNPC).find(function (option) { return selected.id && option.id === selected.id; });
         if (!current || current.disabled) return textModeResult("blocked", "That choice is no longer available. Type options for the current choices.");
         textModeState.choices = null;
-        await chooseChatOption(current);
+        const selectedResult=await chooseChatOption(current);
+        if(current.action==='communication'&&selectedResult&&/^(blocked|interrupted)$/.test(selectedResult.status))return selectedResult;
         if ((current.action && !/^(disengage|respond)$/.test(String(current.action))) || (G.activeNPC && !/^(talk|respond|menu)$/.test(G.activeNPCMode))) return textModeResult("needs_input", "Choice selected. Pending commands are paused; finish any open interaction above before continuing.");
         return { status: "completed" };
     }
@@ -7182,6 +7188,10 @@ function textPartyRelation(value) {
 }
 
 function parseTextPartyCommand(raw) {
+    let chatter=/^companion\s+(quiet|resume|chat|talk less|talk again)\s+(.+)$/i.exec(raw);
+    if(chatter)return {verb:'companion',args:{action:/^(quiet|talk less)$/i.test(chatter[1])?'quiet':'resume',target:textCommandUnquote(chatter[2])}};
+    chatter=/^ask\s+(.+)\s+to\s+(talk less|be quiet|talk again|chat again)$/i.exec(raw);
+    if(chatter)return {verb:'companion',args:{action:/^(talk less|be quiet)$/i.test(chatter[2])?'quiet':'resume',target:textCommandUnquote(chatter[1])}};
     let match = /^(?:party|companions)(?:\s+(.+))?$/i.exec(raw);
     if (match) return { verb: "party", args: { action: match[1] || "" } };
     if (/^(?:keep(?:\s+it)?|keep\s+(?:the\s+)?rest|agree|yield|compromise|stand\s+firm|decide\s+later)$/i.test(raw)) return { verb: "party", args: { action: textCommandNormalize(raw) } };
@@ -7221,6 +7231,7 @@ function textCompanionInspect(npc) {
 }
 
 function textPartyShow(topic) {
+    if(/^(companion talk|companion chatter)$/.test(topic))return showCompanionTalk();
     if (/^(party|companions)$/.test(topic)) return textPartyRoster();
     if (/^(options|choices)$/.test(topic)) return textSharedOptions();
     const match = /^companion\s+(.+)$/.exec(topic);
@@ -7431,6 +7442,7 @@ async function executeTextPartyCommand(action) {
     if (!targets.length) return textModeResult("blocked", "No available NPC/companion matches. Type show party or who is here.");
     if (targets.length > 1) return textModeAsk(action, "target", targets, "Who do you mean?");
     const npc = targets[0]; action.targetRef = npc;
+    if(action.verb==='companion'&&/^(quiet|resume)$/.test(args.action||''))return requestCompanionTalkMode(npc,args.action);
     if (G.activeNPC && G.activeNPC !== npc) return textModeResult("blocked", "Type leave before switching to another NPC.");
     if (roomHasActiveHostile(G.activeRoom) || isRoomCollapsed(G.activeRoom)) return textModeResult("blocked", "Too dangerous to exchange items here.");
     if (G.activeNPC && !/^(menu|talk|respond|give)$/.test(G.activeNPCMode)) return textModeResult("blocked", "Finish the current NPC interaction first.");
@@ -12799,7 +12811,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-25-001
+// Core Engine Version: 2026-10-25-004
 // Latest: Voice command fallback infers misheard words: person targets that match no one get a sounds-like best guess (textGuessNPCTarget: "female cancun" -> the female kenku), the AI is told voice input is speech-to-text and to always give a best guess (exits listed), AI plans wrapped in prose, using shorthand keys or verb synonyms are repaired, and in voice play the valid part of a partly bad plan still runs.
 // Previous: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
 // Previous: Trade and economy pass: Traders now carry a real purse (20-50 gold) instead of the 2-10 default; merchants pay at most 1.75x half value so deity tomes and similar cannot be bought and flipped for profit; bone dice wagers move coin to and from the NPC and have a cooldown; sealed goods pay slightly less coin. Previous -007: Hand-in tokens now pay out of the NPC's own coin pouch and are kept if they cannot cover them. Previous -006: Item purpose pass part 2: keepsakes (charms, rings, brooches, scarves) wear on the Neck for +1 Charisma; rivets, nails, pick-heads, sewing kits, twine and cloth mend worn gear; relics, tokens, candles and incense can be left as offerings at a shrine; sealed bales, crates and goods open; spice seasons a meal; pawn tickets, receipts, tally sticks, chits and house tokens are handed in to the right NPC; bone dice wager with friendly NPCs; ledgers, maps and receipts are readable; ink, chalk, parchment and wax tablets count as writing supplies; the ladle and net weight are improvised weapons; clean linen bandages. New "apply" text command.
@@ -12873,7 +12885,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-25-001";
+window.__ENGINE_CORE_VERSION = "2026-10-25-004";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -17480,7 +17492,7 @@ window.advanceStoryTurn = function(steps = 1) {
     if (typeof tickForgeUpgradeJob === "function") tickForgeUpgradeJob(steps);
     if (typeof tickClothierJob === "function") tickClothierJob(steps);
     if (typeof tickGoodsCycle === "function") tickGoodsCycle();
-    if (typeof tickActiveRoomInitiative === "function") tickActiveRoomInitiative();
+    if (typeof tickCompanionTalk === "function") tickCompanionTalk();
     return G.story.turnCounter;
 };
 
@@ -17629,7 +17641,7 @@ function updateStoryOnAdventureStart(zone, roomType) {
 
 function updateStoryOnRoomEntered(room, direction) {
     if (typeof tickNPCCommitments === "function") tickNPCCommitments();
-    if (room && typeof tickActiveRoomInitiative === "function") tickActiveRoomInitiative();
+    if (room && typeof tickCompanionTalk === "function") tickCompanionTalk();
     if (!room) return;
 
     const danger = deriveRoomContext(room).danger;
@@ -20287,7 +20299,8 @@ async function beginAdventure() {
         G.activeObject = null;
         G.activeNPCMode = null;
         G.story = createStoryDirectorState();
-        G.commitments = []; G.commitmentSequence = 0; G._lastInitiativeTurn = undefined; G._lastNPCSeekTurn = undefined;
+        G.commitments = []; G.commitmentSequence = 0; G._lastInitiativeTurn = undefined; G._lastNPCSeekTurn = undefined; G._lastCompanionTalkAITurn = undefined;
+        if(typeof resetCompanionTalkRuntime==='function')resetCompanionTalkRuntime();
         G.sessionFollowers = [];
         G.prefetchCache = {};
         G.prefetchQueue = [];
@@ -20611,6 +20624,8 @@ async function resumeSavedGame() {
         G.commitmentSequence = Number(save.commitmentSequence) || 0;
         G._lastInitiativeTurn = Number.isFinite(save.npcInitiativeLastTurn) ? save.npcInitiativeLastTurn : undefined;
         G._lastNPCSeekTurn = Number.isFinite(save.npcSeekLastTurn) ? save.npcSeekLastTurn : undefined;
+        G._lastCompanionTalkAITurn = Number.isFinite(save.companionTalkLastAITurn) ? save.companionTalkLastAITurn : undefined;
+        if(typeof resetCompanionTalkRuntime==='function')resetCompanionTalkRuntime();
         if (typeof ensureNPCCommitments === "function") ensureNPCCommitments();
         migrateLegacyNPCRoles();
         G.zoneBossState = save.zoneBossState || {};
@@ -21161,6 +21176,7 @@ function createGameSaveData() {
         commitmentSequence: G.commitmentSequence || 0,
         npcInitiativeLastTurn: Number.isFinite(G._lastInitiativeTurn) ? G._lastInitiativeTurn : null,
         npcSeekLastTurn: Number.isFinite(G._lastNPCSeekTurn) ? G._lastNPCSeekTurn : null,
+        companionTalkLastAITurn: Number.isFinite(G._lastCompanionTalkAITurn) ? G._lastCompanionTalkAITurn : null,
         player: G.player,
 
         roomMap: G.roomMap,
@@ -25166,6 +25182,8 @@ function runNPCAutonomyTick() {
         const room = map[coords];
         if (!room || !Array.isArray(room.creatures) || !room.creatures.length) return;
 
+        if (typeof observeNPCWorldRoom === 'function') observeNPCWorldRoom(room);
+
         // Copy first - fleeing/wandering can move an NPC out of this room's
         // creatures array while we're still iterating it.
         room.creatures.slice().forEach(npc => {
@@ -26176,6 +26194,8 @@ function noteCombatActivity() {
     G._lastCombatTurn = getCurrentStoryTurn();
     const room = G.activeRoom;
     G._lastCombatRoom = room ? (room.id || room.name || "") : "";
+    if(typeof noteCompanionTalkEvent==='function')noteCompanionTalkEvent("combat",room);
+    if (typeof noteNPCWorldEvent === 'function') noteNPCWorldEvent(room, "combat");
 }
 
 function canNPCInitiate() {
@@ -26257,6 +26277,7 @@ function maybeNPCOpener(npc) {
     if (!reason && typeof G._lastCombatTurn === "number" &&
         now - G._lastCombatTurn <= FIGHT_AFTERMATH_TURNS &&
         G._lastCombatRoom === (room.id || room.name || "") &&
+        typeof npcWitnessedRecentFight === 'function' && npcWitnessedRecentFight(npc, room) &&
         !(typeof seen.aftermath === "number" && now - seen.aftermath < NPC_INITIATIVE_REASON_COOLDOWN)) {
         reason = "aftermath";
         chance = known && favor >= 10 ? 0.6 : 0.3;
@@ -26275,6 +26296,178 @@ function maybeNPCOpener(npc) {
     markNPCInitiatedGreeting(npc, "greet-initiative-" + reason);
     return true;
 }
+
+// NPC Life W7: bounded, witnessed world observations. No culprit inference,
+// rewards, combat ownership or extra AI calls belong to this layer.
+const NPC_WORLD_REACTION = { seen: 24, pending: 4, memories: 4, lifetime: 48, gap: 24, avoid: 24 };
+let npcWorldPerceptionSequence = 0;
+function npcWorldVisible(entity) {
+    return !!entity && !entity.hidden && !entity.isHidden && entity.visible !== false && !entity.concealed && !entity.invisible;
+}
+function npcWorldObserver(npc, room) {
+    return !!npc && !!room && (room.creatures || []).includes(npc) && npc.isHumanoid === true && npc.hp > 0 &&
+        !npc.dead && !npc.unconscious && !npc.isUnconsciousBody && npc.objectType !== 'body' && npcWorldVisible(npc) &&
+        !(npc.currentState && npc.currentState.sleeping) && !npc.bound && !npc._prisoner && !npc.isGuide && !npc.guide &&
+        !isCompanionNPC(npc) && !isGuardNPC(npc) && !isUndeadNPC(npc) && !getBodyKind(npc) && !isEntityIncorporeal(npc);
+}
+function npcWitnessedRecentFight(npc, room) {
+    const s = npc && npc.worldReactions, now = getCurrentStoryTurn();
+    return !!s && (Array.isArray(s.pending) ? s.pending : []).concat(Array.isArray(s.memories) ? s.memories : []).some(function(e) {
+        return e && e.kind === 'fight' && e.coords === room.coords && e.turn <= now && now - e.turn <= FIGHT_AFTERMATH_TURNS;
+    });
+}
+function ensureNPCWorldReactions(npc) {
+    let s = npc.worldReactions;
+    if (!s || typeof s !== 'object' || Array.isArray(s)) s = npc.worldReactions = {};
+    s.seen = (Array.isArray(s.seen) ? s.seen : []).filter(function(k) { return typeof k === 'string' && k.length <= 180; }).slice(-NPC_WORLD_REACTION.seen);
+    s.pending = (Array.isArray(s.pending) ? s.pending : []).filter(function(e) { return e && typeof e.key === 'string' && e.key.length <= 180 && /^(body|fire|blood|fight|theft|assault|gift)$/.test(e.kind) && typeof e.coords === 'string' && Number.isFinite(e.turn); }).slice(-NPC_WORLD_REACTION.pending);
+    s.memories = (Array.isArray(s.memories) ? s.memories : []).filter(function(e) { return e && typeof e.text === 'string' && e.text.length <= 240 && Number.isFinite(e.turn); }).slice(-NPC_WORLD_REACTION.memories);
+    return s;
+}
+function npcWorldSourceKey(source) {
+    if (!source._worldPerceptionKey) source._worldPerceptionKey = 'observation-' + getCurrentStoryTurn() + '-' + (++npcWorldPerceptionSequence) + '-' + Math.random().toString(36).slice(2, 12);
+    return String(source._worldPerceptionKey).slice(0, 120);
+}
+function getRoomPerceptions(room) {
+    if (!room) return [];
+    const rows = [], bodies = new Set(), add = function(source, kind, stage, priority) {
+        rows.push({ source: source, kind: kind, stage: stage, key: npcWorldSourceKey(source) + ':' + kind + ':' + stage, priority: priority });
+    };
+    (room.items || []).concat(room.creatures || []).forEach(function(body) {
+        if (!npcWorldVisible(body) || bodies.has(body) || bodies.size >= 8) return;
+        if (!(body.objectType === 'body' || body.dead || body.unconscious || body.isUnconsciousBody)) return;
+        bodies.add(body);
+        const stage = body.dead || body.bodyState === 'corpse' ? 'corpse' : 'unconscious';
+        add(body, 'body', stage, stage === 'corpse' ? 86 : 88);
+    });
+    const fire = (room.structural || []).concat(room.items || []).find(function(item) {
+        return npcWorldVisible(item) && (item.fire && item.fire.turnsLeft > 0 || item.chestBurn && item.chestBurn.turnsLeft > 0);
+    });
+    if (fire) add(fire, 'fire', 'burning', 100);
+    const blood = (room.trails || []).find(function(mark) { return mark && mark.kind === 'blood' && mark.expiresAtTurn > getCurrentStoryTurn(); });
+    if (blood) add(blood, 'blood', 'trail', 70);
+    return rows;
+}
+function queueNPCWorldObservation(npc, room, observation) {
+    const s = ensureNPCWorldReactions(npc), now = getCurrentStoryTurn();
+    if (s.seen.includes(observation.key)) return false;
+    s.seen.push(observation.key); s.seen = s.seen.slice(-NPC_WORLD_REACTION.seen);
+    s.pending.push({ key: observation.key, kind: observation.kind, stage: observation.stage || '', coords: room.coords, turn: now });
+    s.pending = s.pending.slice(-NPC_WORLD_REACTION.pending);
+    const memories = { body: observation.stage === 'corpse' ? 'I saw a dead body here. I did not see how they died.' : 'I saw an unconscious person here. I did not see how they fell.', fire: 'I saw a fire here. This does not tell me who started it.', blood: 'I saw a blood trail here. I do not know whose blood it was.', fight: 'I witnessed fighting here. I do not know who began it.', theft: 'I witnessed an attempt to take belongings here.', assault: 'I witnessed violence here.', gift: 'I saw a gift willingly change hands here.' };
+    s.memories.push({ key: observation.key, kind: observation.kind, coords: room.coords, text: memories[observation.kind], turn: now });
+    s.memories = s.memories.slice(-NPC_WORLD_REACTION.memories);
+    return true;
+}
+function observeNPCWorldRoom(room) {
+    const observations = getRoomPerceptions(room);
+    (room && room.creatures || []).forEach(function(npc) {
+        if (!npcWorldObserver(npc, room)) return;
+        if (typeof ensureNPCRelationshipState === 'function') ensureNPCRelationshipState(npc);
+        // Highest priorities are enqueued last so bounded queues retain danger.
+        observations.slice().sort(function(a,b) { return a.priority - b.priority; }).forEach(function(o) { queueNPCWorldObservation(npc, room, o); });
+    });
+}
+function noteNPCWorldEvent(room, kind, options) {
+    const kinds = { combat: 'fight', theft: 'theft', lockpick: 'theft', assault: 'assault', backstab: 'assault', attackGuard: 'assault', murder: 'assault', arson: 'fire', gift: 'gift' };
+    kind = kinds[kind]; if (!room || !kind) return;
+    const o = options || {}, now = getCurrentStoryTurn(), key = 'event:' + room.coords + ':' + kind + ':' + now;
+    const witnesses = Array.isArray(o.witnesses) ? o.witnesses : (room.creatures || []);
+    witnesses.forEach(function(npc) {
+        if (npc === o.exclude || !npcWorldObserver(npc, room)) return;
+        queueNPCWorldObservation(npc, room, { key: key, kind: kind, stage: 'witnessed' });
+    });
+}
+function npcWorldReactionPlan(npc, event, source) {
+    const traits = String(npc.temperament || '') + ' ' + String(npc.personalityProfile && npc.personalityProfile.temperament || '');
+    const tie = source && (npc.ties || []).find(function(t) { return t && t.id === source.id && /^(spouse|partner|parent|child|sibling|friend)$/.test(t.type); });
+    const cleric = /^(Priest|Priestess|Cleric|Reliquarian)$/.test(npc.role || '');
+    if (event.kind === 'body') {
+        if (event.stage !== 'corpse') return { action: 'inspect', priority: 88, text: tie ? 'kneels beside someone close to them, checking for signs of life.' : 'crouches beside the fallen person, checking for signs of life.', memory: 'I saw an unconscious person here and checked for signs of life. I did not see how they fell.' };
+        if (tie) return { action: 'grieve', priority: 94, text: 'recognizes someone close to them among the dead and falls silent in grief.', memory: 'I recognized the body of someone close to me and grieved. I did not see how they died.' };
+        if (cleric) return { action: 'pray', priority: 86, text: 'bows their head beside the dead, offering a quiet prayer.', memory: 'I saw a body and offered a prayer. I do not know who was responsible.' };
+        if (/timid|fearful|skittish|nervous|coward/i.test(traits)) return { action: 'flee', priority: 86, text: 'recoils from the body and looks for a safe way out.', memory: 'I saw a dead body and wanted to avoid this place. I did not see a killer.' };
+        return { action: 'inspect', priority: 86, text: 'stops beside the dead, looking troubled.', memory: 'I saw a dead body here. I did not see how they died.' };
+    }
+    if (event.kind === 'fire') return source ? { action: 'flee', priority: 100, urgent: true, text: 'raises the alarm about the fire and looks for a safe way out.', memory: 'I saw a fire here and sought safety. Seeing the fire does not tell me who started it.' } : { action: 'alarm', priority: 83, text: 'looks uneasy after witnessing a fire.', memory: 'I witnessed a fire here.' };
+    if (event.kind === 'blood') return { action: 'inspect', priority: 70, text: 'pauses at the blood trail, scanning the room uneasily.', memory: 'I noticed a blood trail. I do not know whose blood it was or what caused it.' };
+    if (event.kind === 'fight') return { action: /timid|fearful|skittish|nervous|coward/i.test(traits) ? 'flee' : 'freeze', priority: 82, text: 'keeps a wary distance after the fighting.', memory: 'I witnessed fighting here and kept my distance. I do not know who began it.' };
+    if (event.kind === 'theft') return { action: 'alarm', priority: 80, text: 'looks alarmed after witnessing an attempt to take belongings.', memory: 'I witnessed an attempt to take belongings here.' };
+    if (event.kind === 'assault') return { action: 'alarm', priority: 84, text: 'looks shaken after witnessing violence.', memory: 'I witnessed violence here.' };
+    return { action: 'approve', priority: 68, text: /cold|cruel|gruff|sullen/i.test(traits) ? 'watches the gift change hands, saying nothing.' : 'smiles at the small act of generosity.', memory: 'I saw a gift willingly change hands here.' };
+}
+function getNPCWorldReactionAgenda(npc, room) {
+    if (!npcWorldObserver(npc, room) || !npc.memory || npc._encId || npc._inSkirmish || (npc.hostility || 0) >= 20 || npc.memory.pendingResponse && npc.memory.pendingResponse.needed) return [];
+    const s = ensureNPCWorldReactions(npc), now = getCurrentStoryTurn(), perceptions = getRoomPerceptions(room);
+    if (Number.isFinite(s.lastTurn) && now - s.lastTurn < NPC_WORLD_REACTION.gap || Number.isFinite(npc._lastActiveInitiativeTurn) && now - npc._lastActiveInitiativeTurn < 24) return [];
+    return s.pending.filter(function(e) { return e.coords === room.coords && e.turn <= now && now - e.turn <= NPC_WORLD_REACTION.lifetime; }).map(function(e) {
+        // The existing W5 warning owns in-view fire alarms and never moves its speaker.
+        if (e.kind === 'fire' && room === G.activeRoom) return null;
+        const perception = perceptions.find(function(p) { return p.key === e.key; });
+        if (e.stage !== 'witnessed' && !perception) return null;
+        const source = perception && perception.source, plan = npcWorldReactionPlan(npc, e, source);
+        return { reason: 'world-' + e.kind, key: e.key + ':' + plan.action, priority: plan.priority, urgent: !!plan.urgent, worldReaction: true,
+            source: source || null, event: e, reactionState: s, plan: plan };
+    }).filter(Boolean).sort(function(a,b) { return b.priority - a.priority || a.event.turn - b.event.turn; });
+}
+function npcWorldReactionDestination(npc, room) {
+    return getNPCExitCoords(room, npc).find(function(coords) {
+        const next = G.roomMap[coords], dir = getNPCExitDirTo(room, coords), access = dir && npcLockAccess(npc, room, dir);
+        return next && next.zone === room.zone && !next.isPrivate && !next.isJailCell && !guardRoomIsPost(next) && !commitmentRoomUnsafe(next) &&
+            !getRoomPerceptions(next).some(function(p) { return p.kind === 'body'; }) && access && ['open', 'free', 'key'].includes(access.how);
+    }) || null;
+}
+function npcWorldReactionCanMove(npc) {
+    return !npc.stationary && !npc._onCall && !npc._npcParty && !npc._guardDuty && !npc._fleeRun && !npc._drunkBlackout &&
+        !(npc.memory && npc.memory.lastAggressor) && npc.hp >= (npc.hpMax || npc.hp) * 0.5 && getTotalBleed(npc) <= 0;
+}
+function npcWorldAvoids(npc, coords) {
+    const s = npc && npc.worldReactions;
+    return !!s && s.avoidCoords === coords && s.avoidUntil > getCurrentStoryTurn() && !isCompanionNPC(npc) && !npc._prisoner && !npc.bound && !isGuardNPC(npc);
+}
+function commitNPCWorldReaction(npc, room, row, visible) {
+    const s = ensureNPCWorldReactions(npc), now = getCurrentStoryTurn();
+    if (s !== row.reactionState || !s.pending.includes(row.event)) return false;
+    s.pending = s.pending.filter(function(e) { return e !== row.event; }); s.lastTurn = now;
+    s.memories = s.memories.filter(function(e) { return e.key !== row.event.key; });
+    s.memories.push({ key: row.event.key, kind: row.event.kind, coords: room.coords, text: row.plan.memory, turn: now }); s.memories = s.memories.slice(-NPC_WORLD_REACTION.memories);
+    s.concern = row.plan.action === 'grieve' ? 'grieving' : row.event.kind === 'body' && row.event.stage === 'unconscious' ? 'someone needs care' : '';
+    let moved = false;
+    if (row.plan.action === 'flee' && npcWorldReactionCanMove(npc)) {
+        const dest = npcWorldReactionDestination(npc, room);
+        if (dest) {
+            moved = relocateNPCBetweenRooms(npc, room, dest, { ignoreDrunkStumble: true });
+            if (moved) { s.avoidCoords = room.coords; s.avoidUntil = now + NPC_WORLD_REACTION.avoid; }
+        }
+    }
+    if (!visible) return { moved: moved };
+    spendNPCInitiative(); npc._lastActiveInitiativeTurn = now;
+    const speaker = commitmentLabel(npc), line = speaker + ' ' + row.plan.text + (moved ? ' They leave for a safer place.' : '');
+    if (row.urgent) markTextModeUrgent('a nearby NPC raises the fire alarm');
+    addChatMessage('left', 'Narrator', line, { mode: 'auto' });
+    publishTextModeOutput('npc-reaction', line, { source: 'engine', speaker: 'Narrator', speakerRole: 'narrator', reaction: {
+        observer: speaker, kind: row.event.kind, action: row.plan.action, moved: moved, optional: true,
+        responseCommand: moved ? '' : 'talk to ' + JSON.stringify(speaker) } }, textModeState.enabled ? false : undefined);
+    return { moved: moved };
+}
+function stepNPCWorldReaction(npc, room) {
+    if (room === G.activeRoom || !npcWorldObserver(npc, room) || roomHasActiveHostile(room)) return null;
+    const rows = getNPCWorldReactionAgenda(npc, room);
+    if (rows.length) { const result = commitNPCWorldReaction(npc, room, rows[0], false); return result && result.moved ? 'moved' : 'stay'; }
+    const s = npc.worldReactions;
+    if (s && s.avoidCoords === room.coords && s.avoidUntil > getCurrentStoryTurn() && npcWorldReactionCanMove(npc)) {
+        const dest = npcWorldReactionDestination(npc, room);
+        if (dest && relocateNPCBetweenRooms(npc, room, dest, { ignoreDrunkStumble: true })) return 'moved';
+    }
+    return null;
+}
+function buildNPCWorldReactionMemory(npc) {
+    const s = npc && npc.worldReactions;
+    if (!s || !Array.isArray(s.memories)) return '';
+    const entries = s.memories.filter(function(e) { return e && typeof e.text === 'string' && e.text.length <= 240; }).slice(-4);
+    return entries.length ? 'NEARBY EVENTS YOU PERSONALLY OBSERVED (do not infer a culprit or treat these as promises):\n' + entries.map(function(e) { return '- ' + e.text; }).join('\n') : '';
+}
+
 
 // NPC Life W5: one optional same-room approach. No movement, transfer or
 // forced dialogue; the existing talk/task actions own the player's reply.
@@ -26299,7 +26492,7 @@ function getNPCAgenda(npc) {
         if(Number.isFinite(seen['active-'+reason])&&now-seen['active-'+reason]<NPC_INITIATIVE_REASON_COOLDOWN)return;
         rows.push(Object.assign({reason:reason,key:key,priority:priority,line:line,urgent:false},extra||{}));
     };
-    const fires=(room.structural||[]).concat(room.items||[]).some(function(i){return i&&i.fire&&i.fire.turnsLeft>0;});
+    const fires=getRoomPerceptions(room).some(function(p){return p.kind==='fire';});
     if(fires)add('warning','fire',100,'Keep clear of that fire. Find somewhere safer.',{urgent:true});
     else if(p.hp<p.hpMax*0.5||getTotalBleed(p)>=3)add('warning','wounds',90,'You look badly hurt. Take care of those wounds before you go farther.',{urgent:getTotalBleed(p)>=3});
     const task=ensureNPCCommitments().find(function(c){return c.state==='accepted'&&c.personId===npc.id&&getCurrentStoryTurn()<=c.dueTurn;});
@@ -26316,24 +26509,36 @@ function getNPCAgenda(npc) {
     return rows.sort(function(a,b){return b.priority-a.priority;});
 }
 function tickActiveRoomInitiative() {
+    observeNPCWorldRoom(G.activeRoom);
     observePlayerForNPCInitiative();
     if(activeRoomInitiativeBlocked(false)||!canNPCInitiate()){activeRoomInitiativePending=null;return false;}
     const choices=[];
-    (G.activeRoom.creatures||[]).forEach(function(npc){const agenda=getNPCAgenda(npc);if(agenda.length)choices.push({npc:npc,agenda:agenda[0]});});
+    (G.activeRoom.creatures||[]).forEach(function(npc){const agenda=getNPCInitiativeAgenda(npc);if(agenda.length)choices.push({npc:npc,agenda:agenda[0]});});
     choices.sort(function(a,b){return b.agenda.priority-a.agenda.priority||(a.npc._lastActiveInitiativeTurn||0)-(b.npc._lastActiveInitiativeTurn||0)||String(a.npc.id).localeCompare(String(b.npc.id));});
     const choice=choices[0];if(!choice){activeRoomInitiativePending=null;return false;}
-    const chance=choice.agenda.priority>=65?1:getInitiativeTone(choice.npc)==='warm'?0.6:0.3;
+    const traits=choice.agenda.companion?companionTalkTemperament(choice.npc):'';
+    const chance=choice.agenda.priority>=65?1:choice.agenda.companion?(/shy|aloof|grump|reserved|timid/.test(traits)?0.12:/cheer|curious|joker|excitable|talkative/.test(traits)?0.65:0.3):getInitiativeTone(choice.npc)==='warm'?0.6:0.3;
     if(Math.random()>=chance){activeRoomInitiativePending=null;return false;}
     activeRoomInitiativePending={player:G.player,map:G.roomMap,room:G.activeRoom,npc:choice.npc,memory:choice.npc.memory,relationship:JSON.stringify([choice.npc.memory.metPlayer,choice.npc.memory.favorability,choice.npc.memory.nameKnown]),agenda:choice.agenda,turn:getCurrentStoryTurn(),epoch:textModeState.epoch};
+    if(choice.agenda.worldReaction){activeRoomInitiativePending.reactionCreatures=G.activeRoom.creatures;}
+    if(choice.agenda.companion){const frame=activeRoomInitiativePending;frame.creatures=G.activeRoom.creatures;frame.party=G.partyMembers;frame.followers=G.sessionFollowers;frame.companionState=ensureCompanionTalkState(choice.npc);frame.companionRevision=frame.companionState.revision;queueCompanionTalkLine(frame);}
     setTimeout(flushActiveRoomInitiative,0);return true;
 }
 function flushActiveRoomInitiative() {
     const frame=activeRoomInitiativePending;if(!frame)return false;
     if(frame.player!==G.player||frame.map!==G.roomMap||frame.room!==G.activeRoom||frame.memory!==frame.npc.memory||frame.relationship!==JSON.stringify([frame.npc.memory.metPlayer,frame.npc.memory.favorability,frame.npc.memory.nameKnown])||frame.turn!==getCurrentStoryTurn()||frame.epoch!==textModeState.epoch){activeRoomInitiativePending=null;return false;}
+    if(frame.agenda.companion&&!companionTalkFrameCurrent(frame)){activeRoomInitiativePending=null;return false;}
+    if(frame.companionAwaiting)return false;
     if(textModeState.busy||textModeState.parsing||textModeState.capture&&textModeState.capture.length)return false;
     activeRoomInitiativePending=null;
     if(activeRoomInitiativeBlocked(true)||!canNPCInitiate())return false;
-    const agenda=getNPCAgenda(frame.npc).find(function(row){return row.reason===frame.agenda.reason&&row.key===frame.agenda.key;});if(!agenda)return false;
+    const agendas=getNPCInitiativeAgenda(frame.npc);
+    const agenda=agendas.find(function(row){return row.reason===frame.agenda.reason&&row.key===frame.agenda.key;});if(!agenda||agenda.companion&&agendas[0]!==agenda)return false;
+    if(agenda.worldReaction){
+        if(frame.reactionCreatures!==G.activeRoom.creatures||agenda.source!==frame.agenda.source||agenda.reactionState!==frame.agenda.reactionState||agenda.event!==frame.agenda.event||agenda.plan.action!==frame.agenda.plan.action||agendas[0]!==agenda)return false;
+        return !!commitNPCWorldReaction(frame.npc,G.activeRoom,agenda,true);
+    }
+    if(agenda.companion)return deliverCompanionTalk(frame,agenda);
     const npc=frame.npc,now=getCurrentStoryTurn(),label=commitmentLabel(npc),speaker=npc.name||label;
     npcInitiativeSeen(npc)['active-'+agenda.reason]=now;npc._lastActiveInitiativeTurn=now;npc._initiativeVisitKey=npcInitiativeVisitKey(npc);
     if(agenda.newsId)npc._initiativeNewsId=agenda.newsId;spendNPCInitiative();npc.memory.metPlayer=true;
@@ -26358,6 +26563,455 @@ function consumeNPCInitiativeGreeting(npc) {
         if(record&&session)record.encounterKey='talk:'+session.sessionNumber;
     }
     return true;
+}
+
+// Player communication: engine-owned address facts, one greeting gate and a session manner.
+const npcCommunicationManners=new WeakMap(),npcCommunicationReplies=new WeakMap();
+function npcCommunicationText(value,max) {
+    return typeof value==='string'&&!/[<>\r\n{}]/.test(value)?value.replace(/\s+/g,' ').trim().slice(0,max||100):'';
+}
+function getNPCCommunicationProfile(npc) {
+    const social=npc&&npc.social||{},explicit=npcCommunicationText(npc&&npc.preferredAddress,100);
+    let title=npcCommunicationText(npc&&(npc.title||npc.honorific)||social.title,60);
+    const role=String(npc&&npc.role||'');
+    if(!title&&/^(?:Captain|Guard Captain|Commander|Sergeant|Lieutenant|Magistrate|Judge|Doctor|Professor|Priest|Priestess|Lord|Lady|Baron|Baroness|Duke|Duchess)$/.test(role))title=role==='Guard Captain'?'Captain':role;
+    const name=npcCommunicationText(npc&&npc.givenName||'',100);
+    const form=explicit||(title?[title,name].filter(Boolean).join(' '):name);
+    const liking=String(social.liking&&social.liking.text||'');
+    const rejectsFormal=/\b(?:dislike|hate|avoid|not|no|without)\b.{0,24}\b(?:formal|formality|titles)|\b(?:don't|do not)\s+like\b.{0,20}\bformal/i.test(liking);
+    const formalPreferred=!rejectsFormal&&/\bformality\b|\bformal(?:ly)?\b|\bproper titles\b|\b(?:addressed|spoken to).{0,35}\b(?:proper|respectful)|\b(?:proper|respectful)\s+(?:address|speech|greetings?)/i.test(liking);
+    return {title:title,form:form,name:name,formalPreferred:formalPreferred};
+}
+function getNPCCommunicationKnowledge(npc) {
+    if(!npc||!npc.memory)return null;
+    const m=npc.memory;
+    if(!m.communication||typeof m.communication!=='object'||Array.isArray(m.communication))m.communication={addressKnown:false,formKnown:false,knownForm:'',knownTitle:'',preferenceKnown:false};
+    return m.communication;
+}
+function publicNPCAddress(npc) {
+    const k=npc&&npc.memory&&npc.memory.communication,p=getNPCCommunicationProfile(npc),known=!!(k&&k.addressKnown);
+    const form=known?(k.formKnown?npcCommunicationText(k.knownForm,100):npcCommunicationText(k.knownTitle,60)||(npcNameIsKnownSafe(npc)?npcCommunicationText(npc.name,100):'')):'';
+    const likingKnown=!!(npc&&npc.social&&npc.social.liking&&npc.social.liking.known);
+    return {known:known,preferredKnown:!!(known&&k.formKnown),form:form,title:known?npcCommunicationText(k.knownTitle,60):'',formalPreferred:likingKnown?p.formalPreferred:!!(k&&k.preferenceKnown&&k.formalPreference)};
+}
+function getNPCCommunicationManner(npc) {
+    const frame=npc&&npcCommunicationManners.get(npc),session=npc&&npc.memory&&npc.memory.conversationState;
+    return frame&&frame.player===G.player&&frame.map===G.roomMap&&frame.room===G.activeRoom&&G.activeNPC===npc&&frame.memory===npc.memory&&frame.session===session&&frame.sessionNumber===(session&&session.sessionNumber)?frame.style:'ordinary';
+}
+function setNPCCommunicationManner(npc,style) {
+    const session=ensureNPCConversationState(npc);
+    npcCommunicationManners.set(npc,{player:G.player,map:G.roomMap,room:G.activeRoom,memory:npc.memory,session:session,sessionNumber:session.sessionNumber,style:style});
+    if(npc.memory.cachedReplies)npc.memory.cachedReplies={};
+}
+function getNPCCommunicationSignature(npc) {
+    const style=getNPCCommunicationManner(npc),address=publicNPCAddress(npc);
+    const profile=getNPCCommunicationProfile(npc);
+    return (style==='formal'?'formal':'')+(address.known?':'+hashConversationKey(JSON.stringify([address,profile.title,profile.form])):'');
+}
+function getNPCCommunicationGuide(npc) {
+    const p=getNPCCommunicationProfile(npc),known=publicNPCAddress(npc),style=getNPCCommunicationManner(npc);
+    return 'COMMUNICATION: The player is using an '+(style==='formal'?'explicitly formal, respectful':'ordinary')+' manner in this conversation. Keep YOUR own species/personality voice. Do not rewrite the player\'s actual typed words, invent speech for gestures, or make rude words polite. '+
+        (p.formalPreferred?'You appreciate proper, formal address; acknowledge it naturally without offering gifts, secrets or other game effects. ':'')+
+        (p.title?'Your actual title is '+p.title+'. ':'You have no established formal title. Never invent a noble rank, honorific or official position. ')+
+        (known.form?'The player knows your preferred address: '+known.form+'. ':'The player has not learned a preferred address. Polite language works without a title; do not volunteer a hidden name unless asked for an introduction/address. ');
+}
+function npcCommunicationBlock(npc) {
+    const p=G.player,r=G.activeRoom;
+    if(!p||!r||p.dead||p.hp<=0||p.unconscious||p._dying||p._collapsing||p.fatigue&&p.fatigue.sleeping)return 'You cannot start that exchange right now.';
+    if(!npc||G.activeNPC!==npc||!(r.creatures||[]).includes(npc)||!isVisibleEntity(npc)||!canConverseWithNPC(npc)||npc.dead||npc.hp<=0||npc._inSkirmish||npc._encId||npc.bound||npc._prisoner)return 'That person is not available for this conversation.';
+    if(G.combatEncounter||G.activeNPCMode==='combat'||roomHasActiveHostile(r)||isRoomCollapsed(r)||isPlayerHidden()||isPlayerJailed())return 'You need a safe moment to speak with them.';
+    if(!/^(talk|respond|menu)$/.test(G.activeNPCMode||'')||G.activeObject||G.activeItemModal||hasPendingPartyLoot()||sharedChoiceState.menu||textModeState.pending||textModeState.dialogue)return 'Finish the current interaction first.';
+    if(npc.guide||npc.isGuide)return 'Let them finish their current conversation first.';
+    return '';
+}
+function captureNPCCommunication(npc) {
+    const session=ensureNPCConversationState(npc);
+    return {npc:npc,player:G.player,map:G.roomMap,room:G.activeRoom,memory:npc.memory,creatures:G.activeRoom.creatures,mode:G.activeNPCMode,turn:getCurrentStoryTurn(),epoch:textModeState.epoch,
+        session:session,sessionNumber:session.sessionNumber,interaction:session.interactionCount,profile:JSON.stringify(getNPCCommunicationProfile(npc)),style:getNPCCommunicationManner(npc),signature:getNPCCommunicationSignature(npc)};
+}
+function npcCommunicationCaptureFresh(frame,npc,afterChoice) {
+    const session=npc&&npc.memory&&npc.memory.conversationState;
+    return !!frame&&frame.npc===npc&&frame.player===G.player&&frame.map===G.roomMap&&frame.room===G.activeRoom&&frame.memory===npc.memory&&G.activeNPC===npc&&frame.creatures===G.activeRoom.creatures&&
+        (G.activeRoom.creatures||[]).includes(npc)&&frame.epoch===textModeState.epoch&&frame.session===session&&frame.sessionNumber===session.sessionNumber&&
+        (afterChoice?session.interactionCount===frame.interaction+1:frame.turn===getCurrentStoryTurn()&&session.interactionCount===frame.interaction&&frame.mode===G.activeNPCMode)&&
+        frame.profile===JSON.stringify(getNPCCommunicationProfile(npc))&&(afterChoice?frame.style===getNPCCommunicationManner(npc):frame.signature===getNPCCommunicationSignature(npc))&&isVisibleEntity(npc)&&npc.hp>0&&!npc.dead&&!npc.unconscious;
+}
+function getNPCCommunicationGreeting(npc,options) {
+    return (options||queryConversationCatalogue(npc,{room:G.activeRoom})).find(function(o){return o&&o.intent==='greeting'&&/^greet-/.test(o.id||'')&&!o.action;})||null;
+}
+function withNPCCommunicationOptions(npc,options) {
+    if(npcCommunicationBlock(npc)||options.some(function(o){return o&&(o.guideTalk||o.guideParty||o.action==='pressure');}))return options;
+    const frame=captureNPCCommunication(npc),base=getNPCCommunicationGreeting(npc,options),result=options.slice();
+    const make=function(id,label,action,style){return {id:id,label:label,kind:action==='manner'||action==='greet'?'social':'topic',intent:action==='greet'?'greeting':'talk',action:'communication',communication:{action:action,style:style||''},communicationCapture:frame};};
+    if(base){
+        const index=result.indexOf(base);
+        result.splice(index,1,Object.assign({},make(base.id,base.label,'greet','ordinary'),{kind:'social'}),make('greet-formal','Greet them formally','greet','formal'),make('greet-nonverbal','Acknowledge them without words','greet','nod'));
+    }
+    result.push(make('ask-preferred-address','How should I address you?','address'),make('ask-established-title','Ask their title','title'));
+    const formal=getNPCCommunicationManner(npc)==='formal';
+    result.push(make('communication-manner-'+(formal?'ordinary':'formal'),formal?'Use an ordinary manner':'Speak formally','manner',formal?'ordinary':'formal'));
+    return result;
+}
+function prepareNPCCommunicationReply(npc,choice,action,style) {
+    const frame=captureNPCCommunication(npc),p=getNPCCommunicationProfile(npc),known=publicNPCAddress(npc);
+    const meta={frame:frame,action:action,style:action==='greet'?style||'ordinary':getNPCCommunicationManner(npc),refused:false};
+    if(action==='address'||action==='title'){
+        meta.refused=(npc.hostility||0)>70;
+        let reply=meta.refused?'I am not giving you my name or title.':action==='title'?(p.title?'My title is '+p.title+'.':'I have no formal title.'):
+            p.form?'Please address me as '+p.form+'.':'I have no special form of address. Polite language is enough.';
+        if(!meta.refused&&p.formalPreferred)reply+=' I prefer formal, respectful speech and proper titles when they apply.';
+        meta.fixed={text:reply,affirmative:!meta.refused,responseNeeded:false};
+        choice.revealsName=!meta.refused&&action==='address'&&!!p.name&&reply.includes(p.name);
+        choice.noPrefetch=true;
+    }
+    if(action==='greet'){
+        meta.nonverbal=/^(nod|bow|salute)$/.test(style);
+        if(meta.nonverbal){
+            const gesture=style==='bow'?'bow politely':style==='salute'?'offer a respectful salute':typeof isSlimeEntity==='function'&&isSlimeEntity(G.player)?'signal acknowledgment':'nod politely';
+            choice.text='You '+gesture+' without speaking.';choice.promptText='(Nonverbal greeting: '+gesture+'; no words are spoken.)';choice.revealsName=false;
+            choice.contextNote='The player acknowledges you WITHOUT SPEAKING. Do not invent any spoken player words or treat the gesture as a request for names. You may acknowledge the gesture in your own voice; keep any unknown personal name private.';
+        }else if(style==='formal'){
+            meta.introduce=choice.revealsName===true;choice.revealsName=false;
+            const words='Good day'+(known.form?', '+known.form:'')+'.';
+            choice.text='You greet them respectfully. "'+words+'"';choice.promptText=words;
+            choice.contextNote=String(choice.contextNote||'')+' The player greets you respectfully with a formal manner, using a preferred address only if they already know it. No noble rank is being claimed or invented.';
+        }
+        choice.noPrefetch=true;
+    }
+    choice._communicationSig=getNPCCommunicationSignature(npc);npcCommunicationReplies.set(choice,meta);return choice;
+}
+function getNPCCommunicationFixedReply(npc,choice) {
+    const meta=choice&&npcCommunicationReplies.get(choice);
+    return meta&&meta.frame.npc===npc?meta.fixed||null:null;
+}
+function getNPCCommunicationApproach(choice,input) {
+    const meta=choice&&npcCommunicationReplies.get(choice);
+    return meta&&meta.nonverbal?'The player makes only this nonverbal acknowledgment: '+input+'. They say nothing.':`The player says: "${input}"`;
+}
+function commitNPCCommunicationReply(npc,choice,responseText) {
+    const meta=choice&&npcCommunicationReplies.get(choice);
+    if(!meta||meta.delivered||!npcCommunicationCaptureFresh(meta.frame,npc,true))return false;
+    meta.delivered=true;const k=getNPCCommunicationKnowledge(npc),p=getNPCCommunicationProfile(npc),now=getCurrentStoryTurn();let appreciated=false;
+    if((meta.action==='address'||meta.action==='title')&&!meta.refused){k.addressKnown=true;k.knownTitle=p.title;if(meta.action==='address'){k.formKnown=true;k.knownForm=p.form;}if(p.formalPreferred){k.preferenceKnown=true;k.formalPreference=true;}
+        if(typeof registerNPCToldMemory==='function')registerNPCToldMemory(npc,'preferred-address-'+meta.action,'Said: '+responseText,{importance:4,tags:['self'],shortTerm:false});}
+    if(meta.action==='greet'&&meta.style==='formal'&&p.formalPreferred&&(npc.hostility||0)<20&&(!Number.isFinite(k.respectTurn)||now-k.respectTurn>=commitmentDayTurns())){
+        k.respectTurn=now;appreciated=true;applyNPCImpact(npc,{mood:0,favor:1,hostility:0,intent:'greeting',markMet:true,actionTag:'respectful-address'});
+    }
+    const label=commitmentLabel(npc),speaker=npc.name||label;
+    publishTextModeOutput('communication',responseText,{source:'engine',speaker:speaker,speakerRole:'npc',speakerInfo:{species:String(npc.species||''),gender:String(npc.gender||''),voiceKey:'v'+textModeObjectGen(npc)},
+        communication:{stage:'result',action:meta.action,style:meta.style,nonverbal:!!meta.nonverbal,appreciated:appreciated,refused:meta.refused,address:publicNPCAddress(npc)}},textModeState.enabled?false:undefined);
+    return true;
+}
+async function performNPCCommunication(npc,request,frame) {
+    const action=request&&request.action,style=request&&request.style||'ordinary',reason=npcCommunicationBlock(npc);
+    if(reason)return textModeResult('blocked',reason);
+    if(frame&&!npcCommunicationCaptureFresh(frame,npc,false))return textModeResult('blocked','That conversation changed. Choose a current approach.');
+    if(!/^(greet|manner|address|title)$/.test(action)||action==='manner'&&!/^(ordinary|formal)$/.test(style)||action==='greet'&&!/^(ordinary|formal|nod|bow|salute)$/.test(style))return textModeResult('blocked','Choose a current greeting, form of address or conversation manner.');
+    if(action==='manner'){
+        setNPCCommunicationManner(npc,style);
+        const line=style==='formal'?'You keep your speech respectful and formal.':'You return to an ordinary conversational manner.';
+        setNarration(line);publishTextModeOutput('communication',line,{communication:{stage:'manner',style:style,target:commitmentLabel(npc)}},textModeState.enabled?false:undefined);
+        if(typeof renderChatOptions==='function')renderChatOptions(npc);return {status:'completed'};
+    }
+    const base=getNPCCommunicationGreeting(npc);
+    if(action==='greet'&&!base)return textModeResult('blocked','You have already opened this conversation. Use manner formal to change how you speak.');
+    if(action==='greet'&&/^(ordinary|formal)$/.test(style))setNPCCommunicationManner(npc,style);
+    const choice=action==='greet'?Object.assign({},base):{id:action==='title'?'ask-established-title':'ask-preferred-address',kind:'topic',text:action==='title'?'You ask what their title is.':'You ask how they prefer to be addressed.',promptText:action==='title'?'What is your title?':'How should I address you?',intent:'talk',relationshipImpact:{mood:0,favor:0,hostility:0,intent:'talk',markMet:true,actionTag:'talk'}};
+    delete choice.action;delete choice._conversationBundleKey;delete choice._conversationReplyKey;
+    prepareNPCCommunicationReply(npc,choice,action,style);
+    const pending=chooseChatOption(choice),ownDialogue=textModeState.dialogue;await pending;
+    const meta=npcCommunicationReplies.get(choice);
+    if(!meta||!meta.delivered){
+        if(ownDialogue&&textModeState.dialogue===ownDialogue)textModeDialogueBusy(false);
+        if(meta&&meta.frame.player===G.player&&meta.frame.map===G.roomMap&&meta.frame.room===G.activeRoom&&G.activeNPC===npc&&!npcCommunicationBlock(npc)&&npc.memory.conversationState===meta.frame.session&&npc.memory.conversationState.sessionNumber===meta.frame.sessionNumber){setChatOptionsDisabled(false);renderChatOptions(npc);}
+        return textModeResult('interrupted','The exchange is interrupted.',{communication:{stage:'interrupted',action:action,exchangeSpent:true}});
+    }
+    return {status:'completed'};
+}
+function prepareTypedNPCCommunication(npc,choice,body,isAction) {
+    if(isAction||!npc||npcCommunicationBlock(npc))return;
+    const kind=typedNPCAddressQuestion(body);if(!kind)return;
+    choice.id=kind==='title'?'ask-established-title':'ask-preferred-address';
+    prepareNPCCommunicationReply(npc,choice,kind,getNPCCommunicationManner(npc));
+}
+function typedNPCAddressQuestion(text) {
+    const t=String(text||'').replace(/[’‘]/g,"'").trim();
+    if(/\b(?:how\s+(?:should|may|can|do|would)\s+(?:i|we)\s+(?:properly\s+)?address\s+you|how\s+(?:do|would)\s+you\s+(?:like|prefer)\s+(?:to be addressed|(?:me|us) to address you)|preferred\s+form\s+of\s+address|what\s+(?:do|would)\s+you\s+prefer\s+to\s+be\s+called)\b/i.test(t))return 'address';
+    if(/\b(?:what(?:'s| is| are)?\s+(?:your|ur)\s+(?:(?:formal|official|proper|preferred)\s+)?title|tell\s+me\s+your\s+title|do you have (?:a |an )?(?:(?:formal|official) )?title|what title (?:do you have|should (?:i|we) use))\b/i.test(t))return 'title';
+    return '';
+}
+function parseTextCommunication(raw) {
+    let m=/^(?:manner|speak|talk)\s+(formal(?:ly)?|ordinary|normally|casually)$/i.exec(raw);
+    if(m)return {verb:'communication',args:{action:'manner',style:/^formal/i.test(m[1])?'formal':'ordinary'}};
+    m=/^(?:ask\s+(?:about\s+)?(?:their\s+)?|request\s+)?(address|title)(?:\s+(?:(?:from|of|for)\s+)?(.+))?$/i.exec(raw);
+    if(m)return {verb:'communication',args:{action:m[1].toLowerCase(),target:textCommandUnquote(m[2]||'')}};
+    const question=typedNPCAddressQuestion(raw);if(question)return {verb:'communication',args:{action:question}};
+    m=/^greet(?:\s+(formally|respectfully|normally|ordinarily|silently|nonverbally|with (?:a )?(?:nod|bow|salute)))?(?:\s+(.+))?$/i.exec(raw);
+    if(!m)return null;const word=(m[1]||'normally').toLowerCase();
+    return {verb:'communication',args:{action:'greet',style:/formal|respectful/.test(word)?'formal':/bow/.test(word)?'bow':/salute/.test(word)?'salute':/nod|silent|nonverbal/.test(word)?'nod':'ordinary',target:textCommandUnquote((m[2]||'').replace(/^(?:to|at)\s+/i,''))}};
+}
+async function executeTextCommunication(command) {
+    const args=command.args||{},members=textModeVisibleNPCs(),matches=command.targetRef?members.filter(function(n){return n===command.targetRef;}):args.target?textNPCMatchesOrGuess(args.target,members):G.activeNPC?[G.activeNPC]:members;
+    if(!matches.length)return textModeResult('blocked','No visible conversation partner matches. Use who is here.');
+    if(matches.length>1)return textModeAsk(command,'target',matches,'Who do you want to address?');
+    const npc=matches[0];command.targetRef=npc;
+    if(G.activeNPC&&G.activeNPC!==npc)return textModeResult('blocked','Leave your current conversation before switching people.');
+    if(!G.activeNPC){if(!canConverseWithNPC(npc))return textModeResult('blocked','That person cannot converse with you.');selectNPC(npc);}
+    if(G.activeNPC!==npc)return textModeResult('interrupted','That conversation is no longer available.');
+    if(G.activeNPCMode==='menu')chooseNPCAction('talk');
+    return performNPCCommunication(npc,{action:args.action,style:args.style||'ordinary'});
+}
+function showNPCCommunication() {
+    const npc=G.activeNPC;
+    if(!npc||npcCommunicationBlock(npc))return textModeResult('completed','Start a safe conversation to choose a greeting or manner.',{communication:{stage:'availability',choices:[]}});
+    const choices=[];if(getNPCCommunicationGreeting(npc)){choices.push({label:'Greet normally',command:'greet normally'},{label:'Greet formally',command:'greet formally'},{label:'Acknowledge without words',command:'greet silently'});}
+    choices.push({label:'Ask preferred address',command:'ask address'},{label:'Ask title',command:'ask title'},{label:'Use a formal manner',command:'manner formal'},{label:'Use an ordinary manner',command:'manner ordinary'});
+    const address=publicNPCAddress(npc);
+    const known=address.known?(address.title?'Their title is '+address.title+'. ':'They have no formal title. ')+(address.form?(address.preferredKnown?'Their preferred address is ':'Their known address is ')+address.form+'.':'You can ask how they prefer to be addressed.'):'You can ask how they prefer to be addressed.';
+    return textModeResult('completed','Your current manner is '+getNPCCommunicationManner(npc)+'. '+known,{communication:{stage:'availability',manner:getNPCCommunicationManner(npc),address:address,choices:choices}});
+}
+
+function npcCommunicationReplyCurrent(npc,choice) { const meta=choice&&npcCommunicationReplies.get(choice);return !meta||npcCommunicationCaptureFresh(meta.frame,npc,true); }
+function npcCommunicationFallback(npc,choice) {
+    const meta=choice&&npcCommunicationReplies.get(choice);if(!meta||meta.action!=='greet')return '';
+    if(meta.nonverbal)return meta.style==='bow'?'They acknowledge your bow.':meta.style==='salute'?'They acknowledge your salute.':'They return your quiet acknowledgment.';
+    if(meta.style==='formal'){
+        if((npc.hostility||0)>=70)return 'They acknowledge you cautiously.';
+        const p=getNPCCommunicationProfile(npc),intro=meta.introduce&&p.name&&!npcNameIsKnownSafe(npc)?' I am '+p.name+'.':'';
+        return (p.formalPreferred?'They acknowledge your respectful greeting with approval. ':'')+'<Good day.'+intro+'>';
+    }
+    return '';
+}
+
+// W6 shares W5 selection, foreground ownership and the speech budget.
+const COMPANION_TALK = { gap:24, reasonGap:60, quietTurns:60, questionTurns:24, questionGap:120, timeout:4000 };
+let companionTalkAIWork=null;
+const companionRoadRepliesRunning=new WeakSet();
+const companionRoadAnswerFrames=new WeakMap();
+function resetCompanionTalkRuntime() {
+    companionTalkAIWork=null;
+    if(activeRoomInitiativePending&&activeRoomInitiativePending.agenda.companion)activeRoomInitiativePending=null;
+}
+function companionTalkEligible(npc,room) {
+    return !!npc&&!!npc.memory&&!!room&&(room.creatures||[]).includes(npc)&&npc.isHumanoid===true&&isCompanionNPC(npc)&&isVisibleEntity(npc)&&
+        isAwakeHumanoidNPC(npc)&&!npc.dead&&!npc.bound&&!npc._prisoner&&!npc._encId&&!npc._guardDuty&&!npc._npcParty&&
+        !getBodyKind(npc)&&!isUndeadNPC(npc)&&!isEntityIncorporeal(npc)&&(npc.hostility||0)<20&&
+        !(npc.memory.pendingResponse&&npc.memory.pendingResponse.needed)&&
+        !(npc.guide&&npc.guide.active&&!(G.story&&G.story.flags&&G.story.flags['guide-in-party']));
+}
+function ensureCompanionTalkState(npc) {
+    if(!npc||!npc.memory)return null;
+    const now=getCurrentStoryTurn();
+    if(!npc.memory.companionTalk||typeof npc.memory.companionTalk!=='object'||Array.isArray(npc.memory.companionTalk))
+        npc.memory.companionTalk={joinedTurn:now,zone:String(G.activeRoom&&G.activeRoom.zone||'').slice(0,80),seen:{},stories:[],answered:[],revision:0};
+    const state=npc.memory.companionTalk;
+    if(!state.seen||typeof state.seen!=='object'||Array.isArray(state.seen))state.seen={};
+    if(!Array.isArray(state.stories))state.stories=[];state.stories=state.stories.slice(-2);
+    if(!Array.isArray(state.answered))state.answered=[];state.answered=state.answered.slice(-2);
+    return state;
+}
+function companionTalkTemperament(npc) {
+    return String([npc.temperament,npc.personalityProfile&&npc.personalityProfile.temperament].concat(npc.traits||[],npc.personalityProfile&&npc.personalityProfile.traits||[]).filter(Boolean).join(' ')).toLowerCase();
+}
+function getCompanionTalkAgenda(npc) {
+    const room=G.activeRoom,p=G.player,now=getCurrentStoryTurn(),rows=[];
+    if(!p||!npc||!npc.memory||!companionTalkEligible(npc,room))return rows;
+    const state=ensureCompanionTalkState(npc);
+    if(Number.isFinite(state.lastTurn)&&now-state.lastTurn<COMPANION_TALK.gap)return rows;
+    const add=function(reason,key,priority,line,extra){
+        if(Number.isFinite(state.seen[reason])&&now-state.seen[reason]<COMPANION_TALK.reasonGap)return;
+        rows.push(Object.assign({companion:true,reason:'companion-'+reason,key:String(key).slice(0,160),priority:priority,line:line,urgent:false},extra||{}));
+    };
+    if(p.hp<p.hpMax*0.5||getTotalBleed(p)>=3)add('wounds','wounds',95,'You are badly hurt. We should see to your wounds.',{urgent:getTotalBleed(p)>=3});
+    if((state.quietUntil||0)>now)return rows; // Real danger can still be voiced.
+    const fallen=(room.creatures||[]).concat(room.items||[]).find(function(n){return n&&n!==npc&&(n.objectType==='body'||n.dead||n.unconscious||n.isUnconsciousBody)&&(!n.concealed||n.revealed)&&isVisibleEntity(n);});
+    const bodyKey=fallen&&String(fallen.id||fallen._uid||'body:'+textModeObjectGen(fallen)).slice(0,120);
+    if(fallen&&state.bodyKey!==bodyKey)add('body',bodyKey,85,'Someone has fallen here. Let us be careful.',{bodyKey:bodyKey});
+    if(Number.isFinite(state.combatTurn)&&now>=state.combatTurn&&now-state.combatTurn<=FIGHT_AFTERMATH_TURNS&&state.combatRoom===room.coords)
+        add('fight',state.combatTurn,80,'That was a hard fight. Take a moment before we carry on.');
+    const task=ensureNPCCommitments().find(function(c){return c.state==='accepted'&&(c.giverId===npc.id||c.personId===npc.id)&&c.dueTurn>=now&&c.dueTurn-now<=12;});
+    if(task)add('task',task.id,75,'We still have that task to settle. Let us not forget it.',{commitment:task});
+    const known=npc.memory.knownDeeds;
+    const deed=p.renown&&Array.isArray(p.renown.deeds)&&p.renown.deeds.find(function(d){return d&&d.public&&d.id!==state.deedId&&
+        /^(jobDone|theft|assault)$/.test(d.kind)&&known&&(Array.isArray(known)?known.includes(d.id):known[d.id]);});
+    if(deed){const harsh=/cruel|ruthless|aggressive|greedy/.test(companionTalkTemperament(npc));
+        add('deed',deed.id,65,deed.kind==='jobDone'?'You saw that work through. That was worth doing.':harsh?'That was a rough way to handle things. We should keep our wits about us.':'What happened back there troubles me. I would rather we caused less harm.',{deedId:deed.id});}
+    if(state.question&&state.question.untilTurn>=now)return rows.sort(function(a,b){return b.priority-a.priority;});
+    const zone=String(room.zone||'').slice(0,80);
+    if(zone&&state.zone!==zone)add('zone',zone,45,'A different stretch of the world. I wonder what we will find here.',{zone:zone});
+    if((room.landmark||room.isLandmark||/^(Town Gate|Shrine|Temple|Ruins|Ancient Ruins)$/.test(room.type||''))&&state.landmark!==room.coords)
+        add('landmark',room.coords,40,'This looks like a place worth remembering.',{landmark:room.coords});
+    if(Number.isFinite(state.restTurn)&&now>=state.restTurn&&now-state.restTurn<=6)add('rest',state.restTurn,35,'It is good to have a moment to catch our breath.');
+    const since=now-(Number.isFinite(state.lastTurn)?state.lastTurn:Number.isFinite(state.joinedTurn)?state.joinedTurn:now);
+    if(since>=COMPANION_TALK.gap){
+        const liking=npc.social&&npc.social.liking;
+        const background=typeof npc.background==='string'?npc.background.replace(/\s+/g,' ').trim().slice(0,240):'';
+        const fact=liking&&typeof liking.text==='string'&&!liking.known&&!state.stories.includes('liking')?{key:'liking',text:liking.text.replace(/\s+/g,' ').trim().slice(0,240)}:
+            background&&!state.stories.includes('background')?{key:'background',text:background}:null;
+        if(fact&&fact.text&&(npc.memory.favorability||0)>=10)add('story',fact.key,30,fact.text,{storyKey:fact.key,storyText:fact.text});
+        const questionKey=!state.answered.includes('journey')?'journey':!state.answered.includes('destination')?'destination':'';
+        if(questionKey&&(!Number.isFinite(state.questionTurn)||now-state.questionTurn>=COMPANION_TALK.questionGap))
+            add('question',questionKey,25,questionKey==='journey'?'What brought you to the road?':'Is there somewhere you hope this journey will take you?',{questionKey:questionKey,responseNeeded:true});
+        add('quiet','road',10,'It is good to have company on the road.');
+    }
+    return rows.sort(function(a,b){return b.priority-a.priority;});
+}
+function getNPCInitiativeAgenda(npc) {
+    return isCompanionNPC(npc)?getCompanionTalkAgenda(npc):getNPCWorldReactionAgenda(npc,G.activeRoom).concat(getNPCAgenda(npc)).sort(function(a,b){return b.priority-a.priority;});
+}
+function tickCompanionTalk() { return tickActiveRoomInitiative(); }
+function noteCompanionTalkEvent(kind,room) {
+    if(!room||room!==G.activeRoom)return;
+    (room.creatures||[]).forEach(function(npc){
+        const combatWitness=kind==='combat'&&npc&&npc.memory&&npc.isHumanoid===true&&isCompanionNPC(npc)&&isVisibleEntity(npc)&&npc.hp>0&&!npc.dead&&!npc.unconscious&&!npc.bound&&!npc.hidden&&!(npc.currentState&&npc.currentState.sleeping);
+        if(!combatWitness&&(!companionTalkEligible(npc,room)||!npc.memory))return;
+        const state=ensureCompanionTalkState(npc);
+        if(kind==='combat'){state.combatTurn=getCurrentStoryTurn();state.combatRoom=room.coords;}
+        if(kind==='rest')state.restTurn=getCurrentStoryTurn();
+    });
+}
+function companionTalkFrameCurrent(frame) {
+    if(!frame||frame.player!==G.player||frame.map!==G.roomMap||frame.room!==G.activeRoom||frame.memory!==frame.npc.memory||frame.turn!==getCurrentStoryTurn()||frame.epoch!==textModeState.epoch)return false;
+    if(frame.creatures!==frame.room.creatures||frame.party!==G.partyMembers||frame.followers!==G.sessionFollowers||!companionTalkEligible(frame.npc,frame.room))return false;
+    const state=ensureCompanionTalkState(frame.npc);
+    return state===frame.companionState&&state.revision===frame.companionRevision&&frame.relationship===JSON.stringify([frame.npc.memory.metPlayer,frame.npc.memory.favorability,frame.npc.memory.nameKnown]);
+}
+function buildCompanionTalkInstruction(npc,agenda) {
+    return [
+        'Write one brief SFW companion comment to the person travelling with you, in your established voice. Return JSON {"text":"one or two sentences"}.',
+        'Speak only about this supplied observation: '+agenda.line,
+        'Do not ask a question, disclose private facts, quote hidden names, invent history, locations, goods, promises, healing, payments or other game effects. Do not narrate an answer or action for the player.',
+        'You are already travelling together; do not greet or introduce yourself. Keep the comment under 320 characters.',
+        typeof buildNPCMemoryBlock==='function'?buildNPCMemoryBlock(npc,['self','place'],{max:2}):'',
+        typeof getTTSSpeechGuideLines==='function'?getTTSSpeechGuideLines().join('\n'):''
+    ].filter(Boolean).join('\n');
+}
+function queueCompanionTalkLine(frame) {
+    if(companionTalkAIWork&&!companionTalkAIWork.running&&!G.prefetchQueue.some(function(task){return task.key===companionTalkAIWork.key;}))companionTalkAIWork=null;
+    if(!frame.agenda.companion||frame.agenda.responseNeeded||frame.agenda.storyKey||frame.agenda.urgent||!useAIEnabled()||!aiAvailable()||companionTalkAIWork||G.prefetchQueue.length>=12)return false;
+    const now=getCurrentStoryTurn();
+    if(Number.isFinite(G._lastCompanionTalkAITurn)&&now>=G._lastCompanionTalkAITurn&&now-G._lastCompanionTalkAITurn<NPC_INITIATIVE_GAP_TURNS[NPC_INITIATIVE_LEVEL])return false;
+    const work={frame:frame,key:'companion-talk:'+textModeObjectGen(frame.npc)+':'+now};
+    const queued=enqueuePrefetchTask({key:work.key,priority:60,run:async function(){
+        work.running=true;
+        let timer;
+        try{
+            if(activeRoomInitiativePending!==frame||!companionTalkFrameCurrent(frame)||activeRoomInitiativeBlocked(true))return;
+            const instruction=buildPrompt(frame.room,frame.npc,buildCompanionTalkInstruction(frame.npc,frame.agenda),{conversation:true,includeRandomQuirk:false,memoryTags:['place','self'],memoryText:frame.agenda.line});
+            const raw=await Promise.race([Promise.resolve(callAI({instruction:instruction,endButtons:'none'})),new Promise(function(resolve){timer=setTimeout(function(){resolve(null);},COMPANION_TALK.timeout);})]);
+            const value=typeof raw==='string'?raw:raw&&raw.text;
+            let parsed;try{parsed=JSON.parse(value);}catch(e){parsed=null;}
+            const line=parsed&&typeof parsed.text==='string'?normalizeNPCReplyText(parsed.text).replace(/\s+/g,' ').trim():'';
+            if(line&&line.length<=320&&!/[?]/.test(line)&&!replyDemandsAnswer(line)&&!/<\/?(?:script|div|span|img)\b/i.test(line))frame.companionLine=line;
+        }catch(e){ /* Scripted fallback owns offline, invalid and failed comments. */ }
+        finally{
+            if(timer!==undefined)clearTimeout(timer);
+            frame.companionAwaiting=false;
+            if(companionTalkAIWork===work)companionTalkAIWork=null;
+            if(activeRoomInitiativePending===frame)flushActiveRoomInitiative();
+        }
+    }});
+    if(!queued)return false;
+    companionTalkAIWork=work;frame.companionAwaiting=true;G._lastCompanionTalkAITurn=now;return true;
+}
+function companionTalkOutput(npc,line,details) {
+    const speaker=npc.name||commitmentLabel(npc);
+    addChatMessage('left',speaker,line,{mode:'auto'});
+    publishTextModeOutput('companion-talk',line,{source:'engine',speaker:speaker,speakerRole:'npc',speakerInfo:{species:String(npc.species||''),gender:String(npc.gender||''),voiceKey:'v'+textModeObjectGen(npc)},
+        companionTalk:Object.assign({speaker:commitmentLabel(npc)},details)},textModeState.enabled?false:undefined);
+}
+function deliverCompanionTalk(frame,agenda) {
+    if(!companionTalkFrameCurrent(frame))return false;
+    const npc=frame.npc,state=frame.companionState,now=getCurrentStoryTurn(),reason=agenda.reason.slice(10),line=frame.companionLine||agenda.line;
+    state.seen[reason]=now;state.lastTurn=now;state.revision++;npc._lastActiveInitiativeTurn=now;spendNPCInitiative();
+    if(agenda.zone)state.zone=agenda.zone;if(agenda.landmark)state.landmark=agenda.landmark;if(agenda.deedId)state.deedId=agenda.deedId;if(agenda.bodyKey)state.bodyKey=agenda.bodyKey;
+    if(agenda.storyKey){state.stories=state.stories.filter(function(k){return k!==agenda.storyKey;}).concat([agenda.storyKey]).slice(-2);if(agenda.storyKey==='liking'&&npc.social&&npc.social.liking)npc.social.liking.known=true;}
+    if(agenda.questionKey){state.question={key:agenda.questionKey,text:line,turn:now,untilTurn:now+COMPANION_TALK.questionTurns};state.questionTurn=now;}
+    npc.memory.metPlayer=true;
+    activeRoomInitiativeDelivered.set(npc,{player:G.player,map:G.roomMap,room:G.activeRoom,turn:now,reason:agenda.reason,memory:npc.memory});
+    if(agenda.urgent)markTextModeUrgent('your companion warns about your wounds');
+    companionTalkOutput(npc,line,{stage:'line',reason:reason,optional:true,responseNeeded:!!agenda.responseNeeded,responseCommand:'talk to '+JSON.stringify(commitmentLabel(npc)),commitment:agenda.commitment?publicNPCCommitment(agenda.commitment):null});
+    rememberNPCConversationLine(npc,'npc',line,'talk');
+    if(typeof addNPCShortTermMemory==='function')addNPCShortTermMemory(npc,{conversation:true,text:'Companion said: '+line,importance:agenda.storyKey?4:agenda.questionKey?3:2,tags:['said',agenda.storyKey?'self':'place']});
+    if(typeof recordNPCEntityEncounter==='function')recordNPCEntityEncounter(npc,frame.player,{encounterKey:'initiative:'+now});
+    if(agenda.storyKey&&typeof registerNPCToldMemory==='function')registerNPCToldMemory(npc,'companion-'+agenda.storyKey,'Said: '+agenda.storyText,{importance:4,tags:['self','leisure'],shortTerm:false});
+    return true;
+}
+function companionRoadQuestion(npc) {
+    const state=npc&&npc.memory&&npc.memory.companionTalk,q=state&&state.question;
+    return q&&isCompanionNPC(npc)&&q.untilTurn>=getCurrentStoryTurn()&&q.turn<=getCurrentStoryTurn()?q:null;
+}
+function withCompanionTalkOptions(npc,options) {
+    if(!companionTalkEligible(npc,G.activeRoom))return options;
+    const state=ensureCompanionTalkState(npc),q=companionRoadQuestion(npc),result=options.slice();if(!state)return options;
+    const capture={player:G.player,map:G.roomMap,room:G.activeRoom,memory:npc.memory,turn:getCurrentStoryTurn(),epoch:textModeState.epoch,state:state,revision:state.revision,creatures:G.activeRoom.creatures,
+        activeNPC:G.activeNPC,mode:G.activeNPCMode,session:npc.memory.conversationState,interaction:npc.memory.conversationState&&npc.memory.conversationState.interactionCount};
+    if(q){
+        const answers=q.key==='journey'?[['Explore','I want to see new places.'],['Keep it private','I would rather keep my reasons to myself.']]:[['Find a new home','I hope to find somewhere to call home.'],['Keep an open mind','I have not chosen a destination yet.']];
+        answers.forEach(function(answer,i){
+            const reply={id:'companion-road-answer-'+i,kind:'reply',label:answer[0],text:'You say, "'+answer[1]+'"',promptText:answer[1],typedText:answer[1],intent:'talk',noPrefetch:true,
+                companionRoadQuestion:q,companionPrivateAnswer:q.key==='journey'&&i===1,relationshipImpact:{mood:0,favor:0,hostility:0,intent:'talk',markMet:true,actionTag:'talk'}};
+            captureCompanionRoadAnswer(npc,reply);
+            result.unshift(Object.assign({},reply,{action:'companion-road-answer',companionTalkCapture:capture,companionRoadReply:reply}));
+        });
+    }
+    const quiet=(state.quietUntil||0)>getCurrentStoryTurn();
+    result.push({id:'companion-chatter-'+(quiet?'resume':'quiet'),kind:'social',companionTalkControl:true,label:quiet?'Invite them to chat again':'Ask for some quiet',action:'companion-talk',companionTalkMode:quiet?'resume':'quiet',companionTalkCapture:capture});
+    return result;
+}
+function attachCompanionRoadReply(npc,choice,isAction) {
+    const q=companionRoadQuestion(npc),text=String(choice.typedText||'');
+    if(q&&!isAction&&text&&!/\?|^(?:who|what|where|when|why|how|can you|could you|would you)\b/i.test(text)){choice.companionRoadQuestion=q;captureCompanionRoadAnswer(npc,choice);}
+}
+function captureCompanionRoadAnswer(npc,choice) {
+    companionRoadAnswerFrames.set(choice,{player:G.player,map:G.roomMap,room:G.activeRoom,memory:npc.memory,epoch:textModeState.epoch,creatures:G.activeRoom&&G.activeRoom.creatures});
+}
+function recordCompanionRoadAnswer(npc,choice) {
+    const q=companionRoadQuestion(npc),frame=choice&&companionRoadAnswerFrames.get(choice);
+    if(!q||!choice||choice.companionRoadQuestion!==q||!choice.typedText||!frame||frame.player!==G.player||frame.map!==G.roomMap||frame.room!==G.activeRoom||frame.memory!==npc.memory||frame.epoch!==textModeState.epoch||frame.creatures!==G.activeRoom.creatures||!companionTalkEligible(npc,G.activeRoom))return false;
+    const state=ensureCompanionTalkState(npc),answer=String(choice.typedText).replace(/\s+/g,' ').trim().slice(0,240);
+    const text=choice.companionPrivateAnswer?'The player preferred not to discuss why they travel.':'When asked "'+q.text+'", the player said: '+answer;
+    addNPCMemory(npc,{id:'companion-answer:'+q.key,text:text,importance:5,tags:['self','said']});
+    const entity=typeof ensureNPCEntityMemory==='function'?ensureNPCEntityMemory(npc,G.player):null;
+    if(entity){const notable=choice.companionPrivateAnswer?text:'The player said about their '+q.key+': '+answer;entity.notable=[notable.slice(0,80)].concat(entity.notable||[]).slice(0,4);entity.revision++;}
+    state.answered=state.answered.filter(function(k){return k!==q.key;}).concat([q.key]).slice(-2);delete state.question;state.revision++;return true;
+}
+function executeCompanionRoadAnswer(npc,choice) {
+    const q=companionRoadQuestion(npc),state=npc&&npc.memory&&npc.memory.companionTalk;
+    if(!q||!companionTalkCaptureValid(choice.companionTalkCapture,npc,state)||!companionTalkEligible(npc,G.activeRoom)||q!==choice.companionRoadQuestion||companionRoadRepliesRunning.has(q)||sharedChoiceState.menu||textModeState.pending||G.activeNPC!==npc)
+        return textModeResult('blocked','That question has passed. Ask your companion again.');
+    companionRoadRepliesRunning.add(q);
+    return Promise.resolve(chooseChatOption(choice.companionRoadReply)).finally(function(){companionRoadRepliesRunning.delete(q);});
+}
+function companionTalkCaptureValid(capture,npc,state) {
+    return !capture||capture.player===G.player&&capture.map===G.roomMap&&capture.room===G.activeRoom&&capture.memory===npc.memory&&capture.turn===getCurrentStoryTurn()&&capture.epoch===textModeState.epoch&&
+        capture.state===state&&capture.revision===state.revision&&capture.creatures===G.activeRoom.creatures&&capture.activeNPC===G.activeNPC&&capture.mode===G.activeNPCMode&&
+        capture.session===npc.memory.conversationState&&capture.interaction===(npc.memory.conversationState&&npc.memory.conversationState.interactionCount);
+}
+function requestCompanionTalkMode(npc,mode,capture) {
+    const p=G.player,r=G.activeRoom,now=getCurrentStoryTurn();
+    if(!/^(quiet|resume)$/.test(mode)||!p||p.hp<=0||p.dead||p.unconscious||p._collapsing||p._dying||p.fatigue&&p.fatigue.sleeping||!companionTalkEligible(npc,r)||G.combatEncounter||roomHasActiveHostile(r)||isRoomCollapsed(r)||isPlayerHidden()||isPlayerJailed()||G.activeObject||G.activeItemModal||hasPendingPartyLoot()||sharedChoiceState.menu||textModeState.pending||G.activeNPC&&G.activeNPC!==npc||G.activeNPC&&!/^(menu|talk|respond)$/.test(G.activeNPCMode||''))return textModeResult('blocked','Your companion cannot talk about that right now.');
+    const state=ensureCompanionTalkState(npc);
+    if(!companionTalkCaptureValid(capture,npc,state))return textModeResult('blocked','That conversation changed. Ask again.');
+    if(mode==='quiet'&&(state.quietUntil||0)>now)return textModeResult('completed','They are already keeping you quiet company.');
+    if(mode==='quiet'&&Number.isFinite(state.refusedTurn)&&now-state.refusedTurn<12)return textModeResult('blocked','They have heard your request. Give them a moment.');
+    const traits=companionTalkTemperament(npc),soft=/passive|submissive|timid|gentle/.test(traits),upset=/angry|upset/.test(String(npc.memory.lastMood||''))||(npc.memory.favorability||0)<0;
+    const complied=mode==='resume'||soft||!(/proud|haughty|stubborn/.test(traits)||upset)||Math.random()>=0.5;
+    state.controlTurn=now;state.revision++;
+    if(complied){state.quietUntil=mode==='quiet'?now+COMPANION_TALK.quietTurns:0;if(mode==='quiet')delete state.question;}
+    else state.refusedTurn=now;
+    const line=mode==='resume'?'Gladly. I will speak when something comes to mind.':complied?'Of course. I will give you some quiet.':'I have something to say as well. I will try to keep it brief.';
+    companionTalkOutput(npc,line,{stage:'preference',mode:mode,complied:complied,quietTurns:complied&&mode==='quiet'?COMPANION_TALK.quietTurns:0});
+    rememberNPCConversationLine(npc,'player',mode==='quiet'?'Please give me some quiet company.':'You are welcome to chat again.','talk');
+    rememberNPCConversationLine(npc,'npc',line,'talk');
+    if(typeof saveGameState==='function')saveGameState();return {status:'completed'};
+}
+function showCompanionTalk() {
+    const rows=textModeVisibleNPCs().filter(function(n){return companionTalkEligible(n,G.activeRoom);}).map(function(n){
+        const state=ensureCompanionTalkState(n),name=commitmentLabel(n),quiet=(state.quietUntil||0)>getCurrentStoryTurn();
+        return {name:name,quiet:quiet,command:'companion '+(quiet?'resume ':'quiet ')+JSON.stringify(name),question:companionRoadQuestion(n)?companionRoadQuestion(n).text:''};
+    });
+    return textModeResult('completed',rows.length?rows.map(function(row){return row.name+(row.quiet?' is keeping quiet company.':' is open to conversation.')+' '+row.command;}).join('\n'):'No available travelling companions are here.',{companionTalk:{stage:'availability',companions:rows}});
 }
 
 // W5: bounded pursuit of a witnessed location, never the live player coordinates.
@@ -30805,6 +31459,8 @@ function stepNPCAutonomy(npc, room) {
     // Fleeing a fresh aggressor takes priority over everything else.
     if (attemptNPCFlee(npc, room)) return;
 
+    if (typeof stepNPCWorldReaction === 'function' && stepNPCWorldReaction(npc, room)) return;
+
     healNPCOverTime(npc);
 
     if (typeof tickNPCCrimeStep === "function" && tickNPCCrimeStep(npc, room)) return;
@@ -31027,6 +31683,7 @@ function npcPassExit(npc, room, dir) {
 function relocateNPCBetweenRooms(npc, fromRoom, toCoords, options) {
     const toRoom = toCoords ? G.roomMap[toCoords] : null;
     if (!fromRoom || !toRoom || toRoom === fromRoom) return false;
+    if (typeof npcWorldAvoids === 'function' && npcWorldAvoids(npc, toCoords)) return false;
     if (!(fromRoom.creatures || []).includes(npc)) return false;
     if (npc._npcParty && !(options && options.npcPartyEscort) &&
         (npc._npcParty.leaderId !== npc.id || npcPartyBusy(npc, fromRoom))) return false;
@@ -32191,6 +32848,7 @@ function buildConversationBundleKey(npc, options, room, ctx) {
         lastOptionId: ctx && ctx.lastOptionId || "",
         drunk: typeof getConversationStyleSig === "function" ? getConversationStyleSig(npc) : "",
         recent: buildRecentConversationDigest(npc),
+        communication:typeof getNPCCommunicationSignature==='function'?getNPCCommunicationSignature(npc):'',
         options: relevantOptions.map(option => ({
             id: option.id || "",
             intent: option.intent || "",
@@ -32213,7 +32871,8 @@ function getConversationSessionReplyKey(npc, optionId) {
         : null;
     const sessionNumber = state && typeof state.sessionNumber === "number" ? state.sessionNumber : 0;
     const npcKey = npc.id || npc.name || "npc";
-    return `${npcKey}:${sessionNumber}:${optionKey}`;
+    const sig=typeof getNPCCommunicationSignature==='function'?getNPCCommunicationSignature(npc):'';
+    return `${npcKey}:${sessionNumber}:${optionKey}${sig?':'+sig:''}`;
 }
 
 function getCachedConversationReply(npc, choice) {
@@ -32224,7 +32883,8 @@ function getCachedConversationReply(npc, choice) {
     // A reply prefetched before anyone had a drink (or after they sobered up)
     // does not fit the current state: skip caches whose drunkSig differs.
     const drunkNow = typeof getConversationStyleSig === "function" ? getConversationStyleSig(npc) : "0/0";
-    const drunkOk = function (reply) { return !reply || typeof reply !== "object" || (reply.drunkSig || "0/0") === drunkNow; };
+    const comm=typeof getNPCCommunicationSignature==='function'?getNPCCommunicationSignature(npc):'';
+    const drunkOk = function (reply) { return (!reply || typeof reply !== "object" || (reply.drunkSig || "0/0") === drunkNow)&&((reply&&typeof reply==='object'?reply.communicationSig||'':'')===comm); };
 
     // Check NPC's persistent cache first
     if (npc && npc.memory && npc.memory.cachedReplies && npc.memory.cachedReplies[optionId] && drunkOk(npc.memory.cachedReplies[optionId])) {
@@ -32232,7 +32892,7 @@ function getCachedConversationReply(npc, choice) {
     }
     
     // Fallback to runtime cache
-    if (choice._conversationReplyKey && runtimeConversationState.replyCache[choice._conversationReplyKey]) {
+    if (choice._conversationReplyKey && runtimeConversationState.replyCache[choice._conversationReplyKey] && drunkOk(runtimeConversationState.replyCache[choice._conversationReplyKey])) {
         return runtimeConversationState.replyCache[choice._conversationReplyKey];
     }
 
@@ -32262,7 +32922,9 @@ function storeCachedConversationReply(npc, option, reply) {
     if (!normalized) return "";
     
     // Build reply object to cache
-    const cachedReply = { text: normalized };
+    const sig=typeof getNPCCommunicationSignature==='function'?getNPCCommunicationSignature(npc):'';
+    if(Object.prototype.hasOwnProperty.call(option,'_communicationSig')&&option._communicationSig!==sig)return '';
+    const cachedReply = { text: normalized };if(sig)cachedReply.communicationSig=sig;
     if (typeof getConversationStyleSig === "function") cachedReply.drunkSig = getConversationStyleSig(npc);
     if (affirmative !== undefined) cachedReply.affirmative = affirmative;
     if (replyExtras.responseNeeded !== undefined) cachedReply.responseNeeded = replyExtras.responseNeeded;
@@ -32506,6 +33168,8 @@ function getNPCConversationReplyBaseLines(npc, room) {
         "Example: {\"text\":\"\\u003cI can handle it.\\u003e She sighs.\"} - NOT: {\"text\":\"\\u003cI can handle it.\\u003e\" She sighs.}",
         "For each reply, you MUST include an 'affirmative' boolean field inside the JSON object. Set true if the NPC's response is positive or agreeable, false if negative or rejecting. For neutral responses, use true if leaning positive, false if leaning negative. Example: {\"id\":\"greet-known\",\"text\":\"\\u003cHello there.\\u003e\",\"affirmative\":true}",
         typeof getNPCCommitmentPrompt === "function" ? getNPCCommitmentPrompt(npc) : "",
+        typeof getNPCCommunicationGuide==='function'?getNPCCommunicationGuide(npc):'',
+        typeof companionRoadQuestion==='function'&&companionRoadQuestion(npc)?"Earlier while travelling you asked: "+companionRoadQuestion(npc).text+" Reply to what the player actually says; never invent their answer.":"",
         ...getResponseNeededGuideLines(),
         ...(typeof getDrunkSpeechGuideLines === "function" ? getDrunkSpeechGuideLines(npc) : []),
         ...(typeof getTTSSpeechGuideLines === "function" ? getTTSSpeechGuideLines() : []),
@@ -32561,7 +33225,7 @@ function buildSingleConversationInstruction(npc, interaction, room) {
         ...(interaction && interaction.judgeTone ? getPlayerToneGuideLines() : []),
         "CRITICAL: Your reply MUST strictly follow the speech tone, style, and language specified above for this character. Do NOT lapse into generic human speech. Apply the species speech pattern, voice quality, grammar level, and vocabulary described above.",
         interaction && interaction.contextNote ? `Established fact for this reply: ${String(interaction.contextNote).replace(/\s+/g, " ").trim()}` : "",
-        `The player says: "${playerInput}"`,
+        typeof getNPCCommunicationApproach==='function'?getNPCCommunicationApproach(interaction,playerInput):`The player says: "${playerInput}"`,
         `Conversation intent: ${intent}.`
     ].filter(Boolean).join("\n");
 }
@@ -33892,6 +34556,8 @@ function kenkuMimicReply(npc, interaction, band) {
 }
 
 function pickNPCConversationFallbackReply(npc, interaction) {
+    const communication=typeof npcCommunicationFallback==='function'?npcCommunicationFallback(npc,interaction):'';if(communication)return communication;
+    if(interaction&&interaction.companionRoadQuestion)return interaction.companionPrivateAnswer?"Of course. You need not tell me.":"Thank you for telling me. I will remember that.";
     if (interaction && interaction.interactionFamily) return interaction.interactionFamily === "expression" ? "They acknowledge your gesture." : "They stay where they are. <Not just now.>";
     if (interaction && Object.prototype.hasOwnProperty.call(SOCIAL_GESTURES, interaction.socialGesture || "")) {
         return getConversationRelationshipBand(npc) === "hostile"
@@ -33943,14 +34609,17 @@ function queueConversationPrefetch(npc, options) {
         ? getNPCConversationContext(npc, { room })
         : null;
     const bundleKey = buildConversationBundleKey(npc, relevantOptions, room, ctx);
+    const communicationSig=typeof getNPCCommunicationSignature==='function'?getNPCCommunicationSignature(npc):'';
     const optionSnapshots = relevantOptions.map(option => {
+        option._communicationSig=communicationSig;
         option._conversationBundleKey = bundleKey;
         option._conversationReplyKey = getConversationReplyKey(bundleKey, option.id);
         return {
             id: option.id,
             intent: option.intent || "talk",
             promptText: option.promptText || option.text || "",
-            replyKey: option._conversationReplyKey
+            replyKey: option._conversationReplyKey,
+            _communicationSig:communicationSig
         };
     });
 
@@ -33984,6 +34653,8 @@ function queueConversationPrefetch(npc, options) {
 
     // Process batches sequentially with slight delay between them
     const processBatch = async (batchIndex) => {
+        if(typeof getNPCCommunicationSignature==='function'&&getNPCCommunicationSignature(npc)!==communicationSig){delete runtimeConversationState.bundlePromises[bundleKey];if(resolveBundle)resolveBundle();return;}
+
         if (batchIndex >= batches.length) {
             delete runtimeConversationState.bundlePromises[bundleKey];
             if (resolveBundle) resolveBundle();
@@ -34288,9 +34959,15 @@ async function npcRespond(npc, interaction) {
         ? interaction
         : { text: playerInput, promptText: playerInput, intent };
 
+    if(typeof npcCommunicationReplyCurrent==='function'&&!npcCommunicationReplyCurrent(npc,choice))return;
+    const communicationSig=typeof getNPCCommunicationSignature==='function'?getNPCCommunicationSignature(npc):'';
+    if((choice._communicationSig||'')!==communicationSig){delete choice._conversationBundleKey;delete choice._conversationReplyKey;}
+    choice._communicationSig=communicationSig;
+    const communicationFixed=typeof getNPCCommunicationFixedReply==='function'?getNPCCommunicationFixedReply(npc,choice):null;
+
     // If this choice came from the rendered talk menu, it already carries the
     // batch key/reply key from that menu's JSON prefetch. Do not overwrite it.
-    if (!choice.action && !choice._conversationBundleKey) {
+    if (!communicationFixed && !choice.action && !choice._conversationBundleKey) {
         // Check if there's already a cached reply for this option
         const optionId = choice.id || choice.optionId;
         const hasCached = optionId && npc && npc.memory && npc.memory.cachedReplies && npc.memory.cachedReplies[optionId];
@@ -34313,7 +34990,7 @@ async function npcRespond(npc, interaction) {
         }
     }
 
-    let responseObj = getCachedConversationReply(npc, choice);
+    let responseObj = communicationFixed || getCachedConversationReply(npc, choice);
     let affirmative;
     let responseNeeded;
     let replyOptions;
@@ -34421,6 +35098,7 @@ async function npcRespond(npc, interaction) {
             "applyInquiryResponse type:", typeof window.applyInquiryResponse);
     }
 
+    if(typeof npcCommunicationReplyCurrent==='function'&&!npcCommunicationReplyCurrent(npc,choice))return;
     // Asking their name is what makes the (hidden) given name public: from
     // here on npc.name is the real name, including this reply's chat label.
     const _nameSpokenAloud = typeof npcReplyMentionsOwnName === "function" && !npcNameIsKnownSafe(npc) && npcReplyMentionsOwnName(npc, responseText);
@@ -34449,6 +35127,8 @@ async function npcRespond(npc, interaction) {
     if (typeof recordNPCReplyMemory === "function" && G.player === replyPlayer && G.activeRoom === room && G.activeNPC === npc &&
         (!replySession || npc.memory.conversationState === replySession && replySession.sessionNumber === replySessionNumber && replySession.interactionCount === replyInteractionCount)) {
         recordNPCReplyMemory(npc, choice, lifeExtras, playerInput, responseText);
+        if(typeof recordCompanionRoadAnswer==='function')recordCompanionRoadAnswer(npc,choice);
+        if(typeof commitNPCCommunicationReply==='function')commitNPCCommunicationReply(npc,choice,responseText);
     }
     // What was just said (a question? a dodge? a hint of trouble?) so reactive
     // options only show when they fit (see _npcLiveReplyMeta in npc-data).
@@ -34547,7 +35227,8 @@ function getChatOptions(npc, expanded = false) {
         }
         if (Array.isArray(options) && options.length) {
             // Use AI off: nobody can answer free text, so drop "Say something...".
-            const withReplies = withCannedReplyOptions(npc, options);
+            const communicated=typeof withNPCCommunicationOptions==='function'?withNPCCommunicationOptions(npc,options):options;
+            const withReplies = withCannedReplyOptions(npc, typeof withCompanionTalkOptions==='function'?withCompanionTalkOptions(npc, communicated):communicated);
             const ready = normalizeConversationActions(useAIEnabled() ? withReplies : withReplies.filter(function (o) { return !(o && o.id === "respond-free"); }));
             return expanded ? ready : groupConversationActions(npc, ready);
         }
@@ -34582,6 +35263,8 @@ function normalizeConversationActions(options) {
 }
 
 function conversationActionGroup(option) {
+    if(option&&option.action==='communication')return '';
+    if(option&&(option.companionRoadQuestion||option.companionTalkControl))return '';
     if (!option || option.action === "respond" || option.action === "disengage" || option.action === "conversation-group") return "";
     if (option.kind !== "action" && !option.action) return "";
     if (/^(drinks|menu)$/.test(option.service || "")) return "food";
@@ -35936,6 +36619,7 @@ function submitTypedResponse(npc, raw, options) {
     // A drunk player's words come out slurred, on screen and to the NPC.
     const drunkTier = typeof getDrunkTier === "function" ? getDrunkTier(G.player) : 0;
     const spoken = !isAction && drunkTier >= 2 && typeof slurDrunkSpeech === "function" ? slurDrunkSpeech(body, drunkTier) : body;
+    if(social&&(!social.args.family||social.args.family==='expression')&&/^(nod|bow|salute)$/.test(social.args.action)&&typeof getNPCCommunicationGreeting==='function'&&!npcCommunicationBlock(npc)&&getNPCCommunicationGreeting(npc))return performNPCCommunication(npc,{action:'greet',style:social.args.action});
     typedResponseCounter += 1;
     const choice = {
         id: "respond-typed-" + typedResponseCounter,
@@ -35995,6 +36679,8 @@ function submitTypedResponse(npc, raw, options) {
             choice.revealsName = nameAsk.reveal === true;
         }
     }
+    if(typeof prepareTypedNPCCommunication==='function')prepareTypedNPCCommunication(npc,choice,body,isAction);
+    if(typeof attachCompanionRoadReply==='function')attachCompanionRoadReply(npc,choice,isAction);
     G.activeNPCMode = "talk";
     if (!social) return chooseChatOption(choice);
     const state = socialReplyState.get(choice);
@@ -44029,6 +44715,7 @@ function completeGift(npc, stackKey, item, result, narrationOnly, giftContext) {
         saveGameState();
         return { status: "completed", accepted: true };
     }
+    if (accepted && giftedItem && typeof noteNPCWorldEvent === 'function') noteNPCWorldEvent(G.activeRoom, "gift", { exclude: npc });
     if (accepted && giftedItem && typeof commitmentGiftMatch === "function") { const task=commitmentGiftMatch(npc,item); if(task)finishNPCCommitment(task,"done"); }
     const wearLine = accepted && giftedItem ? npcEquipIfUpgrade(npc, giftedItem) : "";
     const note = (accepted ? "You give " + withIndefiniteArticle(name) + " to " + npcName + "." : "You offer " + withIndefiniteArticle(name) + " to " + npcName + ", who will not take it.") + (wearLine ? " " + wearLine : "");
@@ -44084,8 +44771,12 @@ function renderNPCActionMenu(npc) {
             el.appendChild(interactBtn);
         }
         
-        // Standard sleeping actions
-        [ { label: "Search quietly", action: "search", reason: sleepingNPCBlock(npc, "search") }, { label: "Wake", action: "wake", reason: sleepingNPCBlock(npc, "wake") }, { label: "Attack", action: "attack", reason: "", title: "Sleeping target: +4 to hit and double opening damage before armour." }, { label: "Step away", action: "disengage", reason: "" } ].forEach(function (option) {
+        // Standard sleeping actions (including Examine to trigger intimacy menu)
+        [ { label: "Examine", action: "examine", title: "Look them over carefully" },
+          { label: "Search quietly", action: "search", reason: sleepingNPCBlock(npc, "search") }, 
+          { label: "Wake", action: "wake", reason: sleepingNPCBlock(npc, "wake") }, 
+          { label: "Attack", action: "attack", reason: "", title: "Sleeping target: +4 to hit and double opening damage before armour." }, 
+          { label: "Step away", action: "disengage", reason: "" }].forEach(function (option) {
             const btn = createCombatButton(option.label, function () {
                 if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== "menu" || getCurrentStoryTurn() !== turn || !(room.creatures || []).includes(npc) || !isNPCSleeping(npc)) return sharedChoiceResult("blocked", "That sleeping action changed. Look at them again.");
                 return chooseNPCAction(option.action);
@@ -44115,6 +44806,7 @@ function renderNPCActionMenu(npc) {
         
         // Add basic actions for unconscious NPCs
         actions.push(
+            { label: "Examine", action: "examine", title: "Look them over carefully" },
             { label: "Try to wake", action: "wake" },
             { label: "Step away", action: "disengage" }
         );
@@ -44228,12 +44920,6 @@ function renderNPCActionMenu(npc) {
         if (playerHasPenis(G.player) && typeof window.slimeFinishInsideInteraction === "function") {
             actions.push({ label: "Finish inside", action: "finish-inside-slime", className: "danger", title: `Climax inside ${npc.name}. Your cum will be visible inside the translucent slime.` });
         }
-    }
-    
-    // Add Examine option for unconscious/sleeping NPCs to expose intimacy menu
-    if (npc.unconscious || npc.bodyState === "unconscious" || npc.isUnconsciousBody || 
-        (npc.currentState && npc.currentState.sleeping)) {
-        actions.push({ label: "Examine", action: "examine", title: "Look them over carefully" });
     }
     
     actions.push(
@@ -55037,7 +55723,7 @@ function renderChatOptions(npc, options = null) {
             btn.textContent = CHAT_KIND_GLYPHS[kind] + option.label;
             const player = G.player, room = G.activeRoom, mode = G.activeNPCMode;
             btn.onclick = () => {
-                if ((option.service || /^(conversation-group|contact-hug)$/.test(option.action)) && (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== mode || !el.contains(btn))) return sharedChoiceResult("blocked", "That action choice is no longer available.");
+                if ((option.service || option.action==='communication' || option.companionTalkControl || option.companionRoadQuestion || /^(conversation-group|contact-hug)$/.test(option.action)) && (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== mode || !el.contains(btn))) return sharedChoiceResult("blocked", "That action choice is no longer available.");
                 return chooseChatOption(option);
             };
             el.appendChild(btn);
@@ -55064,6 +55750,9 @@ function chooseChatOption(option) {
     const choice = typeof option === "string" ? { text: option } : option;
     if (!choice || (!choice.text && !choice.action) || !canConverseWithNPC(G.activeNPC)) return;
     const npc = G.activeNPC;
+    if(choice.action==='communication')return performNPCCommunication(npc,choice.communication,choice.communicationCapture);
+    if(choice.action==='companion-talk')return requestCompanionTalkMode(npc,choice.companionTalkMode,choice.companionTalkCapture);
+    if(choice.action==='companion-road-answer')return executeCompanionRoadAnswer(npc,choice);
     if (choice.action === "conversation-group") return showConversationActionMenu(npc, choice.conversationGroup);
     if (choice.action === "contact-hug") return performPlayerInteraction(npc, { family: "contact", action: "give them a hug" });
     if (choice.service) return requestNPCService(npc, choice.service);
@@ -58870,6 +59559,7 @@ function recoverRestingCompanion(member, room, options) {
 // Present companions recover their own HP, limbs, stamina and mana. Keep
 // downed allies stable until they reach the existing wake threshold.
 function restHealParty(room, amount, options) {
+    if((amount>0||options&&options.rest)&&typeof noteCompanionTalkEvent==='function')noteCompanionTalkEvent("rest",room);
     const lines = [];
     const standing = getRestingPartyMembers(room);
     getDownedCompanionBodies(room).slice().forEach(function (b) {
@@ -59108,6 +59798,7 @@ function reportCrime(room, kind, lines, opts) {
     // companionsReactToCrime). This runs before the lawless-zone check: they
     // judge what you did, not whether anyone local would punish it.
     if (room) companionsReactToCrime(room, kind, lines);
+    if (room && typeof noteNPCWorldEvent === 'function') noteNPCWorldEvent(room, kind, { witnesses: getLockWitnesses(room) });
     if (!room || !room.zone || zoneIsLawless(room.zone)) return 0;
     const witnesses = getLockWitnesses(room);
     if (!opts.force && !witnesses.length) return 0;
@@ -62815,7 +63506,7 @@ function getNPCExitCoords(room, npc) {
     return Object.keys(room.exits).filter(function (dir) {
         if (isVerticalDirection(dir)) return false;
         const c = room.exits[dir];
-        if (!c || !G.roomMap[c]) return false;
+        if (!c || !G.roomMap[c] || typeof npcWorldAvoids === 'function' && npcWorldAvoids(npc, c)) return false;
         return !npc || npcLockAccess(npc, room, dir).ok;
     }).map(function (dir) { return room.exits[dir]; });
 }
@@ -63077,6 +63768,7 @@ function npcStealFromNPC(thief, victim, room) {
     const guards = (room.creatures || []).filter(function (c) { return c && c !== thief && c !== victim && isAwakeHumanoidNPC(c) && isGuardNPC(c); });
     const witness = guards.find(function () { return Math.random() < NPC_THEFT_GUARD_WITNESS_CHANCE; });
     if (noticed || witness) {
+        if (typeof noteNPCWorldEvent === 'function') noteNPCWorldEvent(room, "theft", { witnesses: (noticed ? [victim] : []).concat(witness ? [witness] : []) });
         markNPCWanted(thief, room, "theft", vName);
         const enforcer = witness || (noticed && guards[0]) || null;
         if (enforcer && startNPCConflict(room, enforcer, thief, "arrest")) {
@@ -66847,7 +67539,7 @@ const SHAPESHIFT_OPTIONS = {
 // The per-NPC fields that make up "what they think of the player". The NPC's
 // own name and what the player has learned (nameKnown, loreTold, trade history)
 // stay: the player is the one who changed, not the world.
-const SHAPESHIFT_NPC_MEMORY_KEYS = ["socialEffort", "metPlayer", "everGreeted", "favorability", "lastMood", "playerActions",
+const SHAPESHIFT_NPC_MEMORY_KEYS = ["communication", "companionTalk", "socialEffort", "metPlayer", "everGreeted", "favorability", "lastMood", "playerActions",
     "playerActionTags", "recentLines", "aggressionCount", "cachedReplies", "cachedReplySigs", "lastSpokenTo",
     "attraction", "attractionEarned", "attractionSwing", "lust", "arousal", "disinhibition", "actDisinhibition",
     "conversationState", "typedTones", "typeAlignmentGain", "firstImpressionDone", "speciesReactionDone", "pendingResponse",
