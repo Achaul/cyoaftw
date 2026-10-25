@@ -82310,25 +82310,46 @@ function renderIntimacyActionMenu(npc) {
         console.log(`[DEBUG] Anatomy check - cock: ${npcAnatomy.cock}, penis: ${npcAnatomy.penis}, dick: ${npcAnatomy.dick}`);
         console.log(`[DEBUG] Anatomy check - vagina: ${npcAnatomy.vagina}, pussy: ${npcAnatomy.pussy}, vulva: ${npcAnatomy.vulva}`);
         
-        // Define tab order priority
+        // Define tab order priority - NEW BODY-PART BASED SECTIONS
         const tabPriority = {
             "Clothing": 0,
+            "Head": 10,
+            "Upper Body": 20,
+            "Midsection": 30,
+            "Lower Body": 40,
+            "Requests": 50,
+            // Legacy names for backwards compatibility - map to new sections
             "Face": 10,
-            "Hair": 20,
-            "Breasts": 30,
-            "Cock": 40,
-            "Pussy": 50,
-            "Anus": 60,
-            "Cloaca": 70,
-            "Lower Body": 80,
-            "Tail": 90,
-            "Body": 100,
-            "Impact": 110,
-            "Watersports": 120,
-            "Climax": 130,
-            "Receive": 140,
-            "Other": 150,
-            "Foreplay": 160
+            "Hair": 10,
+            "Mouth & Lips": 10,
+            "Breasts": 20,
+            "Chest": 20,
+            "Shoulders": 20,
+            "Stomach": 20,
+            "Belly": 20,
+            "Cock": 30,
+            "Pussy": 30,
+            "Vagina": 30,
+            "Clitoris": 30,
+            "Anus": 30,
+            "Butt": 30,
+            "Buttocks": 30,
+            "Ass": 30,
+            "Cloaca": 30,
+            "Tail": 30,
+            "Thighs": 40,
+            "Thigh": 40,
+            "Legs": 40,
+            "Leg": 40,
+            "Feet": 40,
+            "Foot": 40,
+            "Body": 20,
+            "Impact": 30,
+            "Watersports": 30,
+            "Climax": 30,
+            "Receive": 50,
+            "Other": 50,
+            "Foreplay": 20
         };
         
         // Get anatomy type for surface renaming
@@ -82350,14 +82371,8 @@ function renderIntimacyActionMenu(npc) {
         
         // Helper to get display label for a section
         function getTabLabel(sectionLabel) {
-            // Rename Hair based on anatomy type
-            if (sectionLabel === "Hair") {
-                if (anatomyType === "furry") return "Fur";
-                if (anatomyType === "scaled") return "Scales";
-                if (anatomyType === "feathered") return "Feathers";
-            }
             // Rename Receive to Requests
-            if (sectionLabel === "Receive") return "Requests";
+            if (sectionLabel === "Receive" || sectionLabel === "Other") return "Requests";
             return sectionLabel;
         }
         
@@ -82365,7 +82380,23 @@ function renderIntimacyActionMenu(npc) {
         function shouldShowSection(sectionLabel) {
             const label = String(sectionLabel || "");
             
-            // Gender-specific body parts
+            // Always show special sections
+            if (label === "Clothing" || label === "Requests" || label === "Head" || 
+                label === "Upper Body" || label === "Lower Body") {
+                return true;
+            }
+            
+            // Midsection - show if NPC has any genitals, anus, cloaca, or tail
+            if (label === "Midsection") {
+                const hasGenitals = hasCock || hasPussy || hasCloaca;
+                const hasAnusOrCloaca = !hasCloaca || hasCloaca; // If hasCloaca, show Midsection
+                const hasTail = npcAnatomy.tail || npcSpecies.includes("cat") || npcSpecies.includes("wolf") || 
+                               npcSpecies.includes("fox") || npcSpecies.includes("rat") || npcSpecies.includes("lizard");
+                return hasGenitals || hasTail || hasAnusOrCloaca;
+            }
+            
+            // Legacy section names for backwards compatibility - map to new sections
+            // These should mostly be filtered out by the new body-part system, but handle them just in case
             if (label === "Cock" && !hasCock) return false;
             if (label === "Pussy" && !hasPussy) return false;
             if (label === "Breasts" && !hasBreasts) return false;
@@ -82376,11 +82407,6 @@ function renderIntimacyActionMenu(npc) {
                 const hasTail = npcAnatomy.tail || npcSpecies.includes("cat") || npcSpecies.includes("wolf") || 
                                npcSpecies.includes("fox") || npcSpecies.includes("rat") || npcSpecies.includes("lizard");
                 if (!hasTail) return false;
-            }
-            
-            // Anus - all humanoids have one, but filter for non-humanoids if needed
-            if (label === "Anus" && !npc.isHumanoid) {
-                return false;
             }
             
             // Default: show the section
@@ -82441,6 +82467,14 @@ function renderIntimacyActionMenu(npc) {
             tab.className = "intimacy-tab-btn" + (firstTab ? " active" : "");
             tab.textContent = tabLabel;
             tab.dataset.section = actualSection;
+            
+            // Find the section object to get bgColor for special tabs
+            const sectionItem = menuItems.find(item => item.label === label);
+            if (sectionItem && sectionItem.bgColor) {
+                tab.style.backgroundColor = sectionItem.bgColor;
+                tab.style.borderColor = "#444";
+            }
+            
             tabContainer.appendChild(tab);
             firstTab = false;
         });
@@ -82599,6 +82633,10 @@ function renderIntimacyActionMenu(npc) {
                 sectionContainer.dataset.section = sectionName;
                 // Start hidden, will be shown when its tab is clicked
                 sectionContainer.style.display = "none";
+                // Apply background color for special sections
+                if (item.bgColor) {
+                    sectionContainer.style.backgroundColor = item.bgColor;
+                }
                 el.appendChild(sectionContainer);
             }
             
@@ -82618,7 +82656,16 @@ function renderIntimacyActionMenu(npc) {
                 }
                 
                 const btn = document.createElement("button");
-                btn.className = "chat-option-btn intimacy-action-btn" + (item.label === "Receive" ? " receive-action" : "");
+                btn.className = "chat-option-btn intimacy-action-btn" + (item.label === "Receive" || item.label === "Requests" ? " receive-action" : "");
+                
+                // Apply border color from action metadata (NEW: body-part based color coding)
+                if (action.borderColor) {
+                    btn.style.borderColor = action.borderColor;
+                    btn.style.borderWidth = "2px";
+                    btn.style.borderStyle = "solid";
+                }
+                
+                // Apply accent (text color) from existing function
                 if (typeof getIntimacyActionAccent === "function") {
                     const accent = getIntimacyActionAccent(action.id);
                     if (accent) {
@@ -83439,6 +83486,90 @@ function finishPullAwayActs(npc, pullOutNarrative) {
 
 function chooseIntimacyAction(npc, actId) {
     if (!npc || !actId) return;
+
+    // BONDAGE ACTION: Bind NPC with rope for dom/sub play
+    if (actId === "bind_npc_intimacy") {
+        if (!npc.intimacy) {
+            npc.intimacy = { encounter: { active: true } };
+        }
+        
+        // Check if player has binding materials
+        const hasRope = typeof window.findRopeInInventory === "function" && !!window.findRopeInInventory();
+        const playerInventory = (G.player && Array.isArray(G.player.inventory)) ? G.player.inventory : [];
+        
+        // Count rope belts
+        let ropeBeltCount = 0;
+        let fullRopeCount = 0;
+        
+        for (const item of playerInventory) {
+            if (!item || item.hidden || item.isHidden || item.broken || item.ruined) continue;
+            if (Array.isArray(item.packed) && item.packed.length) continue;
+            
+            const id = String(item.id || "").trim().toLowerCase();
+            const name = String(item.name || "").trim().toLowerCase();
+            
+            if (id === "rope" || id.indexOf("rope-") === 0 || name === "rope") {
+                fullRopeCount++;
+            } else if (/\brope[\s-]+belt\b/.test(name) || /^rope-belt(?:-|$)/.test(id)) {
+                ropeBeltCount++;
+            }
+        }
+        
+        if (!hasRope && fullRopeCount < 1 && ropeBeltCount < 2) {
+            setNarration("You need a rope or two rope belts to bind them.");
+            return;
+        }
+        
+        // Bind the NPC
+        npc.bound = true;
+        npc.surrendered = true;
+        
+        // Consume binding materials
+        const bindingToolCapacity = typeof window.bindingToolCapacity === "function" ? window.bindingToolCapacity : function(item) {
+            if (!item || item.hidden || item.isHidden || item.broken || item.ruined) return 0;
+            if (Array.isArray(item.packed) && item.packed.length) return 0;
+            const id = String(item.id || "").trim().toLowerCase();
+            const name = String(item.name || "").trim().toLowerCase();
+            if (/\brope[\s-]+belt\b/.test(name) || /^rope-belt(?:-|$)/.test(id)) return 1;
+            return id === "rope" || id.indexOf("rope-") === 0 || name === "rope" ? 2 : 0;
+        };
+        
+        // Find and consume items
+        let neededCapacity = 2; // Need capacity of 2 (one full rope or two belts)
+        const consumedItems = [];
+        
+        for (const item of playerInventory) {
+            if (neededCapacity <= 0) break;
+            const cap = bindingToolCapacity(item);
+            if (cap > 0) {
+                consumedItems.push(item);
+                neededCapacity -= cap;
+            }
+        }
+        
+        // Remove consumed items from inventory
+        if (consumedItems.length > 0 && Array.isArray(G.player.inventory)) {
+            for (const item of consumedItems) {
+                const index = G.player.inventory.indexOf(item);
+                if (index > -1) {
+                    G.player.inventory.splice(index, 1);
+                }
+            }
+        }
+        
+        // Narrate the binding
+        const npcName = npc.name || "them";
+        const bindingNarration = `You quickly bind ${npcName} with the rope, securing their limbs. They are now at your mercy, completely helpless.`;
+        setNarration(bindingNarration);
+        
+        // Re-render menu to show unlocked actions
+        if (typeof renderIntimacyActionMenu === "function") {
+            renderIntimacyActionMenu(npc);
+        }
+        
+        saveGameState();
+        return;
+    }
 
     // BATHHOUSE SERVICE: Check turn tracking and warnings
     if (npc.intimacy && npc.intimacy.bathhouseService) {

@@ -2266,11 +2266,25 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         // on an already-bare zone get the undressing credited against the
         // ladder.
         var _disinhibThreshold = _effectiveActDisinhibitionThreshold(act);
+        
+        // Get current demeanor mode
+        const demeanorMode = (npc.intimacy && npc.intimacy._demeanorMode) 
+            ? String(npc.intimacy._demeanorMode).toLowerCase() 
+            : "consentual";
+        
         // A collared slave (npc.enslaved) or a bound captive does as they
         // are told: the disinhibition ladder does not gate commanded acts.
-        if (npc && (npc.enslaved || (npc.bound && npc.surrendered))) {
+        // DOMINANT MODE: Player in dominant demeanor can do whatever they want
+        // to the NPC - all disinhibition-gated acts are unlocked with red border
+        if (npc && (npc.enslaved || (npc.bound && npc.surrendered) || demeanorMode === "dominant")) {
+            // Bypass disinhibition gating but mark the action as bypassed for red border
+            if (demeanorMode === "dominant" && _disinhibThreshold > 0) {
+                // Mark this action as dominant-bypass in the act object for later use
+                act._dominantBypass = true;
+            }
             _disinhibThreshold = 0;
         }
+        
         if (_disinhibThreshold > 0 && typeof window !== "undefined" &&
             typeof window.getActDisinhibition === "function" &&
             typeof window.getActionCategory === "function") {
@@ -2470,21 +2484,36 @@ function applyStageFiltering(categorizedActions, stage) {
     // Stage 1: Clothed - only external actions
     if (stage === INTIMACY_STAGES.CLOTHED) {
         // Remove penetration and continue actions (now categorized by body area)
-        // These will be in Pussy, Cock, Anus, Face categories
+        // These will be in Midsection, Head categories
         delete filtered.Penetration;
         
-        // Remove pussy, cock, and anus actions that require nudity
-        if (filtered.Pussy) {
-            filtered.Pussy = filtered.Pussy.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
-        }
-        if (filtered.Cock) {
-            filtered.Cock = filtered.Cock.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
-        }
-        if (filtered.Anal) {
-            filtered.Anal = filtered.Anal.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
-        }
-        if (filtered["Face"]) {
-            filtered["Face"] = filtered["Face"].filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+        // Remove genital actions that require nudity
+        // Map old section names to new ones for filtering
+        const sectionMap = {
+            "Pussy": "Midsection",
+            "Cock": "Midsection",
+            "Anal": "Midsection",
+            "Anus": "Midsection",
+            "Face": "Head",
+            "Breasts": "Upper Body",
+            "Hair": "Head",
+            "Cloaca": "Midsection"
+        };
+        
+        for (const [oldSection, newSection] of Object.entries(sectionMap)) {
+            const actions = filtered[oldSection] || filtered[newSection];
+            if (actions) {
+                if (newSection === "Midsection") {
+                    // Filter genital actions
+                    filtered[newSection] = actions.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+                } else if (newSection === "Head") {
+                    // Filter face actions
+                    filtered[newSection] = actions.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+                } else if (newSection === "Upper Body") {
+                    // Filter breast actions
+                    filtered[newSection] = actions.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+                }
+            }
         }
     }
     
@@ -8373,59 +8402,502 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         return String(a.label).localeCompare(String(b.label));
     });
 
-    // Section grouping by body zone for clarity
-    // First row: Clothing (always first)
-    // Second row: Body zones
-    // Only show categories that have applicable actions
+    // ============================================================================
+    // NEW BODY-PART BASED MENU SYSTEM
+    // ============================================================================
     
-    // Define body zone order - Clothing first, then body zones top to bottom
-    const BODY_ZONE_SECTIONS = ["Clothing", "Face", "Hair", "Breasts", "Cock", "Pussy", "Anus", "Cloaca", "Lower Body", "Tail", "Body", "Receive", "Climax", "Impact", "Watersports", "Other"];
+    // Helper functions to determine if NPC has specific body parts
+    // These check both gender and anatomy to determine which body parts exist
     
-    // Get menu section using body-zone categorization
+    /**
+     * Check if NPC has a head (all NPCs have this)
+     */
+    const npcHasHead = function(npc) {
+        return true; // All NPCs have a head
+    };
+    
+    /**
+     * Check if NPC has upper body (all NPCs have this)
+     */
+    const npcHasUpperBody = function(npc) {
+        return true; // All NPCs have upper body
+    };
+    
+    /**
+     * Check if NPC has midsection (genitals/anus/tail area)
+     */
+    const npcHasMidsection = function(npc) {
+        if (!npc) return false;
+        // All NPCs have this area, but specific parts vary
+        return true;
+    };
+    
+    /**
+     * Check if NPC has lower body (thighs/legs/feet)
+     */
+    const npcHasLowerBody = function(npc) {
+        return true; // All NPCs have lower body
+    };
+    
+    /**
+     * Check if NPC has breasts
+     */
+    const npcHasBreasts = function(npc) {
+        if (!npc) return false;
+        // Check gender - females and non-binary typically have breasts
+        const gender = (npc.gender || "female").toLowerCase();
+        if (gender === "male") return false;
+        // Check anatomy
+        const anatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || (npc.anatomy || {});
+        if (anatomy.breasts) return true;
+        // Default based on gender
+        return (gender === "female" || gender === "non-binary");
+    };
+    
+    /**
+     * Check if NPC has a penis/cock
+     */
+    const npcHasPenis = function(npc) {
+        if (!npc) return false;
+        const gender = (npc.gender || "female").toLowerCase();
+        const anatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || (npc.anatomy || {});
+        // Check anatomy first
+        if (anatomy.penis || anatomy.cock || anatomy.dick) return true;
+        // Check gender
+        return (gender === "male" || gender === "non-binary");
+    };
+    
+    /**
+     * Check if NPC has a vagina/pussy
+     */
+    const npcHasVagina = function(npc) {
+        if (!npc) return false;
+        const gender = (npc.gender || "female").toLowerCase();
+        const anatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || (npc.anatomy || {});
+        // Check anatomy first
+        if (anatomy.vagina || anatomy.pussy) return true;
+        // Check gender
+        return (gender === "female" || gender === "non-binary");
+    };
+    
+    /**
+     * Check if NPC has an anus (most have this, except cloaca species)
+     */
+    const npcHasAnus = function(npc) {
+        if (!npc) return false;
+        // Cloaca species have a vent instead of separate anus
+        if (typeof getNPCAnatomyType === "function" && getNPCAnatomyType(npc) === "reptilian") {
+            return false;
+        }
+        return true;
+    };
+    
+    /**
+     * Check if NPC has a cloaca
+     */
+    const npcHasCloaca = function(npc) {
+        return npcHasCloacaFlag(npc);
+    };
+    
+    /**
+     * Check if NPC has a tail
+     */
+    const npcHasTail = function(npc) {
+        if (!npc) return false;
+        if (typeof hasNPCTail === "function") return hasNPCTail(npc);
+        // Fallback check
+        const anatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || (npc.anatomy || {});
+        if (anatomy.tail) return true;
+        const species = npc.species || "";
+        if (typeof getSpeciesTemplate === "function") {
+            const template = getSpeciesTemplate(species);
+            if (template && template.hasTail) return true;
+        }
+        return false;
+    };
+    
+    /**
+     * Check if player has binding materials (rope or rope belts)
+     * Returns true if player has: one full rope, OR two or more rope belts
+     */
+    const playerHasBindingMaterials = function(player) {
+        if (!player || !Array.isArray(player.inventory)) return false;
+        
+        let fullRopeCount = 0;
+        let ropeBeltCount = 0;
+        
+        for (const item of player.inventory) {
+            if (!item || item.hidden || item.isHidden || item.broken || item.ruined) continue;
+            if (Array.isArray(item.packed) && item.packed.length) continue;
+            
+            const id = String(item.id || "").trim().toLowerCase();
+            const name = String(item.name || "").trim().toLowerCase();
+            
+            // Full rope (capacity 2)
+            if (id === "rope" || id.indexOf("rope-") === 0 || name === "rope") {
+                fullRopeCount++;
+            }
+            // Rope belt (capacity 1)
+            else if (/\brope[\s-]+belt\b/.test(name) || /^rope-belt(?:-|$)/.test(id)) {
+                ropeBeltCount++;
+            }
+        }
+        
+        // Has at least one full rope, OR at least two rope belts
+        return (fullRopeCount >= 1) || (ropeBeltCount >= 2);
+    };
+    
+    // ============================================================================
+    // ACTION BORDER COLOR CODING
+    // ============================================================================
+    
+    /**
+     * Get border color for an action based on its type/purpose
+     * @param {Object} act - The action object
+     * @param {Object} entry - The menu entry
+     * @param {Object} npc - The NPC for mode checking
+     * @returns {string} - CSS color string or null
+     */
+    const getActionBorderColor = function(act, entry, npc) {
+        if (!act) act = getAct(entry.id) || {};
+        if (!act) return null;
+        
+        const actIdLower = (act.id || "").toLowerCase();
+        const labelLower = (act.label || "").toLowerCase();
+        const target = act.target || "";
+        const type = act.type || "";
+        
+        // Check if this action is available due to Dominant mode bypass
+        // In Dominant mode, actions gated by disinhibition are unlocked with red border
+        const demeanorMode = (npc && npc.intimacy && npc.intimacy._demeanorMode) 
+            ? String(npc.intimacy._demeanorMode).toLowerCase() 
+            : "consentual";
+        
+        if (demeanorMode === "dominant") {
+            // Check if this action would normally be gated by disinhibition
+            const _disinhibThreshold = _effectiveActDisinhibitionThreshold(act);
+            
+            if (_disinhibThreshold > 0 && typeof window !== "undefined" &&
+                typeof window.getActDisinhibition === "function" &&
+                typeof window.getActionCategory === "function") {
+                
+                const _catKey = window.getActionCategory(entry.id || act.id, npc);
+                let isGated = false;
+                
+                if (type === ACT_TYPES.WATERSPORT || type === ACT_TYPES.IMPACT) {
+                    const _kinkCatKey = _catKey;
+                    const _ownScore = (_kinkCatKey && _kinkCatKey !== "Other")
+                        ? window.getActDisinhibition(npc, _kinkCatKey)
+                        : 0;
+                    const maxScore = typeof _getMaxCategoryDisinhibition === "function" 
+                        ? _getMaxCategoryDisinhibition(npc) 
+                        : 0;
+                    if (Math.max(_ownScore, maxScore) < _disinhibThreshold) {
+                        isGated = true;
+                    }
+                } else if (_catKey && _catKey !== "Other") {
+                    if (window.getActDisinhibition(npc, _catKey) < _disinhibThreshold) {
+                        isGated = true;
+                    }
+                }
+                
+                // If this action would be gated but is available due to Dominant mode, use red border
+                if (isGated) {
+                    return "#ff0000"; // Red border for dominant-bypass actions
+                }
+            }
+        }
+        
+        // Pussy/Vagina targeted actions (pink)
+        if (target === "vagina" || target === "pussy" || target === "clitoris" ||
+            actIdLower.includes("pussy") || actIdLower.includes("vagina") ||
+            actIdLower.includes("clit") || labelLower.includes("pussy") ||
+            labelLower.includes("vagina") || labelLower.includes("clitoris")) {
+            return "#ff99cc"; // Pink
+        }
+        
+        // Anal targeted actions (brown)
+        if (target === "anus" || target === "butt" || target === "buttocks" || target === "ass" ||
+            actIdLower.includes("anal") || actIdLower.includes("anus") ||
+            actIdLower.includes("butt") || actIdLower.includes("ass") ||
+            labelLower.includes("anal") || labelLower.includes("anus") ||
+            labelLower.includes("butt") || labelLower.includes("ass")) {
+            return "#8B4513"; // Brown
+        }
+        
+        // Penis/Cock targeted actions (purple)
+        if (target === "penis" || target === "cock" ||
+            actIdLower.includes("cock") || actIdLower.includes("penis") ||
+            actIdLower.includes("dick") || labelLower.includes("cock") ||
+            labelLower.includes("penis") || labelLower.includes("dick")) {
+            return "#9933ff"; // Purple
+        }
+        
+        // Climax actions (white)
+        if (act.triggersClimax || actIdLower.includes("climax") || actIdLower.includes("orgasm") ||
+            actIdLower.includes("cum") || actIdLower.includes("ejaculate") ||
+            labelLower.includes("climax") || labelLower.includes("orgasm")) {
+            return "#ffffff"; // White
+        }
+        
+        // Impact actions (red)
+        if (type === ACT_TYPES.IMPACT || actIdLower.includes("slap") || actIdLower.includes("spank") ||
+            actIdLower.includes("hit") || actIdLower.includes("smack") ||
+            labelLower.includes("slap") || labelLower.includes("spank")) {
+            return "#ff0000"; // Red
+        }
+        
+        // Watersports actions (yellow)
+        if (type === ACT_TYPES.WATERSPORT || actIdLower.includes("pee") || actIdLower.includes("piss") ||
+            actIdLower.includes("urinate") || actIdLower.includes("water") ||
+            labelLower.includes("pee") || labelLower.includes("piss")) {
+            return "#ffff00"; // Yellow
+        }
+        
+        // Fingering/Tease actions with fingers (green)
+        if (type === ACT_TYPES.TEASE &&
+            (target === "vagina" || target === "pussy" || target === "anus" ||
+             actIdLower.includes("finger") || actIdLower.includes("hand") ||
+             labelLower.includes("finger"))) {
+            return "#00ff00"; // Green
+        }
+        
+        // Oral/Mouth actions (orange)
+        if (target === "mouth" || target === "lips" || actIdLower.includes("mouth") ||
+            actIdLower.includes("oral") || actIdLower.includes("kiss") ||
+            actIdLower.includes("suck") || actIdLower.includes("blow") ||
+            labelLower.includes("mouth") || labelLower.includes("oral") ||
+            labelLower.includes("kiss")) {
+            return "#ffa500"; // Orange
+        }
+        
+        // General/Other actions (gray or null)
+        return null;
+    };
+    
+    // ============================================================================
+    // BODY PART SECTION DEFINITION
+    // ============================================================================
+    
+    // Define the new body-part-only sections in order
+    const BODY_PART_SECTIONS = [
+        { id: "Clothing", label: "Clothing", isSpecial: true, bgColor: "#e6f2ff" },
+        { id: "Head", label: "Head", isSpecial: false, bgColor: null },
+        { id: "Upper Body", label: "Upper Body", isSpecial: false, bgColor: null },
+        { id: "Midsection", label: "Midsection", isSpecial: false, bgColor: null },
+        { id: "Lower Body", label: "Lower Body", isSpecial: false, bgColor: null },
+        { id: "Requests", label: "Requests", isSpecial: true, bgColor: "#f0e6ff" }
+    ];
+    
+    // Get menu section based on action's target body part
     const getMenuSection = function (entry, npc) {
         const act = getAct(entry.id) || {};
         const actType = act.type || entry.type;
         
         // Explicit menuSection override takes precedence
-        if (act.menuSection) return act.menuSection;
+        if (act.menuSection) {
+            // Map old section names to new ones
+            const sectionMap = {
+                "Face": "Head",
+                "Hair": "Head",
+                "Mouth & Lips": "Head",
+                "Breasts": "Upper Body",
+                "Chest": "Upper Body",
+                "Shoulders": "Upper Body",
+                "Stomach": "Upper Body",
+                "Belly": "Upper Body",
+                "Cock": "Midsection",
+                "Pussy": "Midsection",
+                "Vagina": "Midsection",
+                "Clitoris": "Midsection",
+                "Anus": "Midsection",
+                "Butt": "Midsection",
+                "Buttocks": "Midsection",
+                "Ass": "Midsection",
+                "Cloaca": "Midsection",
+                "Tail": "Midsection",
+                "Thighs": "Lower Body",
+                "Thigh": "Lower Body",
+                "Legs": "Lower Body",
+                "Leg": "Lower Body",
+                "Feet": "Lower Body",
+                "Foot": "Lower Body",
+                "Body": "Upper Body", // General body actions go to Upper Body
+                "Receive": "Requests",
+                "Climax": null, // Will be determined by target
+                "Impact": null, // Will be determined by target
+                "Watersports": null, // Will be determined by target
+                "Foreplay": "Upper Body", // Default for general foreplay
+                "Other": "Requests",
+                "End": "Requests",
+                "Penetration": "Midsection" // Penetration goes to midsection
+            };
+            return sectionMap[act.menuSection] || act.menuSection;
+        }
         
-        // Clothing actions go first
+        // Clothing actions go to Clothing section
         if (actType === ACT_TYPES.CLOTHING) return "Clothing";
+        
+        // Requests/Receive actions go to Requests
+        if (act.playerIsBottom === true || actType === ACT_TYPES.END) {
+            return "Requests";
+        }
         
         // Use body-zone category from getActionCategory
         if (typeof getActionCategory === "function") {
             const bodyZone = getActionCategory(entry.id, npc);
-            // Map some categories to cleaner labels
-            if (bodyZone === "Mouth & Lips" || bodyZone === "Face") return "Face";
-            if (bodyZone === "Breasts") return "Breasts";
-            if (bodyZone === "Pussy") return "Pussy";
-            if (bodyZone === "Cock") return "Cock";
-            if (bodyZone === "Anus") return "Anus";
-            if (bodyZone === "Cloaca") return "Cloaca";
-            if (bodyZone === "Lower Body") return "Lower Body";
-            if (bodyZone === "Tail") return "Tail";
-            if (bodyZone === "Body") return "Body";
-            if (bodyZone === "Hair") return "Hair";
-            if (bodyZone === "Mouth & Lips") return "Face";
+            
+            // Map body zones to new sections
+            const zoneToSection = {
+                "Face": "Head",
+                "Hair": "Head",
+                "Mouth & Lips": "Head",
+                "Neck": "Head",
+                "Breasts": "Upper Body",
+                "Nipples": "Upper Body",
+                "Chest": "Upper Body",
+                "Shoulders": "Upper Body",
+                "Back": "Upper Body",
+                "Stomach": "Upper Body",
+                "Belly": "Upper Body",
+                "Bellybutton": "Upper Body",
+                "Groin": "Midsection",
+                "Cock": "Midsection",
+                "Penis": "Midsection",
+                "Pussy": "Midsection",
+                "Vagina": "Midsection",
+                "Clitoris": "Midsection",
+                "Anus": "Midsection",
+                "Butt": "Midsection",
+                "Buttocks": "Midsection",
+                "Ass": "Midsection",
+                "Cloaca": "Midsection",
+                "Tail": "Midsection",
+                "Thighs": "Lower Body",
+                "Thigh": "Lower Body",
+                "Legs": "Lower Body",
+                "Leg": "Lower Body",
+                "Feet": "Lower Body",
+                "Foot": "Lower Body",
+                "Arms": "Upper Body",
+                "Hands": "Upper Body",
+                "Body": "Upper Body"
+            };
+            
+            if (zoneToSection[bodyZone]) {
+                return zoneToSection[bodyZone];
+            }
         }
         
-        // Fallback to action-type categories
-        if (actType === ACT_TYPES.IMPACT) return "Impact";
-        if (actType === ACT_TYPES.WATERSPORT) return "Watersports";
-        if (act.triggersClimax) return "Climax";
+        // For actions that don't have a clear body zone from getActionCategory,
+        // determine based on action ID and target
+        const actIdLower = (act.id || "").toLowerCase();
+        const labelLower = (act.label || "").toLowerCase();
+        const target = act.target || "";
+        
+        // Head targets
+        if (target === "face" || target === "mouth" || target === "lips" || 
+            target === "neck" || target === "hair" ||
+            actIdLower.includes("kiss") || actIdLower.includes("face") ||
+            actIdLower.includes("mouth") || actIdLower.includes("lips") ||
+            actIdLower.includes("hair") || actIdLower.includes("neck") ||
+            actIdLower.includes("rubcockonface") || actIdLower.includes("rubpussyonface") ||
+            actIdLower.includes("cumonface") || actIdLower.includes("peeonface")) {
+            return "Head";
+        }
+        
+        // Upper Body targets
+        if (target === "breasts" || target === "nipples" || target === "chest" ||
+            target === "shoulders" || target === "stomach" || target === "belly" ||
+            actIdLower.includes("breast") || actIdLower.includes("nipple") ||
+            actIdLower.includes("chest") || actIdLower.includes("shoulder") ||
+            actIdLower.includes("stomach") || actIdLower.includes("belly") ||
+            actIdLower.includes("rubcockonbreast") || actIdLower.includes("rubpussyonbreast") ||
+            actIdLower.includes("cumonbreast") || actIdLower.includes("peeonbreast") ||
+            actIdLower.includes("cumonchest") || actIdLower.includes("peeonchest")) {
+            return "Upper Body";
+        }
+        
+        // Midsection targets (genitals, anus, tail)
+        if (target === "penis" || target === "cock" || target === "vagina" || 
+            target === "pussy" || target === "clitoris" || target === "anus" ||
+            target === "butt" || target === "buttocks" || target === "ass" ||
+            target === "cloaca" || target === "tail" || target === "groin" ||
+            actIdLower.includes("cock") || actIdLower.includes("penis") ||
+            actIdLower.includes("pussy") || actIdLower.includes("vagina") ||
+            actIdLower.includes("anal") || actIdLower.includes("anus") ||
+            actIdLower.includes("butt") || actIdLower.includes("ass") ||
+            actIdLower.includes("tail") || actIdLower.includes("cloaca") ||
+            actIdLower.includes("spank") || actIdLower.includes("finger") ||
+            actIdLower.includes("penetrate") || actIdLower.includes("fuck") ||
+            actIdLower.includes("thrust") || actIdLower.includes("pump")) {
+            return "Midsection";
+        }
+        
+        // Lower Body targets
+        if (target === "thighs" || target === "thigh" || target === "legs" || 
+            target === "leg" || target === "feet" || target === "foot" ||
+            actIdLower.includes("thigh") || actIdLower.includes("leg") ||
+            actIdLower.includes("foot") || actIdLower.includes("feet")) {
+            return "Lower Body";
+        }
+        
+        // Fallback for Impact/Climax/Watersports - determine by target in act ID
+        if (actType === ACT_TYPES.IMPACT) {
+            // Impact actions - determine by what they're impacting
+            if (actIdLower.includes("face") || actIdLower.includes("head") || actIdLower.includes("mouth")) {
+                return "Head";
+            }
+            if (actIdLower.includes("breast") || actIdLower.includes("chest") || actIdLower.includes("stomach")) {
+                return "Upper Body";
+            }
+            if (actIdLower.includes("butt") || actIdLower.includes("ass") || actIdLower.includes("anus") ||
+                actIdLower.includes("thigh") || actIdLower.includes("cock") || actIdLower.includes("pussy")) {
+                return "Midsection";
+            }
+            if (actIdLower.includes("leg") || actIdLower.includes("foot")) {
+                return "Lower Body";
+            }
+            return "Midsection"; // Default for impact
+        }
+        
+        if (actType === ACT_TYPES.WATERSPORT) {
+            // Watersports - determine by where the pee is going
+            if (actIdLower.includes("face") || actIdLower.includes("mouth") || actIdLower.includes("head")) {
+                return "Head";
+            }
+            if (actIdLower.includes("breast") || actIdLower.includes("chest") || actIdLower.includes("stomach")) {
+                return "Upper Body";
+            }
+            if (actIdLower.includes("butt") || actIdLower.includes("ass") || actIdLower.includes("pussy") ||
+                actIdLower.includes("cock")) {
+                return "Midsection";
+            }
+            if (actIdLower.includes("leg") || actIdLower.includes("foot")) {
+                return "Lower Body";
+            }
+            return "Midsection"; // Default
+        }
+        
+        if (act.triggersClimax || actIdLower.includes("climax") || actIdLower.includes("ejaculate")) {
+            // Climax actions - determine by target
+            if (actIdLower.includes("face") || actIdLower.includes("mouth") || actIdLower.includes("head")) {
+                return "Head";
+            }
+            if (actIdLower.includes("breast") || actIdLower.includes("chest") || actIdLower.includes("stomach")) {
+                return "Upper Body";
+            }
+            // Most climax actions are on genitals
+            return "Midsection";
+        }
+        
+        // Default to Midsection for penetration/continue actions
         if (actType === ACT_TYPES.PENETRATE || actType === ACT_TYPES.CONTINUE) {
-            // Penetration acts should be in their body zone (Pussy/Anus/Cloaca), but fallback here
-            if (act.target === "vagina" || act.target === "pussy" || act.target === "clitoris") return "Pussy";
-            if (act.target === "anus" || act.target === "butt" || act.target === "buttocks") return "Anus";
-            if (act.target === "cloaca") return "Cloaca";
-            return "Penetration";
+            return "Midsection";
         }
-        if (actType === ACT_TYPES.END) return "Other";
         
-        // Receive actions (NPC servicing player)
-        if (act.playerIsBottom === true) return "Receive";
-        
-        return "Foreplay";
+        // Default fallback
+        return "Upper Body";
     };
 
     const sectionedActions = {};
@@ -8435,40 +8907,73 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         sectionedActions[section].push(entry);
     }
 
-    // Separate Clothing (first row) from body zones (second row)
-    const clothingSection = sectionedActions["Clothing"];
-    const bodyZoneSections = BODY_ZONE_SECTIONS.filter(s => s !== "Clothing");
-    
-    // Add Clothing first if it exists
-    if (clothingSection && clothingSection.length > 0) {
-        menu.push({
-            type: "section",
-            label: "Clothing",
-            actions: clothingSection.map(entry => ({
-                id: entry.id,
-                label: entry.label,
-                description: entry.description,
-                disabled: entry.disabled,
-                disabledHint: entry.disabledHint
-            }))
-        });
-    }
-    
-    // Add body zone sections (only those with actions)
-    for (const section of bodyZoneSections) {
-        const actions = sectionedActions[section];
+    // Add sections in order, filtering by NPC anatomy and enabled actions
+    for (const sectionDef of BODY_PART_SECTIONS) {
+        const sectionId = sectionDef.id;
+        const sectionLabel = sectionDef.label;
+        const isSpecial = sectionDef.isSpecial;
+        const bgColor = sectionDef.bgColor;
+        
+        const actions = sectionedActions[sectionId];
         if (!actions || !actions.length) continue;
-        menu.push({
-            type: "section",
-            label: section,
-            actions: actions.map(entry => ({
+        
+        // For non-special sections (body parts), check if NPC has that body part
+        // and if there are any enabled (non-disabled) actions
+        if (!isSpecial) {
+            // Check if there are any enabled actions for this section
+            const hasEnabledActions = actions.some(a => !a.disabled);
+            if (!hasEnabledActions) continue;
+            
+            // For Midsection, also check if NPC has any relevant anatomy
+            if (sectionId === "Midsection") {
+                const hasRelevantAnatomy = npcHasMidsection(npc) && 
+                    (npcHasPenis(npc) || npcHasVagina(npc) || npcHasAnus(npc) || npcHasCloaca(npc) || npcHasTail(npc));
+                if (!hasRelevantAnatomy) continue;
+            }
+        }
+        
+        // Build the actions with color coding
+        const menuActions = actions.map(entry => {
+            const act = getAct(entry.id) || {};
+            const borderColor = getActionBorderColor(act, entry, npc);
+            
+            return {
                 id: entry.id,
                 label: entry.label,
                 description: entry.description,
                 disabled: entry.disabled,
-                disabledHint: entry.disabledHint
-            }))
+                disabledHint: entry.disabledHint,
+                borderColor: borderColor
+            };
         });
+        
+        // Add rope bondage action to Clothing section if player has binding materials
+        if (sectionId === "Clothing" && playerHasBindingMaterials(player)) {
+            // Check if NPC is already bound
+            const isAlreadyBound = npc.bound && npc.surrendered;
+            
+            menuActions.push({
+                id: "bind_npc_intimacy",
+                label: isAlreadyBound ? "NPC is bound" : "Bind NPC with rope",
+                description: isAlreadyBound 
+                    ? "The NPC is already bound and surrendered to you"
+                    : "Use rope or rope belts to bind the NPC, allowing you to do as you please",
+                disabled: isAlreadyBound,
+                disabledHint: isAlreadyBound ? "NPC is already bound" : null,
+                borderColor: "#ff0000" // Red border for bondage action
+            });
+        }
+        
+        // Build section object with color info
+        const sectionObj = {
+            type: "section",
+            label: sectionLabel,
+            actions: menuActions,
+            isSpecial: isSpecial,
+            bgColor: bgColor
+        };
+        
+        menu.push(sectionObj);
     }
     
     // Multi-act Continue: with acts engaged in several slots (kissing +
