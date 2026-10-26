@@ -84331,6 +84331,11 @@ function renderIntimacyActionMenu(npc) {
         }
         return;
     }
+    
+    // Check if NPC is non-resisting (unconscious, sleeping, or bound)
+    const isUnconsciousOrSleeping = typeof isNPCUnconsciousOrSleeping === "function" && isNPCUnconsciousOrSleeping(npc);
+    const isBound = npc && (npc.bound || npc._prisoner || npc._boundCaptiveFollower);
+    const isNonResisting = isUnconsciousOrSleeping || isBound;
 
     // Get stored active tab from NPC memory, or from DOM if not set
     const currentTabSection = (npc.intimacy && npc.intimacy._lastActiveTab) 
@@ -84674,12 +84679,6 @@ function renderIntimacyActionMenu(npc) {
     showAllLabel.style.cursor = "pointer";
     showAllContainer.appendChild(showAllLabel);
 
-    // For unconscious/sleeping/bound NPCs, add special clothing actions
-    // These are injected before getting menu actions
-    const isUnconsciousOrSleeping = typeof isNPCUnconsciousOrSleeping === "function" && isNPCUnconsciousOrSleeping(npc);
-    const isBound = npc && (npc.bound || npc._prisoner || npc._boundCaptiveFollower);
-    const isNonResisting = isUnconsciousOrSleeping || isBound;
-    
     // Get menu actions with room context
     if (typeof getMenuActions === "function") {
         const room = G.activeRoom;
@@ -84944,12 +84943,7 @@ function renderIntimacyActionMenu(npc) {
         // Also filter out Pause/Stop from Other section (they go in controls-row)
         console.log(`[DEBUG] sectionItems:`, sectionItems.map(item => ({label: item.label, actionsCount: item.actions ? item.actions.length : 0})));
         
-        // Check if NPC is unconscious, sleeping, or bound - all actions should be available
-        const isUnconsciousOrSleeping = typeof isNPCUnconsciousOrSleeping === "function" && isNPCUnconsciousOrSleeping(npc);
-        const isBound = npc && (npc.bound || npc._prisoner || npc._boundCaptiveFollower);
-        const isNonResisting = isUnconsciousOrSleeping || isBound;
-        
-        // Force showAllActions to true for unconscious/sleeping/bound NPCs (they cannot resist)
+        // Force showAllActions to true for non-resisting NPCs (they cannot resist)
         if (isNonResisting && npc.intimacy) {
             npc.intimacy.showAllActions = true;
         }
