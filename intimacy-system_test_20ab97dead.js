@@ -1649,7 +1649,8 @@ function updateLastActivity(npc) {
 function generateValidActions(npc, player, positionId = null) {
     if (!npc || !player) return [];
     
-    const intimacy = npc.intimacy || initializeIntimacyState(npc);
+    // Always call initializeIntimacyState to ensure all properties exist
+    const intimacy = initializeIntimacyState(npc);
     const clothingState = intimacy.clothing;
     const currentPosition = positionId || intimacy.position.player;
     const stage = getIntimacyStage(clothingState);
@@ -2583,23 +2584,8 @@ function getDisabledHintForReason(reason, npc, player, act) {
 function generateAllActionsWithStatus(npc, player, positionId = null) {
     if (!npc || !player) return { valid: [], invalid: [] };
     
-    const intimacy = npc.intimacy || initializeIntimacyState(npc);
-    
-    // Ensure position object exists
-    if (!intimacy.position) {
-        intimacy.position = {
-            player: DEFAULT_POSITION,
-            npc: DEFAULT_POSITION
-        };
-    }
-    
-    // Ensure clothing object exists
-    if (!intimacy.clothing) {
-        intimacy.clothing = {
-            player: {},
-            npc: {}
-        };
-    }
+    // Always call initializeIntimacyState to ensure all properties exist
+    const intimacy = initializeIntimacyState(npc);
     
     const clothingState = intimacy.clothing;
     const currentPosition = positionId || intimacy.position.player;
@@ -3775,23 +3761,8 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     if (!npc || !player || !hasAct(actId)) return null;
     
     const act = getAct(actId);
-    const intimacy = npc.intimacy || initializeIntimacyState(npc);
-    
-    // Ensure position object exists
-    if (!intimacy.position) {
-        intimacy.position = {
-            player: DEFAULT_POSITION,
-            npc: DEFAULT_POSITION
-        };
-    }
-    
-    // Ensure clothing object exists
-    if (!intimacy.clothing) {
-        intimacy.clothing = {
-            player: {},
-            npc: {}
-        };
-    }
+    // Always call initializeIntimacyState to ensure all properties exist
+    const intimacy = initializeIntimacyState(npc);
     
     const clothingState = intimacy.clothing;
     const currentPosition = positionId || intimacy.position.player;

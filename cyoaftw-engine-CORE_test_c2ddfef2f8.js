@@ -56884,10 +56884,8 @@ function handleIntimacyConversationChoice(npc, choice) {
                     
                     if (result && result.success) {
                         // Set bathhouse-specific context on NPC
-                        if (!npc.intimacy) {
-                            if (typeof initializeIntimacyState === "function") {
-                                initializeIntimacyState(npc);
-                            }
+                        if (typeof initializeIntimacyState === "function") {
+                            initializeIntimacyState(npc);
                         }
                         
                         // Store service context for turn tracking
