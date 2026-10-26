@@ -84676,6 +84676,7 @@ function renderIntimacyActionMenu(npc) {
 
     // For unconscious/sleeping/bound NPCs, add special clothing actions
     // These are injected before getting menu actions
+    const isUnconsciousOrSleeping = typeof isNPCUnconsciousOrSleeping === "function" && isNPCUnconsciousOrSleeping(npc);
     const isBound = npc && (npc.bound || npc._prisoner || npc._boundCaptiveFollower);
     const isNonResisting = isUnconsciousOrSleeping || isBound;
     
@@ -84898,15 +84899,11 @@ function renderIntimacyActionMenu(npc) {
         function shouldShowSection(sectionLabel) {
             const label = String(sectionLabel || "");
             
-            // Check if NPC is unconscious or sleeping
-            const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
-                               (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
-            const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
-                             (npc && npc.currentState && npc.currentState.sleeping);
-            const isUnconsciousOrSleeping = isUnconscious || isSleeping;
+            // Check if NPC is unconscious or sleeping using our helper
+            const isNPCNonResisting = typeof isNPCUnconsciousOrSleeping === "function" && isNPCUnconsciousOrSleeping(npc);
             
             // Hide Requests section for unconscious/sleeping NPCs
-            if (label === "Requests" && isUnconsciousOrSleeping) {
+            if (label === "Requests" && isNPCNonResisting) {
                 return false;
             }
             
