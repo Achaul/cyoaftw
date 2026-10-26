@@ -153,7 +153,7 @@ function interactionDescriptionBlock(request) {
 function parseTextCommitmentCommand(input) {
     const raw=String(input||"").trim().replace(/[.!?]+$/,"");let m;
     if(/^(?:say|reply|respond)\s|^["“']/.test(raw) || /^(?:accept|take|abandon)\s+(?:job|quest|bounty)\b/i.test(raw))return null;
-    if(/^(?:tasks?|requests?|ask[- ]for(?:\s+(?:work|help|tasks?|requests?))?)$/i.test(raw))return {verb:"commitment",args:{action:"menu"}};
+    if(/^(?:tasks?|requests?|ask[- ]for(?:\s+(?:work|help|tasks?|requests?))?|ask what they (?:need|want)|what do you (?:need|want)|continue (?:their |the )?request)$/i.test(raw))return {verb:"commitment",args:{action:"menu"}};
     m=/^ask-for\s+(.+)$/i.exec(raw);if(m)return {verb:"commitment",args:{action:"ask",target:m[1]}};
     if(/^(?:commitments?|promises?|task log)$/i.test(raw))return {verb:"commitment",args:{action:"status"}};
     if(/^(?:let['’]?s trade|let us trade|can we trade)$/i.test(raw))return {verb:"trade",args:{target:""}};
@@ -177,7 +177,7 @@ function textCommitmentHelp(topic,show) {
         const requests=needs.map(function(n){return {title:n.title,kind:n.kind,priority:n.priority,reward:publicNPCCommitment(n).reward,command:"tasks",acceptTurns:1};});
         return textModeResult("completed",records.map(function(c){return c.title+" ("+c.state+")";}).concat(requests.map(function(n){return n.title+". Reward: "+commitmentRewardText(n)+". Review with tasks; accepting takes one turn.";})).join("\n")||"No current requests or promises. Talk to someone and use tasks.",{commitments:records.map(publicNPCCommitment),requests:requests});
     }
-    return textModeResult("completed","Use tasks during a conversation to review grounded requests. Accept task or decline task answers the current reviewed offer. Deliver task settles an accepted task with the actual recipient; give <item> to <person> uses the same native transfer. Promise <carried item> or promise 2 coins reviews your own promise. Break promise abandons an accepted task and costs trust. Accepting costs one turn; cancelling is free. Examples: tasks; accept task; deliver task; commitments; promise bread; promise 2 coins.");
+    return textModeResult("completed","Use tasks during a conversation to review grounded requests. Ask what they need, ask what they want and continue their request open the same menu. The main conversation also offers Ask what they need or Continue their request. Accept task or decline task answers the current reviewed offer. Deliver task settles an accepted task with the actual recipient; give <item> to <person> uses the same native transfer. Promise <carried item> or promise 2 coins reviews your own promise. Break promise abandons an accepted task and costs trust. Accepting costs one turn; cancelling is free. Examples: tasks; accept task; deliver task; commitments; promise bread; promise 2 coins.");
 }
 async function executeTextCommitment(action) {
     if(typeof ensureNPCCommitments!=="function")return textModeResult("blocked","Requests are unavailable here.");
@@ -3276,6 +3276,7 @@ function textNPCServicesShow() {
 
 
 const TEXT_COMMANDS = [
+    {id:'checkpoint',checkpoint:true,args:['action'],aliases:['checkpoint','gate entry','state business','pay toll','ask toll waiver','refuse entry questions','turn back'],example:'checkpoint; state business trade; state business work; state business visit; state business official; pay toll; ask toll waiver; turn back; show checkpoint; how checkpoint',description:'Answer an actual guard checkpoint using shared conversation choices. Explain lawful business, then pay a two-coin day toll or verify local business for a waiver. One hardship appeal costs one turn and a Charisma check. Refusing blocks onward movement; the return exit stays available. No payment or admission comes from AI narration.'},
     { id: "mausoleum", mausoleum: true, args: ["action", "target", "niche", "message"], aliases: ["mausoleum", "tomb", "niches", "plaques", "inter", "entomb", "engrave", "plaque"], example: 'mausoleum; inter body; inter body Mira; engrave niche 1 "Always remembered"; show niches; how mausoleum', description: "A mausoleum has fifty permanent body niches per burial vault. Interment requires a confirmed deceased NPC here or carried by you, one turn, no gold and separate confirmation. No retrieval service is available yet. Plaques include the recorded name and your exact single-line message (1 to 240 characters), cost five gold and one turn, and require a separate numbered confirmation. A working Keeper of the Quiet must be available for engraving. Each niche accepts one plaque. Back/cancel are free; continue explicitly resumes an older batch. When all existing vaults are full, another fifty-niche floor opens automatically. Bier Bearers collect the dead in pairs during working hours, using safe same-zone routes. No player dispatch or construction command is needed." },
     { id: "bathhouse", bathhouse: true, args: ["action"], aliases: ["bathhouse", "baths", "spa", "take a bath", "get bathed", "get a massage", "massage trial", "audition massage", "trial shift"], example: "bathhouse; bathhouse bath; get bathed; get a massage; bathhouse trial; bathhouse attendant; bathhouse practitioner; show baths; how bathhouse", description: "Visit a bathhouse and ask the available bathkeeper for services. Hot bath: 4 gold/2 turns/up to 3 stamina; assisted wash: 7 gold/3 turns/up to 5 stamina; massage: 9 gold/3 turns/up to 7 stamina. Prices scale with town tier. Bath and wash clean you and worn gear; massage does not. Treatments do not heal wounds or replace sleep. A practical massage trial costs 1 stamina and 2 turns and uses flexibility against difficulty 11; failure can be retried tomorrow. Ordinary attendant work needs no trial. Qualified massage work pays more and may earn tips. Work uses the existing job system: leave the conversation, go to the stated site, work, collect pay. Answer menus one step at a time; back/cancel/leave are free; continue resumes an older batch explicitly." },
     { id: "actions", conversationActions: true, args: ["group"], aliases: ["actions", "conversation actions"], example: "actions; actions services; actions food; actions company; actions interactions; show conversation actions; how conversation actions", description: "Open grouped conversation actions through the same current callbacks as the buttons. Services/trade, food/drink, travel/company and interactions are separate menus. Choose one numbered option at a time. Back returns to conversation; leave steps away; cancel closes the menu and cancels later commands. Resume older batches explicitly with continue." },
@@ -3283,7 +3284,7 @@ const TEXT_COMMANDS = [
     {id:'world_life',worldLife:true,args:['action','target'],aliases:['investigate','tend','incidents'],example:'investigate corpse; tend unconscious person; show incidents; how tend',description:'Examine a visible fallen person for one turn, or review shared wound treatments. Uses native supplies and healing costs. Findings cannot identify a culprit without evidence.'},
     {id:'communication',communication:true,args:['action','style','target'],aliases:['communication','greet','manner','address','title'],example:'greet normally; greet formally; greet silently; greet with a bow; ask address; ask title; manner formal; manner ordinary; show greetings; show address; how manner',description:'Choose an ordinary, formal or nonverbal initial greeting using the same native greeting and cost. Greet with a nod/bow/salute is nonverbal. Ask address/title gets a grounded answer; no title or rank is invented. Manner formal/ordinary changes only your current conversation, freely, without rewards. Known preferred addresses can be used as public target aliases. Speak formally/normally are aliases; quoted say remains literal. Show greetings/manner/address/communication gives free public availability without revealing an unknown address. Greetings and questions use normal conversation exchanges; repeated variants cannot reopen the greeting gate. Finish other interactions first.'},
     { id: "service", service: true, args: ["service"], aliases: ["service", "services", "inquire about rooms", "order drink", "ask for menu", "see wares", "ask about healing services", "ask about forge services"], example: "show services; service rooms; order a drink; ask for the menu; see wares; service forge; how service", description: "While talking to an obvious provider, choose any available service without greeting first. Blacksmiths offer wares and forge work separately; innkeepers offer rooms, drinks and a menu. Service healing opens supplies for sale. Menus retain native prices, checks and costs. Choices pause later commands; continue explicitly after finishing." },
-    { id: "commitment", commitment: true, args: ["action","target"], aliases: ["tasks","requests","commitments","promises","promise","ask-for","accept task","decline task","deliver task","break promise"], example: "tasks; accept task; deliver task; commitments; promise bread; promise 2 coins", description: "Review real NPC requests, accept or decline their current terms, settle tasks with real items or coin, or review a player-made promise. Accepting costs one turn. Promised coin rewards are reserved from the giver. Breaking a promise costs trust; cancelling is free." },
+    { id: "commitment", commitment: true, args: ["action","target"], aliases: ["tasks","requests","ask what they need","ask what they want","continue their request","commitments","promises","promise","ask-for","accept task","decline task","deliver task","break promise"], example: "tasks; ask what they need; accept task; deliver task; commitments; promise bread; promise 2 coins", description: "Review real NPC requests, accept or decline their current terms, settle tasks with real items or coin, or review a player-made promise. Accepting costs one turn. Promised coin rewards are reserved from the giver. Breaking a promise costs trust; cancelling is free." },
     { id: "tool", jobs: true, args: ["action", "target", "item"], aliases: ["tools", "tool use", "pry", "lever", "wedge", "jam", "brace", "unwedge", "force obstruction"], example: "pry packing board with iron pry bar; wedge chair under north door; unwedge north door; force obstruction north door; tools; show tools", description: "Use real objects together. Pry exposed nailed/pegged fittings with a sound rigid lever; wedge suitable furniture or a solid object against a real door. Material, shape, size, condition, reach and stats determine eligibility and dice difficulty. Pry/wedge cost 1 stamina and 1 turn; forcing a brace costs 2 stamina and 1 turn; removing your reachable brace costs 1 turn. Failures spend costs and pause later commands. A brace stays in place, blocks both sides and cannot be picked up until released. Unwedging does not unlock a lock. Show tools lists current combinations; tools opens the same choices as native controls. Options/back/cancel/leave work; explicitly continue older queued commands." },
     { id: "object", info: false, jobs: true, args: ["action", "target"], aliases: ["objects", "physical objects", "lift", "heave", "drag", "haul", "shift", "move object", "push object", "pull object"], example: "lift bucket; drag bench; shift crate; push object chair; show objects; how lift", description: "Lift an accessible object and set it down, or drag/shift it a short distance within the room. Heave means lift; haul/pull object means drag; push object/move object means shift. The engine checks reach, attachment, occupancy, material, size, contents and physical prowess. Easy lifts succeed without a roll or cost; uncertain lifts and floor moves use a stat-based d20 check, 1 stamina and 1 turn, including failures. Impossible attempts never roll. These actions do not carry objects between rooms or create cover, block exits or spill contents. Take retains pack limits. Show objects lists public properties and current availability." },
     { id: "fire", fire: true, args: ["action", "target", "item"], aliases: ["light", "ignite", "set fire", "douse", "extinguish", "put out"], example: "light cart with torch; set fire to the bench; light the shelf from the hearth; douse cart with waterskin; put out the fire", description: "Set a flammable fixture alight with a carried torch or a nearby flame (hearth, brazier, wall torch, another fire), or douse a burning one with carried water or a well, fountain or water barrel. One turn, no roll and no mana. Fire spreads and burns out by the same rules as fire spells, and setting fires in front of people is arson. Doused water containers are emptied; you keep the container." },
@@ -3453,6 +3454,7 @@ function parseTextCommand(input) {
     const mausoleum = parseTextMausoleumCommand(raw); if (mausoleum) return mausoleum;
     const bathhouse = parseTextBathhouseCommand(raw); if (bathhouse) return bathhouse;
     const npcService = parseTextNPCService(raw); if (npcService) return npcService;
+    const checkpoint=typeof parseTextCheckpointCommand==='function'?parseTextCheckpointCommand(raw):null;if(checkpoint)return checkpoint;
     const commitment = parseTextCommitmentCommand(raw); if (commitment) return commitment;
     const toolCommand = parseTextWorldToolCommand(raw); if (toolCommand) return toolCommand;
     const objectCommand = parseTextObjectCommand(raw); if (objectCommand) return objectCommand;
@@ -3635,6 +3637,7 @@ async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
     TEXT_COMMANDS.filter(function(def) {
+        if(def.checkpoint)return false; // Local checkpoint replies never enlarge unrelated AI prompts.
         // Keep location-specific staff commands out of unrelated intent prompts.
         if(def.id==='uniform')return !!G.activeRoom&&G.activeRoom.type==='Bathhouse Changeroom';
         if(def.id==='bathhouse_requests')return isBathhouseRoom(G.activeRoom)||!!(G.player&&G.player._bathhouseRequestsFromNPCs&&G.player._bathhouseRequestsFromNPCs.length);
@@ -5355,6 +5358,7 @@ function textModeInspectNPC(action) {
 }
 
 function textModeHelpContent(topic, show) {
+    if(/^(checkpoint|gate entry|toll|pay toll|state business|ask toll waiver)$/.test(textCommandNormalize(topic))&&typeof checkpointHelp==='function')return checkpointHelp(show);
     if(/^(conversations|npc conversations|nearby conversations|join conversation|join chat|join discussion)$/.test(textCommandNormalize(topic))&&typeof npcLifeHelp==='function')return npcLifeHelp(show);
     if (/^(incidents|incident|investigate|investigation|tend|treat|care)$/.test(textCommandNormalize(topic)) && typeof worldLifeHelp==='function') return worldLifeHelp(show);
     let key = textCommandNormalize(topic).replace(/^(?:to|use)\s+/, "");
@@ -5411,6 +5415,7 @@ function textModeHelpContent(topic, show) {
     if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
     const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "taste", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
+        if(def.checkpoint)return typeof activeGuardCheckpoint==='function'&&!!activeGuardCheckpoint();
         if (ids.indexOf(def.id) < 0 && !def.bathhouse && !def.conversationActions && !def.service && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.binding && !def.lootDetail && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !def.commitment && !/^(back|cancel)$/.test(def.id)) return false;
         if (def.lootDetail && !lootItemDetailAvailable()) return false;
         if (def.binding && (typeof getBindingTargets !== "function" || !getBindingTargets().length)) return false;
@@ -5577,6 +5582,7 @@ async function executeTextCommand(action) {
     if (action.verb === 'npc_life') return executeTextNPCLife(action);
     if (action.verb === 'world_life') return executeTextWorldLife(action);
     if (action.verb === 'communication') return executeTextCommunication(action);
+    if (action.verb === 'checkpoint') return executeTextCheckpoint(action.args);
     if (action.verb === "actions") return showConversationActionMenu(G.activeNPC, args.group || "");
     if (action.verb === "service") {
         if (!args.service) return textNPCServicesShow();
@@ -5715,6 +5721,7 @@ async function executeTextCommand(action) {
         if (!choices || !textModeSameScene(choices.scene)) return textModeResult("blocked", "Type options to list the current conversation choices first.");
         const selected = choices.options[number - 1];
         if (!selected || !Number.isInteger(number) || number < 1) return textModeResult("blocked", "Choose a number from the options list.");
+        if(selected.action==='requests'&&(!selected.requestChoiceCurrent||!selected.requestChoiceCurrent())){textModeState.choices=null;return textModeResult('blocked','That request choice changed. Ask for current options.');}
         if(selected.action==='communication'&&typeof npcCommunicationCaptureFresh==='function'&&!npcCommunicationCaptureFresh(selected.communicationCapture,G.activeNPC,false)){textModeState.choices=null;return textModeResult('blocked','Those conversation choices changed. Ask for current options.');}
         const current = getChatOptions(G.activeNPC).find(function (option) { return selected.id && option.id === selected.id; });
         if (!current || current.disabled) return textModeResult("blocked", "That choice is no longer available. Type options for the current choices.");
@@ -7763,6 +7770,7 @@ function textSharedOptions() {
     const owned = menu && menu.ownsView();
     if (menu && menu.valid()) return showSharedChoiceMenu(menu);
     if (menu) clearSharedChoiceMenu(menu);
+    if(menu&&owned&&menu.kind==='guard-checkpoint'&&menu.scene.player===G.player&&menu.scene.room===G.activeRoom&&menu.npc===G.activeNPC&&typeof activeGuardCheckpoint==='function'&&activeGuardCheckpoint())return renderGuardCheckpointMenu(menu.npc);
     if (menu && menu.kind === "sleep-spot") {
         if (owned && menu.scene.player === G.player && menu.scene.room === G.activeRoom && menu.scene.npc === G.activeNPC &&
             menu.scene.mode === G.activeNPCMode && menu.scene.modal === G.activeItemModal && menu.scene.object === G.activeObject &&
@@ -7821,6 +7829,7 @@ function textSharedChoiceCanHandle(input, action) {
     if (menu && /^goods-/.test(menu.kind) && action && action.verb === "leave") return true;
     if (action && action.verb === "options") return !!menu || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot();
     if (!menu) return false;
+    if(menu.kind==='guard-checkpoint'&&(!action||/^(checkpoint|say|leave|back|cancel)$/.test(action.verb)||(splitTextCommands(input||'').parts||[]).length>1))return true;
     if (menu.kind === "sleeping-search" && action && /^(leave|wake)$/.test(action.verb)) return true;
     if (/^commitment-/.test(menu.kind) && (action && /^(commitment|leave)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (menu.kind === "world-tools" && (action && /^(tool|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
@@ -7860,6 +7869,7 @@ async function textRunSharedChoice(menu, choice) {
 }
 
 async function textSharedChoiceInput(input, action) {
+    if(sharedChoiceState.menu&&sharedChoiceState.menu.kind==='guard-checkpoint'&&(!action||/^(checkpoint|say|leave|back|cancel)$/.test(action.verb)||(splitTextCommands(input||'').parts||[]).length>1)){await textCheckpointMenuInput(sharedChoiceState.menu,action,input);return true;}
     if (sharedChoiceState.menu && sharedChoiceState.menu.kind === 'world-care' && (action && /^(back|cancel|leave)$/.test(action.verb) || (splitTextCommands(input || '').parts || []).length > 1)) {
         await textWorldCareMenuInput(sharedChoiceState.menu,action,input);return true;
     }
@@ -13338,7 +13348,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-25-008
+// Core Engine Version: 2026-10-26-003
 // Latest: Voice command fallback infers misheard words: person targets that match no one get a sounds-like best guess (textGuessNPCTarget: "female cancun" -> the female kenku), the AI is told voice input is speech-to-text and to always give a best guess (exits listed), AI plans wrapped in prose, using shorthand keys or verb synonyms are repaired, and in voice play the valid part of a partly bad plan still runs.
 // Previous: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
 // Previous: Trade and economy pass: Traders now carry a real purse (20-50 gold) instead of the 2-10 default; merchants pay at most 1.75x half value so deity tomes and similar cannot be bought and flipped for profit; bone dice wagers move coin to and from the NPC and have a cooldown; sealed goods pay slightly less coin. Previous -007: Hand-in tokens now pay out of the NPC's own coin pouch and are kept if they cannot cover them. Previous -006: Item purpose pass part 2: keepsakes (charms, rings, brooches, scarves) wear on the Neck for +1 Charisma; rivets, nails, pick-heads, sewing kits, twine and cloth mend worn gear; relics, tokens, candles and incense can be left as offerings at a shrine; sealed bales, crates and goods open; spice seasons a meal; pawn tickets, receipts, tally sticks, chits and house tokens are handed in to the right NPC; bone dice wager with friendly NPCs; ledgers, maps and receipts are readable; ink, chalk, parchment and wax tablets count as writing supplies; the ladle and net weight are improvised weapons; clean linen bandages. New "apply" text command.
@@ -13412,7 +13422,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-25-008";
+window.__ENGINE_CORE_VERSION = "2026-10-26-003";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -19861,7 +19871,14 @@ function getPressureSheetRows() {
 const GUIDE_ARRIVAL_DELAY_MS = 1500;
 let _guideArrivalTimer = null;
 
+function guideCanArriveHere() {
+    // The opening guide belongs to the original world. A pending timer or an
+    // older save must not introduce another guide while visiting a portal town.
+    return !G.townPortalBusy && (typeof getPortalTier !== "function" || getPortalTier() === 0);
+}
+
 function guideArrivalReady() {
+    if (!guideCanArriveHere()) return false;
     const bs = getPlayerBackstory();
     if (!bs || !bs.guide || bs.guide.state !== "pending") return false;
     if (!G.player || G.player.hp <= 0 || isEntityCollapsed(G.player)) return false;
@@ -19877,6 +19894,7 @@ function guideArrivalReady() {
 // attemptRest). The short delay lets the new room's narration land first; if
 // the player is busy when it fires, the next call tries again.
 function scheduleGuideArrival() {
+    if (!guideCanArriveHere()) return;
     if (_guideArrivalTimer) return;
     const bs = getPlayerBackstory();
     if (!bs || !bs.guide || bs.guide.state !== "pending") return;
@@ -19899,6 +19917,7 @@ const GUIDE_ENTRANCE_MAX_TRIES = 12;
 let _guideEntranceTimer = null;
 
 function guideEntranceReady() {
+    if (!guideCanArriveHere()) return false;
     const bs = getPlayerBackstory();
     if (!bs || !bs.guide || bs.guide.state !== "pending") return false;
     if (!G.player || G.player.hp <= 0 || isEntityCollapsed(G.player)) return false;
@@ -19921,6 +19940,7 @@ function getGuideEntranceLine(bs) {
 
 function runGuideEntrance(tries) {
     _guideEntranceTimer = null;
+    if (!guideCanArriveHere()) return;
     const bs = getPlayerBackstory();
     if (!bs || !bs.guide || bs.guide.state !== "pending") return;
     if (!guideEntranceReady()) {
@@ -19941,6 +19961,7 @@ function runGuideEntrance(tries) {
 }
 
 function scheduleGuideEntrance(delayMs) {
+    if (!guideCanArriveHere()) return;
     if (_guideEntranceTimer) return;
     const bs = getPlayerBackstory();
     if (!bs || !bs.guide || bs.guide.state !== "pending") return;
@@ -20103,6 +20124,7 @@ function getGuideTypedCheckinBeat(npc, text) {
 
 
 function startGuideArrival() {
+    if (typeof guideCanArriveHere === "function" && !guideCanArriveHere()) return false;
     const bs = getPlayerBackstory();
     const room = G.activeRoom;
     if (!bs || !bs.guide || bs.guide.state !== "pending" || !room) return false;
@@ -24012,6 +24034,203 @@ const GUARD_CHECKPOINT_ROLES = ["Town Guard", "Stone Guard"];
 const GUARD_CHECKPOINT_FAVOR_NOD = 20;
 const GUARD_CHECKPOINT_DENY_HOSTILITY = 60;
 const GUARD_CHECKPOINT_ATTACK_HOSTILITY = 90;
+const GUARD_CHECKPOINT_TOLL = 2;
+
+function parseTextCheckpointCommand(raw) {
+    const text=String(raw||'').trim().replace(/[.!?]+$/,'');let match;
+    if(/^(?:checkpoint|gate entry)$/i.test(text))return {verb:'checkpoint',args:{action:'menu'}};
+    match=/^(?:state|explain) business (trade|work|visit|official)$/i.exec(text);
+    if(match)return {verb:'checkpoint',args:{action:match[1].toLowerCase()}};
+    match=/^checkpoint (trade|work|visit|official|pay|appeal|refuse|back)$/i.exec(text);
+    if(match)return {verb:'checkpoint',args:{action:match[1].toLowerCase()}};
+    const aliases={'pay toll':'pay','pay the toll':'pay','ask toll waiver':'appeal','refuse entry questions':'refuse','turn back':'back'};
+    return aliases[text.toLowerCase()]?{verb:'checkpoint',args:{action:aliases[text.toLowerCase()]}}:null;
+}
+function activeGuardCheckpoint() {
+    const p=G.player,s=p&&p.guardCheckpoint,r=G.activeRoom;
+    if(!s)return null;
+    if(!r||s.roomCoords!==r.coords||s.tier!==getPortalTier()||p.coords!==r.coords||!['business','toll','denied'].includes(s.stage)||typeof s.originCoords!=='string'||!G.roomMap[s.originCoords]){delete p.guardCheckpoint;return null;}
+    const guard=(r.creatures||[]).find(function(n){return n&&n.id===s.guardId;});
+    if(!guard||findCheckpointGuard({creatures:[guard]})!==guard){delete p.guardCheckpoint;return null;}
+    return s;
+}
+function guardCheckpointPass(room) {
+    const now=getCurrentStoryTurn(),tier=getPortalTier(),p=G.player;
+    return p&&Array.isArray(p.guardCheckpointPasses)&&p.guardCheckpointPasses.some(function(pass){return pass&&pass.zone===room.zone&&pass.tier===tier&&Number.isFinite(pass.expiresTurn)&&pass.expiresTurn>now;});
+}
+function guardCheckpointEvidence(stop) {
+    const job=G.player.jobs&&G.player.jobs.active,site=job&&G.roomMap[job.siteCoords],now=getCurrentStoryTurn();
+    if(job&&job.state==='working'&&job.tier===stop.tier&&site&&site.zone===stop.zone)return 'local employment';
+    if((G.commitments||[]).some(function(c){return c&&c.state==='accepted'&&c.zone===stop.zone&&c.dueTurn>=now&&Object.values(G.roomMap).some(function(r){return r&&r.zone===stop.zone&&(r.creatures||[]).some(function(n){return n&&n.hp>0&&!n.dead&&(n.id===c.giverId||n.id===c.personId);});});}))return 'an accepted local task';
+    if(getTownStanding(stop.tier)>=10)return 'your standing in this settlement';
+    return '';
+}
+function guardCheckpointBlock(stop,guard) {
+    const p=G.player,r=G.activeRoom;
+    if(!stop||activeGuardCheckpoint()!==stop||!p||p.dead||p.hp<=0||p.unconscious||p._dying||p._collapsing)return 'That checkpoint conversation is no longer available.';
+    if(!guard||guard.id!==stop.guardId||G.activeNPC!==guard||!['talk','menu','respond'].includes(G.activeNPCMode)||!canConverseWithNPC(guard))return 'Speak with the checkpoint guard first.';
+    if(G.combatEncounter||roomHasActiveHostile(r)||isRoomCollapsed(r)||isPlayerJailed()||G.activeItemModal||G.activeObject||hasPendingPartyLoot()||textModeState.pending||textModeState.dialogue)return 'Finish the current danger or interaction first.';
+    if(getEffectiveBounty(stop.zone)>0)return 'Your outstanding bounty must be settled with the watch first.';
+    return '';
+}
+function checkpointPublic(stop,extra) {
+    const canPay=!!stop.business&&hasEnoughCoins(G.player,GUARD_CHECKPOINT_TOLL),canAppeal=!!stop.business&&!stop.appealed,commands=['checkpoint','state business official','turn back'];
+    if(stop.stage!=='toll')commands.push('state business trade','state business work','state business visit');
+    if(canPay)commands.push('pay toll');if(canAppeal)commands.push('ask toll waiver');if(stop.stage!=='denied')commands.push('refuse entry questions');
+    return Object.assign({stage:stop.stage,zone:stop.zone,business:stop.business||'',toll:GUARD_CHECKPOINT_TOLL,admitted:false,canPay:canPay,canAppeal:canAppeal,evidence:guardCheckpointEvidence(stop),commands:commands},extra||{});
+}
+function checkpointOutput(stop,text,extra) {
+    if(text)setNarration(text);
+    publishTextModeOutput('checkpoint',text||'',{checkpoint:checkpointPublic(stop,extra)},false);
+}
+function checkpointGuardSpeech(guard,text) {
+    addChatMessage('left',guard.name||'The guard',text,{mode:'spoken'});
+    if(typeof rememberNPCConversationLine==='function')rememberNPCConversationLine(guard,'npc',text,'talk');
+    if(!textModeState.enabled)publishTextModeOutput('dialogue',text,{speaker:guard.name||'The guard',speakerRole:'npc',speakerInfo:{species:String(guard.species||''),gender:String(guard.gender||''),voiceKey:'v'+textModeObjectGen(guard)}});
+}
+function guardCheckpointFrame(stop,guard) {
+    const evidence=guardCheckpointEvidence(stop);
+    const p=G.player,r=G.activeRoom,map=G.roomMap,memory=guard.memory,creatures=r.creatures,mode=G.activeNPCMode,turn=getCurrentStoryTurn(),epoch=textModeState.epoch;
+    const playerItems=choiceEntitySnapshot(p),guardItems=choiceEntitySnapshot(guard),coins=getCoinValue(p),guardCoins=getCoinValue(guard),hostility=guard.hostility,favor=memory.favorability;
+    const exits=r.exits,exitStamp=JSON.stringify(exits),origin=map[stop.originCoords],ledger=G.commitments,job=p.jobs&&p.jobs.active,session=memory.conversationState,sessionStamp=JSON.stringify(session);
+    const businessStamp=function(){return JSON.stringify([p.jobs&&p.jobs.active,getTownStanding(stop.tier),(G.commitments||[]).filter(function(c){return c&&c.state==='accepted'&&c.zone===stop.zone;})]);},proofStamp=businessStamp();
+    const frame={player:p,ownsScene:function(){return p===G.player&&r===G.activeRoom&&map===G.roomMap&&guard===G.activeNPC&&G.activeNPCMode==='talk'&&epoch===textModeState.epoch;},stopStamp:JSON.stringify(stop),evidence:evidence,current:function(afterTurn){return p===G.player&&r===G.activeRoom&&map===G.roomMap&&map[r.coords]===r&&creatures===r.creatures&&guard.memory===memory&&
+        epoch===textModeState.epoch&&G.activeNPCMode===mode&&(!sharedChoiceState.menu||sharedChoiceState.menu===frame.menu)&&getCurrentStoryTurn()===turn+(afterTurn?1:0)&&!guardCheckpointBlock(stop,guard)&&JSON.stringify(stop)===frame.stopStamp&&frame.evidence===guardCheckpointEvidence(stop)&&
+        r.exits===exits&&JSON.stringify(exits)===exitStamp&&map[stop.originCoords]===origin&&G.commitments===ledger&&(p.jobs&&p.jobs.active)===job&&businessStamp()===proofStamp&&memory.conversationState===session&&JSON.stringify(session)===sessionStamp&&
+        playerItems()&&guardItems()&&getCoinValue(p)===coins&&getCoinValue(guard)===guardCoins&&guard.hostility===hostility&&memory.favorability===favor;}};
+    return frame;
+}
+function admitGuardCheckpoint(stop,guard,paid,reason,roll) {
+    const p=G.player,now=getCurrentStoryTurn(),expires=now+(typeof STORY_DAY_TURNS==='number'?STORY_DAY_TURNS:54);
+    const passes=(Array.isArray(p.guardCheckpointPasses)?p.guardCheckpointPasses:[]).filter(function(row){return row&&Number.isFinite(row.expiresTurn)&&row.expiresTurn>now&&!(row.zone===stop.zone&&row.tier===stop.tier);}).slice(-11);
+    passes.push({zone:stop.zone,tier:stop.tier,expiresTurn:expires});p.guardCheckpointPasses=passes;
+    delete p.guardCheckpoint;
+    checkpointOutput(stop,paid?'You pay the two-coin entry toll. The guard records your day pass and steps aside.':'The guard grants you a day pass and steps aside.',{stage:'result',admitted:true,paid:paid,turns:roll?1:0,waiver:reason||'',expiresInTurns:expires-now,roll:roll||null,commands:[],canPay:false,canAppeal:false});
+    checkpointGuardSpeech(guard,'You may enter. Your pass is valid here for one day.');
+    renderStats();renderChatOptions(guard);saveGameState();
+    return {status:'completed',outputPublished:true};
+}
+function performGuardCheckpointAction(stop,guard,action,frame) {
+    if(!frame||!frame.current(false))return sharedChoiceResult('blocked','That checkpoint choice changed. Review the guard’s current terms.');
+    if(action==='back'){
+        const room=G.activeRoom,dir=Object.keys(room.exits||{}).find(function(d){return room.exits[d]===stop.originCoords;});
+        if(!dir)return sharedChoiceResult('blocked','The route back is no longer available.');
+        disengageFromNPC('You turn back from the checkpoint.');movePlayer(dir);
+        return {status:G.activeRoom!==room?'completed':'blocked',outputPublished:true};
+    }
+    if(['trade','work','visit'].includes(action)){
+        stop.business=action;stop.stage='toll';
+        const said=frame.spoken||(action==='trade'?'I am here to trade.':action==='work'?'I am looking for work.':'I am visiting and passing through.');
+        addPlayerChatLine(said);
+        if(typeof rememberNPCConversationLine==='function')rememberNPCConversationLine(guard,'player',said,'talk');
+        checkpointGuardSpeech(guard,'That is lawful business. Entry costs two coins for a day pass. If you have an accepted local task or employment, I can verify it and waive the toll.');
+        checkpointOutput(stop,'',{stage:'terms'});
+    }else if(action==='official'){
+        const proof=guardCheckpointEvidence(stop);
+        if(proof){stop.business='official';return admitGuardCheckpoint(stop,guard,0,proof);}
+        checkpointGuardSpeech(guard,'I cannot verify any local employment, accepted task or standing for you. State your business and pay the visitor toll, or turn back.');
+    }else if(action==='pay'){
+        if(!stop.business||!hasEnoughCoins(G.player,GUARD_CHECKPOINT_TOLL))return sharedChoiceResult('blocked','Explain your business first and have two coins ready for the entry toll.');
+        adjustCoins(G.player,-GUARD_CHECKPOINT_TOLL);adjustCoins(guard,GUARD_CHECKPOINT_TOLL);
+        return admitGuardCheckpoint(stop,guard,GUARD_CHECKPOINT_TOLL,'');
+    }else if(action==='appeal'){
+        if(!stop.business||stop.appealed)return sharedChoiceResult('blocked','State your business first. You may ask for a hardship waiver only once during this stop.');
+        stop.appealed=true;frame.stopStamp=JSON.stringify(stop);
+        advanceStoryTurn(1);
+        if(!frame.current(true)){
+            if(G.player===frame.player)saveGameState();
+            if(frame.ownsScene()&&!sharedChoiceState.menu&&activeGuardCheckpoint()===stop&&!guardCheckpointBlock(stop,guard)){markTextModeUrgent('checkpoint-interrupted');setNarration('The checkpoint discussion changes after one spent turn. No toll is paid and entry remains unresolved.');renderGuardCheckpointMenu(guard);}
+            publishTextModeOutput('checkpoint','The checkpoint discussion changed after one spent turn. No toll was paid and no entry permission was granted.',{systemOnly:true,checkpoint:{stage:'interrupted',turns:1,paid:0,admitted:false}},false);
+            return {status:'interrupted',outputPublished:true};
+        }
+        const dc=12+Math.floor(Math.max(0,guard.hostility||0)/20),check=rollStatCheck(G.player,'charisma',dc),roll={stat:'charisma',dc:dc,die:check.roll,bonus:check.bonus,total:check.total,success:!!check.success};
+        if(check.success)return admitGuardCheckpoint(stop,guard,0,'hardship',roll);
+        stop.stage='denied';checkpointGuardSpeech(guard,'I cannot waive the toll. Pay the two coins if you wish to enter, or turn back.');
+        checkpointOutput(stop,'The guard refuses your hardship appeal. Onward passage remains closed.',{stage:'result',turns:1,paid:0,roll:roll});
+    }else if(action==='refuse'){
+        stop.stage='denied';checkpointGuardSpeech(guard,'Then you may not go farther. Explain your business and settle the toll, or go back the way you came.');
+        checkpointOutput(stop,'The guard denies you entry until the checkpoint is settled.',{stage:'result',paid:0});
+    }else return sharedChoiceResult('blocked','Choose one of the guard’s current checkpoint replies.');
+    renderGuardCheckpointMenu(guard);saveGameState();
+    return {status:'needs_input',outputPublished:true};
+}
+function renderGuardCheckpointMenu(guard) {
+    const stop=activeGuardCheckpoint(),blocked=guardCheckpointBlock(stop,guard);
+    if(blocked)return sharedChoiceResult('blocked',blocked);
+    const el=document.getElementById('chatOptionsEl');if(!el)return {status:'blocked'};
+    el.innerHTML='';
+    const title=stop.stage==='business'?'State your business at the checkpoint. Visitor entry costs two coins for one day.':stop.stage==='toll'?'Your business is accepted. Settle the two-coin day toll or request a waiver.':'Entry is denied. Resolve the checkpoint or turn back.';
+    const menu=beginSharedChoiceMenu('guard-checkpoint',guard,title,function(){return renderGuardCheckpointMenu(guard);}),baseValid=menu.valid,frame=guardCheckpointFrame(stop,guard);
+    frame.menu=menu;menu.valid=function(){return baseValid()&&frame.current(false);};menu.publicData={checkpoint:checkpointPublic(stop)};menu.checkpointFrame=frame;
+    const prompt=document.createElement('div');prompt.className='checkpoint-prompt';prompt.style.cssText='flex:1 1 100%;padding:6px;white-space:pre-wrap;';prompt.textContent=title;el.appendChild(prompt);
+    const add=function(action,label,reason){el.appendChild(createSharedChoiceButton(menu,label,function(){return performGuardCheckpointAction(stop,guard,action,frame);},{disabled:!!reason,title:reason||'',textChoice:{action:action}}));};
+    if(stop.stage!=='toll'){
+        add('trade','I am here to trade');add('work','I am looking for work');add('visit','I am visiting or passing through');
+    }
+    add('official','Verify my local business and waive the toll');
+    if(stop.business){add('pay','Pay the entry toll (2 coins)',hasEnoughCoins(G.player,2)?'':'You need two coins.');if(!stop.appealed)add('appeal','Ask for a hardship waiver (Charisma check, 1 turn)');}
+    if(stop.stage!=='denied')add('refuse','Refuse to explain or pay');
+    add('back','Turn back');
+    publishSharedChoiceMenu(menu,el);textModeState.paused=true;
+    return {status:'needs_input',outputPublished:true};
+}
+function openGuardCheckpointConversation(stop,spoken) {
+    if(!stop||activeGuardCheckpoint()!==stop)return {status:'blocked'};
+    if(G.player.dead||G.player.hp<=0||G.player.unconscious||G.player._dying||G.player._collapsing)return sharedChoiceResult('blocked','You cannot answer the checkpoint while incapacitated.');
+    const guard=(G.activeRoom.creatures||[]).find(function(n){return n.id===stop.guardId;});
+    if(G.activeNPC&&G.activeNPC!==guard||G.combatEncounter||G.activeItemModal||G.activeObject||hasPendingPartyLoot()||textModeState.pending||textModeState.dialogue||sharedChoiceState.menu&&sharedChoiceState.menu.kind!=='guard-checkpoint')return sharedChoiceResult('blocked','The checkpoint is still closed. Finish the current interaction before speaking with its guard.');
+    if(getEffectiveBounty(stop.zone)>0){checkGuardConfrontation(G.activeRoom);return {status:'needs_input',outputPublished:true};}
+    if(spoken)markTextModeUrgent('guard-checkpoint');
+    if(!G.activeNPC)selectNPC(guard,{conversation:true,deferChoices:true,narration:(guard.name||'The guard')+' steps into your path at the checkpoint.'});
+    if(G.activeNPC!==guard)return {status:'blocked'};
+    G.activeNPCMode='talk';guard.memory.metPlayer=true;markNPCInitiatedGreeting(guard,'greet-checkpoint');
+    if(typeof recordNPCEntityEncounter==='function')recordNPCEntityEncounter(guard,G.player,{encounterKey:'talk:'+ensureNPCConversationState(guard).sessionNumber});
+    if(!textModeState.enabled&&spoken)publishTextModeOutput('narration',(guard.name||'The guard')+' steps into your path at the checkpoint.',{speakerRole:'narrator',source:'engine'});
+    if(spoken)checkpointGuardSpeech(guard,spoken);
+    return renderGuardCheckpointMenu(guard);
+}
+function guardCheckpointMoveBlock(room,dir) {
+    const stop=activeGuardCheckpoint();
+    if(!stop||room.exits&&room.exits[dir]===stop.originCoords)return false;
+    if(G.combatEncounter||G.activeNPCMode==='combat')return false; // Native combat escape owns its consequences.
+    openGuardCheckpointConversation(stop);
+    return true;
+}
+function checkpointHelp(show) {
+    const stop=activeGuardCheckpoint();
+    if(show){const data=stop?checkpointPublic(stop):{stage:'availability',active:false,commands:[]};return textModeResult('completed',stop?'The checkpoint is unresolved. State your business, settle the toll, or turn back.':'There is no unresolved checkpoint here.',{checkpoint:data,commands:data.commands});}
+    return textModeResult('completed','Use checkpoint for the current replies. State business trade, work or visit explains your purpose; state business official checks real local employment, accepted tasks or standing for a free day pass. Pay toll pays two coins after your business is accepted. Ask toll waiver makes one Charisma check for one turn. Refuse entry questions denies onward passage; turn back uses the real return exit. A day pass lasts 54 story turns. Responses and payment are separate decisions. Examples: state business trade; pay toll. Use show checkpoint for current availability.');
+}
+function executeTextCheckpoint(args) {
+    const stop=activeGuardCheckpoint();if(!stop)return sharedChoiceResult('blocked','There is no unresolved checkpoint here.');
+    let menu=sharedChoiceState.menu;
+    if(!menu){const opened=openGuardCheckpointConversation(stop);menu=sharedChoiceState.menu;if(!menu||menu.kind!=='guard-checkpoint')return opened;}
+    if(menu.kind!=='guard-checkpoint')return sharedChoiceResult('blocked','Finish the current choice before reopening the checkpoint.');
+    if(!menu.valid())return sharedChoiceResult('blocked','The checkpoint choices changed. Use options to review the current terms.');
+    if(!args||args.action==='menu')return showSharedChoiceMenu(menu);
+    const choice=menu.options.find(function(row){return row.meta.action===args.action;});
+    return choice?(textModeState.enabled&&!textModeState.busy?textRunSharedChoice(menu,choice):runSharedChoice(menu,choice)):sharedChoiceResult('blocked','That checkpoint answer is not available yet.');
+}
+function guardCheckpointSpokenReply(npc,raw) {
+    const stop=activeGuardCheckpoint(),menu=sharedChoiceState.menu;
+    if(!stop||!menu||menu.kind!=='guard-checkpoint'||menu.npc!==npc||!menu.valid())return sharedChoiceResult('blocked','Review the guard’s current checkpoint choices first.');
+    const text=String(raw||'').trim().slice(0,240),key=text.toLowerCase();
+    const action=/\bofficial\b|\baccepted (?:task|job)\b/.test(key)?'official':/\btrade\b|\bbuy\b|\bsell\b/.test(key)?'trade':/\bwork\b|\bemployment\b|\bjob\b/.test(key)?'work':/\bvisit(?:ing)?\b|\bpassing through\b|\btravel(?:ing|ling)?\b/.test(key)?'visit':'';
+    if(action&&menu.options.some(function(row){return row.meta.action===action;})){menu.checkpointFrame.spoken=text;return executeTextCheckpoint({action:action});}
+    addPlayerChatLine(text);checkpointGuardSpeech(npc,'Please use one of my checkpoint replies to explain your business, settle the toll, or turn back.');
+    return {status:'needs_input',outputPublished:true};
+}
+async function textCheckpointMenuInput(menu,action,input) {
+    if(splitTextCommands(input||'').parts.length>1)return textModeResult('needs_input','Answer one checkpoint decision at a time. Later commands stay paused.',{systemOnly:true});
+    if(!menu.valid())return sharedChoiceResult('blocked','Those checkpoint terms changed. Use options to review them.');
+    if(action&&/^(leave|back|cancel)$/.test(action.verb)){
+        if(action.verb==='cancel'){textModeState.queue=[];textModeState.pending=null;textModeState.epoch++;textModeState.paused=true;}
+        clearSharedChoiceMenu(menu);disengageFromNPC('You step away from the guard. Onward passage is still closed.');return {status:'completed'};
+    }
+    if(!action||action.verb==='say')return guardCheckpointSpokenReply(menu.npc,action?action.args.text:input);
+    if(action&&action.verb==='checkpoint')return executeTextCheckpoint(action.args);
+    return showSharedChoiceMenu(menu);
+}
 
 const GUARD_CHECKPOINT_CHALLENGE_LINES = [
     "\"Halt. State your business here.\"",
@@ -24033,7 +24252,7 @@ function findCheckpointGuard(room) {
     if (!room || !Array.isArray(room.creatures)) return null;
     return room.creatures.find(npc =>
         npc && npc.isHumanoid && !(npc.hp <= 0) &&
-        !npc.unconscious && !npc.hidden && !npc.isHidden && !npc._inSkirmish &&
+        !npc.dead && !npc.unconscious && !npc.hidden && !npc.isHidden && !npc._inSkirmish && !npc._inParty && !npc.bound && !npc._prisoner && !(npc.currentState && npc.currentState.sleeping) &&
         GUARD_CHECKPOINT_ROLES.includes(npc.role)
     ) || null;
 }
@@ -24107,7 +24326,7 @@ function evaluateGuardCheckpoint(originRoom, newRoom) {
         return { block: true, followUp: null };
     }
 
-    if (favor >= GUARD_CHECKPOINT_FAVOR_NOD) {
+    if (favor >= GUARD_CHECKPOINT_FAVOR_NOD || guardCheckpointPass(newRoom)) {
         return {
             block: false,
             followUp: { text: `${guardName} ${rand(GUARD_CHECKPOINT_NOD_LINES)}`, selectGuard: false, guard }
@@ -24117,7 +24336,7 @@ function evaluateGuardCheckpoint(originRoom, newRoom) {
     const challenge = rand(GUARD_CHECKPOINT_CHALLENGE_LINES).replace("{ZONE}", zoneLabel);
     return {
         block: false,
-        followUp: { text: `${guardName} steps forward. ${challenge}`, spoken: challenge, selectGuard: true, guard }
+        followUp: { text: `${guardName} steps forward.`, spoken: challenge.replace(/^"|"$/g,''), selectGuard: true, guard, originCoords:originRoom.coords }
     };
 }
 
@@ -24215,21 +24434,10 @@ function applyGuardCheckpointFollowUp(followUp) {
     if (!followUp || !followUp.text) return;
 
     if (followUp.selectGuard && followUp.guard && typeof selectNPC === "function") {
-        // Same state selectNPC would set from a manual click - puts the
-        // guard's challenge front and center so the player's next chat
-        // input is already aimed at them, same as clicking the guard would.
-        selectNPC(followUp.guard);
-        // The guard spoke first: the challenge stands in for the session
-        // greeting, so the player answers it instead of picking
-        // "You greet them" first. Keep the spoken line in the NPC's
-        // memory so the AI knows what it is replying to.
-        if (G.activeNPC === followUp.guard) {
-            markNPCInitiatedGreeting(followUp.guard, "greet-checkpoint");
-            if (followUp.spoken && typeof rememberNPCConversationLine === "function") {
-                rememberNPCConversationLine(followUp.guard, "npc", followUp.spoken, "talk");
-            }
-        }
-        setNarration(followUp.text);
+        const room=G.activeRoom,guard=followUp.guard;
+        if(!G.player||!room||!(room.creatures||[]).includes(guard)||findCheckpointGuard({creatures:[guard]})!==guard||!G.roomMap[followUp.originCoords])return;
+        G.player.guardCheckpoint={roomCoords:room.coords,originCoords:followUp.originCoords,guardId:guard.id,zone:room.zone,tier:getPortalTier(),stage:'business',business:'',appealed:false};
+        openGuardCheckpointConversation(G.player.guardCheckpoint,followUp.spoken||'Halt. State your business here.');
         return;
     }
 
@@ -25029,6 +25237,8 @@ function movePlayer(direction) {
     const dir = normalizeDirection(direction);
     const room = G.activeRoom;
     if (!room || !dir) return;
+    if(typeof guardCheckpointMoveBlock==='function'&&guardCheckpointMoveBlock(room,dir))return;
+    const departingCheckpoint=typeof activeGuardCheckpoint==='function'?activeGuardCheckpoint():null;
     if (typeof getDoorObstruction === "function" && getDoorObstruction(room, dir)) {
         worldObjectResult("blocked", "A brace holds the doorway shut. You cannot pass through it.", { doorObstruction: { direction: dir, blocked: true } });
         if (!textModeState.enabled) openWorldToolMenu((typeof COLLAPSE_DIR_WORDS !== "undefined" && COLLAPSE_DIR_WORDS[dir] || dir) + " door");
@@ -25153,7 +25363,7 @@ function movePlayer(direction) {
     // Guard checkpoint: only relevant on an actual zone crossing. A denial
     // or an ambush fully finalizes its own narration/stats/save and blocks
     // the move outright - the player never left `room`.
-    const checkpoint = (typeof evaluateGuardCheckpoint === "function")
+    const checkpoint = departingCheckpoint && newRoom.coords===departingCheckpoint.originCoords ? {block:false,followUp:null} : (typeof evaluateGuardCheckpoint === "function")
         ? evaluateGuardCheckpoint(room, newRoom)
         : { block: false, followUp: null };
     if (checkpoint.block) return;
@@ -25177,6 +25387,7 @@ function movePlayer(direction) {
     G.player.coords = newCoords;
     G.player.moveSeq = (G.player.moveSeq || 0) + 1; // room changes, for "talked here a moment ago"
     G.activeRoom = newRoom;
+    if(departingCheckpoint&&G.player.guardCheckpoint===departingCheckpoint)delete G.player.guardCheckpoint;
     if (typeof applyNPCSpeciesReactionToRoom === "function") applyNPCSpeciesReactionToRoom(newRoom);   // species wariness/kinship before any ambush check
     G.activeNPC  = null;
     G.activeNPCMode = null;
@@ -27451,13 +27662,13 @@ function stepNPCSocialVisit(npc,room) {
 }
 
 
-// NPC Life W5: one optional same-room approach. No movement, transfer or
-// forced dialogue; the existing talk/task actions own the player's reply.
+// NPC Life W5: one same-room approach, without movement or automatic transfers.
+// Help requests open ordinary Talk; existing task actions own any agreement.
 let activeRoomInitiativePending=null;
 const activeRoomInitiativeDelivered=new WeakMap();
 function activeRoomInitiativeBlocked(foreground) {
     const p=G.player,r=G.activeRoom;
-    if(!p||!r||p.dead||p.hp<=0||p.unconscious||p._collapsing||p._dying||p.fatigue&&p.fatigue.sleeping)return true;
+    if(!p||!r||p.dead||p.hp<=0||p.unconscious||p._collapsing||p._dying||p.carrying||p.fatigue&&p.fatigue.sleeping)return true;
     if(G.activeNPC||G.activeObject||G.activeItemModal||G.combatEncounter||G.activeNPCMode==='combat'||isRoomCollapsed(r)||roomHasActiveHostile(r)||isPlayerJailed()||isPlayerHidden()||hasPendingPartyLoot())return true;
     if(sharedChoiceState.menu&&sharedChoiceState.menu.valid()||textModeState.pending||textModeState.dialogue)return true;
     if(typeof ttsListen!=='undefined'&&ttsListen.draft)return true;
@@ -27533,14 +27744,25 @@ function flushActiveRoomInitiative() {
     npcInitiativeSeen(npc)['active-'+agenda.reason]=now;npc._lastActiveInitiativeTurn=now;npc._initiativeVisitKey=npcInitiativeVisitKey(npc);
     if(agenda.newsId)npc._initiativeNewsId=agenda.newsId;spendNPCInitiative();npc.memory.metPlayer=true;
     activeRoomInitiativeDelivered.set(npc,{player:G.player,map:G.roomMap,room:G.activeRoom,turn:now,reason:agenda.reason,memory:npc.memory});
-    const line=(agenda.reason==='warning'?'They call out. ':'They step closer. ')+agenda.line;
+    const opensRequest=/^(request|offer|commitment)$/.test(agenda.reason);
+    const narration=label+(agenda.reason==='warning'?' calls out to you.':' steps closer to speak with you.');
     if(agenda.urgent)markTextModeUrgent('an NPC warns of immediate danger');
-    addChatMessage('left',speaker,line,{mode:'auto'});
     if(typeof rememberNPCConversationLine==='function')rememberNPCConversationLine(npc,'npc',agenda.line,'talk');
     if(typeof recordNPCEntityEncounter==='function')recordNPCEntityEncounter(npc,G.player,{encounterKey:'initiative:'+now});
-    publishTextModeOutput('npc-initiative',line,{source:'engine',speaker:speaker,speakerRole:'npc',speakerInfo:{species:String(npc.species||''),gender:String(npc.gender||''),voiceKey:'v'+textModeObjectGen(npc)},
+    // Select first: normal selection clears old bubbles and resets the session.
+    // Its opener consumes the initiative greeting without speaking it twice.
+    if(opensRequest)selectNPC(npc,{conversation:true,narration:narration});
+    else setNarration(narration);
+    if(!textModeState.enabled)publishTextModeOutput('narration',narration,{source:'engine',speaker:'Narrator',speakerRole:'narrator'});
+    addChatMessage('left',speaker,agenda.line,{mode:'spoken'});
+    publishTextModeOutput('npc-initiative',agenda.line,{source:'engine',speaker:speaker,speakerRole:'npc',speakerInfo:{species:String(npc.species||''),gender:String(npc.gender||''),voiceKey:'v'+textModeObjectGen(npc)},
         initiative:{speaker:label,reason:agenda.reason,action:agenda.reason==='warning'?'warn':'approach',optional:true,responseCommand:'talk to '+JSON.stringify(label),
+            conversationOpened:opensRequest&&G.activeNPC===npc&&G.activeNPCMode==='talk',requestCommand:opensRequest?'tasks':'',
             requestTitle:agenda.requestTitle||'',commitment:agenda.commitment?publicNPCCommitment(agenda.commitment):null}},textModeState.enabled?false:undefined);
+    if(opensRequest&&textModeState.enabled&&G.activeNPC===npc&&G.activeNPCMode==='talk'){
+        textModeState.paused=true;
+        textModeListOptions();
+    }
     return true;
 }
 function consumeNPCInitiativeGreeting(npc) {
@@ -30407,6 +30629,23 @@ function openNPCCommitments(npc) {
     ensureNPCCommitments().filter(function(c){return c.state==="accepted" && (c.giverId===npc.id || c.personId===npc.id);}).forEach(function(c){rows.push({label:"Settle: "+c.title,action:"deliver",run:function(){return performNPCCommitment("deliver",c,npc);}});});
     if(!rows.length) return commitmentOutput("completed","They have no new task to offer right now.");
     return commitmentMenu(npc,"Requests from "+commitmentLabel(npc)+(needs[0]&&needs[0].voice?"\n"+needs[0].voice:""),rows);
+}
+// Keep real requests discoverable in the main conversation, including after
+// leaving and returning. Opening a review is free; only its shared task choices
+// can accept, transfer or settle anything.
+function withNPCRequestOptions(npc,options) {
+    if(!npc||npc.guide||npc.isGuide||!npc.memory||!npc.memory.metPlayer||commitmentSceneBlock(npc)||sharedChoiceState.menu||textModeState.pending||textModeState.dialogue)return options;
+    const needs=ensureNPCNeeds(npc),ledger=ensureNPCCommitments();
+    const records=function(){return ledger.filter(function(c){return c.state==='offered'&&c.giverId===npc.id||c.state==='accepted'&&(c.giverId===npc.id||c.personId===npc.id);});};
+    const active=records();
+    if(!needs.some(function(n){return n.state==='offered';})&&!active.length)return options;
+    const player=G.player,map=G.roomMap,room=G.activeRoom,memory=npc.memory,social=npc.social,mode=G.activeNPCMode,turn=getCurrentStoryTurn(),epoch=textModeState.epoch;
+    const session=ensureNPCConversationState(npc),sessionNumber=session.sessionNumber,interaction=session.interactionCount,stamp=JSON.stringify([needs,active]);
+    return [{id:'npc-requests',kind:'topic',intent:'help',label:active.length?'Continue their request':'Ask what they need',action:'requests',
+        requestChoiceCurrent:function(){return G.player===player&&G.roomMap===map&&G.activeRoom===room&&G.activeNPC===npc&&G.activeNPCMode===mode&&npc.memory===memory&&npc.social===social&&social.need===needs&&G.commitments===ledger&&
+            getCurrentStoryTurn()===turn&&textModeState.epoch===epoch&&memory.conversationState===session&&session.sessionNumber===sessionNumber&&session.interactionCount===interaction&&
+            !sharedChoiceState.menu&&!textModeState.pending&&!textModeState.dialogue&&!commitmentSceneBlock(npc)&&JSON.stringify([needs,records()])===stamp;}
+    }].concat(options);
 }
 function reviewNPCCommitment(npc,need,playerMade) {
     const block=commitmentSceneBlock(npc);if(block) return commitmentOutput("blocked",block);
@@ -36232,7 +36471,8 @@ function getChatOptions(npc, expanded = false) {
             // Use AI off: nobody can answer free text, so drop "Say something...".
             const communicated=typeof withNPCCommunicationOptions==='function'?withNPCCommunicationOptions(npc,options):options;
             const withReplies = withCannedReplyOptions(npc, typeof withCompanionTalkOptions==='function'?withCompanionTalkOptions(npc, communicated):communicated);
-            const ready = normalizeConversationActions(useAIEnabled() ? withReplies : withReplies.filter(function (o) { return !(o && o.id === "respond-free"); }));
+            const withRequests = typeof withNPCRequestOptions === 'function' ? withNPCRequestOptions(npc, withReplies) : withReplies;
+            const ready = normalizeConversationActions(useAIEnabled() ? withRequests : withRequests.filter(function (o) { return !(o && o.id === "respond-free"); }));
             return expanded ? ready : groupConversationActions(npc, ready);
         }
     }
@@ -36266,6 +36506,7 @@ function normalizeConversationActions(options) {
 }
 
 function conversationActionGroup(option) {
+    if(option&&option.action==='requests')return '';
     if(option&&option.action==='communication')return '';
     if(option&&(option.companionRoadQuestion||option.companionTalkControl))return '';
     if (!option || option.action === "respond" || option.action === "disengage" || option.action === "conversation-group") return "";
@@ -37587,6 +37828,10 @@ function resolveOddSocialEffort(npc, verdict) {
 
 function submitTypedResponse(npc, raw, options) {
     if (!npc || !raw) return;
+    if(typeof activeGuardCheckpoint==='function'&&activeGuardCheckpoint()&&activeGuardCheckpoint().guardId===npc.id){
+        if(options&&options.interaction||String(raw).trim().charAt(0)==='*')return sharedChoiceResult('blocked','Answer the checkpoint with spoken business or one of the guard’s replies.');
+        return guardCheckpointSpokenReply(npc,raw);
+    }
     // Odd social acts get one AI classification first (see AI judge for odd acts).
     if (options && options.interaction && !options.oddJudged && (!options.interaction.family || options.interaction.family === "expression") &&
         typeof oddActNeedsJudge === "function" && oddActNeedsJudge(npc, options.interaction.action)) {
@@ -46578,7 +46823,7 @@ function maybeNPCOpeningBark(npc) {
     if (typeof rememberNPCConversationLine === "function") rememberNPCConversationLine(npc, "npc", line, "talk");
 }
 
-function startNPCConversation(npc) {
+function startNPCConversation(npc, options = {}) {
     if (!canConverseWithNPC(npc)) {
         setNarration(`${npc.name} does not seem capable of conversation.`);
         renderNPCActionMenu(npc);
@@ -46599,11 +46844,13 @@ function startNPCConversation(npc) {
         npc.guide.lastTurn = nowTurn;
         npc.guide.conversationRun = (npc.guide.conversationRun || 0) + 1;
     }
-    renderChatOptions(npc, getChatOptions(npc));
+    if (!options.deferChoices) renderChatOptions(npc, getChatOptions(npc));
     // A bound captive answers from inside the ropes; say so, so the framing
     // (and the player) never forgets what they are looking at.
     const boundNote = getNPCBoundNote(npc);
-    if (boundNote) {
+    if (options.narration) {
+        setNarration(options.narration);
+    } else if (boundNote) {
         setNarration(`You crouch to speak with ${npc.name}, ${boundNote}. They are your captive, and they know it.`);
     } else {
         setNarration(`You prepare to speak with ${npc.name}.`);
@@ -47370,7 +47617,9 @@ async function travelThroughWaygate(targetTier) {
         forge: G.zoneForgeState,
         count: player.townPortalCount,
         currentTier: player.currentTownTier,
-        coords: player.coords
+        coords: player.coords,
+        renown: player.renown,
+        bounties: player.bounties
     };
     let plannedZone = null;
     let destEntry = null;
@@ -47394,6 +47643,11 @@ async function travelThroughWaygate(targetTier) {
 
         await performLoadingStep(isNew ? "Leaving the old town behind..." : "Leaving this town as it stands...", 15, () => {
             if (isNew) {
+                // Install local reputation before generation: new guards and
+                // townsfolk must not learn another world's deeds or bounty.
+                player.renown = {};
+                ensureRenownState(player);
+                player.bounties = {};
                 G.roomMap = {};
                 G.zoneBossState = {};
                 G.zoneShrineState = {};
@@ -47429,6 +47683,9 @@ async function travelThroughWaygate(targetTier) {
                 G.zoneBossState = destEntry.boss || {};
                 G.zoneShrineState = destEntry.shrine || {};
                 G.zoneForgeState = destEntry.forge || {};
+                player.renown = destEntry.renown && typeof destEntry.renown === "object" ? destEntry.renown : {};
+                ensureRenownState(player);
+                player.bounties = destEntry.bounties && typeof destEntry.bounties === "object" ? destEntry.bounties : {};
             });
         }
 
@@ -47453,11 +47710,6 @@ async function travelThroughWaygate(targetTier) {
             delete player.knownTeachers;
             const flags = getTravelTeacherState();
             flags.travelTeacher = null;
-            const portalBackstory = getPlayerBackstory();
-            if (portalBackstory && portalBackstory.guide && portalBackstory.guide.state === "arrived") {
-                portalBackstory.guide = { state: "pending" };
-            }
-
             queuePersonasForRoom(startRoom);
         });
     } catch (err) {
@@ -47472,6 +47724,10 @@ async function travelThroughWaygate(targetTier) {
         if (typeof oldState.currentTier === "number") player.currentTownTier = oldState.currentTier;
         else delete player.currentTownTier;
         player.coords = oldState.coords;
+        if (oldState.renown === undefined) delete player.renown;
+        else player.renown = oldState.renown;
+        if (oldState.bounties === undefined) delete player.bounties;
+        else player.bounties = oldState.bounties;
         if (isNew) adjustCoins(player, cost);
         G.townPortalBusy = false;
         hideSpinner();
@@ -47491,7 +47747,9 @@ async function travelThroughWaygate(targetTier) {
         roomMap: oldState.roomMap,
         boss: oldState.boss,
         shrine: oldState.shrine,
-        forge: oldState.forge
+        forge: oldState.forge,
+        renown: oldState.renown || { zones: {}, global: { fame: 0, infamy: 0 }, deeds: [] },
+        bounties: oldState.bounties || {}
     };
     if (!isNew) delete G.portalTowns[arrivedTier];
     syncPortalChamberWaygates(G.activeRoom);
@@ -56832,6 +57090,13 @@ function setChatOptionsDisabled(disabled) {
 
 function renderChatOptions(npc, options = null) {
     if (typeof textModeDialogueBusy === "function") textModeDialogueBusy(false);
+    if(typeof activeGuardCheckpoint==='function'){
+        const checkpoint=activeGuardCheckpoint();
+        if(checkpoint&&npc&&checkpoint.guardId===npc.id&&G.activeNPC===npc&&G.activeNPCMode==='talk'&&!guardCheckpointBlock(checkpoint,npc)){
+            if(sharedChoiceState.menu&&sharedChoiceState.menu.kind!=='guard-checkpoint')return;
+            return renderGuardCheckpointMenu(npc);
+        }
+    }
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
     chatLiveNPC = null; // showing the menu ends a live chat
@@ -56883,7 +57148,7 @@ function renderChatOptions(npc, options = null) {
             btn.textContent = CHAT_KIND_GLYPHS[kind] + option.label;
             const player = G.player, room = G.activeRoom, mode = G.activeNPCMode;
             btn.onclick = () => {
-                if ((option.service || option.action==='communication' || option.companionTalkControl || option.companionRoadQuestion || /^(conversation-group|contact-hug)$/.test(option.action)) && (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== mode || !el.contains(btn))) return sharedChoiceResult("blocked", "That action choice is no longer available.");
+                if ((option.service || option.action==='requests' || option.action==='communication' || option.companionTalkControl || option.companionRoadQuestion || /^(conversation-group|contact-hug)$/.test(option.action)) && (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== mode || !el.contains(btn))) return sharedChoiceResult("blocked", "That action choice is no longer available.");
                 return chooseChatOption(option);
             };
             el.appendChild(btn);
@@ -56908,8 +57173,9 @@ function advanceConversationTurn() {
 
 function chooseChatOption(option) {
     const choice = typeof option === "string" ? { text: option } : option;
-    if (!choice || (!choice.text && !choice.action) || !canConverseWithNPC(G.activeNPC)) return;
     const npc = G.activeNPC;
+    if(choice&&choice.action==='requests')return choice.requestChoiceCurrent&&choice.requestChoiceCurrent()?openNPCCommitments(npc):sharedChoiceResult('blocked','That request choice changed. Ask for current options.');
+    if (!choice || (!choice.text && !choice.action) || !canConverseWithNPC(npc)) return;
     if(choice.action==='communication')return performNPCCommunication(npc,choice.communication,choice.communicationCapture);
     if(choice.action==='companion-talk')return requestCompanionTalkMode(npc,choice.companionTalkMode,choice.companionTalkCapture);
     if(choice.action==='companion-road-answer')return executeCompanionRoadAnswer(npc,choice);
@@ -61255,7 +61521,7 @@ function recordDeed(room, kind, lines, opts) {
         if (fame > 0 && getRenownTier(rec.fame) > getRenownTier(before.fame)) lines.push("You are now " + RENOWN_FAME_WORDS[getRenownTier(rec.fame)] + " in " + room.zone + ".");
         if (infamy > 0 && getRenownTier(rec.infamy) > getRenownTier(before.infamy)) lines.push("You are now " + RENOWN_INFAMY_WORDS[getRenownTier(rec.infamy)] + " in " + room.zone + ".");
     }
-    const deed = { id: kind + "-" + now + "-" + r.deeds.length, kind: kind, zone: room.zone, turn: now,
+    const deed = { id: kind + "-t" + (typeof getPortalTier === "function" ? getPortalTier() : 0) + "-" + now + "-" + r.deeds.length, kind: kind, zone: room.zone, turn: now,
         witnessed: Math.max(1, seen), spread: 0, fame: fame, infamy: infamy, text: typeof opts.text === "string" ? opts.text : def.text };
     r.deeds.push(deed);
     while (r.deeds.length > RENOWN_DEED_LOG_CAP) r.deeds.shift();
@@ -62033,12 +62299,19 @@ const DEITY_LENS_CHANCE_CAP = 0.15;    // ...by at most this much either way
 function getDeityLens(deity) {
     const out = { honoured: 0, scorned: 0, lines: [] };
     const lens = deity && DEITY_DEED_LENS[deity.id];
-    const r = G && G.player && G.player.renown;
-    if (!lens || !r || !Array.isArray(r.deeds)) return out;
+    if (!lens || !G || !G.player) return out;
+    // Local reputation changes at a waygate; a patron still judges the same
+    // person's witnessed deeds. Archived towns supply history, never scores.
+    const ledgers = [G.player.renown].concat(Object.values(G.portalTowns || {}).map(function (town) { return town && town.renown; }));
     const seen = [];
-    r.deeds.forEach(function (d) {
-        const good = lens.honours[d.kind] === 1, bad = lens.scorns[d.kind] === 1;
-        if (good || bad) seen.push({ d: d, good: good });
+    const ids = new Set();
+    ledgers.forEach(function (r) {
+        (r && Array.isArray(r.deeds) ? r.deeds : []).forEach(function (d) {
+            if (!d || ids.has(d.id)) return;
+            ids.add(d.id);
+            const good = lens.honours[d.kind] === 1, bad = lens.scorns[d.kind] === 1;
+            if (good || bad) seen.push({ d: d, good: good });
+        });
     });
     seen.sort(function (a, b) { return (b.d.turn || 0) - (a.d.turn || 0); });
     seen.forEach(function (e) { if (e.good) out.honoured++; else out.scorned++; });
@@ -83288,7 +83561,7 @@ function setupRelationshipDebug() {
 // menu (Talk, Attack, Step away) for anyone who wants it.
 const MARKET_STALL_ROLES = ["Clothier", "Vendor", "Wandering Merchant", "Blacksmith", "Enchanter", "Arcanist", "Reliquarian"];
 
-function selectNPC(npc) {
+function selectNPC(npc, options = {}) {
     if (typeof refreshMerchantGoods === "function") refreshMerchantGoods(npc);
     if (!npc) return;
     repairStaleBodyNPC(npc);
@@ -83391,7 +83664,7 @@ function selectNPC(npc) {
     const observation = typeof getNPCObservationDetail === "function"
         ? getNPCObservationDetail(npc) : "";
     setEngagedRoomHeader(npc);
-    setNarration(buildEngagedNPCLine(npc));
+    if (!options.conversation) setNarration(buildEngagedNPCLine(npc));
     setExitGridVisible(false);
 
     // An encounter flagged active here can only mean the player re-clicked
@@ -83409,6 +83682,8 @@ function selectNPC(npc) {
         // are still in the player's power, not back to ordinary discourse.
         G.activeNPCMode = "captor";
         renderCaptorMenu(npc);
+    } else if (options.conversation === true && canConverseWithNPC(npc)) {
+        startNPCConversation(npc, { narration: options.narration, deferChoices: options.deferChoices });
     } else if (npc.isHumanoid !== false && npc.role && MARKET_STALL_ROLES.includes(npc.role)) {
         // Both of these already handle their own hostility/favor gating and
         // fall back to the normal action menu with a refusal line if the
