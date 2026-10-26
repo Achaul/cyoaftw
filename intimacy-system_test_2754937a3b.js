@@ -12230,8 +12230,13 @@ function buildCaptiveNarrative(npc, act, player) {
     
     const npcName = npc.name || "them";
     const tool = act.tool || "hand";
-    const target = act.target || "body";
+    let target = act.target || "body";
     const verb = act.verb || "touch";
+    
+    // Replace special targets with appropriate body parts for narrative
+    if (target === "npc" || target === "player") {
+        target = "body";
+    }
     
     // Oral penetration on bound captive
     if (target === "mouth" || target === "lips" || act.id.toLowerCase().includes("mouth") || act.id.toLowerCase().includes("oral")) {
@@ -12267,7 +12272,12 @@ function buildSubmissiveNarrative(npc, act, player) {
     
     const npcName = npc.name || "them";
     const tool = act.tool || "hand";
-    const target = act.target || "body";
+    let target = act.target || "body";
+    
+    // Replace special targets with appropriate body parts for narrative
+    if (target === "npc" || target === "player") {
+        target = "body";
+    }
     const verb = act.verb || "touch";
     
     // Oral on submissive
@@ -12305,8 +12315,13 @@ function buildUnconsciousNarrative(npc, act, player) {
     const npcName = npc.name || "them";
     const playerName = player.name || "you";
     const tool = act.tool || "hand";
-    const target = act.target || "body";
+    let target = act.target || "body";
     const verb = act.verb || "touch";
+    
+    // Replace special targets with appropriate body parts for narrative
+    if (target === "npc" || target === "player") {
+        target = "body"; // Use generic "body" for clothing removal actions on self/other
+    }
     
     // Custom narratives for specific actions
     const actId = act.id || "";

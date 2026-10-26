@@ -84997,9 +84997,38 @@ function renderIntimacyActionMenu(npc) {
             positionSelect.style.border = "1px solid #444";
             positionSelect.style.width = "100%";
             
-            // Add all positions
+            // Add all positions, filtering for non-resisting NPCs
             const allPositions = getAllPositionIds();
-            for (const posId of allPositions) {
+            const filteredPositions = allPositions.filter(posId => {
+                const pos = getPosition(posId);
+                if (!pos) return false;
+                
+                // For non-resisting NPCs (unconscious/sleeping/bound):
+                // - Disallow positions where NPC is on top (they can't support themselves)
+                // - Disallow standing positions (they're not capable of standing)
+                if (isNonResisting) {
+                    // NPC on top positions to exclude
+                    const npcOnTopPositions = [
+                        "Cowgirl", "Reverse Cowgirl", "Riding Face", 
+                        "Astride Lap", "Perched", "Sitting in Lap"
+                    ];
+                    
+                    // Standing positions to exclude
+                    const standingPositions = [
+                        "Standing", "Standing From Behind", "Against Wall", 
+                        "Against Wall From Behind", "Bent Over"
+                    ];
+                    
+                    const posLabel = pos.label || posId;
+                    if (npcOnTopPositions.includes(posLabel) || standingPositions.includes(posLabel)) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            for (const posId of filteredPositions) {
                 const pos = getPosition(posId);
                 if (pos) {
                     const option = document.createElement("option");
