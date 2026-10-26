@@ -85316,6 +85316,48 @@ function renderIntimacyActionMenu(npc) {
         console.log(`[DEBUG] Anatomy check - cock: ${npcAnatomy.cock}, penis: ${npcAnatomy.penis}, dick: ${npcAnatomy.dick}`);
         console.log(`[DEBUG] Anatomy check - vagina: ${npcAnatomy.vagina}, pussy: ${npcAnatomy.pussy}, vulva: ${npcAnatomy.vulva}`);
         
+        // Filter sections based on NPC anatomy - only show tabs for body parts the NPC actually has
+        function shouldShowSection(sectionLabel) {
+            const label = String(sectionLabel || "");
+            
+            // Hide Requests section for non-resisting NPCs
+            if (label === "Requests" && isNonResisting) {
+                return false;
+            }
+            
+            // Always show special sections
+            if (label === "Clothing" || label === "Head" || 
+                label === "Upper Body" || label === "Lower Body") {
+                return true;
+            }
+            
+            // Midsection - show if NPC has any genitals, anus, cloaca, or tail
+            if (label === "Midsection") {
+                const hasGenitals = hasCock || hasPussy || hasCloaca;
+                const hasAnusOrCloaca = !hasCloaca || hasCloaca; // If hasCloaca, show Midsection
+                const hasTail = npcAnatomy.tail || npcSpecies.includes("cat") || npcSpecies.includes("wolf") || 
+                               npcSpecies.includes("fox") || npcSpecies.includes("rat") || npcSpecies.includes("lizard");
+                return hasGenitals || hasTail || hasAnusOrCloaca;
+            }
+            
+            // Legacy section names for backwards compatibility - map to new sections
+            // These should mostly be filtered out by the new body-part system, but handle them just in case
+            if (label === "Cock" && !hasCock) return false;
+            if (label === "Pussy" && !hasPussy) return false;
+            if (label === "Breasts" && !hasBreasts) return false;
+            if (label === "Cloaca" && !hasCloaca) return false;
+            
+            // Tail - only for species with tails
+            if (label === "Tail") {
+                const hasTail = npcAnatomy.tail || npcSpecies.includes("cat") || npcSpecies.includes("wolf") || 
+                               npcSpecies.includes("fox") || npcSpecies.includes("rat") || npcSpecies.includes("lizard");
+                if (!hasTail) return false;
+            }
+            
+            // Default: show the section
+            return true;
+        }
+        
         // Define tab order priority - NEW BODY-PART BASED SECTIONS
         const tabPriority = {
             "Clothing": 0,
