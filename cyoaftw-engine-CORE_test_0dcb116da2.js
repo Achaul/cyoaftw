@@ -1596,6 +1596,510 @@ function textSleepingNPCShow(key) {
 }
 
 
+// ── MAUSOLEUMS: buildings, permanent niches and paid memorials ─────
+const MAUSOLEUM_PLAQUE_COST = 5;
+const MAUSOLEUM_MESSAGE_MAX = 240;
+const mausoleumMigrationMaps = new WeakMap();
+
+function spawnMausoleumStaffForRoom(room, zoneName) {
+    const roles = room.type === "Mausoleum" ? ["Keeper of the Quiet"] : room.type === "Memorial Gallery" ? ["Vigil Tender"] :
+        room.type === "Bearers' Lodge" ? ["Bier Bearer", "Bier Bearer"] : [];
+    const zone = getZoneTemplate(zoneName);
+    const species = zone && zone.allowedSpecies.filter(s => getSpeciesIsCivilized(s) && getSpeciesHumanoidFlag(s) === true);
+    if (!species || !species.length) return [];
+    return roles.map((role, index) => {
+        const npc = createNPC(rand(species), room, zone, { forceRole: role });
+        if (!npc) return null;
+        npc.buildingId = room.buildingId;
+        npc.hostility = Math.min(20, npc.hostility || 0);
+        if (role === "Bier Bearer") npc.mortuaryDuty = { pairId: zoneName + ":" + room.buildingId + ":bearers", partnerSlot: index, homeBuildingId: room.buildingId, collectionEnabled: true, version: 1 };
+        return npc;
+    }).filter(Boolean);
+}
+
+// Older settlements gain a building only in genuinely unoccupied space.
+function ensureSettlementMausoleum() {
+    const map = G.roomMap, active = G.activeRoom, player = G.player;
+    if (!map || !active || !/^(Town|Underground City)$/.test(active.zone) || !player || player.dead || player.hp <= 0 ||
+        G.activeNPC || G.activeObject || G.activeItemModal || G.combatEncounter || sharedChoiceState.menu || textModeState.pending ||
+        roomHasActiveHostile(active) || hasPendingPartyLoot()) return false;
+    const rooms = Object.values(map).filter(Boolean), zone = active.zone;
+    if (rooms.some(r => r.zone === zone && r.buildingType === "Mausoleum")) return false;
+    const tried = mausoleumMigrationMaps.get(map) || {};
+    if (tried[zone] === rooms.length) return false;
+    tried[zone] = rooms.length; mausoleumMigrationMaps.set(map, tried);
+    if (typeof MAP_MAX_ROOMS === "number" && rooms.length + 7 > MAP_MAX_ROOMS) return false;
+    const reserved = new Set(rooms.flatMap(r => Object.values(r.exits || {})));
+    const publicRooms = rooms.filter(r => r.zone === zone && !r.isBuildingRoom && !r.isNPCHome && r.coords && !isRoomCollapsed(r) &&
+        /^(Street|Avenue|Square|Lantern Hall|Market Cavern|Underground Hallway|Cavern)$/.test(r.type));
+    for (const street of publicRooms) for (const dir of ["N", "S"]) {
+        if (["exits", "doors", "locks", "linkExits", "portalExits", "hiddenExits"].some(key => street[key] && street[key][dir])) continue;
+        const coords = getAdjacentCoords(street.coords, dir);
+        if (!coords || map[coords] || reserved.has(coords)) continue;
+        for (let index = 0; index < 1000; index++) {
+            const plan = { zone, rooms: {}, buildings: rooms.filter(r => r.buildingName).map(r => ({ name: r.buildingName })) };
+            const entrance = _planAddRoom(plan, coords, "Mausoleum", zone, {});
+            _planBuildingInterior(plan, "Mausoleum", index, entrance, dir === "N" ? 1 : -1, Math.random, null);
+            if (Object.keys(plan.rooms).some(key => map[key] || reserved.has(key)) || rooms.some(r => r.buildingId === entrance.buildingId)) continue;
+            _planAddRoom(plan, street.coords, street.type, zone, {});
+            _planLink(plan, street.coords, coords, dir, "door", false);
+            delete plan.rooms[street.coords];
+            const added = instantiatePlannedRooms(plan);
+            street.exits = street.exits || {}; street.exits[dir] = coords;
+            street.doors = street.doors || {}; street.doors[dir] = "door";
+            const previous = PLANNED_GENERATION_ACTIVE;
+            PLANNED_GENERATION_ACTIVE = true;
+            try { added.forEach(room => assignGeneratedNPCs(room, zone)); }
+            finally { PLANNED_GENERATION_ACTIVE = previous; }
+            return true;
+        }
+    }
+    return false;
+}
+
+function mausoleumRoomBlock(room, actor) {
+    if (!room || !G.roomMap || G.roomMap[room.coords] !== room || room.buildingType !== "Mausoleum" || room.type !== "Burial Vault" ||
+        !room.burialStorage || room.burialStorage.capacity !== 50 || !Array.isArray(room.burialStorage.niches) || room.burialStorage.niches.length !== 50) return "Visit a burial vault in the mausoleum.";
+    if (!actor || actor.dead || actor.hp <= 0 || actor.unconscious || actor.bound || actor._prisoner) return "The person arranging this is unavailable.";
+    if (actor === G.player ? G.activeRoom !== room || G.activeNPC || G.activeObject || G.combatEncounter || hasPendingPartyLoot() : !(room.creatures || []).includes(actor)) return "Finish the current interaction and visit the vault.";
+    return isRoomCollapsed(room) || roomHasActiveHostile(room) ? "The vault is unsafe." : "";
+}
+
+function mausoleumBodySources(room, actor) {
+    const sources = (room.items || []).filter(body => body && !body.hidden && !body.isHidden && body.visible !== false && (!body.concealed || body.revealed)).map(body => ({ body, list: room.items }));
+    if (actor && actor.carrying) sources.push({ body: actor.carrying, carrier: actor });
+    return sources.filter(ref => ref.body.objectType === "body" && ref.body.bodyState === "corpse" &&
+        !ref.body.mausoleumInterment && (ref.body.dead === true || ref.body.hp <= 0));
+}
+
+function mausoleumRecordedName(body) {
+    return String(body.originalName || body.name || "Unidentified person").replace(/^(?:corpse of|remains of)\s+/i, "").slice(0, 120);
+}
+
+function mausoleumIntermentBlock(room, actor, source) {
+    return mausoleumRoomBlock(room, actor) || (!source || !mausoleumBodySources(room, actor).some(ref => ref.body === source.body && ref.list === source.list && ref.carrier === source.carrier) ? "That deceased person is no longer available here." : "") ||
+        (!room.burialStorage.niches.some(niche => !niche.body) ? "All fifty niches in this vault are occupied." : "");
+}
+
+// A niche owns the original body, outside creatures/items/inventory tick lists.
+// No healing, looting, decay, burning or background catch-up touches it there.
+function interBodyInMausoleum(room, actor, source) {
+    const reason = mausoleumIntermentBlock(room, actor, source);
+    if (reason) return { status: "blocked", reason };
+    const niche = room.burialStorage.niches.find(n => !n.body), body = source.body;
+    if (source.carrier) source.carrier.carrying = null;
+    else source.list.splice(source.list.indexOf(body), 1);
+    if (G.pendingDragBody === body) G.pendingDragBody = null;
+    niche.recordedName = mausoleumRecordedName(body);
+    niche.interredAtTurn = getCurrentStoryTurn();
+    niche.body = body;
+    niche.plaque = null;
+    delete body.mortuaryClaim;
+    body.mausoleumInterment = { buildingId: room.buildingId, vault: room.coords, niche: niche.number, preservedAtTurn: niche.interredAtTurn };
+    const expanded = ensureMausoleumCapacity(room.buildingId);
+    return { status: "completed", niche: niche.number, name: niche.recordedName, preserved: true, capacityAdded: expanded ? 50 : 0 };
+}
+
+function mausoleumKeeper(room) {
+    for (const site of Object.values(G.roomMap || {})) {
+        if (!site || site.buildingId !== room.buildingId || site.zone !== room.zone || isRoomCollapsed(site) || roomHasActiveHostile(site)) continue;
+        const keeper = (site.creatures || []).find(n => n && n.role === "Keeper of the Quiet" && !n.dead && n.hp > 0 && !n.unconscious && !n.bound && !n._prisoner &&
+            !(n.currentState && n.currentState.sleeping) && (n.hostility || 0) < 30 && !isNPCOffDuty(n, site));
+        if (keeper) return keeper;
+    }
+    return null;
+}
+
+function mausoleumPlaqueBlock(room, payer, number, message) {
+    const block = mausoleumRoomBlock(room, payer);
+    if (block) return block;
+    const niche = room.burialStorage.niches.find(n => n.number === number);
+    if (!niche || !niche.body) return "Choose an occupied niche in this vault.";
+    if (niche.plaque) return "That niche already has an engraved plaque.";
+    if (typeof message !== "string" || !message.trim() || message.length > MAUSOLEUM_MESSAGE_MAX || /[<>\x00-\x1f\x7f]/.test(message)) return "Use a plain, single-line message of one to 240 characters.";
+    if (!mausoleumKeeper(room)) return "The Keeper of the Quiet is unavailable. Return during working hours.";
+    if (getCoinValue(payer) < MAUSOLEUM_PLAQUE_COST) return "An engraved plaque costs five gold.";
+    return "";
+}
+
+// Both NPC patrons and the player use real coins and the same one-time service.
+function engraveMausoleumPlaque(room, payer, number, message) {
+    const reason = mausoleumPlaqueBlock(room, payer, number, message);
+    if (reason) return { status: "blocked", reason };
+    const niche = room.burialStorage.niches.find(n => n.number === number), keeper = mausoleumKeeper(room);
+    adjustCoins(payer, -MAUSOLEUM_PLAQUE_COST);
+    if (keeper !== payer) adjustCoins(keeper, MAUSOLEUM_PLAQUE_COST);
+    else room.mausoleumFees = (room.mausoleumFees || 0) + MAUSOLEUM_PLAQUE_COST;
+    niche.plaque = { name: niche.recordedName, message: message.trim(), paid: MAUSOLEUM_PLAQUE_COST };
+    return { status: "completed", niche: number, name: niche.plaque.name, message: niche.plaque.message, gold: MAUSOLEUM_PLAQUE_COST };
+}
+
+function mausoleumPublicVault(room) {
+    const storage = room && room.burialStorage;
+    return !storage ? null : { capacity: storage.capacity, occupied: storage.niches.filter(n => n.body).length,
+        niches: storage.niches.filter(n => n.body).map(n => ({ number: n.number, name: n.recordedName, preserved: true,
+            plaque: n.plaque ? { name: n.plaque.name, message: n.plaque.message } : null })) };
+}
+
+function mausoleumNicheDescription(fixture, room) {
+    if (!fixture || fixture.id !== "burial-niches" || !room || !(room.structural || []).includes(fixture)) return "";
+    const data = mausoleumPublicVault(room);
+    if (!data) return "";
+    return "Fifty numbered burial niches. " + data.occupied + " are occupied. Bodies in the niches remain preserved indefinitely.\n" +
+        data.niches.map(n => "Niche " + n.number + ": " + n.name + (n.plaque ? ". Engraved plaque: " + n.plaque.name + ". " + n.plaque.message : ". No engraved plaque.")).join("\n");
+}
+
+function mausoleumResult(result) {
+    if (result.status !== "completed") return sharedChoiceResult("blocked", result.reason);
+    const player = G.player, room = G.activeRoom, map = G.roomMap, actor = G.activeNPC, mode = G.activeNPCMode, epoch = textModeState.epoch;
+    closeItemModal();
+    advanceStoryTurn(1);
+    if (G.player === player && G.roomMap === map) { renderStats(); saveGameState(); }
+    if (G.player !== player || G.roomMap !== map || G.activeRoom !== room || map[room.coords] !== room || G.activeNPC !== actor || G.activeNPCMode !== mode || textModeState.epoch !== epoch || player.dead || player.hp <= 0 || player.unconscious || player._collapsing) {
+        publishTextModeOutput("mausoleum", "The mausoleum work was completed before the interruption.", { systemOnly: true, mausoleum: { ...result, stage: "interrupted", turns: 1 } }, false);
+        return { status: "interrupted" };
+    }
+    let text = result.preserved ? result.name + " is laid in niche " + result.niche + ". The body will remain preserved indefinitely." :
+        "A plaque outside niche " + result.niche + " is engraved for " + result.name + ": " + result.message + ". You pay five gold.";
+    if (result.capacityAdded) text += " The mausoleum opens another upper vault with fifty empty niches.";
+    setNarration(text);
+    publishTextModeOutput("mausoleum", text, { presentation: "supplement", mausoleum: { stage: "result", ...result, turns: 1 } }, false);
+    return { status: "completed" };
+}
+
+function mausoleumMenu(kind, title, valid) {
+    const fixture = (G.activeRoom.structural || [])[0];
+    const card = createNoticeWindow(fixture, "Mausoleum", title);
+    if (!card) return null;
+    const menu = beginSharedChoiceMenu(kind, null, title, openMausoleumMenu), original = menu.valid;
+    const player = G.player, room = G.activeRoom, map = G.roomMap, turn = getCurrentStoryTurn(), epoch = textModeState.epoch;
+    const structural = room.structural, items = room.items, storage = room.burialStorage, niches = storage && storage.niches;
+    const slots = niches && niches.map(n => ({ niche: n, body: n.body, name: n.recordedName, plaque: n.plaque, plaqueText: n.plaque && n.plaque.message }));
+    menu.valid = () => original() && G.roomMap === map && map[room.coords] === room && room.structural === structural && room.items === items && room.burialStorage === storage &&
+        (!storage || storage.niches === niches && slots.length === niches.length && slots.every((s, i) => niches[i] === s.niche && s.niche.body === s.body && s.niche.recordedName === s.name && s.niche.plaque === s.plaque && (!s.plaque || s.plaque.message === s.plaqueText))) &&
+        turn === getCurrentStoryTurn() && textModeState.epoch === epoch && (!valid || valid());
+    const add = (label, run, reason, action) => jobChoiceButton(menu, card.actions, label, run, reason || "", { action: action || "select" });
+    const done = () => { add("Back", () => { closeItemModal(); returnToRoomView(); return { status: "completed" }; }, "", "back"); publishSharedChoiceMenu(menu, card.root || document.getElementById("itemModal")); };
+    return { menu, card, add, done, player, room };
+}
+
+function reviewMausoleumInterment(source) {
+    const room = G.activeRoom, actor = G.player, reason = mausoleumIntermentBlock(room, actor, source);
+    if (reason) return sharedChoiceResult("blocked", reason);
+    const name = mausoleumRecordedName(source.body), target = room.burialStorage.niches.find(n => !n.body), bodyState = choiceEntitySnapshot(source.body);
+    const title = "Lay " + name + " in niche " + target.number + "? Preservation is permanent. No retrieval service is available yet. Costs one turn and no gold.";
+    const view = mausoleumMenu("mausoleum-confirm", title, () => bodyState() && !mausoleumIntermentBlock(room, actor, source) && !target.body && mausoleumRecordedName(source.body) === name);
+    if (!view) return sharedChoiceResult("blocked", "The mausoleum controls are unavailable.");
+    view.add("Confirm interment", () => mausoleumResult(interBodyInMausoleum(room, actor, source)), "", "confirm");
+    view.done();
+    return { status: "needs_input" };
+}
+
+function reviewMausoleumPlaque(number, message) {
+    const room = G.activeRoom, actor = G.player, reason = mausoleumPlaqueBlock(room, actor, number, message);
+    if (reason) return sharedChoiceResult("blocked", reason);
+    const niche = room.burialStorage.niches.find(n => n.number === number), body = niche.body, name = niche.recordedName, coins = getCoinValue(actor), keeper = mausoleumKeeper(room);
+    const title = "Engrave the plaque outside niche " + number + "?\n" + name + "\n" + message + "\nCosts five gold and one turn.";
+    const view = mausoleumMenu("mausoleum-confirm", title, () => niche.body === body && niche.recordedName === name && room.burialStorage.niches.includes(niche) &&
+        getCoinValue(actor) === coins && mausoleumKeeper(room) === keeper && !mausoleumPlaqueBlock(room, actor, number, message));
+    if (!view) return sharedChoiceResult("blocked", "The mausoleum controls are unavailable.");
+    view.add("Confirm engraving for five gold", () => mausoleumResult(engraveMausoleumPlaque(room, actor, number, message)), "", "confirm");
+    view.done();
+    publishTextModeOutput("mausoleum", title, { presentation: "supplement", mausoleum: { stage: "quote", niche: number, name, message, gold: 5, turns: 1 } }, false);
+    return { status: "needs_input" };
+}
+
+function composeMausoleumPlaque(number) {
+    const room = G.activeRoom, niche = room.burialStorage.niches.find(n => n.number === number), body = niche && niche.body;
+    const title = 'Write a plaque message with engrave niche ' + number + ' "your message", then review the price. Maximum 240 characters.';
+    const view = mausoleumMenu("mausoleum-compose", title, () => room.burialStorage.niches.includes(niche) && niche.body === body && !niche.plaque);
+    if (!view) return sharedChoiceResult("blocked", "The mausoleum controls are unavailable.");
+    if (!textModeState.enabled) {
+        const input = document.createElement("textarea"); input.maxLength = MAUSOLEUM_MESSAGE_MAX; input.rows = 3;
+        input.setAttribute("aria-label", "Personalized memorial message"); input.style.width = "100%";
+        view.card.contents.appendChild(input);
+        view.add("Review plaque", () => reviewMausoleumPlaque(number, input.value));
+    }
+    view.done();
+    return { status: "needs_input" };
+}
+
+function openMausoleumMenu() {
+    const room = G.activeRoom;
+    if (!room || room.buildingType !== "Mausoleum") return sharedChoiceResult("blocked", "Visit a mausoleum.");
+    if (room.type !== "Burial Vault") {
+        const text = "The receiving hall keeps the register. The memorial gallery, laying-out room and bearers' lodge are downstairs. Follow the stairs up to a burial vault to inter a deceased person or arrange a plaque. Each vault has fifty niches.";
+        setNarration(text);
+        publishTextModeOutput("mausoleum", text, { presentation: "supplement", mausoleum: { stage: "availability", capacityPerVault: 50 } }, false);
+        return { status: "completed" };
+    }
+    const block = mausoleumRoomBlock(room, G.player);
+    if (block) return sharedChoiceResult("blocked", block);
+    const data = mausoleumPublicVault(room);
+    const title = "Burial vault: " + data.occupied + " of fifty niches occupied. Bodies remain preserved indefinitely. Engraved plaques cost five gold and one turn.\n" +
+        data.niches.map(n => "Niche " + n.number + ": " + n.name + (n.plaque ? ". Plaque: " + n.plaque.message : ". No plaque.")).join("\n");
+    const view = mausoleumMenu("mausoleum-vault", title);
+    if (!view) return sharedChoiceResult("blocked", "The mausoleum controls are unavailable.");
+    mausoleumBodySources(room, G.player).forEach(source => view.add("Inter " + mausoleumRecordedName(source.body), () => reviewMausoleumInterment(source), mausoleumIntermentBlock(room, G.player, source)));
+    data.niches.forEach(niche => {
+        if (!niche.plaque) view.add("Engrave plaque for niche " + niche.number + ": " + niche.name, () => composeMausoleumPlaque(niche.number), mausoleumPlaqueBlock(room, G.player, niche.number, "Memorial"));
+    });
+    view.done();
+    publishTextModeOutput("mausoleum", title, { presentation: "supplement", mausoleum: { stage: "availability", ...data } }, false);
+    return { status: "needs_input" };
+}
+
+function parseTextMausoleumCommand(raw) {
+    const text = String(raw || "").trim();
+    if (/^(?:mausoleum|tomb|burial vault|niches|plaques)$/i.test(text)) return { verb: "mausoleum", args: { action: "menu" } };
+    const inter = /^(?:inter|entomb)(?:\s+(?:body|corpse))?(?:\s+(.+))?$/i.exec(text);
+    if (inter) return { verb: "mausoleum", args: { action: "inter", target: inter[1] || "" } };
+    const plaque = /^(?:engrave|plaque)(?:\s+(?:plaque|niche))?\s+(\d+)\s+"([^"\r\n]*)"$/i.exec(text);
+    if (plaque) return { verb: "mausoleum", args: { action: "engrave", niche: Number(plaque[1]), message: plaque[2] } };
+    if (/^(?:engrave|plaque)\s+(?:niche|plaque)\b/i.test(text)) return { verb: "mausoleum", args: { action: "invalid-plaque" } };
+    return null;
+}
+
+function executeTextMausoleumCommand(action) {
+    const args = action.args || {}, menu = sharedChoiceState.menu;
+    if (menu && /^mausoleum-/.test(menu.kind)) {
+        if (!menu.valid()) return sharedChoiceResult("blocked", "The mausoleum scene changed. Open its services again.");
+        if (menu.kind === "mausoleum-confirm") return sharedChoiceResult("blocked", "Confirm this review separately by its numbered choice, or go back.");
+        if (menu.kind === "mausoleum-compose" && args.action !== "engrave") return sharedChoiceResult("blocked", "Write the plaque message or go back.");
+    }
+    if (args.action === "engrave") return reviewMausoleumPlaque(args.niche, args.message);
+    if (args.action === "invalid-plaque") return textModeResult("blocked", 'Use engrave niche 1 "your exact memorial message".');
+    if (args.action === "inter") {
+        const reason = mausoleumRoomBlock(G.activeRoom, G.player);
+        if (reason) return textModeResult("blocked", reason);
+        const target = String(args.target || "").toLowerCase();
+        const sources = mausoleumBodySources(G.activeRoom, G.player).filter(ref => !target || mausoleumRecordedName(ref.body).toLowerCase().includes(target));
+        if (sources.length === 1) return reviewMausoleumInterment(sources[0]);
+        if (!sources.length) return textModeResult("blocked", "No matching deceased person is here or being carried. Unconscious people cannot be interred.");
+    }
+    return openMausoleumMenu();
+}
+
+function textMausoleumMenuInput(menu, action, input) {
+    if ((splitTextCommands(input || "").parts || []).length > 1) return textModeResult("needs_input", "Answer one mausoleum choice at a time.", { systemOnly: true });
+    if (!menu.valid()) return sharedChoiceResult("blocked", "The mausoleum scene changed. Open its services again.");
+    if (action && /^(leave|cancel)$/.test(action.verb)) {
+        clearSharedChoiceMenu(menu);
+        closeItemModal();
+        returnToRoomView();
+        if (action.verb === "cancel") stopTextCommands(false);
+        return textModeResult("completed", "You leave the mausoleum choices without spending anything.", { systemOnly: true });
+    }
+    return executeTextMausoleumCommand(action);
+}
+
+function textMausoleumShow(topic) {
+    if (!/^(?:mausoleum|tomb|burial vault|niches|plaques)$/.test(topic)) return null;
+    const room = G.activeRoom, here = room && room.buildingType === "Mausoleum", data = here && mausoleumPublicVault(room);
+    const text = !here ? "Visit a mausoleum in Town or the Underground City." : !data ? "Follow the mausoleum stairs up to a burial vault. Each vault has fifty niches." :
+        data.occupied + " of fifty niches occupied.\n" + data.niches.map(n => "Niche " + n.number + ": " + n.name + (n.plaque ? ". Plaque: " + n.plaque.message : ". No plaque.")).join("\n") +
+        '\nUse mausoleum, inter body, or engrave niche 1 "your message". Engraving costs five gold and one turn; interment costs one turn. Both require separate confirmation.';
+    return textModeResult("completed", text, { systemOnly: true, mausoleum: { stage: "availability", ...(data || { capacityPerVault: 50 }) } });
+}
+function ensureMausoleumCapacity(buildingId) {
+    const map = G.roomMap;
+    const vaults = Object.values(map || {}).filter(r => r && r.buildingId === buildingId && r.type === "Burial Vault" && r.burialStorage);
+    if (!vaults.length || vaults.some(r => r.burialStorage.niches.some(n => !n.body))) return false;
+    if (typeof planMausoleumExpansion !== "function" || typeof instantiatePlannedRooms !== "function") return false;
+    if (typeof MAP_MAX_ROOMS === "number" && Object.keys(map).length + 2 > MAP_MAX_ROOMS) return false;
+    const plan = planMausoleumExpansion(map, buildingId);
+    if (!plan) return false;
+    const connection = plan.connection, top = map[connection.from];
+    if (!top || top.exits[connection.direction]) return false;
+    const added = instantiatePlannedRooms(plan);
+    if (added.length !== 2) return false;
+    top.exits[connection.direction] = connection.to;
+    return true;
+}
+
+function ensureMausoleumCapacities() {
+    const ids = new Set(Object.values(G.roomMap || {}).filter(r => r && r.type === "Burial Vault" && r.buildingId).map(r => r.buildingId));
+    ids.forEach(id => ensureMausoleumCapacity(id));
+}
+
+function mortuaryWorkerReady(npc) {
+    return !!(npc && npc.role === "Bier Bearer" && npc.mortuaryDuty && npc.mortuaryDuty.collectionEnabled &&
+        !npc.dead && npc.hp > 0 && !npc.unconscious && !npc.isUnconsciousBody && !npc.hidden && !npc.isHidden && npc.visible !== false &&
+        !npc.bound && !npc._prisoner && !npc._inSkirmish && !npc._encId && !npc._npcParty && !npc._fleeRun && !npc._onCall && !npc._drunkBlackout &&
+        !npc.stationary && !(npc.currentState && npc.currentState.sleeping) && !isCompanionNPC(npc) &&
+        (npc.hostility || 0) < 30 && npc.hp >= (npc.hpMax || npc.hp) * 0.5 && getTotalBleed(npc) <= 0);
+}
+
+function mortuaryOnShift(npc) {
+    return typeof getNPCRoutineNow !== "function" || getNPCRoutineNow(npc).where !== "home";
+}
+
+function mortuaryOwnsNPC(npc) {
+    return mortuaryWorkerReady(npc) && (npc.mortuaryDuty.onCollection || mortuaryOnShift(npc));
+}
+
+function mortuaryRoomSafe(room) {
+    return !!room && !commitmentRoomUnsafe(room) && !room.skirmish && !room.liquidBurn;
+}
+
+function mortuaryCanEnter(pair, from, to) {
+    if (!mortuaryRoomSafe(from) || !mortuaryRoomSafe(to) || to.zone !== from.zone) return false;
+    const dir = getNPCExitDirTo(from, to.coords);
+    return !!dir && pair.every(npc => {
+        const access = npcLockAccess(npc, from, dir);
+        return access.ok && /^(open|free|key)$/.test(access.how) && getNPCExitCoords(from, npc, { includeVertical: true }).includes(to.coords);
+    });
+}
+
+// Reuse the bounded native BFS and door eligibility, including real stair exits.
+function mortuaryRoute(pair, from, test) {
+    if (!from) return null;
+    if (test(from)) return { room: from, path: [] };
+    return commitmentNeedRoute(pair[0], from, test, Math.min(1500, Object.keys(G.roomMap || {}).length),
+        { includeVertical: true, canEnter: (to, source) => mortuaryCanEnter(pair, source, to) });
+}
+
+function mortuaryForegroundBlocked(rooms) {
+    return rooms.includes(G.activeRoom) && activeRoomInitiativeBlocked(false);
+}
+
+function mortuaryNote(room, text, data) {
+    if (room !== G.activeRoom) return;
+    queueTurnNote(text);
+    publishTextModeOutput("mortuary", text, { presentation: "supplement", mortuary: data }, false);
+}
+
+function moveMortuaryPair(pair, from, to, body) {
+    if (pair.length !== 2 || !pair.every(n => (from.creatures || []).includes(n)) || !mortuaryCanEnter(pair, from, to) || mortuaryForegroundBlocked([from, to])) return false;
+    const map = G.roomMap, moved = [];
+    for (const npc of pair) {
+        if (G.roomMap !== map || !relocateNPCBetweenRooms(npc, from, to.coords, { ignoreLocks: true, ignoreDrunkStumble: true, mortuaryPair: true })) {
+            if (G.roomMap === map) moved.forEach(n => {
+                to.creatures = (to.creatures || []).filter(other => other !== n);
+                if (!(from.creatures || []).includes(n)) from.creatures.push(n);
+            });
+            return false;
+        }
+        moved.push(npc);
+    }
+    if (body) {
+        const index = (from.items || []).indexOf(body);
+        if (index < 0) return false;
+        from.items.splice(index, 1);
+        to.items = to.items || []; to.items.push(body);
+    }
+    pair.forEach(n => { n.coords = to.coords; n.mortuaryDuty.lastMoveTurn = getCurrentStoryTurn(); });
+    const text = body ? "The two Bier Bearers carry " + mausoleumRecordedName(body) + " together on their bier." : "The two Bier Bearers continue their round together.";
+    const visibleRoom = from === G.activeRoom ? from : to;
+    mortuaryNote(visibleRoom, text, { stage: body ? "transport" : "walking", ...(body ? { name: mausoleumRecordedName(body) } : {}) });
+    return true;
+}
+
+function releaseMortuaryClaim(lodge, workers) {
+    const state = lodge.mortuaryCollection;
+    if (state && state.token) {
+        Object.values(G.roomMap || {}).forEach(room => (room ? (room.items || []).concat(room.creatures || []) : []).forEach(body => {
+            if (body && body.mortuaryClaim && body.mortuaryClaim.token === state.token) delete body.mortuaryClaim;
+        }));
+        const carried = G.player && G.player.carrying;
+        if (carried && carried.mortuaryClaim && carried.mortuaryClaim.token === state.token) delete carried.mortuaryClaim;
+    }
+    workers.forEach(entry => { entry.npc.mortuaryDuty.onCollection = false; });
+    lodge.mortuaryCollection = { lastTurn: getCurrentStoryTurn() };
+}
+
+function mortuaryAvailableBody(room, token) {
+    return mausoleumBodySources(room, null).find(ref => !isBodyBeingHauled(ref.body) &&
+        (!ref.body.mortuaryClaim || ref.body.mortuaryClaim.token === token)) || null;
+}
+
+function tickMausoleumService() {
+    if (!G.player || G.player.dead || G.player.hp <= 0) return;
+    ensureMausoleumCapacities();
+    const map = G.roomMap || {}, rooms = Object.values(map).filter(Boolean), now = getCurrentStoryTurn();
+    const entries = rooms.flatMap(room => (room.creatures || []).filter(n => n && n.role === "Bier Bearer" && n.mortuaryDuty).map(npc => ({ npc, room })));
+    entries.forEach(({ npc }) => {
+        if (npc.mortuaryDuty.version !== 1) { npc.mortuaryDuty.collectionEnabled = true; npc.mortuaryDuty.version = 1; }
+    });
+    rooms.filter(room => room.type === "Bearers' Lodge" && room.buildingType === "Mausoleum").forEach(lodge => {
+        const workers = entries.filter(e => e.npc.mortuaryDuty.homeBuildingId === lodge.buildingId && e.room.zone === lodge.zone);
+        const state = lodge.mortuaryCollection || (lodge.mortuaryCollection = {});
+        if (state.lastTurn === now) return;
+        state.lastTurn = now;
+        if (workers.length !== 2 || workers[0].npc.mortuaryDuty.pairId !== workers[1].npc.mortuaryDuty.pairId || workers.some(e => !mortuaryWorkerReady(e.npc))) {
+            releaseMortuaryClaim(lodge, workers); return;
+        }
+        const pair = workers.map(e => e.npc), origin = workers[0].room;
+        const together = workers[1].room === origin;
+        if (!state.phase) {
+            if (!pair.every(mortuaryOnShift)) return;
+            if (workers.some(e => e.room !== lodge)) {
+                if (together) {
+                    const route = mortuaryRoute(pair, origin, room => room === lodge);
+                    if (route && route.path.length) moveMortuaryPair(pair, origin, map[route.path[0]]);
+                } else workers.forEach(({ npc, room }) => {
+                    if (room === lodge) return;
+                    const route = mortuaryRoute([npc], room, r => r === lodge), next = route && map[route.path[0]];
+                    if (next && !mortuaryForegroundBlocked([room, next])) relocateNPCBetweenRooms(npc, room, next.coords, { ignoreDrunkStumble: true });
+                });
+                return;
+            }
+            if (!mortuaryRoomSafe(lodge) || mortuaryForegroundBlocked([lodge])) return;
+            const vaultTest = room => room.buildingId === lodge.buildingId && room.type === "Burial Vault" && room.burialStorage && room.burialStorage.niches.some(n => !n.body);
+            const route = mortuaryRoute(pair, lodge, room => !!mortuaryAvailableBody(room) && !!mortuaryRoute(pair, room, vaultTest));
+            const source = route && mortuaryAvailableBody(route.room);
+            if (!source || mortuaryForegroundBlocked([lodge, route.room])) return;
+            state.phase = "outbound"; state.coords = route.room.coords;
+            state.token = pair[0].mortuaryDuty.pairId + ":" + now;
+            source.body.mortuaryClaim = { token: state.token, inTransit: false };
+            pair.forEach(n => { n.mortuaryDuty.onCollection = true; });
+            return;
+        }
+        if (!together) { releaseMortuaryClaim(lodge, workers); return; }
+        if (state.phase === "home") {
+            if (origin === lodge) { releaseMortuaryClaim(lodge, workers); return; }
+            const home = mortuaryRoute(pair, origin, room => room === lodge);
+            if (home && home.path.length) moveMortuaryPair(pair, origin, map[home.path[0]]);
+            return;
+        }
+        const site = map[state.coords], body = site && (site.items || []).find(b => b && b.mortuaryClaim && b.mortuaryClaim.token === state.token);
+        if (!body || !mausoleumBodySources(site, null).some(ref => ref.body === body) || G.player.carrying === body || G.pendingDragBody === body || !mortuaryRoomSafe(site) || !mortuaryRoomSafe(origin)) {
+            releaseMortuaryClaim(lodge, workers); return;
+        }
+        if (state.phase === "outbound") {
+            if (origin === site) {
+                if (mortuaryForegroundBlocked([site])) return;
+                body.mortuaryClaim.inTransit = true; state.phase = "returning";
+                mortuaryNote(site, "The two Bier Bearers lift " + mausoleumRecordedName(body) + " onto their carrying bier.", { stage: "pickup", name: mausoleumRecordedName(body) });
+            } else {
+                const route = mortuaryRoute(pair, origin, room => room === site);
+                if (!route) { releaseMortuaryClaim(lodge, workers); return; }
+                moveMortuaryPair(pair, origin, map[route.path[0]]);
+            }
+            return;
+        }
+        if (origin !== site) { releaseMortuaryClaim(lodge, workers); return; }
+        const route = mortuaryRoute(pair, origin, room => room.buildingId === lodge.buildingId && room.type === "Burial Vault" && room.burialStorage && room.burialStorage.niches.some(n => !n.body));
+        if (!route) { releaseMortuaryClaim(lodge, workers); return; }
+        if (route.path.length) {
+            if (moveMortuaryPair(pair, origin, map[route.path[0]], body)) state.coords = route.path[0];
+            return;
+        }
+        if (mortuaryForegroundBlocked([origin])) return;
+        const result = interBodyInMausoleum(origin, pair[0], { body, list: origin.items });
+        if (result.status === "completed") {
+            let text = "The Bier Bearers lay " + result.name + " in niche " + result.niche + ", where the body will remain preserved.";
+            if (result.capacityAdded) text += " Another upper vault opens with fifty empty niches.";
+            mortuaryNote(origin, text, { stage: "interred", name: result.name, niche: result.niche, preserved: true, capacityAdded: result.capacityAdded });
+            releaseMortuaryClaim(lodge, workers);
+            lodge.mortuaryCollection.phase = "home";
+            pair.forEach(n => { n.mortuaryDuty.onCollection = true; });
+        }
+    });
+}
+// ── END MAUSOLEUMS ──────────────────────────────────────────────
+
+
 // Bathhouses: shared customer treatments, practical trials and work offers.
 // Pending menus and action latches are session-only; training lives on the player.
 const BATHHOUSE_TREATMENTS = Object.freeze({
@@ -2772,6 +3276,7 @@ function textNPCServicesShow() {
 
 
 const TEXT_COMMANDS = [
+    { id: "mausoleum", mausoleum: true, args: ["action", "target", "niche", "message"], aliases: ["mausoleum", "tomb", "niches", "plaques", "inter", "entomb", "engrave", "plaque"], example: 'mausoleum; inter body; inter body Mira; engrave niche 1 "Always remembered"; show niches; how mausoleum', description: "A mausoleum has fifty permanent body niches per burial vault. Interment requires a confirmed deceased NPC here or carried by you, one turn, no gold and separate confirmation. No retrieval service is available yet. Plaques include the recorded name and your exact single-line message (1 to 240 characters), cost five gold and one turn, and require a separate numbered confirmation. A working Keeper of the Quiet must be available for engraving. Each niche accepts one plaque. Back/cancel are free; continue explicitly resumes an older batch. When all existing vaults are full, another fifty-niche floor opens automatically. Bier Bearers collect the dead in pairs during working hours, using safe same-zone routes. No player dispatch or construction command is needed." },
     { id: "bathhouse", bathhouse: true, args: ["action"], aliases: ["bathhouse", "baths", "spa", "take a bath", "get bathed", "get a massage", "massage trial", "audition massage", "trial shift"], example: "bathhouse; bathhouse bath; get bathed; get a massage; bathhouse trial; bathhouse attendant; bathhouse practitioner; show baths; how bathhouse", description: "Visit a bathhouse and ask the available bathkeeper for services. Hot bath: 4 gold/2 turns/up to 3 stamina; assisted wash: 7 gold/3 turns/up to 5 stamina; massage: 9 gold/3 turns/up to 7 stamina. Prices scale with town tier. Bath and wash clean you and worn gear; massage does not. Treatments do not heal wounds or replace sleep. A practical massage trial costs 1 stamina and 2 turns and uses flexibility against difficulty 11; failure can be retried tomorrow. Ordinary attendant work needs no trial. Qualified massage work pays more and may earn tips. Work uses the existing job system: leave the conversation, go to the stated site, work, collect pay. Answer menus one step at a time; back/cancel/leave are free; continue resumes an older batch explicitly." },
     { id: "actions", conversationActions: true, args: ["group"], aliases: ["actions", "conversation actions"], example: "actions; actions services; actions food; actions company; actions interactions; show conversation actions; how conversation actions", description: "Open grouped conversation actions through the same current callbacks as the buttons. Services/trade, food/drink, travel/company and interactions are separate menus. Choose one numbered option at a time. Back returns to conversation; leave steps away; cancel closes the menu and cancels later commands. Resume older batches explicitly with continue." },
     {id:'npc_life',npcLife:true,args:['action','target'],aliases:['join conversation','join chat','join discussion','conversations'],example:'join conversation; join conversation Mira; show conversations; how join conversation',description:'Join a recent visible NPC interaction using normal Talk. No automatic greeting, payment or relationship reward.'},
@@ -2945,6 +3450,7 @@ function parseTextCommand(input) {
     if (match) return { verb: "say", args: { text: textCommandUnquote(match[1]) } };
     match = /^(?:actions|conversation actions)(?:\s+(.+))?$/i.exec(raw);
     if (match) return { verb: "actions", args: { group: textCommandNormalize(match[1] || "") } };
+    const mausoleum = parseTextMausoleumCommand(raw); if (mausoleum) return mausoleum;
     const bathhouse = parseTextBathhouseCommand(raw); if (bathhouse) return bathhouse;
     const npcService = parseTextNPCService(raw); if (npcService) return npcService;
     const commitment = parseTextCommitmentCommand(raw); if (commitment) return commitment;
@@ -3133,7 +3639,7 @@ async function interpretTextCommands(input) {
         if(def.id==='uniform')return !!G.activeRoom&&G.activeRoom.type==='Bathhouse Changeroom';
         if(def.id==='bathhouse_requests')return isBathhouseRoom(G.activeRoom)||!!(G.player&&G.player._bathhouseRequestsFromNPCs&&G.player._bathhouseRequestsFromNPCs.length);
         return true;
-    }).filter(function (def) { return !def.npcLife && !def.worldLife && !def.communication && (!def.lootDetail || lootItemDetailAvailable()) && (!def.binding || typeof getBindingTargets === "function" && getBindingTargets().length > 0) && (!def.bathhouse || !!bathhouseProvider(G.activeRoom)) && !def.tasting && (!def.conversationActions || typeof conversationActionMenuBlock === "function" && !conversationActionMenuBlock(G.activeNPC)) && (!def.service || getNPCServiceOptions(G.activeNPC).length > 0) && (!def.commitment || commitmentIntentAvailable()) && !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
+    }).filter(function (def) { return !def.npcLife && !def.worldLife && !def.communication && (!def.lootDetail || lootItemDetailAvailable()) && (!def.binding || typeof getBindingTargets === "function" && getBindingTargets().length > 0) && (!def.bathhouse || !!bathhouseProvider(G.activeRoom)) && !def.tasting && (!def.conversationActions || typeof conversationActionMenuBlock === "function" && !conversationActionMenuBlock(G.activeNPC)) && (!def.service || getNPCServiceOptions(G.activeNPC).length > 0) && (!def.commitment || commitmentIntentAvailable()) && !/^(stop|continue|back|cancel|readables|phrases|rulings|adjudicate)$/.test(def.id) && (def.id !== "wake" || textModeVisibleNPCs().some(isNPCSleeping)) && (def.id !== "tool" || worldToolIntentAvailable()) && !def.fire && (def.id !== "object" || !G.activeNPC && textObjectIntentAvailable()) && (!def.social || socialActionAvailable(true) || textModeInCombat()) && (!def.casting || castingAvailable()) && (!def.synergy || G.activeNPCMode === "synergy" || typeof getSynergyStation === "function" && !!getSynergyStation(G.activeRoom)) && (!def.travel || !!G.guiding || G.activeNPC && G.activeNPC.isHumanoid !== false) && (!def.nectar || nectarTextAvailable()) && (!def.merchant || G.activeNPCMode === "trade") && (!def.bench || workbenchFixtures().length > 0) && (!def.mausoleum || G.activeRoom && G.activeRoom.buildingType === "Mausoleum") && (!def.notice || textNoticeAvailable()) && (!def.environmental || environmentAvailable(def.id)) && (!def.material || materialAvailable(def.id)) && (!def.structure || structuralEntries().length > 0) && (!def.shrine || shrineAvailable()) && (!def.nsfw || typeof window.handlePhysicalTouch === "function") && (def.id !== "choose" || !!G.activeNPC || !!sharedChoiceState.menu || !!textModeState.pending); }).forEach(function (def) {
         const args = (def.args || []).join(",");
         let shape = shapes.find(function (entry) { return entry.args === args; });
         if (!shape) { shape = { args: args, verbs: [] }; shapes.push(shape); }
@@ -4876,6 +5382,7 @@ function textModeHelpContent(topic, show) {
     if (show && typeof textStructuralShow === "function") { const structure = textStructuralShow(key); if (structure) return structure; }
     if (show && typeof textMaterialShow === "function") { const material = textMaterialShow(key); if (material) return material; }
     if (show && typeof textEnvironmentShow === "function") { const environment = textEnvironmentShow(key); if (environment) return environment; }
+    if (show && typeof textMausoleumShow === "function") { const mausoleum = textMausoleumShow(key); if (mausoleum) return mausoleum; }
     if (show && typeof textNoticeShow === "function") { const notice = textNoticeShow(key); if (notice) return notice; }
     if (show && typeof textWorkbenchShow === "function") { const bench = textWorkbenchShow(key); if (bench) return bench; }
     if (show && typeof textTrainingShow === "function") { const training = textTrainingShow(key); if (training) return training; }
@@ -4923,6 +5430,7 @@ function textModeHelpContent(topic, show) {
         if (def.structure && !structuralEntries().length) return false;
         if (def.material && !materialAvailable(def.id)) return false;
         if (def.environmental && !environmentAvailable(def.id)) return false;
+        if (def.mausoleum && (!G.activeRoom || G.activeRoom.buildingType !== "Mausoleum")) return false;
         if (def.notice && !textNoticeAvailable()) return false;
         if (def.bench && (!workbenchFixtures().length || textModeRoomBlock())) return false;
         if (def.training && !textTrainingAvailable()) return false;
@@ -5122,6 +5630,7 @@ async function executeTextCommand(action) {
     if (def.tasting) return executeTextTaste(action);
     if (def.material) return executeTextMaterialCommand(action);
     if (def.environmental) return executeTextEnvironmentCommand(action);
+    if (def.mausoleum) return executeTextMausoleumCommand(action);
     if (def.notice) return executeTextNoticeCommand(action);
     if (def.bench) return executeTextWorkbenchCommand(action);
     if (def.training) return executeTextTrainingCommand(action);
@@ -6819,6 +7328,7 @@ function textExplorationBlock() {
 function textFixtureActions(fixture) {
     const room = G.activeRoom, actions = [];
     const add = function (id, reason, run, note) { actions.push({ id: id, label: id + " " + getEntityName(fixture), reason: reason || "", run: run, note: note || "" }); };
+    if (fixture.id === "burial-niches") add("mausoleum", mausoleumRoomBlock(room, G.player), openMausoleumMenu, "review niches, interment and engraved plaques");
     if (fixture.id === "grindstone") add("hone", workbenchBlock("hone", fixture), function () { return selfHoneAtGrindstone(fixture); }, FORGE_SELF_HONE_STAMINA + " stamina, 1 turn, no coins");
     if (fixture.id === "anvil") add("anvil", workbenchBlock("inspect", fixture), function () { return inspectWeaponAtAnvil(fixture); }, "equipped weapon inspection, free");
     if (noticeIsBoard(fixture)) add("post", getNoticeBoardAccessBlockReason(fixture, room), function () { return openNoticePostEditor(fixture); }, "review a signed notice; posting costs 1 sheet and 1 turn");
@@ -6870,7 +7380,7 @@ function textFixtureCommand(action, entry) {
 function textFixtureDescribe(entry) {
     if (entry.fixture.id === "district-map") return readPaperMap(entry.fixture, "district", false);
     const fixture = entry.fixture, actions = textFixtureActions(fixture);
-    const baseDescription = getBoardFixtureDescription(fixture) || fixture.examineText || fixture.description || "You take a closer look at " + entry.label + ".";
+    const baseDescription = (typeof mausoleumNicheDescription === "function" && mausoleumNicheDescription(fixture, G.activeRoom)) || getBoardFixtureDescription(fixture) || fixture.examineText || fixture.description || "You take a closer look at " + entry.label + ".";
     const stateLine = adjudicationStateLine(fixture), description = stateLine ? baseDescription + " " + stateLine : baseDescription;
     const lines = actions.map(function (action) { return textFixtureCommand(action, entry) + (action.route ? " — " + action.label : "") + (action.note ? " — " + action.note : "") + (action.reason ? " — unavailable: " + action.reason : ""); });
     if (isContainerFixture(fixture)) lines.push("open " + entry.label + "; search " + entry.label + "; contents " + entry.label);
@@ -7157,7 +7667,7 @@ async function runSharedChoice(menu, choice, how) {
     const result = await choice.run();
     // Keep an action's published outcome; a queue pause is not a presentation failure.
     if (result && result.outputPublished) return result;
-    if (result && result.status === "needs_input" && (/^(notice|material|shrine)-/.test(menu.kind) || menu.kind === "structure-magic" || menu.kind === "gift" || /^(nectar|travel|synergy|casting)-/.test(menu.kind))) return result;
+    if (result && result.status === "needs_input" && (/^(mausoleum|notice|material|shrine)-/.test(menu.kind) || menu.kind === "structure-magic" || menu.kind === "gift" || /^(nectar|travel|synergy|casting)-/.test(menu.kind))) return result;
     if (result && result.status && result.status !== "completed") return sharedChoiceResult(result.status, result.message || "The choice could not finish. Pending commands are paused.");
     if (result && result.accepted === false) return sharedChoiceResult("blocked", "The gift was refused; you keep it.");
     return { status: "completed" };
@@ -7322,6 +7832,7 @@ function textSharedChoiceCanHandle(input, action) {
     if (/^shrine-/.test(menu.kind) && (action && /^(shrine|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (menu.kind === "structure-magic" && (action && /^(structure|cast|watch|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^material-/.test(menu.kind) && (action && /^(burn|dip|pour|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
+    if (/^mausoleum-/.test(menu.kind) && (action && /^(mausoleum|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^notice-/.test(menu.kind) && (action && /^(notice|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (/^training-/.test(menu.kind) && (action && /^(train|leave)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (menu.kind === "commission-board" && (action && action.verb === "commission" || (splitTextCommands(input || "").parts || []).length > 1)) return true;
@@ -7399,6 +7910,10 @@ async function textSharedChoiceInput(input, action) {
     if (menu && menu.kind === "structure-magic" && (action && /^(structure|cast|watch|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textStructuralMenuInput(menu, action, input); return true; }
     if (menu && /^material-/.test(menu.kind) && (!menu.ownsView() || menu.scene.modal !== G.activeItemModal || menu.scene.room !== G.activeRoom || menu.scene.player !== G.player || menu.scene.npc !== G.activeNPC || menu.scene.mode !== G.activeNPCMode || menu.scene.object !== G.activeObject)) { clearSharedChoiceMenu(menu); return !!(action && /^(back|cancel|leave)$/.test(action.verb)); }
     if (menu && /^material-/.test(menu.kind) && (action && /^(burn|dip|pour|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textMaterialMenuInput(menu, action, input); return true; }
+    if (menu && /^mausoleum-/.test(menu.kind) && (action && /^(mausoleum|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) {
+        textMausoleumMenuInput(menu, action, input);
+        return true;
+    }
     if (menu && /^notice-/.test(menu.kind) && (!menu.ownsView() || menu.scene.modal !== G.activeItemModal || menu.scene.room !== G.activeRoom || menu.scene.player !== G.player)) { clearSharedChoiceMenu(menu); return !!(action && /^(back|cancel|leave)$/.test(action.verb)); }
     if (menu && /^notice-/.test(menu.kind) && (action && /^(notice|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textNoticeMenuInput(menu, action, input); return true; }
     if (menu && /^training-/.test(menu.kind) && (action && /^(train|leave)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) { await textTrainingMenuInput(menu, action, input); return true; }
@@ -12823,7 +13338,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-25-006
+// Core Engine Version: 2026-10-25-008
 // Latest: Voice command fallback infers misheard words: person targets that match no one get a sounds-like best guess (textGuessNPCTarget: "female cancun" -> the female kenku), the AI is told voice input is speech-to-text and to always give a best guess (exits listed), AI plans wrapped in prose, using shorthand keys or verb synonyms are repaired, and in voice play the valid part of a partly bad plan still runs.
 // Previous: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
 // Previous: Trade and economy pass: Traders now carry a real purse (20-50 gold) instead of the 2-10 default; merchants pay at most 1.75x half value so deity tomes and similar cannot be bought and flipped for profit; bone dice wagers move coin to and from the NPC and have a cooldown; sealed goods pay slightly less coin. Previous -007: Hand-in tokens now pay out of the NPC's own coin pouch and are kept if they cannot cover them. Previous -006: Item purpose pass part 2: keepsakes (charms, rings, brooches, scarves) wear on the Neck for +1 Charisma; rivets, nails, pick-heads, sewing kits, twine and cloth mend worn gear; relics, tokens, candles and incense can be left as offerings at a shrine; sealed bales, crates and goods open; spice seasons a meal; pawn tickets, receipts, tally sticks, chits and house tokens are handed in to the right NPC; bone dice wager with friendly NPCs; ledgers, maps and receipts are readable; ink, chalk, parchment and wax tablets count as writing supplies; the ladle and net weight are improvised weapons; clean linen bandages. New "apply" text command.
@@ -12897,7 +13412,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-25-006";
+window.__ENGINE_CORE_VERSION = "2026-10-25-008";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -17482,6 +17997,7 @@ window.advanceStoryTurn = function(steps = 1) {
     if (typeof tickSettlementWatch === "function") tickSettlementWatch();
     if (typeof tickNPCOpportunism === "function") tickNPCOpportunism();
     if (typeof tickAmbientNPCActivity === "function") tickAmbientNPCActivity();
+    if (typeof tickMausoleumService === "function") tickMausoleumService();
     if (typeof tickNPCScheduleActiveRoom === "function") tickNPCScheduleActiveRoom();
     if (typeof tickDivinePower === "function") tickDivinePower();
     if (typeof tickNPCCommitments === "function") tickNPCCommitments();
@@ -21570,7 +22086,7 @@ function instantiatePlannedRooms(plan) {
             room.locks = {};
             Object.keys(desc.locks).forEach(d => { room.locks[d] = Object.assign({}, desc.locks[d]); });
         }
-        ["buildingId", "buildingType", "buildingName", "floor", "isBuildingRoom", "isEntrance", "guaranteedLink", "minNpcs", "isPlannedHub", "zoneOrdinal", "hostilityCap", "displayName", "name"].forEach(key => {
+        ["buildingId", "buildingType", "buildingName", "shopDisplayName", "floor", "isBuildingRoom", "isEntrance", "guaranteedLink", "minNpcs", "isPlannedHub", "zoneOrdinal", "hostilityCap", "displayName", "name"].forEach(key => {
             if (desc[key] !== undefined && desc[key] !== null) room[key] = desc[key];
         });
         if (Array.isArray(desc.anchorFor)) room.anchorFor = desc.anchorFor.slice();
@@ -21759,6 +22275,7 @@ function createNPCHome(npc, zoneName, spawnRoomArg) {
 
 function spawnNPCsForRoom(room, zoneName) {
     const npcs = [];
+    if (room.buildingType === "Mausoleum") return spawnMausoleumStaffForRoom(room, zoneName);
     if (room.role === "spine") return npcs;
 
     const zone = getZoneTemplate(zoneName);
@@ -23279,6 +23796,7 @@ function isCompanionDownForTravel(npc) {
 }
 
 function isBodyBeingHauled(npc) {
+    if (npc && npc.mortuaryClaim && npc.mortuaryClaim.inTransit) return true;
     if (!npc || !G.player) return false;
     const held = G.player.carrying, dragged = G.pendingDragBody;
     const same = function (b) { return !!b && (b === npc || (npc.id && b.id === npc.id)); };
@@ -29677,13 +30195,13 @@ function commitmentConcernKinds(npc) {
 function commitmentWorkSupply(item) {
     return (Array.isArray(item.type)?item.type:[item.type]).includes('tool') || /sewing|twine|rivet|nails|pick.head|repair kit/i.test(String(item.name||'')+' '+String(item.id||''));
 }
-function commitmentNeedRoute(npc,room,test,maxSteps) {
+function commitmentNeedRoute(npc,room,test,maxSteps,options) {
     const seen=new Set([room.coords]),queue=[{room:room,path:[]}];
     for(let i=0;i<queue.length;i++){
         const node=queue[i];if(node.path.length>=maxSteps)continue;
-        for(const coords of getNPCExitCoords(node.room,npc)){
+        for(const coords of getNPCExitCoords(node.room,npc,options)){
             if(seen.has(coords))continue;seen.add(coords);
-            const next=G.roomMap[coords];if(!next || next.zone!==room.zone || guardRoomIsPost(next) || commitmentRoomUnsafe(next))continue;
+            const next=G.roomMap[coords];if(!next || next.zone!==room.zone || guardRoomIsPost(next) || commitmentRoomUnsafe(next) || options && options.canEnter && !options.canEnter(next,node.room))continue;
             const path=node.path.concat([coords]);if(test(next))return {room:next,path:path};queue.push({room:next,path:path});
         }
     }
@@ -31349,6 +31867,7 @@ function moveScheduledNPC(npc, fromRoom, destCoords, target) {
 // Returns "moved" (took a step), "stay" (on target, or waiting for its turn:
 // do not wander), or null (no schedule applies: fall back to the old wander).
 function stepNPCSchedule(npc, room) {
+    if (typeof mortuaryOwnsNPC === "function" && mortuaryOwnsNPC(npc)) return "stay";
     if(typeof stepNPCSocialVisit==='function'){const social=stepNPCSocialVisit(npc,room);if(social)return social;}
     if (npc && npc._guardDuty) return "stay";
     if (!canNPCFollowSchedule(npc)) return null;
@@ -31939,6 +32458,7 @@ function stepNPCAutonomy(npc, room) {
 
     // Fleeing a fresh aggressor takes priority over everything else.
     if (attemptNPCFlee(npc, room)) return;
+    if (typeof mortuaryOwnsNPC === "function" && mortuaryOwnsNPC(npc)) { healNPCOverTime(npc); return; }
 
     if (typeof stepNPCWorldCare === 'function' && stepNPCWorldCare(npc, room)) return;
     if (typeof stepNPCWorldReaction === 'function' && stepNPCWorldReaction(npc, room)) return;
@@ -48710,7 +49230,7 @@ function useDeityPower(powerId, npc, healTarget) {
                 const check = rollStatCheck(npc, "willpower", power.mercy.dc);
                 if (G.combatRollDebugMode) lines.push(formatRollLine("Mercy save", check.roll, check.bonus, check.total, check.dc, !check.success, false));
                 if (!check.success) {
-                    npc.surrendered = true;
+                    setNPCSurrender(npc, player, "forced");
                     applyNPCImpact(npc, { mood: -1, favor: 2, hostility: -35, intent: "surrender", moodOverride: "afraid", actionTag: "surrender-attempt" });
                     lines.push(`${npcName} lowers their guard, the fight draining out of them, and begs for mercy.`);
                     if (!power.granted) trackCombatSkillGain(player, { statKey: "willpower", statAmount: 2 });
@@ -51341,7 +51861,7 @@ function maybeRenderNPCSurrender(npc, lines) {
     const chance = hpRatio <= 0.1 ? 0.85 : 0.45;
     if (Math.random() > chance) return false;
 
-    npc.surrendered = true;
+    setNPCSurrender(npc, G.player, "voluntary");
     applyNPCImpact(npc, {
         mood: -1,
         favor: -2,
@@ -51373,7 +51893,7 @@ function renderNPCSurrenderOptions(npc) {
 
 function acceptNPCSurrender(npc) {
     if (!npc) return;
-    npc.surrendered = true;
+    setNPCSurrender(npc, G.player, "voluntary");
     applyNPCImpact(npc, {
         mood: 1,
         favor: 10,
@@ -51418,6 +51938,107 @@ function refuseNPCSurrender(npc) {
     renderCombatActionMenu(npc);
     setNarration(`${npc.name || "The creature"} realizes mercy is not coming.`);
     saveGameState();
+}
+
+// Surrender tracking constants
+const SURRENDER_DURATION_TURNS = 24 * 60; // ~24 hours of game time (60 turns/hour typical)
+
+/**
+ * Set NPC surrender with tracking for player-specific access and decay
+ * @param {Object} npc - The NPC
+ * @param {Object} player - The player who defeated them
+ * @param {string} type - 'voluntary' (NPC yielded), 'forced' (mercy power), 'bound' (rope/binding)
+ */
+function setNPCSurrender(npc, player, type = "voluntary") {
+    if (!npc || !player) return;
+    
+    // Set basic flag for backward compatibility
+    npc.surrendered = true;
+    
+    // Store detailed surrender info
+    if (!npc._surrenderData) npc._surrenderData = {};
+    npc._surrenderData.surrenderedById = player.id || player.name;
+    npc._surrenderData.surrenderedByName = player.name || "Unknown";
+    npc._surrenderData.surrenderedAt = Date.now();
+    npc._surrenderData.surrenderedAtTurn = getCurrentStoryTurn();
+    npc._surrenderData.surrenderType = type;
+    npc._surrenderData.voluntary = (type === "voluntary");
+    
+    // Clear any previous bound/prisoner state
+    if (type !== "bound") {
+        delete npc._prisoner;
+        delete npc._boundCaptiveFollower;
+    }
+}
+
+/**
+ * Check if NPC has surrendered to a specific player and hasn't decayed
+ * @param {Object} npc - The NPC
+ * @param {Object} player - The player to check
+ * @returns {boolean} - True if NPC surrendered to this player and it's still valid
+ */
+function isNPCSurrenderedToPlayer(npc, player) {
+    if (!npc || !player || !npc._surrenderData) return false;
+    
+    // Check if surrender has decayed
+    if (npc._surrenderData.surrenderedAt || npc._surrenderData.surrenderedAtTurn) {
+        const startTurn = npc._surrenderData.surrenderedAtTurn || 0;
+        const elapsedTurns = getCurrentStoryTurn() - startTurn;
+        if (elapsedTurns > SURRENDER_DURATION_TURNS) {
+            // Decayed - clear surrender
+            clearNPCSurrender(npc);
+            return false;
+        }
+    }
+    
+    // Check if this player is the one who defeated them
+    const playerId = player.id || player.name;
+    return npc._surrenderData.surrenderedById === playerId;
+}
+
+/**
+ * Check if NPC surrender is still valid (not decayed)
+ * @param {Object} npc - The NPC
+ * @returns {boolean} - True if surrender hasn't decayed
+ */
+function isNPCSurrenderValid(npc) {
+    if (!npc) return !!npc.surrendered;
+    if (!npc._surrenderData) return !!npc.surrendered;
+    
+    const startTurn = npc._surrenderData.surrenderedAtTurn || 0;
+    const elapsedTurns = getCurrentStoryTurn() - startTurn;
+    if (elapsedTurns > SURRENDER_DURATION_TURNS) {
+        clearNPCSurrender(npc);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Clear NPC surrender status
+ * @param {Object} npc - The NPC
+ */
+function clearNPCSurrender(npc) {
+    if (!npc) return;
+    npc.surrendered = false;
+    delete npc._surrenderData;
+    delete npc.refusesSurrender;
+}
+
+/**
+ * Check if an NPC is unconscious or sleeping (cannot resist actions)
+ * @param {Object} npc - The NPC to check
+ * @returns {boolean} - True if NPC is unconscious or sleeping
+ */
+function isNPCUnconsciousOrSleeping(npc) {
+    if (!npc) return false;
+    // Check unconscious states
+    if (npc.dead || npc.hp <= 0 || npc.unconscious || npc.isUnconsciousBody) return true;
+    // Check sleeping state
+    if (typeof isNPCSleeping === "function" && isNPCSleeping(npc)) return true;
+    // Check sleepingSafe flag
+    if (npc.currentState && npc.currentState.sleeping) return true;
+    return false;
 }
 
 // ── CAPTIVES (accepted surrender aftermath) ────────────────────────
@@ -58736,6 +59357,8 @@ function renderRoom() {
     if (room.type === "Portal Chamber" && typeof syncPortalChamberWaygates === "function") syncPortalChamberWaygates(room);
     if (typeof ensureUndergroundStairRoutes === "function") ensureUndergroundStairRoutes();
     if (typeof ensureTownBathhouse === "function") ensureTownBathhouse();
+    if (typeof ensureSettlementMausoleum === "function") ensureSettlementMausoleum();
+    if (typeof ensureMausoleumCapacities === "function") ensureMausoleumCapacities();
     if (typeof ensureRoomImage === "function") ensureRoomImage(room);
     if (typeof ensureShopNamesForRoomMap === "function") ensureShopNamesForRoomMap(G.roomMap);
 
@@ -61729,8 +62352,11 @@ function leaveRoomAfterIntimidation(npc, room) {
 // The demands that make sense with this NPC right now: [{ key, label, dc, chance, hint }].
 function getIntimidationDemands(npc) {
     const out = [];
-    if (!npc || npc.isHumanoid === false || !isAwakeHumanoidNPC(npc) || isCompanionNPC(npc) || npc.isGuide) return out;
+    // Allow intimidation of surrendered/bound NPCs even if they're unconscious/sleeping
+    const isSurrenderedOrBound = npc && (npc.surrendered || npc.bound);
+    if (!npc || npc.isHumanoid === false || (!isAwakeHumanoidNPC(npc) && !isSurrenderedOrBound) || isCompanionNPC(npc) || npc.isGuide) return out;
     if ((npc.hostility || 0) >= INTIMIDATE_MAX_HOSTILITY) return out;
+    
     const seller = isIntimidationSeller(npc);
     const keys = ["leave"];
     if (seller && getIntimidationPriceMult(npc) >= 1 && !renownRefusesTrade(npc)) keys.push("price");
@@ -64134,10 +64760,10 @@ function guardRoomIsPost(room) {
 
 // Breadth-first walk over known exits within the same zone. Returns
 // { room, path } for the nearest room accepted by `test`, or null.
-function getNPCExitCoords(room, npc) {
+function getNPCExitCoords(room, npc, options) {
     if (!room || !room.exits) return [];
     return Object.keys(room.exits).filter(function (dir) {
-        if (isVerticalDirection(dir)) return false;
+        if (isVerticalDirection(dir) && !(options && options.includeVertical)) return false;
         const c = room.exits[dir];
         if (!c || !G.roomMap[c] || typeof npcWorldAvoids === 'function' && npcWorldAvoids(npc, c) || typeof npcSocialAvoids === 'function' && npcSocialAvoids(npc,c)) return false;
         return !npc || npcLockAccess(npc, room, dir).ok;
@@ -67097,6 +67723,9 @@ function renderSynergyReplaceMenu(room,id) {
 
 
 const INTERACT_MENU_ACTIONS = [
+    { id: "mausoleum", label: "Mausoleum and memorials", visible: room => !!room && room.buildingType === "Mausoleum",
+      disabledReason: () => "", title: "Review permanent burial niches, interment and engraved memorial plaques.",
+      run: () => { closeInteractMenu(); return openMausoleumMenu(); } },
     { id: "tools", label: "Use objects", group: "act", visible: function () { return worldToolAvailable(); }, disabledReason: worldToolSceneBlock, title: "Use objects as levers or door braces.", run: function () { return openWorldToolMenu(""); } },
     {
         id: "putdown",
@@ -78336,7 +78965,7 @@ function openFixtureCard(fixture, cardOptions) {
     if (isNoticeFixture(fixture)) ensureNoticeWritingSupplies(room);
     if (isNoticeWritingSuppliesFixture(fixture)) refreshNoticeWritingSupplies(fixture);
     // Fixed notice descriptions also replace verbose text cached in older saves.
-    const examineText = getBoardFixtureDescription(fixture) || fixture.examineText;
+    const examineText = (typeof mausoleumNicheDescription === "function" && mausoleumNicheDescription(fixture, G.activeRoom)) || getBoardFixtureDescription(fixture) || fixture.examineText;
     descEl.textContent = examineText || "You take a closer look...";
     // An opened container describes what is in it now (or the take/store
     // message, or - right after opening - the line typed out below).
@@ -83847,8 +84476,9 @@ function renderIntimacyActionMenu(npc) {
     demeanorContainer.appendChild(demeanorSelect);
     
     // Store demeanor mode on NPC intimacy state
+    // Default to dominant for unconscious/sleeping/bound NPCs (they cannot resist)
     if (!npc.intimacy._demeanorMode) {
-        npc.intimacy._demeanorMode = "consentual";
+        npc.intimacy._demeanorMode = isNonResisting ? "dominant" : "consentual";
     }
     demeanorSelect.value = npc.intimacy._demeanorMode || "consentual";
     
@@ -84044,11 +84674,89 @@ function renderIntimacyActionMenu(npc) {
     showAllLabel.style.cursor = "pointer";
     showAllContainer.appendChild(showAllLabel);
 
+    // For unconscious/sleeping/bound NPCs, add special clothing actions
+    // These are injected before getting menu actions
+    const isBound = npc && (npc.bound || npc._prisoner || npc._boundCaptiveFollower);
+    const isNonResisting = isUnconsciousOrSleeping || isBound;
+    
     // Get menu actions with room context
     if (typeof getMenuActions === "function") {
         const room = G.activeRoom;
         const result = getMenuActions(npc, G.player, room);
         const menuItems = result.menu || [];
+        
+        // Inject clothing removal actions for unconscious/sleeping/bound NPCs
+        if (isNonResisting) {
+            // Find the Clothing section and add special actions
+            const clothingSectionIndex = menuItems.findIndex(item => 
+                item.type === "section" && 
+                (item.label === "Clothing" || item.label === "clothing")
+            );
+            
+            if (clothingSectionIndex >= 0) {
+                // Create special clothing removal actions for unconscious NPCs
+                const unconsciousClothingActions = [
+                    {
+                        id: "tear_off_clothing_unconscious",
+                        label: "Tear off their clothing",
+                        description: "Forcefully remove all of their clothing",
+                        borderColor: "rgb(255, 0, 0)",
+                        disabled: false
+                    },
+                    {
+                        id: "remove_clothing_unconscious",
+                        label: "Remove their clothing",
+                        description: "Gently remove their clothing piece by piece",
+                        borderColor: "rgb(255, 165, 0)",
+                        disabled: false
+                    },
+                    {
+                        id: "cut_off_clothing_unconscious",
+                        label: "Cut off their clothing",
+                        description: "Use a blade to cut away their clothing",
+                        borderColor: "rgb(255, 0, 0)",
+                        disabled: false
+                    }
+                ];
+                
+                // Add these actions to the Clothing section
+                if (menuItems[clothingSectionIndex].actions) {
+                    menuItems[clothingSectionIndex].actions = 
+                        unconsciousClothingActions.concat(menuItems[clothingSectionIndex].actions);
+                } else {
+                    menuItems[clothingSectionIndex].actions = unconsciousClothingActions;
+                }
+            } else {
+                // If no Clothing section exists, create one
+                menuItems.push({
+                    type: "section",
+                    label: "Clothing",
+                    actions: [
+                        {
+                            id: "tear_off_clothing_unconscious",
+                            label: "Tear off their clothing",
+                            description: "Forcefully remove all of their clothing",
+                            borderColor: "rgb(255, 0, 0)",
+                            disabled: false
+                        },
+                        {
+                            id: "remove_clothing_unconscious",
+                            label: "Remove their clothing",
+                            description: "Gently remove their clothing piece by piece",
+                            borderColor: "rgb(255, 165, 0)",
+                            disabled: false
+                        },
+                        {
+                            id: "cut_off_clothing_unconscious",
+                            label: "Cut off their clothing",
+                            description: "Use a blade to cut away their clothing",
+                            borderColor: "rgb(255, 0, 0)",
+                            disabled: false
+                        }
+                    ]
+                });
+            }
+        }
         // Acts the player is currently engaged in (multi-act slots) — these
         // get the engaged border in the button rendering below.
         const engagedActIds = (typeof window.getEngagedActIds === "function" && npc.intimacy)
@@ -84190,8 +84898,20 @@ function renderIntimacyActionMenu(npc) {
         function shouldShowSection(sectionLabel) {
             const label = String(sectionLabel || "");
             
+            // Check if NPC is unconscious or sleeping
+            const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                               (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+            const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+                             (npc && npc.currentState && npc.currentState.sleeping);
+            const isUnconsciousOrSleeping = isUnconscious || isSleeping;
+            
+            // Hide Requests section for unconscious/sleeping NPCs
+            if (label === "Requests" && isUnconsciousOrSleeping) {
+                return false;
+            }
+            
             // Always show special sections
-            if (label === "Clothing" || label === "Requests" || label === "Head" || 
+            if (label === "Clothing" || label === "Head" || 
                 label === "Upper Body" || label === "Lower Body") {
                 return true;
             }
@@ -84227,6 +84947,16 @@ function renderIntimacyActionMenu(npc) {
         // Also filter out Pause/Stop from Other section (they go in controls-row)
         console.log(`[DEBUG] sectionItems:`, sectionItems.map(item => ({label: item.label, actionsCount: item.actions ? item.actions.length : 0})));
         
+        // Check if NPC is unconscious, sleeping, or bound - all actions should be available
+        const isUnconsciousOrSleeping = typeof isNPCUnconsciousOrSleeping === "function" && isNPCUnconsciousOrSleeping(npc);
+        const isBound = npc && (npc.bound || npc._prisoner || npc._boundCaptiveFollower);
+        const isNonResisting = isUnconsciousOrSleeping || isBound;
+        
+        // Force showAllActions to true for unconscious/sleeping/bound NPCs (they cannot resist)
+        if (isNonResisting && npc.intimacy) {
+            npc.intimacy.showAllActions = true;
+        }
+        
         // Get showAll state to check visibility
         const showAllActionsState = npc.intimacy && npc.intimacy.showAllActions;
         
@@ -84237,6 +84967,10 @@ function renderIntimacyActionMenu(npc) {
                 if (label === "player") return false;
                 if (!item.actions || item.actions.length === 0) return false;
                 if (!shouldShowSection(item.label)) return false;
+                
+                // Filter out Requests section for unconscious/sleeping/bound NPCs
+                // (they cannot make requests while unconscious/sleeping/bound)
+                if (isNonResisting && (label === "requests" || item.label === "Requests")) return false;
                 
                 // Check if section has any visible (non-disabled) actions
                 const visibleActions = item.actions.filter(a => !a.disabled || showAllActionsState);
@@ -84280,8 +85014,37 @@ function renderIntimacyActionMenu(npc) {
             
             // Find the section object to get bgColor for special tabs
             const sectionItem = menuItems.find(item => item.label === label);
+            // Override bgColor to use dark theme - remove light colors
+            // Use dark backgrounds that work on dark theme
             if (sectionItem && sectionItem.bgColor) {
-                tab.style.backgroundColor = sectionItem.bgColor;
+                // Check if bgColor is a light color and override it
+                const bgColor = sectionItem.bgColor;
+                // If it's a light color (RGB values > 200), use a dark alternative
+                if (typeof bgColor === "string" && bgColor.includes("rgb")) {
+                    // Extract RGB values
+                    const match = bgColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                    if (match) {
+                        const r = parseInt(match[1]);
+                        const g = parseInt(match[2]);
+                        const b = parseInt(match[3]);
+                        // If all RGB values > 200, it's too light for dark theme
+                        if (r > 200 && g > 200 && b > 200) {
+                            // Use a dark color instead
+                            tab.style.backgroundColor = "#2d2d2d";
+                        } else {
+                            tab.style.backgroundColor = bgColor;
+                        }
+                    } else {
+                        tab.style.backgroundColor = bgColor;
+                    }
+                } else {
+                    // Default dark background
+                    tab.style.backgroundColor = "#2d2d2d";
+                }
+                tab.style.borderColor = "#444";
+            } else {
+                // Default dark background for all tabs
+                tab.style.backgroundColor = "#2d2d2d";
                 tab.style.borderColor = "#444";
             }
             
@@ -85299,6 +86062,60 @@ function finishPullAwayActs(npc, pullOutNarrative) {
 
 function chooseIntimacyAction(npc, actId) {
     if (!npc || !actId) return;
+    
+    // Check if NPC is non-resisting (unconscious, sleeping, or bound)
+    const isUnconsciousOrSleeping = typeof isNPCUnconsciousOrSleeping === "function" && isNPCUnconsciousOrSleeping(npc);
+    const isBound = npc && (npc.bound || npc._prisoner || npc._boundCaptiveFollower);
+    const isNonResisting = isUnconsciousOrSleeping || isBound;
+    
+    // Ensure npc.intimacy exists
+    if (!npc.intimacy) {
+        npc.intimacy = { encounter: { active: true } };
+    }
+    if (!npc.intimacy.encounter) {
+        npc.intimacy.encounter = { active: true };
+    }
+    
+    // For non-resisting NPCs, ensure they cannot resist
+    if (isNonResisting) {
+        // Mark that this is a non-resisting intimacy encounter
+        npc.intimacy.encounter.unconsciousIntimacy = true;
+        // Also mark the surrender type for narrative differentiation
+        if (!npc._surrenderData && isBound) {
+            setNPCSurrender(npc, G.player, "bound");
+        }
+    }
+
+    // UNCONSCIOUS CLOTHING ACTIONS
+    if (actId === "tear_off_clothing_unconscious" || actId === "remove_clothing_unconscious" || actId === "cut_off_clothing_unconscious") {
+        const npcName = npc.name || "them";
+        let narration = "";
+        
+        if (actId === "tear_off_clothing_unconscious") {
+            narration = `You roughly tear off ${npcName}'s clothing, leaving them completely exposed.`;
+        } else if (actId === "remove_clothing_unconscious") {
+            narration = `You carefully remove ${npcName}'s clothing piece by piece, leaving them bare.`;
+        } else if (actId === "cut_off_clothing_unconscious") {
+            narration = `You cut away ${npcName}'s clothing with your blade, the fabric falling away to reveal their naked body.`;
+        }
+        
+        setNarration(narration);
+        
+        // Mark that NPC is now nude
+        if (!npc.intimacy.clothingState) {
+            npc.intimacy.clothingState = {};
+        }
+        npc.intimacy.clothingState.nude = true;
+        npc.intimacy.clothingState.clothingRemoved = true;
+        
+        // Re-render menu
+        if (typeof renderIntimacyActionMenu === "function") {
+            renderIntimacyActionMenu(npc);
+        }
+        
+        saveGameState();
+        return;
+    }
 
     // BONDAGE ACTION: Bind NPC with rope for dom/sub play
     if (actId === "bind_npc_intimacy") {
@@ -85335,7 +86152,7 @@ function chooseIntimacyAction(npc, actId) {
         
         // Bind the NPC
         npc.bound = true;
-        npc.surrendered = true;
+        setNPCSurrender(npc, G.player, "bound");
         
         // Consume binding materials
         const bindingToolCapacity = typeof window.bindingToolCapacity === "function" ? window.bindingToolCapacity : function(item) {

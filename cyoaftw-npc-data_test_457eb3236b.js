@@ -1,9 +1,9 @@
-// Bathhouses: public bathkeeper services, profession, routine and workplace ties.
+// Mausoleum keepers, vigil tenders and paired bier bearers: routines and workplace ties.
 // NPC Life W1/W2: bounded short-term/entity memory, delivered-reply annotations and compatible behavior syntax. Shared species appearance retained.
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-24-004";
+    window.NPC_DATA_VERSION = "2026-10-25-006";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -1163,6 +1163,9 @@ const NPC_ROUTINE_DEFAULT = {
     pastime: "resting, and swapping news with neighbours"
 };
 const NPC_ROUTINES = {
+    "Keeper of the Quiet": { duties: "keeping the mausoleum's register, identifying the departed, overseeing the vaults and commissioning memorial plaques", pay: "a settlement stipend and fees for engraved memorial plaques", shifts: ["checking the register and opening the receiving hall", "attending the receiving counter and keeping burial records", "checking the vaults and settling the day's records", "home"], pastime: "copying old names so they will not be forgotten" },
+    "Vigil Tender": { duties: "tending the memorial gallery, cleaning the laying-out room, preparing shrouds and helping mourners", pay: "wages from the mausoleum keeper", shifts: ["cleaning the gallery and preparing linen", "tending lamps and helping visitors", "laying fresh coverings and trimming the vigil lamps", "home"], pastime: "tending a small pot of rosemary" },
+    "Bier Bearer": { duties: "collecting the dead with a work partner, carrying the bier back to the mausoleum and laying the departed in numbered burial niches", pay: "a settlement stipend through the mausoleum keeper", shifts: ["checking the bier and straps before the first collection round", "collecting the dead and bringing them to the burial vaults together", "finishing the last collection and cleaning the carrying equipment", "home"], pastime: "sharing a quiet meal with a workmate" },
     Bathkeeper: { duties: "running the bathhouse, tending hot water and linen, offering washes and shoulder and back massage, and supervising practical trials", pay: "customer fees, with wages paid to attendants and qualified practitioners", shifts: ["warming water and setting out clean linen", "serving bathers and supervising staff", "finishing treatments and washing linen", "home"], pastime: "a quiet cup of herbal tea and news from travelers" },
     Innkeeper: { duties: "running the inn: rooms, the common room, the cellar and keeping order", pay: "what guests pay for rooms and meals; you answer for the till", shifts: ["lighting the fires and starting the cooking", "settling rooms and keeping stock", "the common room fills and you keep the peace", "closing up, then bed"], pastime: "talking with regulars and tallying the week's takings" },
     Bartender: { duties: "pouring drinks, keeping the bar clean and watching the room", pay: "wages from the house plus whatever tips come over the bar", shifts: ["home", "cleaning and stocking the bar", "pouring for the evening crowd", "last pours, then clearing up"], pastime: "listening to the room's gossip" },
@@ -6356,12 +6359,12 @@ const NPC_TIE_LOVER_CHANCE = 0.10;
 const NPC_TIE_RECIPROCAL = { spouse: "spouse", parent: "child", child: "parent", sibling: "sibling", friend: "friend", coworker: "coworker", employer: "employee", employee: "employer", lover: "lover" };
 const NPC_TIE_FAMILY = ["spouse", "parent", "child", "sibling"];
 // Roles that are staff of the building they stand in (a place of work).
-const NPC_TIE_WORK_ROLES = ["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
+const NPC_TIE_WORK_ROLES = ["Keeper of the Quiet", "Vigil Tender", "Bier Bearer", "Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
 // Employers in a building and who they plausibly employ there.
-const NPC_TIE_EMPLOYER_ROLES = ["Bathkeeper", "Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
-const NPC_TIE_EMPLOYEE_ROLES = ["Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk", "BathhouseAttendant", "BathhousePractitioner"];
+const NPC_TIE_EMPLOYER_ROLES = ["Keeper of the Quiet", "Bathkeeper", "Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
+const NPC_TIE_EMPLOYEE_ROLES = ["Vigil Tender", "Bier Bearer", "Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk", "BathhouseAttendant", "BathhousePractitioner"];
 // Roles that work in teams across a zone rather than in one building.
-const NPC_TIE_TEAM_ROLES = ["Town Guard", "Stone Guard", "Miner", "Scout", "Raider", "Scavenger", "Cultist"];
+const NPC_TIE_TEAM_ROLES = ["Bier Bearer", "Town Guard", "Stone Guard", "Miner", "Scout", "Raider", "Scavenger", "Cultist"];
 
 function _tieCount(npc, type) {
     return (npc.ties || []).filter(function (t) { return !type || t.type === type; }).length;
@@ -7055,6 +7058,7 @@ function getBaseFavorabilityForTemperament(temperament) {
 const NPC_TEMPER_KEYS = ["friendly", "neutral", "curious", "bold", "wary", "skittish", "hostile", "aggressive"];
 
 const NPC_ROLE_TEMPER_CLASS = {
+    "Keeper of the Quiet": "staff", "Vigil Tender": "staff", "Bier Bearer": "staff",
     "Bathkeeper": "staff",
     "Innkeeper": "staff", "Bartender": "staff", "Cook": "staff", "Shopkeeper": "staff", "Vendor": "staff",
     "Wandering Merchant": "staff", "Blacksmith": "staff", "Clothier": "staff", "Healer": "staff", "Priest": "staff", "Archivist": "staff",

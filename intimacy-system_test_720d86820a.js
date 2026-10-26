@@ -2000,25 +2000,24 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         }
     }
     
-    // If NPC is unconscious, hide all NPC-actor actions (playerIsBottom: true)
-    // since the unconscious NPC cannot participate or respond
-    if (isUnconscious && act.playerIsBottom === true) {
-        return { valid: false, reason: "NPC is unconscious", hidden: true };
+    // If NPC is unconscious or sleeping, hide all NPC-actor actions (playerIsBottom: true)
+    // since the unconscious/sleeping NPC cannot participate or respond
+    if ((isUnconscious || isSleeping) && act.playerIsBottom === true) {
+        return { valid: false, reason: isUnconscious ? "NPC is unconscious" : "NPC is sleeping", hidden: true };
     }
     
-    // SLEEPING ACTION CHECK
-    // For sleeping NPCs, only allow safe sleeping acts or all acts if intoxicated
-    if (isSleeping) {
+    // For unconscious NPCs: allow ALL player-actor actions (they can't resist)
+    // For sleeping NPCs: allow all player-actor actions too (they can't resist while asleep)
+    // Only filter by position and clothing requirements below
+    if (isUnconscious || isSleeping) {
+        // No additional filtering for unconscious/sleeping - all player actions are allowed
+        // Position and clothing checks still apply below
+    } else {
+        // SLEEPING ACTION CHECK (legacy - for non-unconscious sleeping)
         const intimacyState = npc.intimacy || {};
         const encounter = intimacyState.encounter || {};
         const isIntoxicated = encounter._isIntoxicated === true;
         const isExhausted = encounter._isExhausted === true;
-        
-        // If NPC is sleeping and this is an NPC-actor action, hide it
-        // (sleeping NPC cannot participate)
-        if (act.playerIsBottom === true) {
-            return { valid: false, reason: "NPC is sleeping", hidden: true };
-        }
         
         // For player-actor actions on sleeping NPCs:
         // - If act is marked as safe for sleeping (sleepingSafe: true), allow it
@@ -2032,7 +2031,14 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
 
     // Demeanor mode check - actions with requiresDemeanorMode only appear in that demeanor
     if (act.requiresDemeanorMode) {
-        const demeanorMode = (npc.intimacy && npc.intimacy._demeanorMode) ? String(npc.intimacy._demeanorMode).toLowerCase() : "consentual";
+        // Default to dominant for unconscious/sleeping/surrendered/bound NPCs
+        const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                           (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+        const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+                         (npc && npc.currentState && npc.currentState.sleeping);
+        const isSurrenderedOrBound = npc && (npc.surrendered || npc.bound);
+        const defaultDemeanor = (isUnconscious || isSleeping || isSurrenderedOrBound) ? "dominant" : "consentual";
+        const demeanorMode = (npc.intimacy && npc.intimacy._demeanorMode) ? String(npc.intimacy._demeanorMode).toLowerCase() : defaultDemeanor;
         const allowedModes = Array.isArray(act.requiresDemeanorMode) ? act.requiresDemeanorMode.map(m => String(m).toLowerCase()) : [String(act.requiresDemeanorMode).toLowerCase()];
         if (!allowedModes.includes(demeanorMode)) {
             return { valid: false, reason: "wrong demeanor mode", hidden: true };
@@ -2496,16 +2502,22 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         // ladder.
         var _disinhibThreshold = _effectiveActDisinhibitionThreshold(act);
         
-        // Get current demeanor mode
+        // Get current demeanor mode - default to dominant for unconscious/sleeping/surrendered/bound
+        const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                           (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+        const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+                         (npc && npc.currentState && npc.currentState.sleeping);
+        const isSurrenderedOrBound = npc && (npc.surrendered || npc.bound);
         const demeanorMode = (npc.intimacy && npc.intimacy._demeanorMode) 
             ? String(npc.intimacy._demeanorMode).toLowerCase() 
-            : "consentual";
+            : ((isUnconscious || isSleeping || isSurrenderedOrBound) ? "dominant" : "consentual");
         
         // A collared slave (npc.enslaved) or a bound captive does as they
         // are told: the disinhibition ladder does not gate commanded acts.
         // DOMINANT MODE: Player in dominant demeanor can do whatever they want
         // to the NPC - all disinhibition-gated acts are unlocked with red border
-        if (npc && (npc.enslaved || (npc.bound && npc.surrendered) || demeanorMode === "dominant")) {
+        // For unconscious/sleeping/surrendered/bound NPCs, always use dominant mode
+        if (npc && (npc.enslaved || (npc.bound && npc.surrendered) || demeanorMode === "dominant" || isUnconscious || isSleeping || isSurrenderedOrBound)) {
             // Bypass disinhibition gating but mark the action as bypassed for red border
             if (demeanorMode === "dominant" && _disinhibThreshold > 0) {
                 // Mark this action as dominant-bypass in the act object for later use
@@ -9384,7 +9396,7 @@ function getMenuActions(npc, player, room = null, positionId = null) {
     
     // Define the new body-part-only sections in order
     const BODY_PART_SECTIONS = [
-        { id: "Clothing", label: "Clothing", isSpecial: true, bgColor: null },
+        { id: "Clothing", label: "Clothing", isSpecial: true, bgColor: "#3a2a1a" },
         { id: "Head", label: "Head", isSpecial: false, bgColor: null },
         { id: "Upper Body", label: "Upper Body", isSpecial: false, bgColor: null },
         { id: "Midsection", label: "Midsection", isSpecial: false, bgColor: null },
@@ -12201,6 +12213,137 @@ function getRoomMessNotes(room) {
 // ============================================================================
 
 /**
+ * Build custom narrative for actions on bound/captive NPCs
+ * Describes forceful actions on a physically restrained NPC
+ */
+function buildCaptiveNarrative(npc, act, player) {
+    if (!npc || !act) return null;
+    
+    const npcName = npc.name || "them";
+    const tool = act.tool || "hand";
+    const target = act.target || "body";
+    const verb = act.verb || "touch";
+    
+    // Oral penetration on bound captive
+    if (target === "mouth" || target === "lips" || act.id.toLowerCase().includes("mouth") || act.id.toLowerCase().includes("oral")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `With ${npcName} securely bound and unable to resist, you force your cock into their mouth, thrusting past their helpless lips.`;
+        }
+    }
+    
+    // Vaginal penetration on bound captive
+    if (target === "vagina" || target === "pussy" || act.id.toLowerCase().includes("vagina") || act.id.toLowerCase().includes("pussy")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `You position yourself over ${npcName}, their bound body unable to resist as you push your cock into their ${target}.`;
+        }
+    }
+    
+    // Anal penetration on bound captive
+    if (target === "anus" || target === "ass" || act.id.toLowerCase().includes("anal") || act.id.toLowerCase().includes("anus")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `With ${npcName} bound and helpless, you spread their cheeks and force your cock into their tight entrance.`;
+        }
+    }
+    
+    // Generic for bound NPC
+    return `You take advantage of ${npcName}'s bound state, ${verb}ing their ${target} as they struggle vainly against their restraints.`;
+}
+
+/**
+ * Build custom narrative for actions on submissive/meek NPCs
+ * Describes consensual but dominant actions on a willing subordinate
+ */
+function buildSubmissiveNarrative(npc, act, player) {
+    if (!npc || !act) return null;
+    
+    const npcName = npc.name || "them";
+    const tool = act.tool || "hand";
+    const target = act.target || "body";
+    const verb = act.verb || "touch";
+    
+    // Oral on submissive
+    if (target === "mouth" || target === "lips" || act.id.toLowerCase().includes("mouth") || act.id.toLowerCase().includes("oral")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `${npcName} opens their mouth obediently, willingly taking your cock between their lips as you guide yourself in.`;
+        }
+    }
+    
+    // Vaginal on submissive
+    if (target === "vagina" || target === "pussy" || act.id.toLowerCase().includes("vagina") || act.id.toLowerCase().includes("pussy")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `${npcName} spreads their legs for you, eagerly accepting your cock into their ${target} with a submissive moan.`;
+        }
+    }
+    
+    // Anal on submissive
+    if (target === "anus" || target === "ass" || act.id.toLowerCase().includes("anal") || act.id.toLowerCase().includes("anus")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `${npcName} presents themselves for you, willingly taking your cock into their back passage.`;
+        }
+    }
+    
+    // Generic for submissive
+    return `You ${verb} ${npcName}'s ${target}, their submissive nature evident as they willingly accept your attention.`;
+}
+
+/**
+ * Build custom narrative for actions on unconscious NPCs
+ * Since they can't resist or react, the narrative describes forceful/non-consensual actions
+ */
+function buildUnconsciousNarrative(npc, act, player) {
+    if (!npc || !act) return null;
+    
+    const npcName = npc.name || "them";
+    const playerName = player.name || "you";
+    const tool = act.tool || "hand";
+    const target = act.target || "body";
+    const verb = act.verb || "touch";
+    
+    // Custom narratives for specific actions
+    const actId = act.id || "";
+    
+    // Oral penetration on unconscious NPC
+    if (target === "mouth" || target === "lips" || actId.toLowerCase().includes("mouth") || actId.toLowerCase().includes("oral")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `You plug ${npcName}'s nose and they instinctively gasp for air, their mouth opening. You jam your cock into their mouth, pushing past their unresisting lips and deep into their throat.`;
+        }
+    }
+    
+    // Vaginal penetration on unconscious NPC  
+    if (target === "vagina" || target === "pussy" || actId.toLowerCase().includes("vagina") || actId.toLowerCase().includes("pussy")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `With ${npcName} completely limp and unresisting, you position yourself and force your cock into their ${target}. Their body offers no resistance as you push deep inside.`;
+        }
+        if (tool === "fingers" || tool === "hand" || tool === "digit") {
+            return `You spread their legs and slide your fingers into their unresisting ${target}, their body completely limp.`;
+        }
+    }
+    
+    // Anal penetration on unconscious NPC
+    if (target === "anus" || target === "ass" || target === "butt" || actId.toLowerCase().includes("anal") || actId.toLowerCase().includes("anus")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `You lift ${npcName}'s hips and press your cock against their tight entrance. With no resistance, you push forward, your cock sinking into their back passage.`;
+        }
+        if (tool === "fingers" || tool === "hand") {
+            return `You probe at ${npcName}'s back entrance with your fingers, their limp body offering no resistance as you push inside.`;
+        }
+    }
+    
+    // Breast/tits actions on unconscious NPC
+    if (target === "breasts" || target === "tits" || target === "nipples" || actId.toLowerCase().includes("breast") || actId.toLowerCase().includes("nipple")) {
+        return `You handle ${npcName}'s bare, limp breasts at will, squeezing and kneading their unresisting flesh.`;
+    }
+    
+    // Generic penetration/insertion
+    if (verb === "penetrate" || verb === "enter" || verb === "insert" || verb === "thrust" || verb === "pound") {
+        return `You take advantage of ${npcName}'s unconscious state and ${verb} them without resistance, their body completely at your mercy.`;
+    }
+    
+    // Generic action - describe forceful action on unresisting body
+    return `You ${verb} ${npcName}'s ${target} as they lie motionless, their body completely unresisting to your touch.`;
+}
+
+/**
  * Generate a rich narrative for an intimacy action
  * Creates flowing sentences like: "You part her brown pubs and expose her meaty vagina, sliding your tongue between her engorged labia..."
  * @param {Object} npc - The NPC
@@ -12214,6 +12357,29 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     const { player, arousalLevel = 0, isAroused = false, isWet = false, isErect = false, isOnCooldown = false, isContinueAction = false, intimacy = null } = context;
     const act = typeof getAct === 'function' ? getAct(actionId) : null;
     if (!act) return null;
+    
+    // Check if NPC is unconscious/sleeping - use custom unconscious narratives
+    const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                       (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+    const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+                     (npc && npc.currentState && npc.currentState.sleeping);
+    
+    if (isUnconscious || isSleeping) {
+        const unconsciousNarrative = buildUnconsciousNarrative(npc, act, player);
+        if (unconsciousNarrative) return unconsciousNarrative;
+    }
+    
+    // Check if NPC is bound/captive - use custom captive narratives
+    if (npc && (npc.bound || (npc._surrenderData && !npc._surrenderData.voluntary))) {
+        const captiveNarrative = buildCaptiveNarrative(npc, act, player);
+        if (captiveNarrative) return captiveNarrative;
+    }
+    
+    // Check if NPC is submissive/meek (voluntarily surrendered) - use custom submissive narratives
+    if (npc && npc._surrenderData && npc._surrenderData.voluntary) {
+        const submissiveNarrative = buildSubmissiveNarrative(npc, act, player);
+        if (submissiveNarrative) return submissiveNarrative;
+    }
     
     const { verb, target, tool, label } = act;
     const posPronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
