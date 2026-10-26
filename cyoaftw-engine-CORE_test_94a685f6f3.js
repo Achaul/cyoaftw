@@ -84336,6 +84336,11 @@ function renderIntimacyActionMenu(npc) {
     const isUnconsciousOrSleeping = typeof isNPCUnconsciousOrSleeping === "function" && isNPCUnconsciousOrSleeping(npc);
     const isBound = npc && (npc.bound || npc._prisoner || npc._boundCaptiveFollower);
     const isNonResisting = isUnconsciousOrSleeping || isBound;
+    
+    // Set flag for NSFW system to suppress verbal NPC responses
+    if (isNonResisting && npc.intimacy) {
+        npc.intimacy.encounter.suppressVerbalResponses = true;
+    }
 
     // Get stored active tab from NPC memory, or from DOM if not set
     const currentTabSection = (npc.intimacy && npc.intimacy._lastActiveTab) 
@@ -84451,7 +84456,12 @@ function renderIntimacyActionMenu(npc) {
     demeanorContainer.style.flex = "0 0 auto";
     demeanorContainer.style.minWidth = "120px";
     demeanorContainer.style.marginLeft = "8px";
-    controlsRow.appendChild(demeanorContainer);
+    // Hide demeanor selector for non-resisting NPCs (force dominant mode)
+    if (isNonResisting) {
+        demeanorContainer.style.display = "none";
+    } else {
+        controlsRow.appendChild(demeanorContainer);
+    }
     
     const demeanorSelect = document.createElement("select");
     demeanorSelect.id = "intimacyDemeanorSelect";
@@ -84694,40 +84704,49 @@ function renderIntimacyActionMenu(npc) {
             );
             
             if (clothingSectionIndex >= 0) {
+                // Check if NPC is already undressed - don't show removal actions
+                const npcClothing = npc.intimacy && npc.intimacy.clothingState && npc.intimacy.clothingState.npc;
+                const isNude = npcClothing && npcClothing.top === false && npcClothing.bottom === false;
+                
                 // Create special clothing removal actions for unconscious NPCs
-                const unconsciousClothingActions = [
-                    {
-                        id: "tear_off_clothing_unconscious",
-                        label: "Tear off their clothing",
-                        description: "Forcefully remove all of their clothing",
-                        borderColor: "rgb(255, 0, 0)",
-                        disabled: false
-                    },
-                    {
-                        id: "remove_clothing_unconscious",
-                        label: "Remove their clothing",
-                        description: "Gently remove their clothing piece by piece",
-                        borderColor: "rgb(255, 165, 0)",
-                        disabled: false
-                    },
-                    {
-                        id: "cut_off_clothing_unconscious",
-                        label: "Cut off their clothing",
-                        description: "Use a blade to cut away their clothing",
-                        borderColor: "rgb(255, 0, 0)",
-                        disabled: false
-                    }
-                ];
+                const unconsciousClothingActions = [];
+                
+                // Only add removal actions if NPC is not already nude
+                if (!isNude) {
+                    unconsciousClothingActions.push(
+                        {
+                            id: "tear_off_clothing_unconscious",
+                            label: "Tear off their clothing",
+                            description: "Forcefully remove all of their clothing",
+                            borderColor: "rgb(255, 0, 0)",
+                            disabled: false
+                        },
+                        {
+                            id: "remove_clothing_unconscious",
+                            label: "Remove their clothing",
+                            description: "Gently remove their clothing piece by piece",
+                            borderColor: "rgb(255, 165, 0)",
+                            disabled: false
+                        },
+                        {
+                            id: "cut_off_clothing_unconscious",
+                            label: "Cut off their clothing",
+                            description: "Use a blade to cut away their clothing",
+                            borderColor: "rgb(255, 0, 0)",
+                            disabled: false
+                        }
+                    );
+                }
                 
                 // Add these actions to the Clothing section
                 if (menuItems[clothingSectionIndex].actions) {
                     menuItems[clothingSectionIndex].actions = 
                         unconsciousClothingActions.concat(menuItems[clothingSectionIndex].actions);
-                } else {
+                } else if (unconsciousClothingActions.length > 0) {
                     menuItems[clothingSectionIndex].actions = unconsciousClothingActions;
                 }
-            } else {
-                // If no Clothing section exists, create one
+            } else if (!isNude) {
+                // If no Clothing section exists and NPC is not nude, create one
                 menuItems.push({
                     type: "section",
                     label: "Clothing",
@@ -85244,8 +85263,14 @@ function renderIntimacyActionMenu(npc) {
                 const isDominateMode = demeanorMode === "dominant";
                 const isSubmitMode = demeanorMode === "submissive";
                 
-                // In Dominate mode: show gated actions with dark red border
-                if (isDominateMode && action.disabled) {
+                // For non-resisting NPCs, ALL actions should be enabled (no gating)
+                // In Dominate mode: show gated actions with dark red border (for resisting NPCs)
+                if (isNonResisting) {
+                    // Non-resisting NPCs: all actions enabled, no gating
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+                    btn.style.cursor = "pointer";
+                } else if (isDominateMode && action.disabled) {
                     btn.classList.add("dominate-gated");
                     // Don't disable the button - allow click for domination attempt
                     btn.disabled = false;
@@ -85259,8 +85284,8 @@ function renderIntimacyActionMenu(npc) {
                     displayLabel = getNaturalLabel(action.id, npc, G.player);
                 }
                 
-                // Format label with hint for disabled actions
-                if (action.disabled && action.disabledHint) {
+                // Format label with hint for disabled actions (but not for non-resisting NPCs)
+                if (!isNonResisting && action.disabled && action.disabledHint) {
                     btn.textContent = displayLabel + " (" + action.disabledHint + ")";
                 } else {
                     btn.textContent = displayLabel;
@@ -85268,8 +85293,8 @@ function renderIntimacyActionMenu(npc) {
                 
                 btn.title = action.description || "";
                 
-                // Disable button if action is disabled (except in Dominate mode)
-                if (action.disabled && !isDominateMode) {
+                // Disable button if action is disabled (except in Dominate mode or non-resisting)
+                if (action.disabled && !isDominateMode && !isNonResisting) {
                     btn.disabled = true;
                     btn.style.opacity = "0.6";
                     btn.style.cursor = "not-allowed";
@@ -86071,10 +86096,26 @@ function chooseIntimacyAction(npc, actId) {
     if (isNonResisting) {
         // Mark that this is a non-resisting intimacy encounter
         npc.intimacy.encounter.unconsciousIntimacy = true;
+        // Mark to suppress verbal NPC responses (unconscious/sleeping/bound can't speak)
+        npc.intimacy.encounter.suppressVerbalResponses = true;
         // Also mark the surrender type for narrative differentiation
         if (!npc._surrenderData && isBound) {
             setNPCSurrender(npc, G.player, "bound");
         }
+    }
+    
+    // List of acts that normally require lubrication for penetration
+    const LUBRICATION_REQUIRING_ACTS = [
+        "penetrate", "insert", "enter", "fuck", "thrust", "pound", "ram",
+        "penetration", "penetrating", "vaginal", "anal", "cloacal"
+    ];
+    
+    // For non-resisting NPCs doing penetration acts, set special lubrication flag
+    const isLubricationAct = LUBRICATION_REQUIRING_ACTS.some(term => 
+        actId.toLowerCase().includes(term)
+    );
+    if (isNonResisting && isLubricationAct && npc.intimacy) {
+        npc.intimacy.encounter.needsLubricationNarration = true;
     }
 
     // UNCONSCIOUS CLOTHING ACTIONS
