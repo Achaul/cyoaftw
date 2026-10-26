@@ -85122,7 +85122,7 @@ function renderIntimacyActionMenu(npc) {
             
             if (clothingSectionIndex >= 0) {
                 // Check if NPC is already undressed - don't show removal actions
-                const npcClothing = npc.intimacy && npc.intimacy.clothingState && npc.intimacy.clothingState.npc;
+                const npcClothing = npc.intimacy && npc.intimacy.clothing && npc.intimacy.clothing.npc;
                 const isNude = npcClothing && npcClothing.top === false && npcClothing.bottom === false;
                 
                 // Create special clothing removal actions for unconscious NPCs
@@ -85386,6 +85386,10 @@ function renderIntimacyActionMenu(npc) {
         
         // Get showAll state to check visibility
         const showAllActionsState = npc.intimacy && npc.intimacy.showAllActions;
+        
+        // Get current clothing state for filtering
+        const currentNpcClothing = npc.intimacy && npc.intimacy.clothing && npc.intimacy.clothing.npc;
+        const currentPlayerClothing = npc.intimacy && npc.intimacy.clothing && npc.intimacy.clothing.player;
         
         // Helper function to check if an action is anatomically appropriate for this NPC
         function isActionAnatomicallyAppropriate(action) {
@@ -86578,6 +86582,12 @@ function chooseIntimacyAction(npc, actId) {
         if (!npc._surrenderData && isBound) {
             setNPCSurrender(npc, G.player, "bound");
         }
+    }
+    
+    // Check if NPC has surrendered - if so, set dominant demeanor
+    const hasSurrendered = npc && npc._surrenderData && typeof isNPCSurrenderedToPlayer === "function" && isNPCSurrenderedToPlayer(npc, G.player);
+    if (hasSurrendered && npc.intimacy) {
+        npc.intimacy._demeanorMode = "dominant";
     }
     
     // List of acts that normally require lubrication for penetration

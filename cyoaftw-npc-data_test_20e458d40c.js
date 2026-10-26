@@ -4809,6 +4809,79 @@ const NPC_CONVERSATION_CATALOGUE = [
         contextNote: (npc, ctx) => `Player is in dominant demeanor mode and forces ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to their knees. Respond in character.`
     },
     // ========================================================================
+    // DOMINATION OPTIONS FROM CONVERSATION (for surrendered NPCs)
+    // These allow starting dominant intimacy from conversation when NPC has surrendered
+    // ========================================================================
+    {
+        id: "assert-dominance-from-surrender",
+        priority: 160,
+        repeat: "always",
+        label: "Assert your dominance",
+        textVariants: [
+            "You assert your dominance over them with a firm command, reminding them of their surrender.",
+            "You make it clear who is in charge, leveraging their defeated state.",
+            "With authority, you establish your dominance over them now that they've surrendered."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        startEncounter: true,
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        onSelect: function(npc, ctx) {
+            // Set dominant demeanor for the encounter
+            if (!npc.intimacy) npc.intimacy = {};
+            npc.intimacy._demeanorMode = "dominant";
+        },
+        contextNote: (npc, ctx) => `Player asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered to them. Respond in character as someone who has accepted defeat.`
+    },
+    {
+        id: "command-from-surrender",
+        priority: 159,
+        repeat: "always",
+        label: "Command them",
+        textVariants: [
+            "You issue a firm command, knowing they must obey after surrendering.",
+            "You give them an order with the authority of their conqueror.",
+            "With a commanding voice, you tell them what to do, confident in their compliance."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        startEncounter: true,
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        onSelect: function(npc, ctx) {
+            // Set dominant demeanor for the encounter
+            if (!npc.intimacy) npc.intimacy = {};
+            npc.intimacy._demeanorMode = "dominant";
+        },
+        contextNote: (npc, ctx) => `Player commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. Respond as someone compelled to obey.`
+    },
+    {
+        id: "use-as-i-please-from-surrender",
+        priority: 158,
+        repeat: "always",
+        label: "Use them as I please",
+        textVariants: [
+            "You make it clear you will use them as you please, now that they've surrendered.",
+            "You declare your intent to use their body as you see fit.",
+            "With a dominant tone, you let them know they exist for your pleasure now."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        startEncounter: true,
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        onSelect: function(npc, ctx) {
+            // Set dominant demeanor for the encounter
+            if (!npc.intimacy) npc.intimacy = {};
+            npc.intimacy._demeanorMode = "dominant";
+        },
+        contextNote: (npc, ctx) => `Player declares they will use ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} as they please. Respond as someone who has surrendered control.`
+    },
+    // ========================================================================
     // BATHHOUSE SERVICES - SFW CONVERSATION OPTIONS
     // ========================================================================
     {
@@ -5119,7 +5192,9 @@ function getNPCConversationContext(npc, extraContext = {}) {
         // Intimacy demeanor mode (consentual/submissive/dominant) for roleplay-specific options
         demeanorMode: (npc.intimacy && npc.intimacy._demeanorMode) ? String(npc.intimacy._demeanorMode).toLowerCase() : "consentual",
         // Whether an intimacy encounter is currently active
-        intimacyActive: !!(npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active)
+        intimacyActive: !!(npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active),
+        // Whether NPC has surrendered to the player and it's still valid
+        surrenderedToPlayer: typeof isNPCSurrenderedToPlayer === "function" && isNPCSurrenderedToPlayer(npc, G.player)
     };
 }
 

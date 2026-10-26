@@ -1184,8 +1184,7 @@ function initializeIntimacyState(npc) {
                 npc: npcClothing
             };
         } else {
-            // Clothing state exists, but log it for debugging
-            console.log(`[Intimacy] Clothing state already exists - NPC: ${JSON.stringify(npc.intimacy.clothing.npc)}, Player: ${JSON.stringify(npc.intimacy.clothing.player)}`);
+            // Clothing state exists - this is normal, no need to log
         }
         
         // Ensure position object exists
@@ -3787,6 +3786,9 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     var _prevActId = intimacy && intimacy.lastAction ? intimacy.lastAction.actId : null;
     var _prevDepth = (intimacy && intimacy.penetration) ? (intimacy.penetration.depth || 0) : 0;
 
+    // Get encounter state for non-resisting checks
+    const encounter = intimacy.encounter || {};
+
     // Bypass validation for non-resisting NPCs (unconscious/sleeping/bound)
     // All actions are allowed when the NPC cannot resist
     if (encounter.unconsciousIntimacy === true || encounter.isSleepingEncounter === true || 
@@ -3802,7 +3804,6 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     
     // WAKE-UP ROLL FOR SLEEPING NPCS
     // Check if this is a sleeping encounter and roll for wake-up chance
-    const encounter = intimacy.encounter || {};
     const isSleeping = encounter.isSleepingEncounter === true;
     
     if (isSleeping && act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.END) {
