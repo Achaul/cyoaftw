@@ -57685,95 +57685,7 @@ function npcLeavesAfterRebuffedAdvance(npc, replyText) {
  * Start an intimacy encounter with an unconscious body or NPC
  * This routes unconscious body/NPC interactions to the main intimacy system
  */
-function startUnconsciousIntimacy(target) {
-    if (!target) return;
-    
-    // Check eligibility
-    const isEligible = isNsfwBodyEligible(target);
-    
-    if (!isEligible) {
-        console.log("[Engine] startUnconsciousIntimacy: target not eligible for intimacy");
-        return;
-    }
-    
-    // Check if the intimacy system is available
-    if (typeof window.startIntimacyEncounter !== "function") {
-        console.error("[Engine] startIntimacyEncounter not available — intimacy-system.js may have failed to load.");
-        return;
-    }
-    
-    // Set up the target for intimacy encounter
-    if (!target.intimacy) {
-        target.intimacy = {};
-    }
-    
-    // Mark as unconscious encounter
-    target.intimacy.encounter = target.intimacy.encounter || {};
-    target.intimacy.encounter.active = true;
-    target.intimacy.encounter.isUnconsciousEncounter = true;
-    
-    // Default to "Unconscious On Back" position
-    const defaultPosition = "Unconscious On Back";
-    
-    console.log("[Engine] Starting unconscious intimacy encounter with", target.name || "target", "in position:", defaultPosition);
-    
-    // Start the intimacy encounter
-    window.startIntimacyEncounter(target, G.player, defaultPosition);
-    
-    // Bring up the intimacy action menu
-    if (typeof window.renderIntimacyActionMenu === "function") {
-        window.renderIntimacyActionMenu(target);
-    }
-}
 
-/**
- * Start an intimacy encounter with a sleeping NPC
- * Similar to unconscious but with wake-up chance and different behavior
- */
-function startSleepingIntimacy(npc) {
-    if (!npc || !isNPCSleeping(npc)) return;
-    
-    // Check if intimacy system is available
-    if (typeof window.startIntimacyEncounter !== "function") {
-        console.error("[Engine] startIntimacyEncounter not available");
-        return;
-    }
-    
-    // Check eligibility
-    if (!isNsfwBodyEligible(npc)) {
-        console.log("[Engine] startSleepingIntimacy: NPC not eligible");
-        return;
-    }
-    
-    // Set up the NPC for intimacy encounter
-    if (!npc.intimacy) {
-        npc.intimacy = {};
-    }
-    
-    // Mark as sleeping encounter with wake-up tracking
-    npc.intimacy.encounter = npc.intimacy.encounter || {};
-    npc.intimacy.encounter.active = true;
-    npc.intimacy.encounter.isSleepingEncounter = true;
-    
-    // Track wake-up state
-    npc.intimacy.encounter._isIntoxicated = typeof getDrunkTier === "function" ? getDrunkTier(npc) >= 2 : false;
-    npc.intimacy.encounter._isExhausted = typeof isEntityExhausted === "function" ? isEntityExhausted(npc) : (npc.stamina <= 0);
-    
-    // Default position for sleeping encounters
-    const defaultPosition = "Missionary";
-    
-    console.log("[Engine] Starting sleeping intimacy encounter with", npc.name || "NPC", 
-                "- Intoxicated:", npc.intimacy.encounter._isIntoxicated,
-                "- Exhausted:", npc.intimacy.encounter._isExhausted);
-    
-    // Start the intimacy encounter
-    window.startIntimacyEncounter(npc, G.player, defaultPosition);
-    
-    // Bring up the intimacy action menu
-    if (typeof window.renderIntimacyActionMenu === "function") {
-        window.renderIntimacyActionMenu(npc);
-    }
-}
 
 /**
  * Start the intimacy encounter for a conversation option whose exchange has
@@ -57842,6 +57754,8 @@ function startSleepingIntimacy(npc) {
     npc.intimacy.encounter = npc.intimacy.encounter || {};
     npc.intimacy.encounter.active = true;
     npc.intimacy.encounter.isSleepingEncounter = true;
+    npc.intimacy.encounter.unconsciousIntimacy = false;  // Not unconscious, but sleeping
+    npc.intimacy.encounter.suppressVerbalResponses = true;  // Sleeping NPCs can't speak
     
     // Track wake-up state
     // These will be used by the intimacy system to determine wake-up chances
@@ -57869,6 +57783,11 @@ function startSleepingIntimacy(npc) {
  * This routes unconscious body/NPC interactions to the main intimacy system
  * instead of the old appendUnconsciousBodyActions system.
  */
+/**
+ * Start an intimacy encounter with an unconscious body or NPC
+ * This routes unconscious body/NPC interactions to the main intimacy system
+ * instead of the old appendUnconsciousBodyActions system.
+ */
 function startUnconsciousIntimacy(target) {
     if (!target) return;
     
@@ -57887,15 +57806,18 @@ function startUnconsciousIntimacy(target) {
     }
     
     // Set up the target for intimacy encounter
-    // Ensure intimacy state exists
+    // Don't create empty intimacy object - let startIntimacyEncounter initialize it properly
+    // But we need to ensure it exists for flag setting
     if (!target.intimacy) {
         target.intimacy = {};
     }
     
-    // Mark as unconscious encounter
+    // Mark as unconscious encounter - use the flag name that intimacy-system.js expects
     target.intimacy.encounter = target.intimacy.encounter || {};
     target.intimacy.encounter.active = true;
-    target.intimacy.encounter.isUnconsciousEncounter = true;
+    target.intimacy.encounter.unconsciousIntimacy = true;  // Flag for bypassing validation
+    target.intimacy.encounter.isSleepingEncounter = false;
+    target.intimacy.encounter.suppressVerbalResponses = true;  // Unconscious NPCs can't speak
     
     // Default to "Unconscious On Back" position for unconscious targets
     // The intimacy system will handle unconscious-specific acts and reactions
@@ -85360,10 +85282,11 @@ function renderIntimacyActionMenu(npc) {
             // Midsection - show if NPC has any genitals, anus, cloaca, or tail
             if (label === "Midsection") {
                 const hasGenitals = hasCock || hasPussy || hasCloaca;
-                const hasAnusOrCloaca = !hasCloaca || hasCloaca; // If hasCloaca, show Midsection
+                // All NPCs have anus except reptilian/avian species with cloaca
+                // For simplicity, show midsection for all NPCs with genitals or cloaca or tail
                 const hasTail = npcAnatomy.tail || npcSpecies.includes("cat") || npcSpecies.includes("wolf") || 
                                npcSpecies.includes("fox") || npcSpecies.includes("rat") || npcSpecies.includes("lizard");
-                return hasGenitals || hasTail || hasAnusOrCloaca;
+                return hasGenitals || hasTail || !hasCloaca; // Show if has genitals, tail, or doesn't have cloaca (has anus)
             }
             
             // Legacy section names for backwards compatibility - map to new sections
@@ -85464,6 +85387,51 @@ function renderIntimacyActionMenu(npc) {
         // Get showAll state to check visibility
         const showAllActionsState = npc.intimacy && npc.intimacy.showAllActions;
         
+        // Helper function to check if an action is anatomically appropriate for this NPC
+        function isActionAnatomicallyAppropriate(action) {
+            if (!action) return true;
+            
+            const actionId = (action.id || "").toLowerCase();
+            const actionLabel = (action.label || "").toLowerCase();
+            
+            // Skip anatomy filtering for non-resisting NPCs - ALL actions should be available
+            // (only body part SECTIONS are filtered, not individual actions)
+            if (isNonResisting) return true;
+            
+            // Cock-related actions - require hasCock
+            if ((actionId.includes("cock") || actionId.includes("penis") || actionId.includes("dick") ||
+                 actionLabel.includes("cock") || actionLabel.includes("penis") || actionLabel.includes("dick")) &&
+                !hasCock) {
+                return false;
+            }
+            
+            // Pussy/vagina-related actions - require hasPussy
+            if ((actionId.includes("pussy") || actionId.includes("vagina") || actionId.includes("vulva") ||
+                 actionLabel.includes("pussy") || actionLabel.includes("vagina") || actionLabel.includes("vulva")) &&
+                !hasPussy) {
+                return false;
+            }
+            
+            // Breast-related actions - require hasBreasts
+            if ((actionId.includes("breast") || actionId.includes("chest") || actionId.includes("nipple") ||
+                 actionLabel.includes("breast") || actionLabel.includes("nipple") || actionLabel.includes("tit")) &&
+                !hasBreasts) {
+                return false;
+            }
+            
+            // Tail-related actions - require hasTail
+            if ((actionId.includes("tail") || actionLabel.includes("tail")) && !hasTail) {
+                return false;
+            }
+            
+            // Cloaca-related actions - require hasCloaca
+            if ((actionId.includes("cloaca") || actionLabel.includes("cloaca")) && !hasCloaca) {
+                return false;
+            }
+            
+            return true;
+        }
+        
         const sectionsWithActions = sectionItems
             .filter(item => {
                 // Filter out Player tab - intimacy actions should only target NPC
@@ -85477,7 +85445,7 @@ function renderIntimacyActionMenu(npc) {
                 if (isNonResisting && (label === "requests" || item.label === "Requests")) return false;
                 
                 // Check if section has any visible (non-disabled) actions
-                const visibleActions = item.actions.filter(a => !a.disabled || showAllActionsState);
+                const visibleActions = item.actions.filter(a => (!a.disabled || showAllActionsState) && isActionAnatomicallyAppropriate(a));
                 if (visibleActions.length === 0) return false;
                 
                 // For Other section, filter out Pause and Stop actions
@@ -88966,3 +88934,6 @@ window.addIntimacyActGrime = function(entity, options) {
 // addSmellMark/getActiveSmellNotes in nsfw/intimacy-system.js); the context
 // builder and detail panel use this to read them.
 window.getCurrentStoryTurn = getCurrentStoryTurn;
+
+// Expose intimacy menu rendering for NSFW system
+window.renderIntimacyActionMenu = renderIntimacyActionMenu;

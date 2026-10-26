@@ -1161,7 +1161,7 @@ function getClothingStateForCharacter(character) {
 }
 
 function initializeIntimacyState(npc) {
-    if (!npc) return;
+    if (!npc) return null;
     
     // Determine gender for tracking
     const npcGender = (npc.gender || "female").toLowerCase();
@@ -3775,6 +3775,7 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     const act = getAct(actId);
     // Always call initializeIntimacyState to ensure all properties exist
     const intimacy = initializeIntimacyState(npc);
+    if (!intimacy) return null;
     
     const clothingState = intimacy.clothing;
     const currentPosition = positionId || intimacy.position.player;
@@ -3786,10 +3787,17 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     var _prevActId = intimacy && intimacy.lastAction ? intimacy.lastAction.actId : null;
     var _prevDepth = (intimacy && intimacy.penetration) ? (intimacy.penetration.depth || 0) : 0;
 
-    // Validate action
-    if (!isActionValid(actId, npc, player, currentPosition, clothingState)) {
-        console.warn(`[Intimacy] Action ${actId} is not valid in current state`);
-        return null;
+    // Bypass validation for non-resisting NPCs (unconscious/sleeping/bound)
+    // All actions are allowed when the NPC cannot resist
+    if (encounter.unconsciousIntimacy === true || encounter.isSleepingEncounter === true || 
+        (npc.bound === true) || (npc._prisoner === true) || (npc._boundCaptiveFollower === true)) {
+        // Skip action validation - all actions permitted
+    } else {
+        // Validate action
+        if (!isActionValid(actId, npc, player, currentPosition, clothingState)) {
+            console.warn(`[Intimacy] Action ${actId} is not valid in current state`);
+            return null;
+        }
     }
     
     // WAKE-UP ROLL FOR SLEEPING NPCS
