@@ -1172,7 +1172,7 @@ function initializeIntimacyState(npc) {
     const playerClothing = getClothingStateForCharacter(player);
     const npcClothing = getClothingStateForCharacter(npc);
     
-    // If intimacy state already exists, only update clothing if it's missing or invalid
+    // If intimacy state already exists, ensure all required properties are present
     if (npc.intimacy) {
         // Check if clothing state exists and is valid
         if (!npc.intimacy.clothing || 
@@ -1187,6 +1187,53 @@ function initializeIntimacyState(npc) {
             // Clothing state exists, but log it for debugging
             console.log(`[Intimacy] Clothing state already exists - NPC: ${JSON.stringify(npc.intimacy.clothing.npc)}, Player: ${JSON.stringify(npc.intimacy.clothing.player)}`);
         }
+        
+        // Ensure position object exists
+        if (!npc.intimacy.position) {
+            npc.intimacy.position = {
+                player: DEFAULT_POSITION,
+                npc: DEFAULT_POSITION
+            };
+        }
+        
+        // Ensure encounter object exists
+        if (!npc.intimacy.encounter) {
+            npc.intimacy.encounter = {
+                active: false,
+                startedAt: null,
+                lastActivityAt: null
+            };
+        }
+        
+        // Ensure actionHistory array exists
+        if (!npc.intimacy.actionHistory) {
+            npc.intimacy.actionHistory = [];
+        }
+        
+        // Ensure engagedActs array exists
+        if (!npc.intimacy.engagedActs) {
+            npc.intimacy.engagedActs = [];
+        }
+        
+        // Ensure arousal object exists
+        if (!npc.intimacy.arousal) {
+            npc.intimacy.arousal = {
+                player: 0,
+                npc: 0
+            };
+        }
+        
+        // Ensure penetration object exists
+        if (!npc.intimacy.penetration) {
+            npc.intimacy.penetration = {
+                active: false,
+                tool: null,
+                target: null,
+                depth: 0,
+                playerIsBottom: false
+            };
+        }
+        
         return npc.intimacy;
     }
     
