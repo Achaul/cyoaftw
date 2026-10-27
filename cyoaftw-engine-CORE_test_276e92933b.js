@@ -3316,7 +3316,7 @@ const TEXT_COMMANDS = [
     { id: "rulings", info: true, args: ["action", "phrase"], aliases: ["rulings", "action rulings"], example: "rulings; forget ruling kick lamppost; clear rulings", description: "List the saved game-master rulings for actions on objects, forget one so it is judged again, or clear them all. Free; stored in this browser only." },
     { id: "act", social: true, args: ["action", "target", "family"], aliases: ["act", "emote", "social", "gestures", "interactions", "express", "invite", "contact", "attempt", "try physical", "wave", "bow", "nod", "smile", "salute", "dance"], example: "wave at human; express stretch dramatically; invite human to share a joke; attempt pinch an arm with human; push human; help attempt", description: "Express yourself with express <action>, invite <person> to <action>, or contact <action> with <person>. Familiar gestures: wave, bow, nod, smile, salute, dance. A dance is an invitation. Contact asks permission. Attempt <minor bare-hand action> with <person> uses AI-proposed pain, minor HP damage, a brief condition and an NPC reaction. It needs AI, costs 1 stamina and one story turn outside combat or one combat action, and can provoke retaliation. Push/shove/slap/punch retain native unarmed combat; inferred attacks ask for review. Push/shove do not move someone into another room. Say \"I dance\" is speech." },
     {id:"phrases",info:true,args:["action","phrase"],aliases:["phrases","learned phrases"],example:'phrases; forget phrase "please survey the room"; clear phrases',description:"List successfully learned AI phrases, remove an exact phrase or clear the local dictionary. Learning stores action templates after complete success; targets and costs are checked fresh. These controls are free."},
-    { id:"casting", casting:true, args:["action","target"], aliases:["powers","divine gifts","enchantments","cast enchant","ask for enchantment"], example:"powers; power mending touch; cast mending touch on <ally>; cast enchant; enchant recipient yourself; enchant item sword; enchant element fire; ask for enchantment; cast fleet foot; show casting; how casting", description:"Use shared native powers/heal targets, player and companion gear casts and learned travel spells. Final gear element choices spend native costs and 1 turn. Power costs/uses and healing stay native; travel spells keep zero-turn behavior. Answer one step per reply; explicitly continue older batches." },
+    { id:"casting", casting:true, args:["action","target"], aliases:["powers","divine gifts","enchantments","cast enchant","ask for enchantment"], example:"powers; cast mending touch on <npc>; cast bless; enchant recipient <npc>; enchant item sword; enchant element holy; cast enchant; ask for enchantment; show casting; how casting", description:"Use shared native powers/heal targets, player and companion gear casts and learned travel spells. Individual healing and cleric Bless can select eligible NPCs in the room; party-wide effects retain party scope. Bless targets their visible worn gear. Final gear choices spend native costs. Answer one step per reply; explicitly continue older batches." },
     { id:"synergy", synergy:true, args:["action","target"], aliases:["synergies","combine skills","notebook"], example:"synergy; combine skills; first skill firebolt; second skill trained strike; add catalyst greenwort; picture \"a burning arc\"; experiment; notebook; memorise synergy <name>; forget synergy <name>; name synergy <old> as \"new\"; use synergy <name>", description:"Use native synergy experiments, catalyst choices, notebook, naming and memory rules. Review attempts and memorisation, then confirm separately. Show synergy and how synergy are free. Answer one step at a time; explicitly continue older batches." },
     { id: "travel", travel: true, args: ["action", "target"], aliases: ["directions", "guide questions", "rent room", "follow guide", "keep following"], example: "directions to <place>; lead me to <place>; guide questions; ask guide how to earn money; rent room; follow guide; keep following; stop walking; show lodging", description: "Use shared native directions, guide questions and rental menus. Directions cost 1 turn; guiding agreement costs 1 turn. Follow guide takes one native movement step; keep following waits for the native paced walk. Rent room reviews the weekly price and requires separate numbered confirmation. Guide answers and menu browsing are free. Options/choose/back/cancel/leave work; answer one step per reply and explicitly continue older batches." },
     { id: "nectar", primary: "feed nectar", nectar: true, args: ["item", "amount", "target"], aliases: ["nectar", "feed nectar", "offer nectar"], example: "feed nectar to slime; feed 5 drops of nectar syrup to second slime; give 3 drops of nectar to slime; show nectar", description: "Offer nectar to a visible living slime. Select a container and a whole drop count from that ONE container; the native dose transaction keeps leftovers and returns its ordinary empty container where applicable. Each offering costs 1 turn. Options/choose/back/cancel/leave work; one menu step per reply and explicit continue for older queued actions. Show nectar/show gifts lists public availability. Ordinary gifts keep give <item> to <npc>." },
@@ -3350,12 +3350,13 @@ const TEXT_COMMANDS = [
     { id: "lootitem", lootDetail: true, args: ["action", "item", "source", "amount"], aliases: ["inspect loot"], example: "inspect sword from chest; examine boots from corpse; equip sword from chest; drop sword from chest; drop 2 arrows from chest; inspect loot sword; show loot; how inspect loot", description: "Inspect visible loot in an open container or searched body. The item decision shows description, equipment comparison, Take, Equip and Drop; use options and numbered choices. Drop places the actual item on the floor for companions, without first using pack capacity. Use Back to return to the source. Actions keep native transfer/equipment/party rules." },
     { id: "fixtures", exploration: true, info: true, args: [], aliases: ["fixtures", "landmarks"], example: "show fixtures; fixtures", description: "List visible room fixtures without revealing hidden landmarks. Use look to observe ordinary surroundings, or search room to try discovering hidden fixtures." },
     { id: "interact", exploration: true, args: ["fixture", "action"], aliases: ["interact"], example: "interact with fountain; examine fixture chest", description: "Inspect a visible fixture and list its typed actions and current restrictions. Actions use the same engine handlers as normal cards. Multiple matches ask for a number. Use show fixture <name> for a free view without replacing a pending choice." },
-    { id: "sit", exploration: true, args: ["fixture"], aliases: ["sit", "sit down", "take a seat"], example: "sit at bar; sit down at bar counter; take a seat at bar; show sit", description: "Sit at a visible bar for free and request service from its bartender. They approach and ask what you want when available; reply with say, options or menu. Later queued commands pause for your answer. Examine fixture bar only inspects it." },
+    { id: "sit", exploration: true, args: ["fixture"], aliases: ["sit", "sit down", "take a seat"], example: "sit at table; sit on bench; sit at bar; show sit", description: "Sit at a visible table or on a bench for free, with narration and no rest recovery. Sitting at a bar requests bartender service and pauses later commands for your reply. Examine fixture <name> only inspects it." },
     { id: "dismiss_request", attention: true, args: [], aliases: ["dismiss request", "ignore request", "ignore", "dismiss", "avoid eye contact"], example: "dismiss request; ignore; show dismiss request", description: "Avoid eye contact with the NPC currently trying to get your attention. This free action cancels their pending help approach and discourages repeat requests. Otherwise conversation opens after a brief pause. It does not decline or abandon any task." },
+    { id: "resume_conversation", conversationActions: true, args: [], aliases: ["resume conversation", "continue conversation"], example: "resume conversation", description: "Pick up a recent conversation with the current NPC without another greeting, relationship reward or turn. Use options to see the current conversation choices." },
     { id: "sneak", exploration: true, args: [], aliases: ["sneak", "hide"], example: "sneak", description: "Use your learned exploration Sneak ability, with its normal availability, stamina and turn rules." },
     { id: "case", exploration: true, args: [], aliases: ["case", "case the place", "case room"], example: "case the place", description: "Use your learned Case the Place ability to reveal loose hidden belongings and read the room's locks. Uses the existing ability's rules; room fixture discovery is search room." },
     ...["gather", "mine", "scavenge", "read", "warm", "wash", "disarm", "break", "pray", "offer", "enter"].map(function (verb) {
-        const examples = { gather: "gather greenwort; harvest moonbloom; gather twisted roots; forage", mine: "mine ore vein", scavenge: "scavenge rubble", read: "read notice board", warm: "warm up at hearth", wash: "wash at fountain; wash at flood of water; wash at stagnant pool; wash at reed beds", disarm: "disarm spike trap", break: "break spike trap", pray: "pray at altar", offer: "offer at altar", enter: "enter waygate; climb stairs" };
+        const examples = { gather: "gather greenwort; harvest moonbloom; gather twisted roots; forage", mine: "mine ore vein", scavenge: "scavenge rubble", read: "read notice board; read faded warding marks; read fixture inscriptions", warm: "warm up at hearth", wash: "wash at fountain; wash at flood of water; wash at stagnant pool; wash at reed beds", disarm: "disarm spike trap", break: "break spike trap", pray: "pray at altar", offer: "offer at altar", enter: "enter waygate; climb stairs" };
         return { id: verb, exploration: true, args: verb === "read" ? ["item", "fixture"] : ["fixture"], aliases: [verb], example: examples[verb], description: "Use " + verb + " on a visible matching fixture through the normal action, preserving costs, rolls, tools, cooldowns and consequences. Omit the name to select among matching fixtures. Type interact with <name> for current actions. Enter asks for portal travel confirmation; disarm/break target traps only." };
     }),
     { id: "fill", exploration: true, args: ["item", "fixture"], aliases: ["fill"], example: "fill bottle from fountain", description: "Fill one empty carried container from a visible clean-water fixture, using the normal one-turn action. Multiple fixtures or bottle types ask numbered questions." },
@@ -3399,7 +3400,7 @@ const TEXT_COMMANDS = [
     { id: "choose", args: ["number"], aliases: ["choose"], example: "choose 2", description: "Pick a numbered conversation option from the most recent options list." },
     { id: "leave", aliases: ["leave", "goodbye", "bye", "step away", "leave conversation"], example: "leave", description: "Step away from the current NPC. Use a direction to leave the room." },
     { id: "rest", aliases: ["rest"], example: "rest", room: true, interact: "rest", description: "Use the normal Rest action, including recovery, time, and danger checks." },
-    { id: "sleep", aliases: ["sleep"], example: "sleep", room: true, interact: "sleep", description: "Sleep on a bed, cot or floor. Choose your surface with options and choose <number>; sharing reduces recovery. Show sleep lists availability, and help sleep explains the choices." },
+    { id: "sleep", aliases: ["sleep"], example: "sleep; sleep in bed", room: true, interact: "sleep", description: "Sleep on a bed, cot or floor. A bed's Sleep action and sleep in <bed> open the same surface choices. Choose with options and choose <number>; sharing reduces recovery. Show sleep lists availability, and help sleep explains the choices." },
     { id: "status", info: true, aliases: ["status", "health", "stats"], example: "status", description: "Read your health, stamina, mana, and coins. Costs no turn." },
     { id: "stop", aliases: ["stop"], example: "stop", description: "Cancel pending commands. An action already in progress finishes normally." },
     { id: "continue", aliases: ["continue", "resume"], example: "continue", description: "Explicitly resume the remaining commands after a pause. A failed action is not retried." },
@@ -3480,6 +3481,7 @@ function parseTextCommand(input) {
         if (typeof getNPCHelpAttention === "function") Object.defineProperty(action, "attentionRef", { value: getNPCHelpAttention() });
         return action;
     }
+    if (/^(?:resume|continue) conversation$/i.test(raw)) return { verb: "resume_conversation", args: {} };
     match = /^(?:actions|conversation actions)(?:\s+(.+))?$/i.exec(raw);
     if (match) return { verb: "actions", args: { group: textCommandNormalize(match[1] || "") } };
     const mausoleum = parseTextMausoleumCommand(raw); if (mausoleum) return mausoleum;
@@ -3668,6 +3670,7 @@ async function interpretTextCommands(input) {
     if (!aiAvailable()) return null;
     const shapes = [];
     TEXT_COMMANDS.filter(function(def) {
+        if(def.id==="resume_conversation")return typeof canResumeNPCConversation==="function"&&canResumeNPCConversation(G.activeNPC);
         if(def.attention)return typeof getNPCHelpAttention==='function'&&!!getNPCHelpAttention();
         if(def.checkpoint)return false; // Local checkpoint replies never enlarge unrelated AI prompts.
         // Keep location-specific staff commands out of unrelated intent prompts.
@@ -5390,6 +5393,12 @@ function textModeInspectNPC(action) {
 }
 
 function textModeHelpContent(topic, show) {
+    if (/^(?:resume|continue) conversation$/i.test(textCommandNormalize(topic))) {
+        const available = typeof canResumeNPCConversation === "function" && canResumeNPCConversation(G.activeNPC);
+        return textModeResult("completed", show ? available ? "Use resume conversation to pick up this conversation without another greeting." : "There is no recent conversation to resume here."
+            : "Resume conversation or continue conversation reopens recent topics for free without greeting again. Bare continue still resumes queued actions.",
+            { conversationResume: { available: !!available, command: "resume conversation" } });
+    }
     if (/^(?:dismiss(?: request)?|ignore(?: request)?|avoid eye contact)$/i.test(textCommandNormalize(topic))) {
         const attention = typeof getNPCHelpAttention === "function" ? getNPCHelpAttention() : null;
         return textModeResult("completed", show ? attention ? "Someone is trying to catch your eye. Use dismiss request to avoid the approach, or wait briefly to talk." : "Nobody is waiting to approach you."
@@ -5453,6 +5462,7 @@ function textModeHelpContent(topic, show) {
     if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
     const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "taste", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
+        if(def.id==="resume_conversation")return typeof canResumeNPCConversation==="function"&&canResumeNPCConversation(G.activeNPC);
         if (def.attention) return typeof getNPCHelpAttention === "function" && !!getNPCHelpAttention();
         if(def.checkpoint)return typeof activeGuardCheckpoint==='function'&&!!activeGuardCheckpoint();
         if (ids.indexOf(def.id) < 0 && !def.bathhouse && !def.conversationActions && !def.service && !def.casting && !def.synergy && !def.travel && !def.nectar && !def.merchant && !def.exploration && !def.binding && !def.lootDetail && !def.party && !def.jobs && !def.goods && !def.reading && !def.crafting && !def.forge && !def.enchanter && !def.tailoring && !def.commitment && !/^(back|cancel)$/.test(def.id)) return false;
@@ -5619,6 +5629,7 @@ async function executeTextCommand(action) {
     if (!def) return textModeResult("blocked", "That command is not supported. Type how for examples.");
     if (/^(help|show)$/.test(action.verb)) return textModeHelp(args.topic, action.verb === "show");
     if (action.verb === "dismiss_request") return dismissNPCHelpAttention(action.attentionRef);
+    if (action.verb === "resume_conversation") return resumeNPCConversation(G.activeNPC);
     if (action.verb === 'npc_life') return executeTextNPCLife(action);
     if (action.verb === 'world_life') return executeTextWorldLife(action);
     if (action.verb === 'communication') return executeTextCommunication(action);
@@ -5879,6 +5890,7 @@ async function submitTextModeCommand(raw) {
     if (single && (single.verb === "stop" || single.verb === "cancel" && (textModeState.busy || textModeState.parsing))) { stopTextCommands(true); return; }
     if (single && /^(help|show)$/.test(single.verb)) { textModeHelp(single.args.topic, single.verb === "show" || /^help(?:\s|$)/i.test(input)); return; }
     if (single && single.verb === "dismiss_request") { dismissNPCHelpAttention(single.attentionRef); return; }
+    if (single && single.verb === "resume_conversation" && !textModeState.busy && !textModeState.parsing) return resumeNPCConversation(G.activeNPC);
     if (single && single.verb === "travel" && /^(pause|stop)$/.test(single.args.action) && (textModeState.busy || textModeState.parsing)) { await executeTextTravelCommand(single); textModeState.paused = true; return; }
     if (textModeState.busy || textModeState.parsing) { textModeResult("blocked", "An action is still finishing. You can type show, how, or stop while you wait."); return; }
     if (typeof textSharedChoiceCanHandle === "function" && textSharedChoiceCanHandle(input, single) && await textSharedChoiceInput(input, single)) return;
@@ -7329,6 +7341,8 @@ function textLootStore(action, entry, scene) {
 function parseTextExplorationCommand(raw) {
     // Learned combat actions such as Disarm keep their established shorthand.
     if (textModeInCombat() && textCombatActions().some(function (action) { return textCombatActionMatches(action, raw); })) return null;
+    const bedSleep = /^sleep\s+(?:(?:in|on|at)\s+)?(?:the\s+)?(.+)$/i.exec(raw);
+    if (bedSleep) return { verb: "interact", args: { fixture: textCommandUnquote(bedSleep[1]), action: "sleep" } };
     let match = /^(?:sit(?:\s+down)?|take\s+a\s+seat)(?:\s+(?:at|on|by))?(?:\s+(.+))?$/i.exec(raw);
     if (match) return { verb: "sit", args: { fixture: textCommandUnquote((match[1] || "").replace(/^the\s+/i, "")) } };
     match = /^(?:search|rummage)(?:\s+(careful|carefully|tight|force|forcefully))?$/i.exec(raw);
@@ -7379,7 +7393,8 @@ function textExplorationBlock() {
 function textFixtureActions(fixture) {
     const room = G.activeRoom, actions = [];
     const add = function (id, reason, run, note) { actions.push({ id: id, label: id + " " + getEntityName(fixture), reason: reason || "", run: run, note: note || "" }); };
-    if (typeof isBarSeatingFixture === "function" && isBarSeatingFixture(fixture)) add("sit", getBarSeatingBlockReason(fixture, room), function () { return sitAtBar(fixture, room); }, "free; requests bartender service");
+    if (fixture.id === "bed" && typeof getBedSleepBlockReason === "function") add("sleep", getBedSleepBlockReason(fixture, room), function () { return sleepAtBed(fixture, room); }, "choose a bed, cot or floor; sleeping takes a night");
+    if (typeof isFixtureSeatingTarget === "function" && isFixtureSeatingTarget(fixture)) add("sit", getFixtureSeatingBlockReason(fixture, room), function () { return sitAtFixture(fixture, room); }, isBarSeatingFixture(fixture) ? "free; requests bartender service" : "free; sit without resting");
     if (fixture.id === "burial-niches") add("mausoleum", mausoleumRoomBlock(room, G.player), openMausoleumMenu, "review niches, interment and engraved plaques");
     if (fixture.id === "grindstone") add("hone", workbenchBlock("hone", fixture), function () { return selfHoneAtGrindstone(fixture); }, FORGE_SELF_HONE_STAMINA + " stamina, 1 turn, no coins");
     if (fixture.id === "anvil") add("anvil", workbenchBlock("inspect", fixture), function () { return inspectWeaponAtAnvil(fixture); }, "equipped weapon inspection, free");
@@ -7387,7 +7402,9 @@ function textFixtureActions(fixture) {
     if (isForageFixture(fixture)) add("gather", getForageBlockReason(fixture, room), function () { return gatherForageFixture(fixture); }, FORAGE_STAMINA_COST + " stamina, 1 turn");
     if (FIXTURE_ORE_SOURCES[fixture.id]) add("scavenge", getScavengeBlockReason(fixture, room), function () { scavengeFixture(fixture); }, PROSPECT_STAMINA_COST + " stamina, 1 turn");
     if (MINING_ENABLED && MINING_SOURCES[fixture.id]) add("mine", getMiningBlockReason(fixture, room), function () { mineFixture(fixture); }, MINING_STAMINA_COST + " stamina, 1 turn; needs a pickaxe");
-    if (isReadableFixture(fixture)) add("read", getReadBlockReason(fixture, room), function () { readFixture(fixture); }, "1 turn");
+    if (isReadableFixture(fixture)) add("read", getReadBlockReason(fixture, room), function () { return readFixture(fixture); },
+        typeof getSecretComprehensionRule === "function" && getSecretComprehensionRule(fixture) ?
+            (fixture.secretComprehension ? "1 turn; revisit a learned lesson, no further points" : "1 turn; understand its lesson for 1d6 plus Willpower modifier training points (minimum 1), even without prior training") : "1 turn");
     if (typeof isCauldronFixture === "function" && isCauldronFixture(fixture) && !isAlchemyTableFixture(fixture)) add("taste", getCauldronTasteBlockReason(fixture,room), function(){return tasteCauldron(fixture);}, "1 turn; nearby hostiles do not block this action");
     if (isDrinkableFixture(fixture)) {
         add("drink", getDrinkBlockReason(room), function () { drinkFromFixture(fixture); }, "1 turn");
@@ -7422,7 +7439,8 @@ function textExplorationList() {
 }
 
 function textFixtureCommand(action, entry) {
-    if (action.id === "sit") return "sit at " + entry.label;
+    if (action.id === "sleep") return "sleep in " + entry.label;
+    if (action.id === "sit") return "sit " + (isBarSeatingFixture(entry.fixture) || /\btables?\b/i.test(entry.label) ? "at " : "on ") + entry.label;
     if (action.material) return action.id + (action.id === "dip" ? " in " : " at ") + JSON.stringify(entry.label);
     if (action.environment) return action.environment.command;
     if (action.id === "post") return "post notice at " + entry.label;
@@ -12360,6 +12378,13 @@ function castingSupportedPower(power) {
  return !!power&&!power.shapeshift&&!power.shapeshiftRevert&&power.use!=="body"&&(power.use!=="world"||!!power.regrow);
 }
 function castingPowers() {return typeof getUsablePowers==="function"&&G.player?getUsablePowers(G.player).filter(castingSupportedPower):[];}
+function getHealingRecipients(power) {
+ if(!power||!power.heal||power.heal.party)return getHealableAllies();
+ return (G.activeRoom&&G.activeRoom.creatures||[]).filter(function(n,i,all){return n&&all.indexOf(n)===i&&n!==G.player&&isVisibleEntity(n)&&!n.dead&&n.hp>0&&!n.unconscious&&!n.isUnconsciousBody&&n.bodyState!=="corpse"&&n.bodyState!=="unconscious";});
+}
+function markRoomBlessing(option, item, owner) {
+ if(option.source==="cleric"&&item.buff&&owner!==G.player&&(G.partyMembers||[]).indexOf(owner)<0&&(G.sessionFollowers||[]).indexOf(owner)<0)item.buff.roomBlessing=true;
+}
 function castingTravelSpells() {
  if(typeof getCastableSpellIds!=="function"||typeof WIZARD_SPELLS==="undefined"||!G.player)return [];
  return getCastableSpellIds(G.player).map(function(id){return {id:id,spell:WIZARD_SPELLS[id]};}).filter(function(e){return e.spell&&e.spell.travel&&e.spell.selfStatus;});
@@ -12369,7 +12394,7 @@ function castingMatch(query,rows,name) {
  return exact.length?exact:textLootMatch(textCommandUnquote(query),rows,name);
 }
 function parseTextCastingCommand(raw) {
- if(textModeInCombat())return null;
+ if(textModeInCombat()&&!(sharedChoiceState.menu&&sharedChoiceState.menu.combat))return null;
  if(/^(powers|divine gifts)$/i.test(raw))return {verb:"casting",args:{action:"powers"}};
  if(/^enchantments$/i.test(raw))return {verb:"casting",args:{action:"enchant"}};
  let m=/^ask (?:for )?(?:an? )?(enchantment|blessing)$/i.exec(raw);
@@ -12418,7 +12443,8 @@ function castingOutput(action,data,text,display) {
 function castingGuard(npc,opts) {
  opts=opts||{};const p=G.player,r=G.activeRoom,map=G.roomMap,origin=map&&map[r.coords],actor=G.activeNPC,mode=G.activeNPCMode,enc=G.combatEncounter,turn=getCurrentStoryTurn();
  const party=(G.partyMembers||[]).slice(),followers=(G.sessionFollowers||[]).slice();
- const entities=[p].concat((r.creatures||[]).filter(function(n){return party.indexOf(n)>=0||followers.indexOf(n)>=0||n===npc;}));
+ const members=(r.creatures||[]).slice(),source=r.creatures;
+ const entities=[p].concat(members.filter(function(n){return n&&(opts.roomTargets||party.indexOf(n)>=0||followers.indexOf(n)>=0||n===npc);}));
  const snapshots=entities.map(function(e){return {entity:e,inventory:choiceEntitySnapshot(e)};});
  const root=document.getElementById("chatOptionsEl"),children=root&&Array.from(root.children);
  const stamp=function(){return JSON.stringify([castingPowers(),typeof getEnchantOptions==="function"?getEnchantOptions(p):[],npc&&getNPCEnchantOptions(npc),castingTravelSpells(),
@@ -12430,6 +12456,7 @@ function castingGuard(npc,opts) {
   !castingBlock(npc,opts.combat)&&
   party.length===(G.partyMembers||[]).length&&party.every(function(n,i){return G.partyMembers[i]===n;})&&
   followers.length===(G.sessionFollowers||[]).length&&followers.every(function(n,i){return G.sessionFollowers[i]===n;})&&
+  (!opts.roomTargets||r.creatures===source&&members.length===(r.creatures||[]).length&&members.every(function(n,i){return r.creatures[i]===n;}))&&
   snapshots.every(function(s){return s.inventory()&&(s.entity===p||(r.creatures||[]).indexOf(s.entity)>=0);})&&stamp()===initial&&
   (opts.resources===false||getCurrentStoryTurn()===turn)&&
   (opts.view===false||!root||children.length===root.children.length&&children.every(function(n,i){return root.children[i]===n;}));};
@@ -12440,6 +12467,7 @@ function beginCastingMenu(kind,npc,title,refresh,opts) {
  const menu=beginSharedChoiceMenu("casting-"+kind,npc,title,refresh),valid=menu.valid;
  const guard=castingGuard(npc,Object.assign({view:false},opts||{}));
  menu.castKind=kind;menu.caster=npc;menu.valid=opts&&opts.combat?function(){return menu.ownsView()&&guard();}:function(){return valid()&&guard();};
+ menu.combat=!!(opts&&opts.combat);
  return menu;
 }
 function castingButton(menu,label,run,meta,opts){return createSharedChoiceButton(menu,label,run,Object.assign({},opts||{},{textChoice:meta||{}}));}
@@ -12466,19 +12494,20 @@ function castingPowerResult(ctx,committed,interrupted) {
   interrupted?"The cast completed its effects, but the scene changed. Spent costs remain; later commands stay paused.":"You call on "+ctx.power.name+".",interrupted);
  return {status:interrupted?"interrupted":"needs_input"};
 }
-function castingItemCurrent(target,npc) {
- const rows=npc?getEnchantTargets(G.player):getEnchantRecipients(G.player).flatMap(getEnchantItemsForRecipient);
+function castingItemCurrent(target,npc,option) {
+ const rows=npc?getEnchantTargets(G.player):getEnchantRecipients(G.player,option).flatMap(getEnchantItemsForRecipient);
  return rows.some(function(t){return t.owner===target.owner&&t.item===target.item&&t.slot===target.slot;});
 }
 function performCastingEnchant(npc,option,target,element) {
- const reason=castingBlock(npc,false)||(!castingItemCurrent(target,npc)?"That item or recipient changed.":"")||
+ const reason=castingBlock(npc,false)||(!castingItemCurrent(target,npc,option)?"That item or recipient changed.":"")||
   (npc?getNPCCastBlockReason(npc,option,target.item,element):getEnchantTargetBlockReason(G.player,option,target.item,element));
  if(reason)return sharedChoiceResult("blocked",reason);
  const p=G.player,room=G.activeRoom,start=getCurrentStoryTurn(),mana=p.mana||0,reserved=getPlayerManaReserved(p),old=target.item.buff;
  const text=npc?castNPCEnchant(npc,option,target.item,element,target.ownerName):castItemEnchant(option,target.item,element,target.ownerName);
  if(!target.item.buff||target.item.buff===old)return sharedChoiceResult("blocked",text||"The enchantment did not take hold.");
+ if(!npc)markRoomBlessing(option,target.item,target.owner);
  const cost={mana:npc?0:option.cost,availableManaChange:Math.max(0,mana-(p.mana||0)),additionalManaHeld:Math.max(0,getPlayerManaReserved(p)-reserved)};
- const current=castingGuard(npc,{view:true,resources:false,committed:true});
+ const current=castingGuard(npc,{view:true,resources:false,committed:true,roomTargets:!npc&&option.source==="cleric"});
  advanceStoryTurn(1);
  const interrupted=!current();
  const result={stage:interrupted?"interrupted":"result",spell:option.label,caster:npc?textModeNPCLabel(npc):"Yourself",recipient:target.owner===p?"Yourself":textModeNPCLabel(target.owner),item:getItemName(target.item),element:element,cost:cost,turns:getCurrentStoryTurn()-start,buff:castingPublicBuff(target.item)};
@@ -12498,7 +12527,7 @@ function castingTravelAction(entry) {
 function castingTextHelp(key,show) {
  const named=key.replace(/^(?:cast|power)\s+/,""),knownPower=castingPowers().filter(function(p){return textCommandNormalize(p.name)===named;}),knownTravel=castingTravelSpells().filter(function(e){return textCommandNormalize(e.spell.name)===named;});
  if(!/^(powers|power|divine gifts|casting|enchantments|cast enchant|cast bless|cast flicker|enchant recipient|enchant item|enchant element|ask for enchantment|ask for blessing|travel spells)(?:\s+.*)?$/.test(key)&&!knownPower.length&&!knownTravel.length)return null;
- if(!show)return textModeResult("completed","Powers lists public gifts; power <name>, use <power> or cast <power> uses the native action. For an ally heal: cast <power> on <ally>, or choose a present target by number. Cast enchant / cast flicker / cast bless opens gear casting (merchant enchant services remain separate). Then enchant recipient <name or yourself>, enchant item <name>, enchant element <element>, or use numbered choices. The final element spends the native mana/reserve and 1 turn. Talk to a present party caster, then ask for enchantment / ask for blessing; their native cap and cooldown apply with no player mana cost. Learned travel spells use cast <name> with their native zero-turn cost. Show powers/enchantments/travel spells is free. Options/back/cancel/leave and one reply per step work; explicitly continue older batches after choices.");
+ if(!show)return textModeResult("completed","Powers lists public gifts; power <name>, use <power> or cast <power> uses the native action. For an individual heal: cast <power> on <npc>, or choose a visible living target in this room by number. Party-wide powers still affect the party. Cast enchant / cast flicker / cast bless opens gear casting. Bless can select any eligible NPC here and their visible worn gear; other gear casts retain companion recipients. Then enchant recipient <name or yourself>, enchant item <name>, enchant element <element>, or use numbered choices. The final element spends native mana/reserve and one turn, or one combat round. Cancelling a combat blessing returns to the fight. Talk to a present party caster, then ask for enchantment / ask for blessing; their native cap and cooldown apply. Learned travel spells keep native zero-turn costs. Show powers/enchantments/travel spells is free. Answer one step per reply and explicitly continue older batches.");
  const powers=castingPowers().map(function(p){return {name:p.name,summary:p.summary,cost:getPowerCostLabel(G.player,p),blockedReason:castingPowerBlock(p,null)};});
  const options=typeof getEnchantOptions==="function"&&G.player?getEnchantOptions(G.player).map(function(o){return {name:o.label,mana:o.cost,manaHeld:Math.max(BUFF_RESERVE_MIN,Math.ceil(G.player.manaMax*o.reserveFraction)),elements:o.elements.slice()};}):[];
  const spells=castingTravelSpells().map(function(e){return {name:e.spell.name,mana:getSpellCastCost(G.player,e.spell),turns:0};});
@@ -12515,7 +12544,7 @@ async function castingChoose(menu,kind,target) {
 async function executeTextCastingCommand(action,fromMenu) {
  const args=action.args||{},kind=args.action,menu=sharedChoiceState.menu;
  const npc=kind==="ask"?G.activeNPC:menu&&menu.caster||null;
- const reason=castingBlock(npc,false);if(reason)return textModeResult("blocked",reason);
+ const reason=castingBlock(npc,!!(menu&&menu.combat));if(reason)return textModeResult("blocked",reason);
  if(menu&&!/^casting-/.test(menu.kind))return textModeResult("blocked","Finish the current choice before casting.");
  if(menu&&!menu.valid())return textModeResult("blocked","That casting choice changed. Use options to refresh or cancel.");
  if(kind==="powers")return openPowersMenu();
@@ -12527,7 +12556,7 @@ async function executeTextCastingCommand(action,fromMenu) {
   const p=powers[0];
   if(rel){
    if(!p.heal||!p.heal.ally||p.heal.party)return textModeResult("blocked","That power does not select an individual healing target.");
-   const rows=[G.player].concat(getHealableAllies()),query=/^(self|me|myself|yourself)$/i.test(rel.source)?"Yourself":rel.source;
+   const rows=[G.player].concat(getHealingRecipients(p)),query=/^(self|me|myself|yourself)$/i.test(rel.source)?"Yourself":rel.source;
    const targets=castingMatch(query,rows,function(e){return e===G.player?"Yourself":textModeNPCLabel(e);});
    if(targets.length!==1){openHealTargetPicker(p,null);return textModeResult("needs_input","Choose one current healing target by number; no cast has been made.");}
   }
@@ -12564,6 +12593,7 @@ async function textCastingMenuInput(menu,action,input) {
  if(action&&/^(leave|cancel)$/.test(action.verb)){
   const owned=menu.ownsView()&&menu.scene.player===G.player&&menu.scene.room===G.activeRoom&&menu.scene.npc===G.activeNPC&&menu.scene.mode===G.activeNPCMode;
   clearSharedChoiceMenu(menu);if(action.verb==="cancel")stopTextCommands(false);
+  if(menu.combat){if(owned)renderCombatActionMenu(menu.caster);return {status:"completed"};}
   if(owned){if(menu.caster){if(action.verb==="leave")disengageFromNPC("You step away.");else renderNPCActionMenu(menu.caster);}else returnToRoomView();}
   return {status:"completed"};
  }
@@ -13395,7 +13425,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-26-006
+// Core Engine Version: 2026-10-26-009
 // Latest: Voice command fallback infers misheard words: person targets that match no one get a sounds-like best guess (textGuessNPCTarget: "female cancun" -> the female kenku), the AI is told voice input is speech-to-text and to always give a best guess (exits listed), AI plans wrapped in prose, using shorthand keys or verb synonyms are repaired, and in voice play the valid part of a partly bad plan still runs.
 // Previous: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
 // Previous: Trade and economy pass: Traders now carry a real purse (20-50 gold) instead of the 2-10 default; merchants pay at most 1.75x half value so deity tomes and similar cannot be bought and flipped for profit; bone dice wagers move coin to and from the NPC and have a cooldown; sealed goods pay slightly less coin. Previous -007: Hand-in tokens now pay out of the NPC's own coin pouch and are kept if they cannot cover them. Previous -006: Item purpose pass part 2: keepsakes (charms, rings, brooches, scarves) wear on the Neck for +1 Charisma; rivets, nails, pick-heads, sewing kits, twine and cloth mend worn gear; relics, tokens, candles and incense can be left as offerings at a shrine; sealed bales, crates and goods open; spice seasons a meal; pawn tickets, receipts, tally sticks, chits and house tokens are handed in to the right NPC; bone dice wager with friendly NPCs; ledgers, maps and receipts are readable; ink, chalk, parchment and wax tablets count as writing supplies; the ladle and net weight are improvised weapons; clean linen bandages. New "apply" text command.
@@ -13469,7 +13499,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-26-006";
+window.__ENGINE_CORE_VERSION = "2026-10-26-009";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -31451,16 +31481,32 @@ function isBarSeatingFixture(fixture) {
     return !!fixture && /^(bar|bar-counter)$/.test(String(fixture.id || ""));
 }
 
-function getBarSeatingBlockReason(fixture, room) {
+function isFixtureSeatingTarget(fixture) {
+    return isBarSeatingFixture(fixture) || !!fixture && /\b(tables?|bench|benches)\b/i.test(String(fixture.name || fixture.id || "").replace(/-/g, " "));
+}
+function getBarSeatingBlockReason(fixture, room) { return getFixtureSeatingBlockReason(fixture, room); }
+function getFixtureSeatingBlockReason(fixture, room, allowCard) {
     const p = G.player;
-    if (!p || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing || p.fatigue && p.fatigue.sleeping) return "You cannot sit at the bar right now.";
-    if (!room || G.activeRoom !== room || !isBarSeatingFixture(fixture) || getVisibleRoomFixtures(room).indexOf(fixture) < 0) return "That bar is no longer available here.";
-    if (G.activeNPC || G.activeObject || G.activeItemModal || sharedChoiceState.menu || textModeState.pending || textModeState.dialogue) return "Finish the current interaction before sitting at the bar.";
-    if (G.combatEncounter || G.activeNPCMode === "combat" || roomHasActiveHostile(room)) return "It is too dangerous to sit at the bar.";
-    if (isRoomCollapsed(room) || isFixtureBurning(fixture) || fixture.destroyed) return "That bar is not safe to sit at.";
-    if (p.carrying || isPlayerJailed() || hasPendingPartyLoot()) return "Finish what you are doing before sitting at the bar.";
-    if (isPlayerHidden()) return "Step out of hiding before asking for service at the bar.";
+    if (!p || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing || p.fatigue && p.fatigue.sleeping) return "You cannot sit down right now.";
+    if (!room || G.activeRoom !== room || !isFixtureSeatingTarget(fixture) || getVisibleRoomFixtures(room).indexOf(fixture) < 0 || fixture.hidden || fixture.isHidden || fixture.visible === false) return "That seat is no longer available here.";
+    if (G.activeNPC || G.activeObject || G.activeItemModal && !allowCard || sharedChoiceState.menu || textModeState.pending || textModeState.dialogue) return "Finish the current interaction before sitting down.";
+    if (G.combatEncounter || G.activeNPCMode === "combat" || roomHasActiveHostile(room)) return "It is too dangerous to sit down here.";
+    if (isRoomCollapsed(room) || isFixtureBurning(fixture) || fixture.destroyed) return "That seat is not safe to use.";
+    if (p.carrying || isPlayerJailed() || hasPendingPartyLoot()) return "Finish what you are doing before sitting down.";
+    if (isBarSeatingFixture(fixture) && isPlayerHidden()) return "Step out of hiding before asking for service at the bar.";
     return "";
+}
+
+function sitAtFixture(fixture, room) {
+    if (isBarSeatingFixture(fixture)) return sitAtBar(fixture, room);
+    const reason = getFixtureSeatingBlockReason(fixture, room);
+    if (reason) { setNarration(reason); return { status: "blocked", message: reason }; }
+    const position = /\btables?\b/i.test(String(fixture.name || fixture.id || "")) ? "at" : "on";
+    const narration = "You sit down " + position + " the " + getEntityName(fixture).replace(/^the\s+/i, "") + ".";
+    setNarration(narration);
+    publishTextModeOutput("seating", narration, { source: "engine", presentation: textModeState.enabled ? "supplement" : "story",
+        seating: { fixture: getEntityName(fixture), position: position, turns: 0 } }, textModeState.enabled ? false : undefined);
+    return { status: "completed" };
 }
 
 function currentBarServiceTask(npc) {
@@ -36408,7 +36454,8 @@ async function npcRespond(npc, interaction) {
     const communicationSig=typeof getNPCCommunicationSignature==='function'?getNPCCommunicationSignature(npc):'';
     if((choice._communicationSig||'')!==communicationSig){delete choice._conversationBundleKey;delete choice._conversationReplyKey;}
     choice._communicationSig=communicationSig;
-    const communicationFixed=typeof getNPCCommunicationFixedReply==='function'?getNPCCommunicationFixedReply(npc,choice):null;
+    const communicationFixed=(typeof getNPCFaithFixedReply==='function'?getNPCFaithFixedReply(npc,choice):null)||
+        (typeof getNPCCommunicationFixedReply==='function'?getNPCCommunicationFixedReply(npc,choice):null);
 
     // If this choice came from the rendered talk menu, it already carries the
     // batch key/reply key from that menu's JSON prefetch. Do not overwrite it.
@@ -36709,6 +36756,7 @@ function normalizeConversationActions(options) {
 }
 
 function conversationActionGroup(option) {
+    if (option && option.action === "resume-conversation") return "";
     if (option && option.service === "baths") return "";
     if(option&&option.action==='requests')return '';
     if(option&&option.action==='communication')return '';
@@ -36725,7 +36773,7 @@ function conversationActionGroup(option) {
 function groupConversationActions(npc, options) {
     // Before greeting, services remain separate, immediate opening choices.
     const used = npc && npc.memory && npc.memory.conversationState && npc.memory.conversationState.sessionUsedOptionIds || [];
-    if (!used.some(id => id === "service-opened" || typeof id === "string" && id.indexOf("greet-") === 0) ||
+    if (!used.some(id => id === "service-opened" || id === "resume-conversation" || typeof id === "string" && id.indexOf("greet-") === 0) ||
         npc.guide || options.some(option => option.action === "pressure")) return options;
     const groups = conversationActionGroups().filter(group => options.some(option => conversationActionGroup(option) === group.key));
     if (!groups.length) return options;
@@ -42373,7 +42421,7 @@ function createCombatActionButton(action) {
 }
 
 function getCombatHealTargetActions(power, npc) {
-    return [G.player].concat(getHealableAllies()).map(function (entity) {
+    return [G.player].concat(getHealingRecipients(power)).map(function (entity) {
         const self = entity === G.player;
         const hurt = entityNeedsHealing(entity);
         const label = self ? "Yourself" : entity.name || "Ally";
@@ -42430,7 +42478,7 @@ function getCombatActionGroups(npc) {
             const enough = !!power.granted || G.player.mana >= cost;
             return combatActionDescriptor(`${power.name} (${getPowerCostLabel(G.player, power)})`, () => activateDeityPower(power, npc), {
                 disabled: !!block || !enough || power.use === "body" || power.use === "world",
-                targets: power.heal && power.heal.ally && getHealableAllies().length ? function () { return getCombatHealTargetActions(power, npc); } : null,
+                targets: power.heal && power.heal.ally && getHealingRecipients(power).length ? function () { return getCombatHealTargetActions(power, npc); } : null,
                 title: block || (power.use === "body" ? "Used from a body's own menu. " + power.summary : (power.use === "world" ? "Not in the middle of a fight. " + power.summary : (enough ? power.summary : `Not enough mana (${cost} needed).`)))
             });
         });
@@ -49450,7 +49498,7 @@ function regrowLimb(player, limbKey, lines) {
     return true;
 }
 function activateDeityPower(power, npc) {
-    if (power.heal && power.heal.ally && getHealableAllies().length) { return openHealTargetPicker(power, npc); }
+    if (power.heal && power.heal.ally && getHealingRecipients(power).length) { return openHealTargetPicker(power, npc); }
     return useDeityPower(power.id, npc, null);
 }
 function openHealTargetPicker(power,npc) {
@@ -49458,15 +49506,15 @@ function openHealTargetPicker(power,npc) {
  if(reason)return sharedChoiceResult("blocked",reason);
  const el=document.getElementById("chatOptionsEl");if(!el)return {status:"blocked"};
  if(!combat)G.activeNPCMode="casting";el.innerHTML="";
- const menu=beginCastingMenu("heal",combat?npc:null,power.name+": who?",function(){return openHealTargetPicker(power,npc);},{combat:combat});
+ const menu=beginCastingMenu("heal",combat?npc:null,power.name+": who?",function(){return openHealTargetPicker(power,npc);},{combat:combat,roomTargets:true});
  appendCombatGroup(el,power.name+": who?",getCombatHealTargetActions(power,npc).map(function(action,index){
-  const entity=index===0?G.player:getHealableAllies()[index-1],name=entity===G.player?"Yourself":textModeNPCLabel(entity);
+  const entity=index===0?G.player:getHealingRecipients(power)[index-1],name=entity===G.player?"Yourself":textModeNPCLabel(entity);
   return castingButton(menu,action.label,action.run,{action:"heal",name:name,entity:entity},{disabled:action.disabled,title:action.title});
  }));
  appendCombatGroup(el,"",[castingButton(menu,"Back",function(){
   if(combat){renderCombatActionMenu(npc);return {status:"completed"};}return openPowersMenu();
  },{action:"back"})]);
- return publishCastingMenu(menu,el,{power:power.name,targets:[G.player].concat(getHealableAllies()).map(function(e){return {name:e===G.player?"Yourself":textModeNPCLabel(e),hp:e.hp,hpMax:e.hpMax};})});
+ return publishCastingMenu(menu,el,{power:power.name,targets:[G.player].concat(getHealingRecipients(power)).map(function(e){return {name:e===G.player?"Yourself":textModeNPCLabel(e),hp:e.hp,hpMax:e.hpMax};})});
 }
 
 // Fires a deity power. `npc` is the combat target (required for use:"combat").
@@ -49476,7 +49524,7 @@ function useDeityPower(powerId, npc, healTarget) {
     const power = getUsablePowers(player).find(function (pw) { return pw.id === powerId; });
     if (!power) return { status: "blocked" };
     const inCombat = !!npc && G.activeNPCMode === "combat";
-    if (healTarget && (!power.heal || !power.heal.ally || getHealableAllies().indexOf(healTarget) < 0)) return sharedChoiceResult("blocked", "That healing target is no longer available.");
+    if (healTarget && (!power.heal || !power.heal.ally || getHealingRecipients(power).indexOf(healTarget) < 0)) return sharedChoiceResult("blocked", "That healing target is no longer available.");
     const castingContext = !inCombat && castingSupportedPower(power) ? castingPowerCapture(power, null, healTarget) : null;
     if (castingContext && castingContext.error) return castingContext.error;
     const refresh = function () {
@@ -57353,7 +57401,7 @@ function renderChatOptions(npc, options = null) {
             btn.textContent = CHAT_KIND_GLYPHS[kind] + option.label;
             const player = G.player, room = G.activeRoom, mode = G.activeNPCMode;
             btn.onclick = () => {
-                if ((option.service || option.action==='requests' || option.action==='communication' || option.companionTalkControl || option.companionRoadQuestion || /^(conversation-group|contact-hug)$/.test(option.action)) && (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== mode || !el.contains(btn))) return sharedChoiceResult("blocked", "That action choice is no longer available.");
+                if ((option.service || option.action==='requests' || option.action==='communication' || option.companionTalkControl || option.companionRoadQuestion || /^(conversation-group|contact-hug|resume-conversation)$/.test(option.action)) && (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.activeNPCMode !== mode || !el.contains(btn))) return sharedChoiceResult("blocked", "That action choice is no longer available.");
                 return chooseChatOption(option);
             };
             el.appendChild(btn);
@@ -57376,11 +57424,28 @@ function advanceConversationTurn() {
     advanceStoryTurn(1);
 }
 
+function canResumeNPCConversation(npc) {
+    return !!npc && G.activeNPC === npc && /^(menu|talk|respond)$/.test(G.activeNPCMode || "") && canConverseWithNPC(npc) &&
+        getChatOptions(npc, true).some(option => option.id === "resume-conversation");
+}
+function resumeNPCConversation(npc) {
+    if (!canResumeNPCConversation(npc)) return sharedChoiceResult("blocked", "There is no recent conversation to resume here.");
+    recordNPCConversationChoice(npc, { id: "resume-conversation", intent: "talk" });
+    G.activeNPCMode = "talk";
+    const narration = "You pick up the conversation where you left off.";
+    setNarration(narration);
+    if (!textModeState.enabled) publishTextModeOutput("narration", narration, { source: "engine", speakerRole: "narrator" });
+    renderChatOptions(npc);
+    if (textModeState.enabled) textModeListOptions();
+    saveGameState();
+    return { status: "needs_input" };
+}
 function chooseChatOption(option) {
     const choice = typeof option === "string" ? { text: option } : option;
     const npc = G.activeNPC;
     if(choice&&choice.action==='requests')return choice.requestChoiceCurrent&&choice.requestChoiceCurrent()?openNPCCommitments(npc):sharedChoiceResult('blocked','That request choice changed. Ask for current options.');
     if (!choice || (!choice.text && !choice.action) || !canConverseWithNPC(npc)) return;
+    if (choice.action === "resume-conversation") return resumeNPCConversation(npc);
     if(choice.action==='communication')return performNPCCommunication(npc,choice.communication,choice.communicationCapture);
     if(choice.action==='companion-talk')return requestCompanionTalkMode(npc,choice.companionTalkMode,choice.companionTalkCapture);
     if(choice.action==='companion-road-answer')return executeCompanionRoadAnswer(npc,choice);
@@ -60496,6 +60561,24 @@ function getSleepBlockReason(room) {
     if (sleepWatched) return sleepWatched;
     if (!playerNeedsRest(player) && !getRestingPartyMembers(room).some(function (m) { return getTurnsAwake(m) >= SLEEP_TIRED_AFTER_TURNS; }) && getTurnsAwake(player) < SLEEP_TIRED_AFTER_TURNS) return "You are not tired enough to sleep yet.";
     return "";
+}
+
+function getBedSleepBlockReason(fixture, room, allowCard) {
+    const p = G.player;
+    if (!p || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot sleep right now.";
+    if (!room || room !== G.activeRoom || !fixture || fixture.id !== "bed" ||
+        (room.structural || []).indexOf(fixture) < 0 || !isUsableRestFixture(fixture) || getVisibleRoomFixtures(room).indexOf(fixture) < 0 || isFixtureBurning(fixture))
+        return "That bed is no longer available for sleep.";
+    if (G.activeNPC || G.activeObject || G.combatEncounter || G.activeNPCMode === "combat" || G.activeItemModal && !allowCard ||
+        sharedChoiceState.menu || textModeState.pending || textModeState.dialogue) return "Finish the current interaction before sleeping.";
+    return getSleepBlockReason(room);
+}
+
+function sleepAtBed(fixture, room) {
+    const reason = getBedSleepBlockReason(fixture, room);
+    if (reason) { setNarration(reason); return { status: "blocked", message: reason }; }
+    openSleepSpotMenu();
+    return { status: sharedChoiceState.menu && sharedChoiceState.menu.kind === "sleep-spot" ? "needs_input" : "blocked" };
 }
 
 // Sleep action entry point: ask where unless there is only the floor (or the
@@ -68742,6 +68825,32 @@ function handleAskAboutDeity(npc) {
     if (!deity) return;
 
     learnDeity(deityId, `${npc.name} told ${player.name} of ${deity.name}.`);
+    (npc.memory || (npc.memory = {})).lastDeityTold = deityId;
+}
+
+function getNPCFaithPatron(npc) {
+    const stored = npc && (npc.deity || npc.faith && npc.faith.deityId);
+    if (stored && getDeityArchetype(stored)) { npc.deity = stored; return stored; }
+    return ensureNPCDeity(npc);
+}
+function getNPCFaithContext(npc) {
+    if (!npc || typeof DEITY_ARCHETYPES === "undefined") return "";
+    const id = getNPCFaithPatron(npc), deity = id && getDeityArchetype(id);
+    const pantheon = Object.values(DEITY_ARCHETYPES).map(d => d.name + " (" + d.domain + ")").join("; ");
+    return "- Faith facts: " + (deity ? "Your personal patron is " + deity.name + ". " + deity.lore : "You do not follow a personal patron.") +
+        " Known deities: " + pantheon + ". Use only these authored gods, domains and your stored patron. Never invent or substitute a god, religious order or personal conversion.";
+}
+function getNPCFaithFixedReply(npc, choice) {
+    if (!npc || !choice) return null;
+    const text = String(choice.typedText || choice.promptText || choice.text || "");
+    const personal = choice.id === "ask-their-deity" || /\b(?:who|which (?:god|deity|spirit))\b.{0,90}\b(?:pray|worship)\b/i.test(text);
+    if (!personal && choice.id !== "ask-deity") return null;
+    if (personal && ((npc.hostility || 0) > 70 || (npc.memory && npc.memory.favorability || 0) < 10)) return { text: "I keep my devotions to myself.", responseNeeded: false };
+    const id = personal ? getNPCFaithPatron(npc) : npc.memory && npc.memory.lastDeityTold || getNPCFaithPatron(npc) || Object.keys(DEITY_ARCHETYPES)[0];
+    const deity = id && getDeityArchetype(id);
+    if (!deity) return { text: "I do not pray to a personal patron.", responseNeeded: false };
+    if (typeof learnDeity === "function") learnDeity(deity.id, "A conversation revealed " + deity.name + ".");
+    return { text: (personal ? "I pray to " : "I can tell you about ") + deity.name + ", whose domain is " + deity.domain + ". " + deity.lore, responseNeeded: false };
 }
 
 // Distinct from handleAskAboutDeity above (generic lore, weighted by role,
@@ -73948,10 +74057,56 @@ const FIXTURE_READ_RULES = {
     "inscriptions":  { kind: "lore", dc: 12, deities: ["titan", "outcast", "guardian"] },
     "worn-carvings": { kind: "lore", dc: 12, deities: ["outcast", "trickster"] },
     "intact-tome":   { kind: "lore", dc: 12, deities: ["trickster", "titan", "healer", "guardian", "outcast"] },
+    "old-wards":     { kind: "comprehension", dc: 0 },
     "bookshelves":   { kind: "lore", dc: 0,  deities: ["healer", "trickster", "guardian"] },
     "wall-tallies":  { kind: "text", dc: 0, deities: ["outcast", "guardian"], lines: FIXTURE_TALLY_LINES },
     "waymarker-post": { kind: "text", dc: 0, deities: ["trickster", "outcast"], lines: FIXTURE_MARKER_LINES }
 };
+// Rare, authored discoveries teach a concrete lesson. This is not inferred
+// from incidental AI prose, nor from ordinary notices and furnishings.
+const SECRET_COMPREHENSION_RULES = Object.freeze({
+    "old-wards": { skill: "wizard", insight: "You trace the ward's outer loop and see how its closing stroke anchors the flow of magic. What looked like decoration becomes a practical lesson in shaping a spell." },
+    "intact-tome": { skill: "wizard", insight: "You follow the surviving exercises in the tome. Their repeated symbols show how to gather and steady magical power, and you begin to understand the method behind them." },
+    "inscriptions": { skill: "cleric", insight: "You piece together the inscription's prayer. Its ordered words and deliberate pauses show how focused devotion gives a rite its shape, and you grasp a little of that discipline." },
+    "worn-carvings": { skill: "rogue", insight: "You follow the deliberate cuts beneath the worn surface and recognize a message concealed within ordinary marks. You learn how small changes in an innocent pattern can carry hidden meaning." }
+});
+var secretReadBusy = false;
+function getSecretComprehensionRule(fixture) { return fixture && SECRET_COMPREHENSION_RULES[fixture.id] || null; }
+function getSecretReadBlockReason(fixture, room, allowCard) {
+    const p = G.player;
+    if (!p || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot study this while incapacitated.";
+    if (!room || room !== G.activeRoom || !getSecretComprehensionRule(fixture) || (room.structural || []).indexOf(fixture) < 0 ||
+        getVisibleRoomFixtures(room).indexOf(fixture) < 0 || fixture.hidden || fixture.isHidden || fixture.visible === false || fixture.invisible || fixture.destroyed || fixture.ruined || fixture.unusable || isFixtureBurning(fixture))
+        return "That discovery is no longer available to study here.";
+    if (G.activeNPC || G.activeObject || G.activeItemModal && !allowCard || G.combatEncounter || G.activeNPCMode === "combat" ||
+        sharedChoiceState.menu || textModeState.pending || textModeState.dialogue || hasPendingPartyLoot()) return "Finish the current interaction before studying this discovery.";
+    if (isRoomCollapsed(room) || roomHasActiveHostile(room)) return "It is too dangerous to study this discovery right now.";
+    return "";
+}
+function captureSecretRead(fixture, rule) {
+    const p = G.player, room = G.activeRoom, map = G.roomMap, list = room.structural, turn = getCurrentStoryTurn(), epoch = textModeState.epoch;
+    const coords = p.coords, moveSeq = p.moveSeq;
+    const state = JSON.stringify(fixture.secretComprehension || null);
+    return function () { return G.player === p && G.activeRoom === room && G.roomMap === map && (!map || map[room.coords] === room) && room.structural === list &&
+        p.coords === coords && p.moveSeq === moveSeq && FIXTURE_READ_RULES[fixture.id] === rule && getCurrentStoryTurn() === turn + 1 && textModeState.epoch === epoch &&
+        JSON.stringify(fixture.secretComprehension || null) === state && !getSecretReadBlockReason(fixture, room); };
+}
+function comprehendSecret(fixture, player, lines) {
+    const lesson = getSecretComprehensionRule(fixture), skill = lesson.skill, label = CLASS_SKILL_LABELS[skill];
+    if (fixture.secretComprehension) {
+        lines.push(lesson.insight + " You have already learned this lesson; revisiting it brings no further training points.");
+        return { source: getEntityName(fixture), skill: label, points: 0, alreadyLearned: true, committed: true, turns: 1 };
+    }
+    const die = randInt(1, 6), modifier = getEntityStatCombatBonus(player, "willpower"), points = Math.max(1, die + modifier);
+    const rankBefore = getClassSkillRank(player, skill);
+    lines.push(lesson.insight);
+    lines.push("You gain " + points + " training points in " + label + (rankBefore < 1 ? ", even though you have not trained in it before." : "."));
+    gainClassSkillXP(skill, points, lines);
+    fixture.secretComprehension = { skill: skill, points: points, die: die, modifier: modifier };
+    fixture.readDone = true;
+    return { source: getEntityName(fixture), skill: label, points: points, alreadyLearned: false, committed: true, turns: 1,
+        rankBefore: rankBefore, rankAfter: getClassSkillRank(player, skill), roll: { die: die, modifier: modifier, total: points, stat: "willpower" } };
+}
 const FIXTURE_TEXT_DEITY_CHANCE = 0.3;
 
 // Everyday postings, not quest hooks. Keep the existing name and readRumors
@@ -74187,10 +74342,11 @@ const FIXTURE_DEITY_FRAGMENTS = {
 };
 
 function isReadableFixture(fixture) {
-    return !!fixture && getFixtureTags(fixture).includes("information") && !!FIXTURE_READ_RULES[fixture.id];
+    return !!fixture && !!FIXTURE_READ_RULES[fixture.id] && (!!getSecretComprehensionRule(fixture) || getFixtureTags(fixture).includes("information"));
 }
 
 function getReadBlockReason(fixture, room) {
+    if (getSecretComprehensionRule(fixture)) return getSecretReadBlockReason(fixture, room, G.activeItemModal === fixture);
     if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     return "";
 }
@@ -74307,7 +74463,7 @@ function typeIntoItemModalDesc(descEl, text, msPerChar, onDone) {
     requestAnimationFrame(step);
 }
 
-function presentReadText(room, text, title) {
+function presentReadText(room, text, title, deferOutput) {
     if (textModeState.enabled && textModeState.explorationTask) { textModeResult("completed", text, { reading: { title: title, text: text } }); return; }
     let shown = false;
     try {
@@ -74315,16 +74471,19 @@ function presentReadText(room, text, title) {
     } catch (err) {
         console.error("[Engine] Reading window failed", err);
     }
-    if (!shown) renderNarrationWithRoomObservations(room, text);
+    if (!shown) renderNarrationWithRoomObservations(room, text, undefined, deferOutput);
 }
 
 function readFixture(fixture) {
+    const secret = !!getSecretComprehensionRule(fixture);
+    if (secret && secretReadBusy) return sharedChoiceResult("blocked", "Your previous study is still finishing.");
+    if (secret) secretReadBusy = true;
     try {
         return readFixtureInner(fixture);
     } catch (err) {
         console.error("[Engine] Read failed", err);
         setNarration("You try to read it, but cannot make anything of it right now.");
-    }
+    } finally { if (secret) secretReadBusy = false; }
 }
 
 function readFixtureInner(fixture) {
@@ -74333,20 +74492,40 @@ function readFixtureInner(fixture) {
     const player = G.player;
     const rule = fixture && FIXTURE_READ_RULES[fixture.id];
     if (!room || !player || !rule) return;
+    const lesson = getSecretComprehensionRule(fixture);
+    const lessonBlock = lesson && getSecretReadBlockReason(fixture, room);
+    if (lessonBlock) { setNarration(lessonBlock); return { status: "blocked", message: lessonBlock }; }
     const block = noticeIsBoard(fixture) ? getNoticeBoardAccessBlockReason(fixture, room) : getReadBlockReason(fixture, room);
     if (block) { setNarration(block); return; }
 
     const noticeGuard = noticeIsBoard(fixture) ? noticeOperationGuard(fixture) : null;
     const name = getEntityName(fixture);
-    // Reading can be repeated (each read costs a story turn); only the first
-    // success trains Willpower so it can't be farmed.
+    // Each read costs a turn. Secret lessons pay their separate saved reward
+    // once; other difficult readings retain their first-success Willpower gain.
     const firstRead = fixture.readDone !== true;
+    const lessonGuard = lesson ? captureSecretRead(fixture, rule) : null;
     advanceStoryTurn(1);
     if (typeof runNPCAutonomyTick === "function") runNPCAutonomyTick();
 
     if (noticeGuard && !noticeGuard()) return sharedChoiceResult("interrupted", "Reading spent a turn, but the situation changed before you could read the board. Later commands are paused.");
+    if (lessonGuard && !lessonGuard()) {
+        const message = "Your study was interrupted after a turn. You gain no new insight; later actions are paused.";
+        if (G.player === player && G.activeRoom === room && !G.activeNPC && !G.activeObject && !G.activeItemModal) setNarration(message);
+        publishTextModeOutput("secret-comprehension", message, { systemOnly: true, presentation: "supplement", comprehension: { committed: false, points: 0, turns: 1 } }, false);
+        return { status: "interrupted", message: message };
+    }
     const lines = [];
-    if (rule.kind === "rumor") {
+    let comprehension = null;
+    if (lesson) {
+        const firstLesson = !fixture.secretComprehension;
+        comprehension = comprehendSecret(fixture, player, lines);
+        if (firstLesson && Array.isArray(rule.deities) && rule.deities.length) {
+            const deityId = rand(rule.deities), deity = getDeityArchetype(deityId), fragment = rand(FIXTURE_DEITY_FRAGMENTS[deityId]);
+            if (fragment) lines.push("You also understand a fragment of the old lore: " + fragment + ".");
+            if (deity && learnDeity(deityId, player.name + " understood a fragment about " + deity.name + " from the " + name + ".")) lines.push("You now know of " + deity.name + ".");
+        }
+        rememberStoryEvent("lore", player.name + " studied the " + name + " and understood its lesson in " + comprehension.skill + ".", 3);
+    } else if (rule.kind === "rumor") {
         const used = Array.isArray(G.story && G.story.readRumors) ? G.story.readRumors : [];
         const fresh = FIXTURE_RUMOR_LINES.filter(line => !used.includes(line)); // prefer ones not seen yet; repeats once all are read
         const pool = fresh.length ? fresh : FIXTURE_RUMOR_LINES;
@@ -74403,9 +74582,13 @@ function readFixtureInner(fixture) {
     }
 
     renderStats();
-    presentReadText(room, lines.join("\n\n"), name);
+    presentReadText(room, lines.join("\n\n"), name, !!comprehension);
+    if (comprehension) publishTextModeOutput("secret-comprehension", lines.join("\n\n"), {
+        presentation: textModeState.enabled && textModeState.explorationTask ? "supplement" : "story", comprehension: comprehension
+    }, textModeState.enabled && textModeState.explorationTask ? false : undefined);
     if (noticeGuard) publishTextModeOutput("notice", lines.join("\n\n"), { notice: { stage: "reading", board: name, turns: 1, notes: getNoticeBoardNotes(fixture).map(function (note) { return { author: note.author || "Someone", text: note.text }; }) } }, false);
     saveGameState();
+    if (comprehension) return { status: "completed" };
 }
 
 // Card for a clicked fixture. Same dialog as loose items (see openItemModal)
@@ -74991,6 +75174,13 @@ function forEachBuffableItem(callback) {
     party.forEach(function (npc) { visit(npc, npc ? npc.id : ""); });
     const sessionFollowers = window.G && Array.isArray(window.G.sessionFollowers) ? window.G.sessionFollowers : [];
     sessionFollowers.forEach(function (npc) { visit(npc, npc ? npc.id : ""); });
+    Object.values(window.G && window.G.roomMap || {}).forEach(function (room) {
+        (room && room.creatures || []).forEach(function (npc) {
+            if (!npc) return;
+            const items = (Array.isArray(npc.inventory) ? npc.inventory : []).concat(Object.values(npc.equipped || {}));
+            if (items.some(function (item) { return item && item.buff && item.buff.roomBlessing; })) visit(npc, npc.id || "");
+        });
+    });
 }
 
 function findBuffedItemByUID(uid) {
@@ -76192,11 +76382,11 @@ function getEnchantTargets(player) {
 // Who an enchantment or blessing can be cast on: the caster themself, plus
 // any party member or follower standing in the room (their items are tracked
 // by forEachBuffableItem, so the effect and its held mana are looked after).
-function getEnchantRecipients(player) {
+function getEnchantRecipients(player, option) {
     const out = [{ owner: player, ownerName: player.name || "You", isSelf: true }];
     const room = G.activeRoom;
     const here = room && Array.isArray(room.creatures) ? room.creatures : [];
-    const others = (G.partyMembers || []).concat(G.sessionFollowers || []);
+    const others = option && option.source === "cleric" ? here : (G.partyMembers || []).concat(G.sessionFollowers || []);
     others.forEach(function (npc) {
         if (!npc || npc === player || npc.dead || npc.unconscious || npc.isUnconsciousBody || !isVisibleEntity(npc) || npc.hp <= 0 || here.indexOf(npc) < 0) return;
         if (out.some(function (r) { return r.owner === npc; })) return;
@@ -76218,7 +76408,8 @@ function getEnchantItemsForRecipient(recipient) {
             out.push({ item: item, slot: slot, worn: true, owner: owner, ownerName: recipient.ownerName });
         }
     });
-    (Array.isArray(owner.inventory) ? owner.inventory : []).forEach(function (item) {
+    const publicGearOnly = owner !== G.player && (G.partyMembers || []).indexOf(owner) < 0 && (G.sessionFollowers || []).indexOf(owner) < 0;
+    (publicGearOnly ? [] : Array.isArray(owner.inventory) ? owner.inventory : []).forEach(function (item) {
         if (item && isLootItemVisible(item) && !Array.isArray(item) && getItemBuffKind(item) && !out.some(function (t) { return t.item === item; })) {
             out.push({ item: item, slot: false, worn: false, owner: owner, ownerName: recipient.ownerName });
         }
@@ -76234,11 +76425,11 @@ function openEnchantMenu(step,state) {
  const reason=castingBlock(null,false);if(reason)return sharedChoiceResult("blocked",reason);
  const p=G.player,st=state||{},options=getEnchantOptions(p),el=document.getElementById("chatOptionsEl");if(!el)return {status:"blocked"};
  if(st.option&&!castingOptionFresh(st.option,null))return sharedChoiceResult("blocked","That enchantment changed. Start again.");
- if(st.recipient&&!getEnchantRecipients(p).some(function(r){return r.owner===st.recipient.owner&&r.ownerName===st.recipient.ownerName;}))return sharedChoiceResult("blocked","That recipient is no longer available.");
- if(st.target&&!castingItemCurrent(st.target,null))return sharedChoiceResult("blocked","That item moved or changed owner.");
+ if(st.recipient&&!getEnchantRecipients(p,st.option).some(function(r){return r.owner===st.recipient.owner&&r.ownerName===st.recipient.ownerName;}))return sharedChoiceResult("blocked","That recipient is no longer available.");
+ if(st.target&&!castingItemCurrent(st.target,null,st.option))return sharedChoiceResult("blocked","That item moved or changed owner.");
  clearChatLog();setExitGridVisible(false);el.innerHTML="";G.activeNPCMode="casting";
  const kind=!st.option?"option":!st.recipient?"recipient":!st.target?"item":"element";
- const menu=beginCastingMenu(kind,null,"Gear casting — "+kind,function(){return openEnchantMenu();});
+ const menu=beginCastingMenu(kind,null,"Gear casting — "+kind,function(){return openEnchantMenu();},{roomTargets:!!st.option&&st.option.source==="cleric"});
  let message=st.message||"",back=function(){G.activeNPCMode=null;openInteractMenu();return {status:"completed"};};
  if(!options.length)message="You have no enchantment to cast.";
  else if(!st.option){
@@ -76247,7 +76438,7 @@ function openEnchantMenu(step,state) {
    return castingButton(menu,o.label+" ("+o.cost+" mana + "+held+" held)",function(){return openEnchantMenu("recipient",{option:o});},{action:"option",name:o.label});
   }));message=message||"Choose an enchantment. While it lasts, part of your mana stays locked.";
  }else if(!st.recipient){
-  appendCombatGroup(el,"For",getEnchantRecipients(p).map(function(r){
+  appendCombatGroup(el,"For",getEnchantRecipients(p,st.option).map(function(r){
    const name=r.isSelf?"Yourself":textModeNPCLabel(r.owner);
    return castingButton(menu,name,function(){return openEnchantMenu("target",{option:st.option,recipient:r});},{action:"recipient",name:name,owner:r.owner});
   }));message="Who is it for?";back=function(){return openEnchantMenu();};
@@ -76271,21 +76462,50 @@ function openEnchantMenu(step,state) {
 }
 
 // In a fight: cast onto the equipped weapon or armour (takes the round).
-function enchantInCombat(npc, option, slot, element) {
+function enchantInCombat(npc, option, slot, element, owner) {
     const player = G.player;
-    const item = player.equipped ? player.equipped[slot] : null;
+    owner = owner || player;
+    const item = owner.equipped ? owner.equipped[slot] : null;
+    if (owner !== player && (option.source !== "cleric" || !getEnchantRecipients(player, option).some(r => r.owner === owner))) return sharedChoiceResult("blocked", "That blessing target is no longer available.");
     const block = getEnchantTargetBlockReason(player, option, item, element);
     if (block) { setNarration(block); return; }
     const lines = [];
     if (!beginSpellRound(npc, lines)) return;
-    lines.push(castItemEnchant(option, item, element, player.name));
+    lines.push(castItemEnchant(option, item, element, owner.name));
+    markRoomBlessing(option, item, owner);
     finishSpellRound(npc, lines, `${player.name} enchanted ${item.name || "their gear"}.`);
+}
+
+function openCombatBlessMenu(npc, option, recipient, target) {
+    const reason = castingBlock(npc, true);
+    if (reason || !castingOptionFresh(option, null) || option.source !== "cleric") return sharedChoiceResult("blocked", reason || "That blessing is no longer available.");
+    const recipients = getEnchantRecipients(G.player, option);
+    if (recipient && !recipients.some(r => r.owner === recipient.owner)) return sharedChoiceResult("blocked", "That blessing recipient changed.");
+    const items = recipient ? getEnchantItemsForRecipient(recipient).filter(t => t.worn) : [];
+    if (target && !items.some(t => t.item === target.item && t.slot === target.slot)) return sharedChoiceResult("blocked", "That equipped item changed.");
+    const el = document.getElementById("chatOptionsEl"); if (!el) return { status: "blocked" };
+    el.innerHTML = "";
+    const kind = !recipient ? "recipient" : !target ? "item" : "element";
+    const menu = beginCastingMenu(kind, npc, "Bless — " + kind, () => openCombatBlessMenu(npc, option), { combat: true, roomTargets: true });
+    const rows = !recipient ? recipients.map(r => ({ name: r.isSelf ? "Yourself" : textModeNPCLabel(r.owner), run: () => openCombatBlessMenu(npc, option, r) })) :
+        !target ? items.map(t => ({ name: getItemName(t.item), run: () => openCombatBlessMenu(npc, option, recipient, t) })) :
+        option.elements.map(element => ({ name: element, reason: getEnchantTargetBlockReason(G.player, option, target.item, element), run: () => {
+            clearSharedChoiceMenu(menu);
+            return enchantInCombat(npc, option, target.slot, element, recipient.owner);
+        } }));
+    rows.forEach(row => el.appendChild(castingButton(menu, row.name, row.run, { action: kind, name: row.name }, { disabled: !!row.reason, title: row.reason || "" })));
+    el.appendChild(castingButton(menu, "Back", () => { clearSharedChoiceMenu(menu); renderCombatActionMenu(npc); return { status: "completed" }; }, { action: "back" }));
+    return publishCastingMenu(menu, el, { spell: "Bless", targets: !recipient ? rows.map(row => ({ name: row.name })) : undefined });
 }
 
 function getEnchantCombatActions(npc) {
     const player = G.player;
     const buttons = [];
     getEnchantOptions(player).forEach(function (o) {
+        if (o.source === "cleric") {
+            buttons.push(combatActionDescriptor("Bless: choose a target (" + o.cost + ")", function () { return openCombatBlessMenu(npc, o); }, { id: "bless-target" }));
+            return;
+        }
         const weapon = player.equipped ? player.equipped.weapon : null;
         const armorSlot = ["upper", "head", "lower", "hands", "feet"].filter(function (s) { return player.equipped && player.equipped[s] && !Array.isArray(player.equipped[s]); })[0];
         o.elements.forEach(function (elem) {
@@ -79444,6 +79664,16 @@ function openFixtureCard(fixture, cardOptions) {
     });
     if (getFixtureTraversalKind(fixture, room) && !movementOptions.length) statBits.push("No usable route from here.");
 
+    if (typeof isFixtureSeatingTarget === "function" && isFixtureSeatingTarget(fixture)) {
+        const player = G.player, list = room.structural;
+        const button = addAction("Sit", function () {
+            if (G.player !== player || G.activeRoom !== room || room.structural !== list || G.activeItemModal !== fixture || !actionsEl.contains(button))
+                return sharedChoiceResult("blocked", "That seating choice is no longer available.");
+            closeItemModal();
+            return sitAtFixture(fixture, room);
+        }, { keepOpen: true, disabledReason: getFixtureSeatingBlockReason(fixture, room, true) });
+    }
+
     if (isContainerFixture(fixture)) {
         const chestLock = !fixture.opened ? ensureChestLock(fixture, room) : null;
         if (!fixture.opened && chestLock && chestLock.state === "locked") {
@@ -79594,10 +79824,23 @@ function openFixtureCard(fixture, cardOptions) {
         addAction("Post", () => openNoticePostEditor(fixture), { keepOpen: true, disabledReason: getNoticeBoardAccessBlockReason(fixture, room) });
     } else if (isReadableFixture(fixture)) {
         if (fixture.readDone === true) statBits.push("Read");
-        addAction("Read", () => readFixture(fixture), {
-            primary: !isContainerFixture(fixture),
-            disabledReason: getReadBlockReason(fixture, room)
-        });
+        if (getSecretComprehensionRule(fixture)) {
+            if (fixture.secretComprehension) statBits.push("Lesson learned");
+            const player = G.player, map = G.roomMap, list = room.structural;
+            const button = addAction("Read", function () {
+                if (G.player !== player || G.roomMap !== map || G.activeRoom !== room || room.structural !== list ||
+                    G.activeItemModal !== fixture || !actionsEl.contains(button) || getSecretReadBlockReason(fixture, room, true))
+                    return sharedChoiceResult("blocked", "That discovery is no longer available to read.");
+                closeItemModal();
+                return readFixture(fixture);
+            }, { keepOpen: true, primary: !isContainerFixture(fixture), disabledReason: getReadBlockReason(fixture, room),
+                title: "One turn. Understand its lesson and gain training points once, even without prior training." });
+        } else {
+            addAction("Read", () => readFixture(fixture), {
+                primary: !isContainerFixture(fixture),
+                disabledReason: getReadBlockReason(fixture, room)
+            });
+        }
     }
 
     if (fixture.id === "grindstone") {
@@ -79700,7 +79943,15 @@ function openFixtureCard(fixture, cardOptions) {
         addAction("Wash up", createWashAction(fixture, room), { primary: true, disabledReason: getWashBlockReason(fixture, room), title: getWashActionNote(fixture) });
     }
 
-    if (tags.includes("rest")) {
+    if (fixture.id === "bed") {
+        const player = G.player, map = G.roomMap, list = room && room.structural;
+        const button = addAction("Sleep", function () {
+            if (G.player !== player || G.roomMap !== map || G.activeRoom !== room || room.structural !== list || G.activeItemModal !== fixture || !actionsEl.contains(button))
+                return sharedChoiceResult("blocked", "That bed's sleep choice is no longer available.");
+            closeItemModal();
+            return sleepAtBed(fixture, room);
+        }, { primary: true, keepOpen: true, disabledReason: getBedSleepBlockReason(fixture, room, true) });
+    } else if (tags.includes("rest")) {
         const reason = !playerNeedsRest(G.player) ? "You are already rested."
             : (hostile ? "Too dangerous to rest here." : "");
         addAction("Rest here", () => attemptRest(), { primary: true, disabledReason: reason });

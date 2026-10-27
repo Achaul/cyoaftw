@@ -1,10 +1,10 @@
 // Settlement mausoleums: named service cluster, fifty-niche vaults and upward expansion plans.
 // Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
-// ── cyoaftw-world-data.js v2026-10-25-005 ── Washable puddles/troughs and authored moonbloom/root harvesting. Previous: Generated bathhouse names and stable saved-building names; street fixture physical templates; guide check-ins and zone/trade shop names.
+// ── cyoaftw-world-data.js v2026-10-26-001 ── Hidden warding marks support reading and comprehension. Previous: Washable puddles/troughs and authored moonbloom/root harvesting; generated bathhouse names and stable saved-building names; street fixture physical templates; guide check-ins and zone/trade shop names.
 // Previous: Commoner debt dialogue identifies the creditor.
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.WORLD_DATA_VERSION = "2026-10-25-005";
+    window.WORLD_DATA_VERSION = "2026-10-26-001";
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
@@ -941,7 +941,13 @@ const ROOM_TEMPLATES = [
     {
         type: "Bathhouse", zone: "Town", role: "landmark", displayName: "Bathhouse", imageKey: "Inn Common",
         baseDescription: "A modest stone bathhouse smells of warm linen and rosemary. A keeper's counter faces the street; beyond a door lie the bathing room and massage room. A painted board offers hot baths, assisted washing, shoulder and back massage, and honest work. Laborers, travelers and old soldiers come here to ease the aches the Long War left behind.",
-        allowedZones: ["town"], parentCluster: ["square"], isConnector: false, minNpcs: 1,
+        allowedZones: ["town"], parentCluster: ["square"], isConnector: false, minNpcs: 7,
+        requiredRole: "Bathkeeper",
+        roleTable: [
+            { role: "BathhouseAttendant", weight: 4 },
+            { role: "BathhousePractitioner", weight: 3 },
+            { role: "BathhouseAttendant", weight: 2 }
+        ],
         structural: [
             { id: "bathhouse-price-board", name: "bathhouse price board", tags: ["information", "commerce"], alwaysShow: true,
               examineText: "The keeper offers hot baths, assisted washes and shoulder and back massage. Ask about bathhouse services for current prices and work. General attendants carry water, tend fires and wash linen; massage practitioners must pass a supervised practical trial." },
@@ -952,7 +958,12 @@ const ROOM_TEMPLATES = [
     {
         type: "Bathing Room", zone: "Town", role: "interior", displayName: "Bathing Room", imageKey: "Guest Room",
         baseDescription: "Copper tubs stand behind linen screens. A banked furnace warms the water, and shelves hold soap, buckets and folded towels. The keeper arranges baths and attendant work at the front counter.",
-        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 3,
+        roleTable: [
+            { role: "BathhouseAttendant", weight: 5 },
+            { role: "BathhousePractitioner", weight: 2 },
+            { role: "BathhouseAttendant", weight: 3 }
+        ],
         structural: [
             { id: "bathing-tubs", name: "screened bathing tubs", tags: ["work", "commerce"], anchored: true, takeable: false },
             { id: "linen-shelves", name: "clean linen shelves", tags: ["work"], anchored: true }
@@ -961,7 +972,12 @@ const ROOM_TEMPLATES = [
     {
         type: "Massage Room", zone: "Town", role: "interior", displayName: "Massage Room", imageKey: "Guest Room",
         baseDescription: "A quiet room holds a padded treatment bench, a stool and a shelf of mild herbal oils. Fresh linen covers the bench. Here the bathkeeper supervises practical trials and trained hands ease tired shoulders and backs.",
-        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 2,
+        roleTable: [
+            { role: "BathhousePractitioner", weight: 4 },
+            { role: "BathhouseAttendant", weight: 2 },
+            { role: "BathhousePractitioner", weight: 3 }
+        ],
         structural: [
             { id: "massage-bench", name: "padded treatment bench", tags: ["work", "commerce"], anchored: true, takeable: false },
             { id: "oil-shelf", name: "shelf of herbal oils", tags: ["work"], anchored: true }
@@ -2410,7 +2426,7 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "sealed-altar",  name: "sealed altar",        tags: ["landmark", "formal"] },
-            { id: "old-wards",     name: "faded warding marks", tags: ["danger", "landmark"] }
+            { id: "old-wards",     name: "faded warding marks", tags: ["danger", "landmark", "information"] }
         ],
         imageKey: "Inner Sanctum"
     },

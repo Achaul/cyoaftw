@@ -3,7 +3,7 @@
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-26-001";
+    window.NPC_DATA_VERSION = "2026-10-26-002";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -2768,6 +2768,10 @@ function _npcSameConversation(npc) {
     }
     return false;
 }
+function _npcCanResumeConversation(npc, ctx) {
+    const state = npc && npc.memory && npc.memory.conversationState;
+    return !!(ctx.stayedSinceLastTalk && (npc.memory.everGreeted || state && state.usedOptionIds.some(id => /^greet-/.test(id))));
+}
 
 function _npcGreetRepeatNote(npc, ctx) {
     if (!ctx || !npc || !npc.memory || typeof npc.memory.lastTalkMoveSeq !== "number") return "";
@@ -2938,7 +2942,6 @@ const NPC_CONVERSATION_CATALOGUE = [
                 return "Greet them warmly";
             }
             if (ctx.sessionUsedOptionIds.includes("greet-known")) return "Check in with them again";
-            if (ctx.stayedSinceLastTalk) return "Say hello again anyway";
             return "Greet them again";
         },
         textVariants: [
@@ -2969,8 +2972,12 @@ const NPC_CONVERSATION_CATALOGUE = [
             metPlayer: true,
             // The guide's opening line and a door-answerer's "Yes? Can I help
             // you?" already are the greeting for this conversation.
-            custom: (npc, ctx) => !(npc && npc.guide) && !(ctx.sessionUsedOptionIds.includes("greet-knock-answer") || ctx.sessionUsedOptionIds.includes("greet-guide-opening")) && !_npcMidConversation(npc, ctx)
+            custom: (npc, ctx) => !(npc && npc.guide) && !_npcCanResumeConversation(npc, ctx) && !(ctx.sessionUsedOptionIds.includes("greet-knock-answer") || ctx.sessionUsedOptionIds.includes("greet-guide-opening")) && !_npcMidConversation(npc, ctx)
         }
+    },
+    {
+        id: "resume-conversation", priority: 14, repeat: "session", kind: "action", action: "resume-conversation",
+        label: "Resume conversation", conditions: { metPlayer: true, custom: (npc, ctx) => _npcCanResumeConversation(npc, ctx) && !_npcMidConversation(npc, ctx) }
     },
     {
         id: "ask-name",
@@ -3742,6 +3749,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         priority: 95,
         repeat: "session",
         label: "Ask about the old gods",
+        contextNote: npc => typeof getNPCFaithContext === "function" ? getNPCFaithContext(npc) : "Use the established deities only.",
         textVariants: [
             "You ask which of the old gods still hold sway around here.",
             "You ask what they know of the gods people still pray to.",
@@ -3765,6 +3773,8 @@ const NPC_CONVERSATION_CATALOGUE = [
         priority: 96,
         repeat: "session",
         label: "Ask who they pray to",
+        contextNote: npc => typeof getNPCFaithContext === "function" ? getNPCFaithContext(npc) : "Use the NPC's stored patron only.",
+        cacheSig: npc => String(npc.deity || "none"),
         textVariants: [
             "You ask which god or spirit they personally hold to.",
             "You ask who they kneel before when no one else is watching.",
@@ -5062,6 +5072,111 @@ const NPC_CONVERSATION_CATALOGUE = [
                    "attempt to secure a better price. Describe your persuasion in character.";
         }
     },
+    // Bathhouse - hint about earning more with private services (shown to qualified providers)
+    {
+        id: "hint_bathhouse_earn_more",
+        priority: 35,
+        repeat: "session",
+        label: (npc, ctx) => {
+            if (npc.role === "Bathkeeper") {
+                return "Ask about higher earning opportunities";
+            }
+            return "Inquire about private service earnings";
+        },
+        textVariants: [
+            "You subtly ask if there are ways to earn more as a provider here.",
+            "You wonder aloud about private service opportunities and their pay.",
+            "You inquire about the most lucrative services offered at the bathhouse."
+        ],
+        intent: "inquiry",
+        isInquiry: true,
+        kind: "topic",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show to bathhouse staff/qualified providers
+                if (!npc || !ctx || !ctx.player) return false;
+                
+                // NPC must be bathhouse staff
+                if (!["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner"].includes(npc.role)) {
+                    return false;
+                }
+                
+                // Player must be qualified for at least manual services
+                const player = ctx.player;
+                if (!player.bathhouseProvider && !player.bathhouseTraining) {
+                    return false;
+                }
+                
+                // Check if player has passed the trial or worked before
+                const hasExperience = player.bathhouseTraining && Object.keys(player.bathhouseTraining).length > 0;
+                const hasWorked = player.bathhouseServicesProvided && player.bathhouseServicesProvided > 0;
+                
+                // Only show hint if player has some experience
+                return hasExperience || hasWorked;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            let note = "This NPC works at the bathhouse. ";
+            if (npc.role === "Bathkeeper") {
+                note += "As the matron, they know all about service tiers and earnings. ";
+            } else if (npc.role === "BathhousePractitioner") {
+                note += "As a practitioner, they earn well from private treatments. ";
+            } else {
+                note += "As an attendant, they may know about advancement opportunities. ";
+            }
+            note += "Answer in character about how providers can earn more through private services. " +
+                    "Mention that qualified practitioners can offer massage, oral, and intercourse services " +
+                    "for higher fees (50-200 gold), with the bathhouse taking a 30% cut. " +
+                    "Encourage the player to pass their trial if they haven't already.";
+            return note;
+        }
+    },
+    // Bathhouse - player asks how to become a qualified provider
+    {
+        id: "ask_bathhouse_qualification",
+        priority: 34,
+        repeat: "session",
+        label: "Ask how to become a qualified provider",
+        textVariants: [
+            "You ask what it takes to offer the more lucrative private services.",
+            "You inquire about the qualification process for higher-tier services.",
+            "You wonder how one becomes a massage practitioner with full service privileges."
+        ],
+        intent: "inquiry",
+        isInquiry: true,
+        kind: "topic",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show to bathhouse staff when player is NOT yet qualified
+                if (!npc || !ctx || !ctx.player) return false;
+                
+                // NPC must be bathhouse staff
+                if (!["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner"].includes(npc.role)) {
+                    return false;
+                }
+                
+                const player = ctx.player;
+                // Player should not already be qualified
+                const isQualified = player.bathhouseTraining && 
+                    Object.values(player.bathhouseTraining).some(t => t.qualified);
+                
+                return !isQualified;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            let note = "This NPC works at the bathhouse. ";
+            if (npc.role === "Bathkeeper") {
+                note += "As the matron, they oversee qualifications. ";
+            } else if (npc.role === "BathhousePractitioner") {
+                note += "As a practitioner, they can share their experience. ";
+            }
+            note += "Answer in character: to offer massage and private services, the player must " +
+                    "pass a practical trial (Flexibility check, DC 11) supervised by the bathkeeper. " +
+                    "Once qualified, they can provide all service tiers. Attendants can only do manual services " +
+                    "(40-60 gold) while practitioners can do all tiers (up to 200 gold). Encourage them to speak to the keeper.";
+            return note;
+        }
+    },
     
     // ===== NSFW OPTIONS =====
     // NSFW catalogue entries (flirt / seduce / touch_intimately /
@@ -5140,7 +5255,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
         // True when the NPC follows a deity: a shrine devotee, any cleric, or
         // a civilized NPC who rolled as devout the first time this was asked
         // (ensureNPCDeity in cyoaftw-engine-CORE.js). Gates "ask-their-deity".
-        hasOwnDeity: !!(typeof ensureNPCDeity === "function" ? ensureNPCDeity(npc) : npc.deity),
+        hasOwnDeity: !!(typeof getNPCFaithPatron === "function" ? getNPCFaithPatron(npc) : typeof ensureNPCDeity === "function" ? ensureNPCDeity(npc) : npc.deity),
         romanceEligible: typeof isAdultHumanoidNPC === "function" ? isAdultHumanoidNPC(npc) : false,
         tradeAvailable: typeof shouldShowPostReplyTradeAction === "function" ? shouldShowPostReplyTradeAction(npc) : false,
         // Staff who have gone home are off duty (see SHOP HOURS in the engine).
@@ -5603,6 +5718,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
         ctx.sessionUsedOptionIds.includes("greet-intro") ||
         ctx.sessionUsedOptionIds.includes("greet-known") ||
         ctx.sessionUsedOptionIds.includes("service-opened") ||
+        ctx.sessionUsedOptionIds.includes("resume-conversation") ||
         ctx.sessionUsedOptionIds.some(id => typeof id === "string" && id.indexOf("greet-") === 0)
     );
     
@@ -5639,7 +5755,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
             // before the session greeting. Same for asking a follower to
             // join the party for good.
             const isCompanionManagement = entry.id === "stop-following" || entry.id === "follower-ask-stay" || entry.id === "follower-join-party";
-            return isGreeting || isDisengage || isCompanionManagement || !!entry.service;
+            return isGreeting || isDisengage || isCompanionManagement || entry.id === "resume-conversation" || !!entry.service;
         });
     }
 
@@ -5676,7 +5792,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     // goodbye and the conversation can never open. If every greet entry
     // was filtered out (unexpected conditions, repeat state, catalogue
     // changes), synthesize a plain greeting.
-    if (!greetedThisSession && !result.some(o => o && o.intent === "greeting")) {
+    if (!greetedThisSession && !result.some(o => o && (o.intent === "greeting" || o.id === "resume-conversation"))) {
         console.warn("[NPC Data] Greeting gate closed with no greeting option — injecting fallback.");
         const fallback = buildConversationOption({
             id: "greet-fallback",
@@ -10283,6 +10399,29 @@ function getStaffScheduleDescription(npc) {
     return desc.join("\n");
 }
 
+// Check if player has bathhouse experience (qualified or worked before)
+function hasBathhouseExperience(player) {
+    if (!player) return false;
+    
+    // Check if player is already a qualified provider
+    if (player.bathhouseProvider === true) return true;
+    
+    // Check if player has passed any trial
+    if (player.bathhouseTraining && typeof player.bathhouseTraining === "object") {
+        const hasQualification = Object.values(player.bathhouseTraining).some(
+            record => record && record.qualified === true
+        );
+        if (hasQualification) return true;
+    }
+    
+    // Check if player has worked any shifts
+    if (player.bathhouseServicesProvided && player.bathhouseServicesProvided > 0) {
+        return true;
+    }
+    
+    return false;
+}
+
 // Player as bathhouse provider mechanics
 function setupPlayerAsBathhouseProvider(player) {
     if (!player) return false;
@@ -10397,6 +10536,7 @@ if (typeof window !== "undefined") {
     window.recordBathhouseEarnings = recordBathhouseEarnings;
     window.canPlayerAcceptBathhouseRequest = canPlayerAcceptBathhouseRequest;
     window.getServiceTier = getServiceTier;
+    window.hasBathhouseExperience = hasBathhouseExperience;
     window.BATHHOUSE_PROVIDER_TYPES = BATHHOUSE_PROVIDER_TYPES;
     window.BATHHOUSE_REQUEST_STATES = BATHHOUSE_REQUEST_STATES;
     // Reputation and client relationship system

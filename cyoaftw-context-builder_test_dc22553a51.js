@@ -3,7 +3,7 @@
 // cyoaftw-context-builder.js v2026-10-23-003 — Bounded NPC Life short-term/entity recollections, personality and sleeping context.
 // Version identifier for debugging cached files.
 if (typeof window !== "undefined") {
-    window.CONTEXT_BUILDER_VERSION = "2026-10-25-002";
+    window.CONTEXT_BUILDER_VERSION = "2026-10-26-001";
     console.log("[Context Builder] Loaded v" + window.CONTEXT_BUILDER_VERSION);
 }
 
@@ -785,6 +785,7 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         `${title}:`,
         `- Name: ${npc.givenName || npc.name || "Unknown"}${npc.givenName && !(npc.memory && npc.memory.nameKnown) ? " (the player has NOT learned this name; never say it unless they ask or you are told to introduce yourself, and never invent a different name)" : " (the player knows this name; never use any other)"}`,
         `- Role: ${npc.role || "unknown"}`,
+        typeof getNPCFaithContext === "function" ? getNPCFaithContext(npc) : "",
         typeof getNPCPartyDescription === "function" && getNPCPartyDescription(npc) ? `- ${getNPCPartyDescription(npc)} They form their own travelling group, separate from the player.` : "",
         `- Species: ${npc.species || "unknown"}, ${gender} (pronoun: ${pronoun})`,
         speciesAppearance ? `- Anatomy constraints: ${speciesAppearance}. Keep incidental gestures consistent; mention appearance only when natural. These facts override generic fantasy assumptions.` : "",
