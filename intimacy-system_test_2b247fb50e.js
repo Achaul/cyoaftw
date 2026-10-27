@@ -1233,6 +1233,16 @@ function initializeIntimacyState(npc) {
             };
         }
         
+        // Ensure lube object exists
+        if (!npc.intimacy.lube) {
+            npc.intimacy.lube = {
+                vagina: { hasLube: false, level: 0 },
+                anus: { hasLube: false, level: 0 },
+                mouth: { hasLube: false, level: 0 },
+                general: { hasLube: false, level: 0 }
+            };
+        }
+        
         return npc.intimacy;
     }
     
@@ -9505,7 +9515,8 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                 "Foot": "Lower Body",
                 "Arms": "Upper Body",
                 "Hands": "Upper Body",
-                "Body": "Upper Body"
+                "Body": "Upper Body",
+                "General": "Upper Body"
             };
             
             if (zoneToSection[bodyZone]) {
@@ -9517,53 +9528,57 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         // determine based on action ID and target
         const actIdLower = (act.id || "").toLowerCase();
         const labelLower = (act.label || "").toLowerCase();
-        const target = act.target || "";
+        const target = (act.target || "").toLowerCase();
         
-        // Head targets
+        // Head targets - check target FIRST to prioritize actual body part over action ID
         if (target === "face" || target === "mouth" || target === "lips" || 
-            target === "neck" || target === "hair" ||
-            actIdLower.includes("kiss") || actIdLower.includes("face") ||
-            actIdLower.includes("mouth") || actIdLower.includes("lips") ||
-            actIdLower.includes("hair") || actIdLower.includes("neck") ||
+            target === "neck" || target === "hair") {
+            return "Head";
+        }
+        
+        // Upper Body targets - check target FIRST
+        if (target === "breasts" || target === "nipples" || target === "chest" ||
+            target === "shoulders" || target === "stomach" || target === "belly" ||
+            target === "bellybutton" || target === "back" || target === "arms" ||
+            target === "arm" || target === "hands" || target === "hand" ||
+            target === "body") {
+            return "Upper Body";
+        }
+        
+        // Midsection targets - check target FIRST
+        if (target === "penis" || target === "cock" || target === "vagina" || 
+            target === "pussy" || target === "clitoris" || target === "anus" ||
+            target === "butt" || target === "buttocks" || target === "ass" ||
+            target === "cloaca" || target === "tail" || target === "groin" ||
+            target === "hips" || target === "hip" ||
+            target === "hemipenis") {
+            return "Midsection";
+        }
+        
+        // Lower Body targets - check target FIRST
+        if (target === "thighs" || target === "thigh" || target === "legs" || 
+            target === "leg" || target === "feet" || target === "foot") {
+            return "Lower Body";
+        }
+        
+        // Now check action ID patterns for actions that might not have a clear target
+        // Head actions (by action ID)
+        if (actIdLower.includes("face") || actIdLower.includes("mouth") || 
+            actIdLower.includes("lips") || actIdLower.includes("hair") ||
+            actIdLower.includes("neck") ||
             actIdLower.includes("rubcockonface") || actIdLower.includes("rubpussyonface") ||
             actIdLower.includes("cumonface") || actIdLower.includes("peeonface")) {
             return "Head";
         }
         
-        // Upper Body targets
-        if (target === "breasts" || target === "nipples" || target === "chest" ||
-            target === "shoulders" || target === "stomach" || target === "belly" ||
-            actIdLower.includes("breast") || actIdLower.includes("nipple") ||
+        // Upper Body actions (by action ID)
+        if (actIdLower.includes("breast") || actIdLower.includes("nipple") ||
             actIdLower.includes("chest") || actIdLower.includes("shoulder") ||
             actIdLower.includes("stomach") || actIdLower.includes("belly") ||
             actIdLower.includes("rubcockonbreast") || actIdLower.includes("rubpussyonbreast") ||
             actIdLower.includes("cumonbreast") || actIdLower.includes("peeonbreast") ||
             actIdLower.includes("cumonchest") || actIdLower.includes("peeonchest")) {
             return "Upper Body";
-        }
-        
-        // Midsection targets (genitals, anus, tail)
-        if (target === "penis" || target === "cock" || target === "vagina" || 
-            target === "pussy" || target === "clitoris" || target === "anus" ||
-            target === "butt" || target === "buttocks" || target === "ass" ||
-            target === "cloaca" || target === "tail" || target === "groin" ||
-            actIdLower.includes("cock") || actIdLower.includes("penis") ||
-            actIdLower.includes("pussy") || actIdLower.includes("vagina") ||
-            actIdLower.includes("anal") || actIdLower.includes("anus") ||
-            actIdLower.includes("butt") || actIdLower.includes("ass") ||
-            actIdLower.includes("tail") || actIdLower.includes("cloaca") ||
-            actIdLower.includes("spank") || actIdLower.includes("finger") ||
-            actIdLower.includes("penetrate") || actIdLower.includes("fuck") ||
-            actIdLower.includes("thrust") || actIdLower.includes("pump")) {
-            return "Midsection";
-        }
-        
-        // Lower Body targets
-        if (target === "thighs" || target === "thigh" || target === "legs" || 
-            target === "leg" || target === "feet" || target === "foot" ||
-            actIdLower.includes("thigh") || actIdLower.includes("leg") ||
-            actIdLower.includes("foot") || actIdLower.includes("feet")) {
-            return "Lower Body";
         }
         
         // Fallback for Impact/Climax/Watersports - determine by target in act ID
@@ -9604,7 +9619,27 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         }
         
         if (act.triggersClimax || actIdLower.includes("climax") || actIdLower.includes("ejaculate")) {
-            // Climax actions - determine by target
+            // Climax actions - determine by target first, then by action ID
+            // Check target first for accurate body part categorization
+            if (target === "face" || target === "mouth" || target === "lips") {
+                return "Head";
+            }
+            if (target === "breasts" || target === "nipples" || target === "chest" || 
+                target === "shoulders" || target === "stomach" || target === "belly") {
+                return "Upper Body";
+            }
+            if (target === "penis" || target === "cock" || target === "vagina" || 
+                target === "pussy" || target === "clitoris" || target === "anus" ||
+                target === "butt" || target === "buttocks" || target === "ass" ||
+                target === "cloaca" || target === "groin" || target === "hips" ||
+                target === "hemipenis") {
+                return "Midsection";
+            }
+            if (target === "thighs" || target === "thigh" || target === "legs" || 
+                target === "leg" || target === "feet" || target === "foot") {
+                return "Lower Body";
+            }
+            // Fallback to action ID patterns for climax actions without clear targets
             if (actIdLower.includes("face") || actIdLower.includes("mouth") || actIdLower.includes("head")) {
                 return "Head";
             }
@@ -9615,8 +9650,9 @@ function getMenuActions(npc, player, room = null, positionId = null) {
             return "Midsection";
         }
         
-        // Default to Midsection for penetration/continue actions
-        if (actType === ACT_TYPES.PENETRATE || actType === ACT_TYPES.CONTINUE) {
+        // Default to Midsection for penetration actions
+        // Continue actions should be categorized by their target, not defaulted
+        if (actType === ACT_TYPES.PENETRATE) {
             return "Midsection";
         }
         
@@ -9638,21 +9674,28 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         const isSpecial = sectionDef.isSpecial;
         const bgColor = sectionDef.bgColor;
         
-        const actions = sectionedActions[sectionId];
-        if (!actions || !actions.length) continue;
+        const actions = sectionedActions[sectionId] || [];
         
-        // For non-special sections (body parts), check if NPC has that body part
-        // and if there are any enabled (non-disabled) actions
-        if (!isSpecial) {
-            // Check if there are any enabled actions for this section
-            const hasEnabledActions = actions.some(a => !a.disabled);
-            if (!hasEnabledActions) continue;
-            
-            // For Midsection, also check if NPC has any relevant anatomy
+        // Always include body part sections (Clothing, Head, Upper Body, Midsection, Lower Body, Requests)
+        // even if they have no actions or all actions are disabled
+        const isBodyPartSection = ["Clothing", "Head", "Upper Body", "Midsection", "Lower Body", "Requests"].includes(sectionId);
+        
+        // For body part sections, always include them
+        if (isBodyPartSection) {
+            // For Midsection, check if NPC has any relevant anatomy
             if (sectionId === "Midsection") {
                 const hasRelevantAnatomy = npcHasMidsection(npc) && 
                     (npcHasPenis(npc) || npcHasVagina(npc) || npcHasAnus(npc) || npcHasCloaca(npc) || npcHasTail(npc));
                 if (!hasRelevantAnatomy) continue;
+            }
+        } else {
+            // For other sections, skip if no actions
+            if (!actions || !actions.length) continue;
+            
+            // For non-special sections, check if there are any enabled actions
+            if (!isSpecial) {
+                const hasEnabledActions = actions.some(a => !a.disabled);
+                if (!hasEnabledActions) continue;
             }
         }
         
@@ -10043,6 +10086,19 @@ function handleNaturalLubrication(npc, act) {
     
     const intimacy = npc.intimacy;
     const npcArousal = intimacy.arousal.npc || 0;
+    
+    // Ensure lube object and all its properties exist
+    if (!intimacy.lube) {
+        intimacy.lube = {};
+    }
+    
+    // Initialize each lube part if missing
+    const lubeParts = ["vagina", "anus", "mouth", "general"];
+    for (const part of lubeParts) {
+        if (!intimacy.lube[part]) {
+            intimacy.lube[part] = { hasLube: false, level: 0 };
+        }
+    }
     
     // Mouth is always lubricated (saliva) - no need to track
     // Mark it as having lube if not already set
@@ -12327,7 +12383,9 @@ function buildUnconsciousNarrative(npc, act, player) {
     const actId = act.id || "";
     
     // Oral penetration on unconscious NPC
-    if (target === "mouth" || target === "lips" || actId.toLowerCase().includes("mouth") || actId.toLowerCase().includes("oral")) {
+    // Only match actual penetration acts (fuck, thrust, deepthroat, etc.) not tease/rub acts
+    const isPenetrativeVerb = ["fuck", "thrust", "deepthroat", "penetrate", "enter"].includes(verb.toLowerCase());
+    if (isPenetrativeVerb && (target === "mouth" || target === "lips")) {
         if (tool === "penis" || tool === "cock" || tool === "dick") {
             return `You plug ${npcName}'s nose and they instinctively gasp for air, their mouth opening. You jam your cock into their mouth, pushing past their unresisting lips and deep into their throat.`;
         }

@@ -3063,18 +3063,17 @@ function openBathhouseMenu(npc) {
     if (G.activeNPC !== npc) return sharedChoiceResult("interrupted", "The conversation changed.");
     G.activeNPCMode = "bathhouse";
     setExitGridVisible(false); el.innerHTML = "";
-    const title = (G.activeRoom.buildingName || "The bathhouse") + " — hot water or honest work. Treatments refresh stamina; they do not replace sleep or wound care.";
+    const title = (G.activeRoom.buildingName || "The bathhouse") + " — hot water and treatments. Refreshes stamina; does not replace sleep or wound care.";
     const menu = beginSharedChoiceMenu("bathhouse-services", npc, title, () => openBathhouseMenu(npc));
     const valid = menu.valid, stamp = bathhouseSceneStamp(npc), turn = getCurrentStoryTurn(), map = G.roomMap;
     const rooms = Object.values(map).filter(r => r && r.buildingId === G.activeRoom.buildingId);
     menu.valid = () => valid() && G.roomMap === map && rooms.every(r => map[r.coords] === r) && getCurrentStoryTurn() === turn && !bathhouseBlock(npc) && bathhouseSceneStamp(npc) === stamp;
     const services = [];
-    ["bath", "wash", "massage", "trial", "attendant", "practitioner"].forEach(action => {
+    // Only show treatment services (not work/job options) in the main service menu
+    ["bath", "wash", "massage"].forEach(action => {
         const spec = bathhouseActionSpec(npc, action);
         let label = spec.label;
         if (BATHHOUSE_TREATMENTS[action]) label += " — " + spec.fee + " gold, " + spec.turns + " turns, up to " + spec.recovery + " stamina";
-        else if (action === "trial") label += " — flexibility check, difficulty 11; 1 stamina, 2 turns; retry tomorrow if unsuccessful";
-        else label += " — " + describeJobPay(JOB_TYPES[action === "attendant" ? "bathAttendant" : "bathMassage"]) + ", 4 shifts";
         services.push(Object.assign({}, spec, { command: "bathhouse " + action, available: !spec.reason }));
         el.appendChild(createSharedChoiceButton(menu, label, () => performBathhouseAction(npc, action), {
             disabled: !!spec.reason, title: spec.reason, textChoice: { action }
@@ -84002,6 +84001,15 @@ function selectNPC(npc, options = {}) {
         window.recomputeNPCAttraction(npc);
     }
 
+    // Auto-open bathhouse service menu for bathhouse staff (Bathkeeper, BathhouseAttendant, BathhousePractitioner)
+    // Also check for matron/owner roles
+    const bathhouseRoles = ["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Matron", "Owner"];
+    if (bathhouseRoles.includes(npc.role) && typeof openBathhouseMenu === "function" && typeof isPublicBathhouseStaff === "function" && isPublicBathhouseStaff(npc)) {
+        // Small delay to ensure UI is ready
+        setTimeout(() => openBathhouseMenu(npc), 50);
+        return;
+    }
+
     const previousNPC = G.activeNPC;
     const isNewNPC = !previousNPC ||
         (previousNPC.id && npc.id ? previousNPC.id !== npc.id : previousNPC !== npc);
@@ -85678,9 +85686,9 @@ function renderIntimacyActionMenu(npc) {
             const actionId = (action.id || "").toLowerCase();
             const actionLabel = (action.label || "").toLowerCase();
             
-            // Skip anatomy filtering for non-resisting NPCs - ALL actions should be available
-            // (only body part SECTIONS are filtered, not individual actions)
-            if (isNonResisting) return true;
+            // Anatomy filtering applies to ALL NPCs, including non-resisting
+            // Non-resisting NPCs can still only have actions that target anatomy they have
+            // The difference is that non-resisting NPCs bypass DISINHIBITION gates, not anatomy checks
             
             // Cock-related actions - require hasCock
             if ((actionId.includes("cock") || actionId.includes("penis") || actionId.includes("dick") ||
@@ -85713,6 +85721,11 @@ function renderIntimacyActionMenu(npc) {
                 return false;
             }
             
+            // Hemipenis-related actions - require hasCock (hemipenis is a male reptilian feature)
+            if ((actionId.includes("hemipenis") || actionLabel.includes("hemipenis")) && !hasCock) {
+                return false;
+            }
+            
             return true;
         }
         
@@ -85721,8 +85734,14 @@ function renderIntimacyActionMenu(npc) {
                 // Filter out Player tab - intimacy actions should only target NPC
                 const label = String(item.label || "").toLowerCase();
                 if (label === "player") return false;
-                if (!item.actions || item.actions.length === 0) return false;
                 if (!shouldShowSection(item.label)) return false;
+                // Always show body part sections and special sections even if empty
+                if (label === "clothing" || label === "head" || 
+                    label === "upper body" || label === "lower body" ||
+                    label === "midsection" || label === "requests") {
+                    return true;
+                }
+                if (!item.actions || item.actions.length === 0) return false;
                 
                 // Filter out Requests section for unconscious/sleeping/bound NPCs
                 // (they cannot make requests while unconscious/sleeping/bound)
@@ -86844,12 +86863,62 @@ function chooseIntimacyAction(npc, actId) {
     const isBound = npc && (npc.bound || npc._prisoner || npc._boundCaptiveFollower);
     const isNonResisting = isUnconsciousOrSleeping || isBound;
     
-    // Ensure npc.intimacy exists
+    // Ensure npc.intimacy exists with all required properties
     if (!npc.intimacy) {
-        npc.intimacy = { encounter: { active: true } };
-    }
-    if (!npc.intimacy.encounter) {
-        npc.intimacy.encounter = { active: true };
+        npc.intimacy = { 
+            encounter: { active: true },
+            arousal: { player: 0, npc: 0 },
+            lube: {
+                vagina: { hasLube: false, level: 0 },
+                anus: { hasLube: false, level: 0 },
+                mouth: { hasLube: false, level: 0 },
+                general: { hasLube: false, level: 0 }
+            },
+            clothing: { player: {}, npc: {} },
+            position: { player: "Standing", npc: "Standing" },
+            penetration: { active: false, tool: null, target: null, depth: 0, playerIsBottom: false },
+            actionHistory: [],
+            engagedActs: []
+        };
+    } else {
+        // Ensure all required sub-properties exist
+        if (!npc.intimacy.encounter) {
+            npc.intimacy.encounter = { active: true };
+        }
+        if (!npc.intimacy.arousal) {
+            npc.intimacy.arousal = { player: 0, npc: 0 };
+        }
+        if (!npc.intimacy.lube) {
+            npc.intimacy.lube = {
+                vagina: { hasLube: false, level: 0 },
+                anus: { hasLube: false, level: 0 },
+                mouth: { hasLube: false, level: 0 },
+                general: { hasLube: false, level: 0 }
+            };
+        } else {
+            // Ensure all lube parts exist
+            const lubeParts = ["vagina", "anus", "mouth", "general"];
+            for (const part of lubeParts) {
+                if (!npc.intimacy.lube[part]) {
+                    npc.intimacy.lube[part] = { hasLube: false, level: 0 };
+                }
+            }
+        }
+        if (!npc.intimacy.clothing) {
+            npc.intimacy.clothing = { player: {}, npc: {} };
+        }
+        if (!npc.intimacy.position) {
+            npc.intimacy.position = { player: "Standing", npc: "Standing" };
+        }
+        if (!npc.intimacy.penetration) {
+            npc.intimacy.penetration = { active: false, tool: null, target: null, depth: 0, playerIsBottom: false };
+        }
+        if (!npc.intimacy.actionHistory) {
+            npc.intimacy.actionHistory = [];
+        }
+        if (!npc.intimacy.engagedActs) {
+            npc.intimacy.engagedActs = [];
+        }
     }
     
     // For non-resisting NPCs, ensure they cannot resist
