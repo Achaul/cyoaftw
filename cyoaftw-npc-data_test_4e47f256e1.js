@@ -3,7 +3,7 @@
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-26-002";
+    window.NPC_DATA_VERSION = "2026-10-27-002";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -3763,18 +3763,15 @@ const NPC_CONVERSATION_CATALOGUE = [
             excludedActionTags: ["ask-deity"]
         }
     },
-    // Distinct from "ask-deity" above (generic lore, gated by role) - this
-    // is for an NPC who personally follows a specific deity (npc.deity,
-    // set once when they were generated inside a shrine room - see
-    // spawnNPCsForRoom in cyoaftw-engine-CORE.js). hasOwnDeity gates it to
-    // exactly those NPCs, regardless of role.
+    // Personal devotion, including an honest no-patron answer. The engine
+    // assigns faith once and owns the reply; generic deity lore is separate.
     {
         id: "ask-their-deity",
         priority: 96,
         repeat: "session",
         label: "Ask who they pray to",
         contextNote: npc => typeof getNPCFaithContext === "function" ? getNPCFaithContext(npc) : "Use the NPC's stored patron only.",
-        cacheSig: npc => String(npc.deity || "none"),
+        cacheSig: npc => String((typeof getNPCFaithPatron === "function" ? getNPCFaithPatron(npc) : npc.deity) || "none"),
         textVariants: [
             "You ask which god or spirit they personally hold to.",
             "You ask who they kneel before when no one else is watching.",
@@ -3783,7 +3780,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-their-deity" },
         conditions: {
-            hasOwnDeity: true,
+            isHumanoid: true,
             minFavor: 10,
             maxHostility: 70,
             excludedActionTags: ["ask-their-deity"]
@@ -5253,8 +5250,8 @@ function getNPCConversationContext(npc, extraContext = {}) {
             : "neutral",
         isHumanoid: npc.isHumanoid === true,
         // True when the NPC follows a deity: a shrine devotee, any cleric, or
-        // a civilized NPC who rolled as devout the first time this was asked
-        // (ensureNPCDeity in cyoaftw-engine-CORE.js). Gates "ask-their-deity".
+        // a civilized NPC with a saved one-time devotion result
+        // (ensureNPCDeity in cyoaftw-engine-CORE.js).
         hasOwnDeity: !!(typeof getNPCFaithPatron === "function" ? getNPCFaithPatron(npc) : typeof ensureNPCDeity === "function" ? ensureNPCDeity(npc) : npc.deity),
         romanceEligible: typeof isAdultHumanoidNPC === "function" ? isAdultHumanoidNPC(npc) : false,
         tradeAvailable: typeof shouldShowPostReplyTradeAction === "function" ? shouldShowPostReplyTradeAction(npc) : false,
@@ -8335,7 +8332,17 @@ function _npcTasteValue(npc, axis) {
 function getPlayerTasteForNPC(npc) {
     var result = { raw: 0, score: 0, label: "" };
     if (!isAdultHumanoidNPC(npc)) return result;
-    var prefs = (typeof G === "object" && G && G.player) ? G.player.preferences : null;
+    var player = (typeof G === "object" && G) ? G.player : null;
+    // Display preference only: shared by the panel, look prose and text/TTS
+    // inspection. Legacy saves without orientation keep their existing scope.
+    var orientation = String(player && player.orientation || "bi").toLowerCase();
+    if (orientation === "none") return result;
+    if (String(player && player.gender || "").toLowerCase() === "male") {
+        var gender = String(npc.gender || "").toLowerCase();
+        if (orientation === "straight" && gender !== "female") return result;
+        if (orientation === "gay" && gender !== "male") return result;
+    }
+    var prefs = player ? player.preferences : null;
     if (!prefs) return result;
     var likes = Array.isArray(prefs.likes) ? prefs.likes : [];
     var dislikes = Array.isArray(prefs.dislikes) ? prefs.dislikes : [];
