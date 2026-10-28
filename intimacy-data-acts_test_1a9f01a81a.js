@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-10-27-001
+ * Version: 2026-10-27-006
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-10-27-001";
-    console.log("[Intimacy Acts] Loaded v2026-10-27-001 - tool-based oral categorization added");
+    window.INTIMACY_ACTS_VERSION = "2026-10-27-006";
+    console.log("[Intimacy Acts] Loaded v2026-10-27-006 - added bury_nose_in_pussy and press_nose_against_anus to Midsection");
 }
 
 // ============================================================================
@@ -364,6 +364,8 @@ var SEX_ACTS = {
     
     caress_face: { id: "caress_face", tool: "hand", target: "face", verb: "caress", type: ACT_TYPES.TEASE, label: "Caress face", desc: "Gently caress their face", arousal: { p: 4, n: 6 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.ANY, sleepingSafe: true, objectDialogueTags: ["being caressed"] },
     stroke_hair: { id: "stroke_hair", tool: "hand", target: "hair", verb: "stroke", type: ACT_TYPES.TEASE, label: "Stroke hair", desc: "Run your fingers through their hair", arousal: { p: 3, n: 5 }, pos: ["Standing", "Perched", "Astride Lap", "Missionary", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, sleepingSafe: true, objectDialogueTags: ["hair stroked"] },
+    slap_face: { id: "slap_face", tool: "hand", target: "face", verb: "slap", type: ACT_TYPES.IMPACT, label: "Slap face", desc: "Slap their face", arousal: { p: 5, n: 15 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Against Wall"], reqCloth: CLOTHING_REQUIREMENTS.ANY, requiresConsent: true, requiresDemeanorMode: ["dominant"] },
+    spit_in_mouth: { id: "spit_in_mouth", tool: "mouth", target: "mouth", verb: "spit", type: ACT_TYPES.IMPACT, label: "Spit in mouth", desc: "Spit into their mouth", arousal: { p: 0, n: -10 }, pos: ["Standing", "Perched", "Missionary", "Against Wall", "Astride Lap", "Kneeling", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.ANY, requiresConsent: true, requiresDemeanorMode: ["dominant"] },
     
     grope_breasts_clothed: { id: "grope_breasts_clothed", tool: "hand", target: "breasts", verb: "grope", type: ACT_TYPES.TEASE, label: "Grope breasts (over clothes)", desc: "Squeeze their breasts over their clothes", arousal: { p: 10, n: 15 }, pos: ["Standing", "Standing From Behind", "Perched", "Missionary", "Against Wall"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
     squeeze_butt_clothed: { id: "squeeze_butt_clothed", tool: "hand", target: "butt", verb: "squeeze", type: ACT_TYPES.TEASE, label: "Squeeze butt", desc: "Squeeze their buttocks over clothes", arousal: { p: 8, n: 18 }, pos: ["Standing", "Standing From Behind", "Perched", "Doggy", "Bent Over", "Spooning"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
@@ -441,6 +443,8 @@ var SEX_ACTS = {
     suck_clit: { id: "suck_clit", tool: "mouth", target: "clitoris", verb: "suck", type: ACT_TYPES.TEASE, label: "Suck clit", desc: "Suck on their clitoris", arousal: { p: 10, n: 60 }, pos: ["Sixty-Nine", "Kneeling Over", "Prone Oral Service", "Riding Face", "Kneeling Before", "Kneeling By Face", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true },
     nibble_pussy: { id: "nibble_pussy", tool: "mouth", target: "vagina", verb: "nibble", type: ACT_TYPES.TEASE, label: "Nibble pussy", desc: "Gently nibble on their pussy", arousal: { p: 10, n: 45 }, pos: ["Sixty-Nine", "Kneeling Over", "Prone Oral Service", "Riding Face", "Kneeling Before", "Kneeling By Face", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true, objectDialogueTags: ["pussy nibbled"] },
     nibble_clit: { id: "nibble_clit", tool: "mouth", target: "clitoris", verb: "nibble", type: ACT_TYPES.TEASE, label: "Nibble clit", desc: "Gently nibble on their clitoris", arousal: { p: 12, n: 50 }, pos: ["Sixty-Nine", "Kneeling Over", "Prone Oral Service", "Riding Face", "Kneeling Before", "Kneeling By Face", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true, objectDialogueTags: ["clit nibbled"] },
+    bury_nose_in_pussy: { id: "bury_nose_in_pussy", tool: "nose", target: "vagina", verb: "bury", type: ACT_TYPES.TEASE, label: "Bury nose in pussy", desc: "Bury your nose in their pussy", arousal: { p: 15, n: 40 }, pos: ["Sixty-Nine", "Kneeling Over", "Prone Oral Service", "Riding Face", "Kneeling Before", "Kneeling By Face", "Standing From Behind"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresNpcFemale: true },
+    press_nose_against_anus: { id: "press_nose_against_anus", tool: "nose", target: "anus", verb: "press", type: ACT_TYPES.TEASE, label: "Press nose against anus", desc: "Press your nose against their anus", arousal: { p: 10, n: 35 }, pos: ["Standing From Behind", "Doggy", "Bent Over", "Spooning", "Missionary", "Cowgirl", "Reverse Cowgirl"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF },
     
     // NEW: Priority 2 - Ride Face (oral service position)
     ride_face: { id: "ride_face", tool: "vagina", target: "mouth", verb: "ride", type: ACT_TYPES.PENETRATE, label: "Ride face", desc: "Sit on their face for oral service", arousal: { p: 30, n: 40 }, pos: ["Riding Face", "Sixty-Nine", "Oral Service", "Prone Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: false, femaleOnly: true },
@@ -584,7 +588,6 @@ var SEX_ACTS = {
     rub_penis_against_face: { id: "rub_penis_against_face", tool: "penis", target: "face", verb: "rub", type: ACT_TYPES.TEASE, label: "Rub cock against face", desc: "Rub your cock against their face", arousal: { p: 35, n: 30 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPlayerMale: true, playerIsBottom: false },
     rub_penis_against_mouth: { id: "rub_penis_against_mouth", tool: "penis", target: "mouth", verb: "rub", type: ACT_TYPES.TEASE, label: "Rub cock against mouth", desc: "Rub your cock against their mouth", arousal: { p: 40, n: 35 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over", "Oral Service"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPlayerMale: true, playerIsBottom: false },
     rub_penis_against_lips: { id: "rub_penis_against_lips", tool: "penis", target: "lips", verb: "rub", type: ACT_TYPES.TEASE, label: "Rub cock against lips", desc: "Rub your cock against their lips", arousal: { p: 38, n: 32 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPlayerMale: true, playerIsBottom: false },
-    rub_penis_against_nose: { id: "rub_penis_against_nose", tool: "penis", target: "nose", verb: "rub", type: ACT_TYPES.TEASE, label: "Rub cock against nose", desc: "Rub your cock against their nose", arousal: { p: 35, n: 30 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPlayerMale: true, playerIsBottom: false },
     rub_penis_against_cheek: { id: "rub_penis_against_cheek", tool: "penis", target: "cheek", verb: "rub", type: ACT_TYPES.TEASE, label: "Rub cock against cheek", desc: "Rub your cock against their cheek", arousal: { p: 32, n: 28 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPlayerMale: true, playerIsBottom: false },
     rub_penis_against_neck: { id: "rub_penis_against_neck", tool: "penis", target: "neck", verb: "rub", type: ACT_TYPES.TEASE, label: "Rub cock against neck", desc: "Rub your cock against their neck", arousal: { p: 30, n: 25 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap", "Kneeling Over"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, requiresPlayerMale: true, playerIsBottom: false },
     
@@ -606,6 +609,9 @@ var SEX_ACTS = {
     caress_feet: { id: "caress_feet", tool: "hand", target: "feet", verb: "caress", type: ACT_TYPES.TEASE, label: "Caress feet", desc: "Caress their feet with your hands", arousal: { p: 4, n: 6 }, pos: ["Kneeling", "Kneeling Before", "Kneeling By Face", "Squatting Before", "Standing", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
     massage_feet: { id: "massage_feet", tool: "hand", target: "feet", verb: "massage", type: ACT_TYPES.TEASE, label: "Massage feet", desc: "Massage their feet", arousal: { p: 5, n: 8 }, pos: ["Kneeling", "Kneeling Before", "Kneeling By Face", "Squatting Before", "Standing", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.ANY, objectDialogueTags: ["feet massaged"] },
     stroke_feet: { id: "stroke_feet", tool: "hand", target: "feet", verb: "stroke", type: ACT_TYPES.TEASE, label: "Stroke feet", desc: "Stroke their feet", arousal: { p: 3, n: 5 }, pos: ["Kneeling", "Kneeling Before", "Kneeling By Face", "Squatting Before", "Standing", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
+    suck_toes: { id: "suck_toes", tool: "mouth", target: "toes", verb: "suck", type: ACT_TYPES.TEASE, label: "Suck toes", desc: "Suck on their toes", arousal: { p: 5, n: 8 }, pos: ["Kneeling", "Kneeling Before", "Kneeling By Face", "Squatting Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY },
+    rub_cock_against_foot: { id: "rub_cock_against_foot", tool: "penis", target: "foot", verb: "rub", type: ACT_TYPES.TEASE, label: "Rub cock against foot", desc: "Rub your cock against their foot", arousal: { p: 30, n: 25 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, maleOnly: true, playerIsBottom: false },
+    rub_pussy_against_foot: { id: "rub_pussy_against_foot", tool: "vagina", target: "foot", verb: "rub", type: ACT_TYPES.TEASE, label: "Rub pussy against foot", desc: "Rub your pussy against their foot", arousal: { p: 25, n: 20 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, femaleOnly: true, playerIsBottom: false },
     
     // ===== VARIED REQUEST ACTIONS =====
     request_sit_on_face: { id: "request_sit_on_face", tool: "mouth", target: "face", verb: "request", type: ACT_TYPES.TEASE, label: "Request they sit on your face", desc: "Ask them to sit on your face", arousal: { p: 30, n: 20 }, pos: ["Standing", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF, playerIsBottom: true },
@@ -637,8 +643,7 @@ var SEX_ACTS = {
     command_undress: { id: "command_undress", tool: "voice", target: "body", verb: "command", type: ACT_TYPES.CLOTHING, label: "Command them to undress", desc: "Order them to remove their clothing", arousal: { p: 15, n: 10 }, pos: ["Standing", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower" },
     demand_serve: { id: "demand_serve", tool: "voice", target: "body", verb: "demand", type: ACT_TYPES.TEASE, label: "Demand they serve you", desc: "Demand they serve you as their master", arousal: { p: 25, n: 20 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower" },
     demand_worship: { id: "demand_worship", tool: "voice", target: "body", verb: "demand", type: ACT_TYPES.TEASE, label: "Demand they worship you", desc: "Command them to show worship and devotion", arousal: { p: 20, n: 15 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower" },
-    assert_dominance: { id: "assert_dominance", tool: "body", target: "body", verb: "assert", type: ACT_TYPES.TEASE, label: "Assert your dominance", desc: "Assert your authority and control over them", arousal: { p: 25, n: 20 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "physicalProwess" },
-    command_mouth: { id: "command_mouth", tool: "voice", target: "mouth", verb: "command", type: ACT_TYPES.TEASE, label: "Command their mouth", desc: "Order them to use their mouth on you", arousal: { p: 30, n: 25 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower" },
+    command_mouth: { id: "command_mouth", tool: "voice", target: "mouth", verb: "command", type: ACT_TYPES.TEASE, label: "Command their mouth", desc: "Order them to use their mouth on you", arousal: { p: 30, n: 25 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower", menuSection: "Requests" },
     demand_obey: { id: "demand_obey", tool: "voice", target: "body", verb: "demand", type: ACT_TYPES.TEASE, label: "Demand they obey", desc: "Demand their complete obedience to your commands", arousal: { p: 20, n: 15 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower" },
     force_kneel: { id: "force_kneel", tool: "hand", target: "body", verb: "force", type: ACT_TYPES.TEASE, label: "Force them to their knees", desc: "Physically guide them to kneel before you", arousal: { p: 25, n: 20 }, pos: ["Standing", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "physicalProwess" },
     
@@ -1163,24 +1168,40 @@ function getActionCategory(actId, npc) {
     // Categorize by body area first, then action type
     const actIdLower = (act.id || "").toLowerCase();
     const labelLower = (act.label || "").toLowerCase();
-    const target = act.target || "";
+    const target = (act.target || "").toLowerCase();
     const tool = (act.tool || "").toLowerCase();
     
-    // TOOL-BASED CATEGORIES: If tool is mouth/tongue, categorize as oral regardless of target
-    // This ensures oral sex actions (mouth on penis/vagina) appear in Head section
+    // TOOL-BASED CATEGORIES: If tool is mouth/tongue on genitals, return genital category
+    // For non-genital targets, let the target-based checks below handle categorization
     if (tool === "mouth" || tool === "tongue") {
-        return "Mouth & Lips";
+        // Oral on genital parts -> return specific genital category
+        const penisTargets = ["penis", "cock", "dick"];
+        const vaginaTargets = ["vagina", "pussy", "clitoris", "clit"];
+        const anusTargets = ["anus", "buttocks", "butt", "ass", "cloaca"];
+        const testicleTargets = ["testicles", "balls"];
+        
+        if (penisTargets.includes(target) || testicleTargets.includes(target)) {
+            return "Cock";
+        }
+        if (vaginaTargets.includes(target)) {
+            return "Pussy";
+        }
+        if (anusTargets.includes(target)) {
+            return _npcHasCloaca(npc) ? "Cloaca" : "Anus";
+        }
+        // For non-genital targets (mouth, lips, face, neck, cheek, hair, feet, etc.),
+        // fall through to the target-based checks below
     }
     
     // First check target - this takes priority over action type
     // Feet/legs/thighs actions
     if (target === "feet" || target === "foot" || target === "legs" || target === "leg" ||
-        target === "thighs" || target === "thigh") {
+        target === "thighs" || target === "thigh" || target === "toes" || target === "toe") {
         return "Legs";
     }
     
     // Mouth/Lips/Face/Neck actions
-    if (target === "mouth" || target === "lips" || target === "face" || target === "neck") {
+    if (target === "mouth" || target === "lips" || target === "face" || target === "neck" || target === "cheek") {
         return "Mouth & Lips";
     }
     
@@ -1204,8 +1225,13 @@ function getActionCategory(actId, npc) {
         return "Cock";
     }
     
+    // Testicles/Balls
+    if (target === "testicles" || target === "balls") {
+        return "Cock";
+    }
+    
     // Anus/Buttocks
-    if (target === "anus" || target === "buttocks" || target === "butt" || target === "ass" || target === "sphincter") {
+    if (target === "anus" || target === "buttocks" || target === "butt" || target === "ass" || target === "sphincter" || target === "cloaca") {
         // Cloaca-bearing NPCs (reptilian-kin) have a cloacal vent instead of
         // a separate anus, so the section is labelled "Cloaca" for them.
         return _npcHasCloaca(npc) ? "Cloaca" : "Anus";
