@@ -3,7 +3,7 @@
 const textModeState = {
     enabled: false, busy: false, parsing: false, epoch: 0, queue: [], pending: null,
     paused: false, capture: null, dialogue: null, lootContext: null, lootTask: null, lootPartyView: null,
-    history: [], historyIndex: 0, draft: "", events: [], systemEntry: null, storyPlayer: null, helpActive: false, sessionPlayer: null, choices: null, combatTurnSpent: false
+    history: [], historyIndex: 0, draft: "", events: [], systemEntry: null, storyPlayer: null, helpActive: false, sessionPlayer: null, choices: null, combatTurnSpent: false, lastCommand: null, lastPhraseInterpretation: null
 };
 const TEXT_COMMAND_LIMIT = 12;
 const TEXT_INPUT_LIMIT = 600;
@@ -1057,6 +1057,8 @@ function performWorldObjectAction(entry, action) {
     } finally { worldObjectExecution = null; }
 }
 function parseTextObjectCommand(raw) {
+    if (/^(?:objects|room objects|list objects)$/i.test(raw)) return { verb: "object", args: { action: "list" } };
+    if (/^(?:object options|objects options|object choices)$/i.test(raw)) return { verb: "object", args: { action: "options" } };
     const match = /^(lift|heave|drag|haul|shift|move object|push object|pull object)\s+(.+)$/i.exec(raw);
     if (match) return { verb: "object", args: { action: /^(lift|heave)$/i.test(match[1]) ? "lift" : /^(drag|haul|pull object)$/i.test(match[1]) ? "drag" : "shift", target: textCommandUnquote(match[2]) } };
     // Plain push remains an NPC action when a visible person matches.
@@ -1069,6 +1071,8 @@ function worldObjectMatches(selector) {
 }
 function executeTextObjectCommand(action) {
     const args = action.args || {};
+    if (args.action === "list") return textRoomObjectList();
+    if (args.action === "options") return openTextRoomObjectMenu();
     if (!/^(lift|drag|shift|take)$/.test(args.action || "")) return textModeResult("blocked", "Choose lift, drag or shift, and name the object.", { systemOnly: true });
     if (!action.objectRef && !String(args.target || "").trim()) return textModeResult("blocked", "Name the object you want to handle.", { systemOnly: true });
     const matches = action.objectRef ? [worldObjectFresh(action.objectRef, true)].filter(Boolean) : worldObjectMatches(args.target);
@@ -1077,6 +1081,7 @@ function executeTextObjectCommand(action) {
     return performWorldObjectAction(matches[0], args.action);
 }
 function textWorldObjectShow(key) {
+    if (/^(?:room objects|object options|objects options|object choices)$/.test(key)) return textRoomObjectList();
     if (!/^(objects|physical objects|lift|drag|shift|move object)(?:\s+.*)?$/.test(key)) return null;
     const target = key.replace(/^(objects|physical objects|lift|drag|shift|move object)\s*/, ""), entries = target ? worldObjectMatches(target) : worldObjectEntries();
     const objects = entries.map(worldObjectPublic).filter(Boolean);
@@ -3309,12 +3314,12 @@ const TEXT_COMMANDS = [
     { id: "service", service: true, args: ["service"], aliases: ["service", "services", "inquire about rooms", "order drink", "ask for menu", "see wares", "ask about healing services", "ask about forge services"], example: "show services; service rooms; order a drink; ask for the menu; see wares; service forge; how service", description: "While talking to an obvious provider, choose any available service without greeting first. Blacksmiths offer wares and forge work separately; innkeepers offer rooms, drinks and a menu. Service healing opens supplies for sale. Menus retain native prices, checks and costs. Choices pause later commands; continue explicitly after finishing." },
     { id: "commitment", commitment: true, args: ["action","target"], aliases: ["tasks","requests","ask what you can help with","what can i help you with","what can i help with","ask what they need","ask what they want","continue their request","commitments","promises","promise","ask-for","accept task","decline task","deliver task","break promise"], example: "tasks; ask what they need; accept task; deliver task; commitments; promise bread; promise 2 coins", description: "Review real NPC requests, accept or decline their current terms, settle tasks with real items or coin, or review a player-made promise. Accepting costs one turn. Promised coin rewards are reserved from the giver. Breaking a promise costs trust; cancelling is free." },
     { id: "tool", jobs: true, args: ["action", "target", "item"], aliases: ["tools", "tool use", "pry", "lever", "wedge", "jam", "brace", "unwedge", "force obstruction"], example: "pry packing board with iron pry bar; wedge chair under north door; unwedge north door; force obstruction north door; tools; show tools", description: "Use real objects together. Pry exposed nailed/pegged fittings with a sound rigid lever; wedge suitable furniture or a solid object against a real door. Material, shape, size, condition, reach and stats determine eligibility and dice difficulty. Pry/wedge cost 1 stamina and 1 turn; forcing a brace costs 2 stamina and 1 turn; removing your reachable brace costs 1 turn. Failures spend costs and pause later commands. A brace stays in place, blocks both sides and cannot be picked up until released. Unwedging does not unlock a lock. Show tools lists current combinations; tools opens the same choices as native controls. Options/back/cancel/leave work; explicitly continue older queued commands." },
-    { id: "object", info: false, jobs: true, args: ["action", "target"], aliases: ["objects", "physical objects", "lift", "heave", "drag", "haul", "shift", "move object", "push object", "pull object"], example: "lift bucket; drag bench; shift crate; push object chair; show objects; how lift", description: "Lift an accessible object and set it down, or drag/shift it a short distance within the room. Heave means lift; haul/pull object means drag; push object/move object means shift. The engine checks reach, attachment, occupancy, material, size, contents and physical prowess. Easy lifts succeed without a roll or cost; uncertain lifts and floor moves use a stat-based d20 check, 1 stamina and 1 turn, including failures. Impossible attempts never roll. These actions do not carry objects between rooms or create cover, block exits or spill contents. Take retains pack limits. Show objects lists public properties and current availability." },
+    { id: "object", info: false, jobs: true, args: ["action", "target"], aliases: ["objects", "room objects", "list objects", "object options", "objects options", "object choices", "physical objects", "lift", "heave", "drag", "haul", "shift", "move object", "push object", "pull object"], example: "objects; object options; choose 1; lift bucket; drag bench; show physical objects; how objects", description: "Objects lists visible room fixtures, floor items and bodies. Object options opens numbered object choices, then current actions; choose a number, back, cancel or leave. Discovery is free. Show room objects lists the room; show objects and show physical objects retain public handling properties. Lift an accessible object and set it down, or drag/shift it a short distance within the room. Heave means lift; haul/pull object means drag; push object/move object means shift. The engine checks reach, attachment, occupancy, material, size, contents and physical prowess. Easy lifts succeed without a roll or cost; uncertain lifts and floor moves use a stat-based d20 check, 1 stamina and 1 turn, including failures. Impossible attempts never roll. These actions do not carry objects between rooms or create cover, block exits or spill contents. Take retains pack limits. Show physical objects lists public properties and current availability." },
     { id: "fire", fire: true, args: ["action", "target", "item"], aliases: ["light", "ignite", "set fire", "douse", "extinguish", "put out"], example: "light cart with torch; set fire to the bench; light the shelf from the hearth; douse cart with waterskin; put out the fire", description: "Set a flammable fixture alight with a carried torch or a nearby flame (hearth, brazier, wall torch, another fire), or douse a burning one with carried water or a well, fountain or water barrel. One turn, no roll and no mana. Fire spreads and burns out by the same rules as fire spells, and setting fires in front of people is arson. Doused water containers are emptied; you keep the container." },
     { id: "adjudicate", adjudicate: true, args: ["action", "target"], aliases: [], example: "kick lamppost; climb the lamppost; rock the merchant cart; attempt shake on cart", description: "Try any physical action on a visible object (not a person) that no other command covers. The game master judges it once from the world rules (material, weight, how it is fixed, your stats): possible or not, which stat and difficulty a d20 roll needs, the stamina and time it takes, and a small effect for success or failure (wear or breakage, a lasting visible state such as dented, a bruise for you, noise onlookers notice). The ruling is saved, so repeating it is resolved by the game and only narrated by AI. New actions need AI; saved ones also work offline. Type rulings to see saved ones." },
     { id: "rulings", info: true, args: ["action", "phrase"], aliases: ["rulings", "action rulings"], example: "rulings; forget ruling kick lamppost; clear rulings", description: "List the saved game-master rulings for actions on objects, forget one so it is judged again, or clear them all. Free; stored in this browser only." },
     { id: "act", social: true, args: ["action", "target", "family"], aliases: ["act", "emote", "social", "gestures", "interactions", "express", "invite", "contact", "attempt", "try physical", "wave", "bow", "nod", "smile", "salute", "dance"], example: "wave at human; express stretch dramatically; invite human to share a joke; attempt pinch an arm with human; push human; help attempt", description: "Express yourself with express <action>, invite <person> to <action>, or contact <action> with <person>. Familiar gestures: wave, bow, nod, smile, salute, dance. A dance is an invitation. Contact asks permission. Attempt <minor bare-hand action> with <person> uses AI-proposed pain, minor HP damage, a brief condition and an NPC reaction. It needs AI, costs 1 stamina and one story turn outside combat or one combat action, and can provoke retaliation. Push/shove/slap/punch retain native unarmed combat; inferred attacks ask for review. Push/shove do not move someone into another room. Say \"I dance\" is speech." },
-    {id:"phrases",info:true,args:["action","phrase"],aliases:["phrases","learned phrases"],example:'phrases; forget phrase "please survey the room"; clear phrases',description:"List successfully learned AI phrases, remove an exact phrase or clear the local dictionary. Learning stores action templates after complete success; targets and costs are checked fresh. These controls are free."},
+    {id:"phrases",info:true,args:["action","phrase"],aliases:["phrases","learned phrases","i did not mean to say that","i didn't mean to say that","no i meant"],example:'phrases; forget phrase "please survey the room"; clear phrases; I did not mean to say that; no, I meant, look',description:"List successfully learned AI phrases, remove an exact phrase or clear the local dictionary. I did not mean to say that forgets the last command's cached interpretation and cancels its unfinished queue; no, I meant, <command> also submits the correction normally. Completed effects stay applied. Learning stores action templates after complete success; targets and costs are checked fresh. These controls are free."},
     { id:"casting", casting:true, args:["action","target"], aliases:["powers","divine gifts","enchantments","cast enchant","ask for enchantment"], example:"powers; cast mending touch on <npc>; cast bless; enchant recipient <npc>; enchant item sword; enchant element holy; cast enchant; ask for enchantment; show casting; how casting", description:"Use shared native powers/heal targets, player and companion gear casts and learned travel spells. Individual healing and cleric Bless can select eligible NPCs in the room; party-wide effects retain party scope. Bless targets their visible worn gear. Final gear choices spend native costs. Answer one step per reply; explicitly continue older batches." },
     { id:"synergy", synergy:true, args:["action","target"], aliases:["synergies","combine skills","notebook"], example:"synergy; combine skills; first skill firebolt; second skill trained strike; add catalyst greenwort; picture \"a burning arc\"; experiment; notebook; memorise synergy <name>; forget synergy <name>; name synergy <old> as \"new\"; use synergy <name>", description:"Use native synergy experiments, catalyst choices, notebook, naming and memory rules. Review attempts and memorisation, then confirm separately. Show synergy and how synergy are free. Answer one step at a time; explicitly continue older batches." },
     { id: "travel", travel: true, args: ["action", "target"], aliases: ["directions", "guide questions", "rent room", "follow guide", "keep following"], example: "directions to <place>; lead me to <place>; guide questions; ask guide how to earn money; rent room; follow guide; keep following; stop walking; show lodging", description: "Use shared native directions, guide questions and rental menus. Directions cost 1 turn; guiding agreement costs 1 turn. Follow guide takes one native movement step; keep following waits for the native paced walk. Rent room reviews the weekly price and requires separate numbered confirmation. Guide answers and menu browsing are free. Options/choose/back/cancel/leave work; answer one step per reply and explicitly continue older batches." },
@@ -3406,6 +3411,7 @@ const TEXT_COMMANDS = [
     { id: "stats", info: true, aliases: ["stats", "stat", "my stats", "statistics", "attributes", "character stats"], example: "stats; my stats; show stats; how stats", description: "Read a brief character-sheet summary: class, resources, five current attributes, torso armour class, weapon, attack bonus and active conditions. Uses the same public values as the Stats menu, including only revealed attribute bonuses. Costs no turn or resources and preserves conversations, pending choices and paused commands. Status or health gives the shorter resource check." },
     { id: "stop", aliases: ["stop"], example: "stop", description: "Cancel pending commands. An action already in progress finishes normally." },
     { id: "continue", aliases: ["continue", "resume"], example: "continue", description: "Explicitly resume the remaining commands after a pause. A failed action is not retried." },
+    { id: "replay", primary: "repeat action", info: true, aliases: ["repeat action", "replay"], example: "repeat action; replay; show repeat action; how replay", description: "Resend the last ordinary typed or spoken command line, including a failed attempt. It runs afresh with current targets, eligibility, rolls and costs. Help, options, speech/queue controls and numbered replies do not replace it. A compound line repeats from its beginning. Finish current work and decisions first. Repeat alone reads narration; continue resumes a paused batch." },
     { id: "bathhouse_services", conversationActions: true, bathhouse: true, args: ["action"], aliases: ["private services", "special services", "bathhouse special", "ask about services"], example: "private services; special services; ask about private services", description: "While talking to a bathhouse staff member, ask about private services. Uses the conversation catalogue entry 'ask_about_private_services'. Requires the NPC to be bathhouse staff or aware of services. Options/choose/back/cancel work normally." },
     { id: "touch", nsfw: true, args: ["target"], aliases: ["touch", "touch gently"], example: "touch elf; touch gently human", description: "Gently touch a visible humanoid NPC. Their reaction depends on your relationship, their temperament, and the context. Only works on romance-eligible NPCs." },
     { id: "grab", nsfw: true, args: ["target"], aliases: ["grab"], example: "grab elf; grab second human", description: "Firmly grab a visible humanoid NPC. Their reaction depends on your relationship and the context. Only works on romance-eligible NPCs." },
@@ -3586,14 +3592,14 @@ function parseTextCommandBatch(input) {
     if (split.parts.length > TEXT_COMMAND_LIMIT) return { error: "Use at most " + TEXT_COMMAND_LIMIT + " actions at once." };
     const actions = split.parts.map(parseTextCommand);
     if (actions.some(function (action) { return !action; })) return { unresolved: true };
-    if (actions.length > 1 && actions.some(function (action) { return /^(help|show|stop|continue|phrases)$/.test(action.verb); })) return { error: "Send help, stop, continue or phrase controls on their own." };
+    if (actions.length > 1 && actions.some(function (action) { return /^(help|show|stop|continue|replay|phrases)$/.test(action.verb); })) return { error: "Send help, stop, continue, repeat action or phrase controls on their own." };
     return { actions: actions };
 }
 
 function validateTextAIPlan(value) {
     if (!value || !Array.isArray(value.actions) || !value.actions.length || value.actions.length > TEXT_COMMAND_LIMIT) return null;
     const fields = Object.create(null);
-    TEXT_COMMANDS.forEach(function (def) { if (!/^(stop|continue|phrases|rulings)$/.test(def.id)) fields[def.id] = def.args || []; });
+    TEXT_COMMANDS.forEach(function (def) { if (!/^(stop|continue|replay|phrases|rulings)$/.test(def.id)) fields[def.id] = def.args || []; });
     const actions = [];
     for (let i = 0; i < value.actions.length; i++) {
         const action = value.actions[i];
@@ -3602,9 +3608,9 @@ function validateTextAIPlan(value) {
         if (Object.keys(action.args).some(function (key) { return fields[action.verb].indexOf(key) < 0 || typeof action.args[key] !== "string" || action.args[key].length > TEXT_INPUT_LIMIT; })) return null;
         if (action.verb === "synergy" && /^(picture|name|confirm|replace)$/.test(action.args.action || "")) return null;
         if (action.verb === "act" && (Object.prototype.hasOwnProperty.call(action.args, "family") ? !interactionRequest(action.args) : !Object.prototype.hasOwnProperty.call(SOCIAL_GESTURES, action.args.action || ""))) return null;
-        if (action.verb === "object" && (!String(action.args.action || "").trim() || action.args.action.length > 120 || !String(action.args.target || "").trim())) return null;
-        if (action.verb === "object" && !/^(lift|drag|shift|take)$/.test(action.args.action) && /^(?:spawn|create|summon|conjure|make|craft|duplicate|copy|generate)\b/i.test(action.args.action.trim())) return null;
-        if (action.verb === "object" && !/^(lift|drag|shift|take)$/.test(action.args.action)) { actions.push({ verb: "adjudicate", args: { action: action.args.action.trim(), target: action.args.target.trim() } }); continue; }
+        if (action.verb === "object" && !/^(list|options)$/.test(action.args.action || "") && (!String(action.args.action || "").trim() || action.args.action.length > 120 || !String(action.args.target || "").trim())) return null;
+        if (action.verb === "object" && !/^(lift|drag|shift|take|list|options)$/.test(action.args.action) && /^(?:spawn|create|summon|conjure|make|craft|duplicate|copy|generate)\b/i.test(action.args.action.trim())) return null;
+        if (action.verb === "object" && !/^(lift|drag|shift|take|list|options)$/.test(action.args.action)) { actions.push({ verb: "adjudicate", args: { action: action.args.action.trim(), target: action.args.target.trim() } }); continue; }
         if (action.verb === "tool" && (!/^(menu|pry|wedge|unwedge|force)$/.test(action.args.action || "") || action.args.action !== "menu" && !String(action.args.target || "").trim() || /^(pry|wedge)$/.test(action.args.action || "") && !String(action.args.item || "").trim())) return null;
         if (action.verb === "fire" && (!/^(ignite|douse)$/.test(action.args.action || "") || !String(action.args.target || "").trim())) return null;
         if (action.verb === "adjudicate" && (!String(action.args.action || "").trim() || !String(action.args.target || "").trim() || action.args.action.length > 120)) return null;
@@ -3676,6 +3682,7 @@ async function interpretTextCommands(input) {
         if(def.id==="resume_conversation")return typeof canResumeNPCConversation==="function"&&canResumeNPCConversation(G.activeNPC);
         if(def.attention)return typeof getNPCHelpAttention==='function'&&!!getNPCHelpAttention();
         if(def.checkpoint)return false; // Local checkpoint replies never enlarge unrelated AI prompts.
+        if(def.id==="replay")return false; // Explicit local control; AI never chooses to repeat actions.
         if(def.id==="status")return false; // AI uses stats for character checks; local status/health stay concise.
         // Keep location-specific staff commands out of unrelated intent prompts.
         if(def.id==='uniform')return !!G.activeRoom&&G.activeRoom.type==='Bathhouse Changeroom';
@@ -3856,7 +3863,7 @@ function textModeSeparateGuidance(event) {
 // Raw event text stays in event.text; the speakable version is event.spoken.
 const ttsModeState = { enabled: false, lastSpoken: null, lastNpcSpoken: null, lastDetails: null, pendingTone: null,
     systemVoice: true, npcVoices: true, readIntimate: false, narratorVoice: "", accent: "", rate: 1, volume: 1, variety: 1, pause: "normal",
-    urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", thinkingTone: false, thinkingToneUrl: "", cueVolume: 0.5,
+    urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", micOffCue: true, tapTalkSounds: true, thinkingTone: false, thinkingToneUrl: "", cueVolume: 0.5,
     pronunciations: "", pronunciationMap: {}, speciesVoice: {}, micMode: "handsfree", autoSubmitWait: 2, silenceRetries: 1, shorterDescriptions: false };
 const TTS_FAILURE_LINES = {
     unresolved: "I pause, unsure how to put that into action.",
@@ -4098,9 +4105,12 @@ function ttsConversationInput(input) {
     const raw = String(input || "").trim(), key = raw.replace(/[.!?]+$/, "").trim();
     if (/^(?:say\s+)?goodbye$|^(?:walk away|step back)$/i.test(key)) return { verb: "leave", args: {}, targetRef: G.activeNPC, conversationScene: textModeScene() };
     if (textModeState.pending || sharedChoiceState.menu) return null;
+    if (parseTextPhraseCorrection(raw)) return null;
     if (textModeIsExitRequest(key.replace(/^(?:show(?:\s+me)?|how|help)\s+/i, ""))) return null;
     if (textModeIsSelfRequest(key.replace(/^(?:show(?:\s+me)?|how|help)\s+/i, ""))) return null;
     if (textModeIsStatsRequest(key.replace(/^(?:show(?:\s+me)?|how|help)\s+/i, ""))) return null;
+    if (textModeIsReplayRequest(key.replace(/^(?:show(?:\s+me)?|how|help)\s+/i, ""))) return null;
+    if (/^(?:(?:show|how|help)\s+)?(?:objects|room objects|list objects|object options|objects options|object choices)$/i.test(key)) return null;
     if (/^(?:options|choices|topics|(?:choose\s+)?\d+|leave|bye|step away|leave conversation|stop|cancel|back|continue|(?:resume|continue) conversation)$/i.test(key) || /^help(?:\s|$)/i.test(key)) return null;
     const speech = /^(?:say|reply|respond)\s+([\s\S]+)$/i.exec(raw);
     return { verb: "say", args: { text: textCommandUnquote(speech ? speech[1] : raw) }, targetRef: G.activeNPC, conversationScene: textModeScene() };
@@ -4312,8 +4322,19 @@ function ttsIntimacyMuted() {
     return !ttsModeState.readIntimate && typeof G !== "undefined" && G.activeNPCMode === "intimacy";
 }
 function ttsVoiceOn() { return ttsModeActive() && ttsModeState.systemVoice !== false && !!ttsSynth(); }
-// Short built-in cue tones (Web Audio). kind: "urgent" or "turn".
+// Microphone cues are presentation only; never speech or game commands.
+function ttsMicCue(kind, tapTalk) {
+    if (!ttsModeActive() || typeof document !== "undefined" && document.hidden || ttsModeState.cueVolume <= 0) return false;
+    if (kind === "mic-off" && !ttsModeState.micOffCue || (tapTalk == null ? ttsTapTalk.enabled : tapTalk) && !ttsModeState.tapTalkSounds) return false;
+    if (typeof window === "undefined" || !(window.AudioContext || window.webkitAudioContext)) return false;
+    ttsPlayCue(kind);
+    return true;
+}
+// Short built-in cue tones (Web Audio).
 function ttsPlayCue(kind, force) {
+    if (ttsModeState.cueVolume <= 0) return;
+    if (!force && kind === "mic-off" && !ttsModeState.micOffCue) return;
+    if (!force && kind === "tap" && !ttsModeState.tapTalkSounds) return;
     if (!force && kind === "urgent" && ttsModeState.urgentCue === false) return;
     if (!force && kind === "turn" && ttsModeState.turnCue === false) return;
     const url = kind === "urgent" ? ttsModeState.urgentCueUrl : kind === "turn" ? ttsModeState.turnCueUrl : "";
@@ -4338,7 +4359,7 @@ function ttsPlayTone(kind) {
         if (!ttsSpeech.audio) ttsSpeech.audio = new C();
         const c = ttsSpeech.audio;
         if (c.state === "suspended" && c.resume) c.resume();
-        const now = c.currentTime, notes = kind === "urgent" ? [880, 660] : [660, 990], vol = 0.25 * (ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume);
+        const now = c.currentTime, notes = kind === "urgent" ? [880, 660] : kind === "mic-off" ? [660, 440] : [660, 990], vol = 0.25 * (ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume);
         notes.forEach(function (f, k) {
             const o = c.createOscillator(), g = c.createGain();
             o.type = kind === "urgent" ? "square" : "sine"; o.frequency.value = f;
@@ -4448,7 +4469,7 @@ function ttsSpeechEnqueue(event) {
 const TTS_SETTINGS_KEY = "cyoaftwTTSSettings";
 const TTS_SETTING_DEFAULTS = {
     systemVoice: true, narratorVoice: "", accent: "", rate: 1, volume: 1, npcVoices: true, variety: 1, pause: "normal",
-    readIntimate: false, urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", thinkingTone: false, thinkingToneUrl: "",
+    readIntimate: false, urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", micOffCue: true, tapTalkSounds: true, thinkingTone: false, thinkingToneUrl: "",
     cueVolume: 0.5, pronunciations: "", speciesVoice: {}, micMode: "handsfree", autoSubmitWait: 2, silenceRetries: 1, shorterDescriptions: false
 };
 const TTS_PAUSE_MS = { short: 0, normal: 250, long: 700 };
@@ -4562,7 +4583,7 @@ const ttsListen = { rec: null, listening: false, starting: false, armed: true, s
     draft: null, submitTimer: null, requested: false, focusPending: false, session: null,
     retryLeft: 1, quiet: false, hardError: false, watchReason: "", watchSince: 0, watchLogged: false };
 // Session-only tap surface; microphone settings and game actions stay shared.
-const ttsTapTalk = { enabled: false, player: null, request: null };
+const ttsTapTalk = { enabled: false, player: null, request: null, cueUntil: 0 };
 function ttsTapTalkAvailable() { return ttsModeActive() && ttsVoiceInputAvailable() && ttsMicMode() !== "off"; }
 function ttsSyncTapTalk() {
     if (typeof document === "undefined") return;
@@ -4590,6 +4611,7 @@ function ttsSyncTapTalk() {
         "Tap anywhere to stop narration and talk.";
 }
 function ttsSetTapTalk(on) {
+    ttsTapTalk.cueUntil = 0;
     ttsTapTalk.enabled = !!on && ttsTapTalkAvailable();
     ttsTapTalk.player = G.player;
     ttsTapTalk.request = null;
@@ -4607,6 +4629,7 @@ function ttsTapToTalk() {
     if (input && input.value.trim() && !ttsListen.draft) { focusTextModeInput(); return; }
     // Repeated taps must not toggle off an open mic or discard its transcript.
     if (!ttsListen.listening && !ttsListen.starting && !ttsListen.draft && !ttsListen.requested) {
+        ttsTapTalk.cueUntil = ttsMicCue("tap") ? Date.now() + 450 : 0;
         ttsMicButton();
         if (ttsListen.requested) ttsTapTalk.request = { scene: textModeScene(), token: textModeSceneToken(), epoch: textModeState.epoch,
             pending: textModeState.pending, choices: textModeState.choices };
@@ -4810,6 +4833,7 @@ function ttsPickAlternative(alternatives) {
     for (let i = 0; i < list.length; i++) {
         const text = list[i];
         const t = text.replace(/[.!?]+$/, "").toLowerCase();
+        if (parseTextPhraseCorrection(text)) return text;
         if (TTS_REPEAT_WORDS.test(t) || TTS_HELP_WORDS.test(t) || /^(?:skip|quiet|silence|hush|stop talking|stop listening|pause listening|details|options|stop|cancel|help)\b/.test(t)) return text;
         if (typeof parseTextCommandBatch === "function") {
             try { const parsed = parseTextCommandBatch(text); if (parsed && !parsed.error && !parsed.unresolved && parsed.actions && parsed.actions.length && !textLocalTargetMiss(parsed.actions)) return text; } catch (e) {}
@@ -4820,12 +4844,15 @@ function ttsPickAlternative(alternatives) {
     return list[0];
 }
 function ttsListenAbort(reason) {
+    const wasListening = ttsListen.listening;
+    const wasTapTalk = ttsListen.session && ttsListen.session.tapTalk;
     ttsCancelVoiceDraft(reason === "typing");
     ttsListen.session = null;
     ttsListen.requested = false;
     ttsListen.aborting = true;
     if (ttsListen.rec) { const rec = ttsListen.rec; ttsListen.rec = null; try { rec.abort(); } catch (e) {} }
     ttsListen.rec = null; ttsListen.listening = false; ttsListen.starting = false;
+    if (wasListening) ttsMicCue("mic-off", wasTapTalk);
     if (reason !== "speech") ttsListen.armed = false;
     if (typeof document !== "undefined") { const input = document.getElementById("textModeInputEl"); if (input && input.dataset && input.dataset.ttsInterim === "1") { input.value = ""; input.dataset.ttsInterim = ""; } }
     ttsSetMicButton();
@@ -4892,9 +4919,10 @@ function ttsStartListening(auto) {
     if (!ttsGameIdle() || ttsScreenOnlyReason() || document.hidden || ttsListen.draft || input && input.value.trim()) return false;
     ttsListen.starting = true;
     ttsListen.gotResult = false;
-    const session = { scene: textModeScene(), token: textModeSceneToken(), epoch: textModeState.epoch,
+    const session = { scene: textModeScene(), token: textModeSceneToken(), epoch: textModeState.epoch, tapTalk: ttsTapTalk.enabled,
         pending: textModeState.pending, choices: textModeState.choices, opening: ttsOpeningCard() };
     ttsListen.session = session;
+    if (!auto) ttsListen.quiet = false;
     const begin = function () {
         if (ttsListen.session !== session) return;
         if (!ttsListen.starting || !ttsModeActive() || ttsMicMode() === "off" || ttsListen.stopped || !ttsGameIdle() || ttsScreenOnlyReason() || document.hidden ||
@@ -4935,6 +4963,7 @@ function ttsStartListening(auto) {
         };
         r.onend = function () {
             if (ttsListen.rec !== r) return;
+            const wasListening = ttsListen.listening;
             if (ttsListen.rec === r) {
                 ttsListen.rec = null; ttsListen.listening = false; ttsListen.starting = false;
                 if (!ttsListen.gotResult) {
@@ -4954,11 +4983,14 @@ function ttsStartListening(auto) {
             const input = typeof document !== "undefined" ? document.getElementById("textModeInputEl") : null;
             if (input && input.dataset && input.dataset.ttsInterim === "1" && !ttsListen.gotResult) { input.value = ""; input.dataset.ttsInterim = ""; }
             if (ttsListen.draft && !ttsListen.draft.final) ttsCancelVoiceDraft(false);
+            if (wasListening && !(ttsListen.quiet && !session.tapTalk && ttsMicMode() === "handsfree")) ttsMicCue("mic-off", session.tapTalk);
             ttsSetMicButton();
         };
         try { r.start(); } catch (e) { ttsListen.rec = null; ttsListen.starting = false; ttsSetMicButton(); }
     };
-    if (auto) { if (!ttsListen.quiet) ttsPlayCue("turn"); ttsListen.quiet = false; setTimeout(begin, 350); } else begin();
+    if (auto) { if (!ttsListen.quiet) ttsPlayCue("turn"); ttsListen.quiet = false; setTimeout(begin, 350); }
+    else if (ttsTapTalk.enabled && ttsTapTalk.cueUntil > Date.now()) setTimeout(begin, ttsTapTalk.cueUntil - Date.now());
+    else begin();
     return true;
 }
 // Thinking tone while an AI command interpretation or reply is loading.
@@ -5324,6 +5356,16 @@ function textLocalTargetMiss(actions) {
         let target = "";
         if (action.verb === "talk" || action.verb === "wake") target = args.target;
         else if (action.verb === "examine" && args.scope === "npc") target = args.item;
+        else if (action.verb === "search" && !action.sourceRef) {
+            const source = String(args.source || "").trim();
+            if (!source || /^(?:the\s+)?(?:room|around|surroundings)$/i.test(source)) return false;
+            try {
+                if (resolveTextNPCTarget(source.replace(/^(?:sleeping|asleep)\s+/i, ""), textModeVisibleNPCs()).matches.length) return false;
+                if (textLootMatch(source, textLootSources(), function (entry) { return entry.label + (entry.kind === "body" ? " body" : " container"); }).length) return false;
+                if (adjudicationObjectOnly(source)) return false;
+                return true;
+            } catch (e) { return false; }
+        }
         target = String(target || "").trim();
         if (!target) return false;
         try { return resolveTextNPCTarget(target, textModeVisibleNPCs()).matches.length === 0; } catch (e) { return false; }
@@ -5445,6 +5487,12 @@ function textModeInspectNPC(action) {
 }
 
 function textModeHelpContent(topic, show) {
+    if (textModeIsReplayRequest(topic)) {
+        const remembered = textModeState.lastCommand, current = remembered && remembered.player === G.player;
+        const reason = textModeReplayBlock();
+        return textModeResult("completed", textCommandDefinition("replay").description + "\n" + (current ? "Last command: " + remembered.input : "There is no previous command in this adventure.") + (reason ? "\nCurrently unavailable: " + reason : "") + "\nExamples: repeat action; replay.",
+            { replay: { available: !reason, command: current ? remembered.input : null } });
+    }
     if (/^(?:resume|continue) conversation$/i.test(textCommandNormalize(topic))) {
         const available = typeof canResumeNPCConversation === "function" && canResumeNPCConversation(G.activeNPC);
         return textModeResult("completed", show ? available ? "Use resume conversation to pick up this conversation without another greeting." : "There is no recent conversation to resume here."
@@ -5512,7 +5560,7 @@ function textModeHelpContent(topic, show) {
     if (entry) return textModeResult("completed", entry.description + "\nExamples: " + entry.example);
     if (key && !show) return textModeHelpContent(topic, true);
     if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
-    const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "taste", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "exits", "me", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stats", "stop", "continue"];
+    const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "taste", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "exits", "me", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stats", "stop", "continue", "replay"];
     const entries = TEXT_COMMANDS.filter(function (def) {
         if(def.id==="resume_conversation")return typeof canResumeNPCConversation==="function"&&canResumeNPCConversation(G.activeNPC);
         if (def.attention) return typeof getNPCHelpAttention === "function" && !!getNPCHelpAttention();
@@ -5802,6 +5850,7 @@ async function executeTextCommand(action) {
     const args = action.args || {};
     const def = textCommandDefinition(action.verb);
     if (!def) return textModeResult("blocked", "That command is not supported. Type how for examples.");
+    if (action.verb === "replay") return textModeResult("blocked", "Send repeat action as a separate command.");
     if (action.conversationScene && (!textModeSameScene(action.conversationScene) || textModeVisibleNPCs().indexOf(action.targetRef) < 0)) return textModeResult("blocked", "That conversation changed. Start a new conversation.");
     if (/^(help|show)$/.test(action.verb)) return textModeHelp(args.topic, action.verb === "show");
     if (action.verb === "dismiss_request") return dismissNPCHelpAttention(action.attentionRef);
@@ -6058,17 +6107,51 @@ function stopTextCommands(announce) {
     renderTextModeStatus();
 }
 
-async function submitTextModeCommand(raw) {
+function textModeIsReplayRequest(input) {
+    return textCommandDefinition("replay").aliases.indexOf(textCommandNormalize(input)) >= 0;
+}
+function textModeRememberCommand(input, single) {
+    if (!G.player || single && /^(replay|help|show|options|choose|stop|continue|back|cancel|phrases|rulings|dismiss_request|resume_conversation)$/.test(single.verb)) return;
+    const speech = single && single.verb === "say" ? single : null;
+    const words = String(input || "").trim().replace(/[.!?]+$/, "");
+    if (!speech && (TTS_REPEAT_WORDS.test(words) || /^repeat (?:npc|them|him|her|that person)$|^(?:details|more detail|exact numbers)$/i.test(words))) return;
+    textModeState.lastCommand = { input: String(input), speech: speech ? String(speech.args.text) : null, player: G.player, npc: speech ? G.activeNPC : null };
+}
+function textModeReplayBlock() {
+    const remembered = textModeState.lastCommand;
+    if (!remembered || remembered.player !== G.player) return "There is no previous command in this adventure.";
+    if (textModeState.busy || textModeState.parsing) return "An action is still finishing.";
+    if (textModeState.pending || sharedChoiceState.menu || typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "A choice is still waiting for an answer.";
+    if (remembered.npc && (G.activeNPC !== remembered.npc || !/^(talk|respond)$/.test(G.activeNPCMode || ""))) return "The original conversation is no longer active.";
+    return "";
+}
+function textModeReplayLastCommand() {
+    const reason = textModeReplayBlock();
+    if (reason) return textModeResult("blocked", reason);
+    const remembered = textModeState.lastCommand;
+    // A new submission, never a saved callback/plan/result. Literal speech
+    // stays speech; prior game commands cannot become NPC dialogue.
+    return submitTextModeCommand(remembered.input, { replay: remembered });
+}
+async function submitTextModeCommand(raw, options) {
     const input = String(raw || "").trim();
     if (!input || !textModeState.enabled) return;
+    const replay = options && options.replay;
     if (ttsListen.rec || ttsListen.starting || ttsListen.draft) ttsListenAbort("typing");
-    publishTextModeOutput("command", "> " + input);
+    publishTextModeOutput("command", "> " + input, replay ? { replay: { command: replay.input } } : undefined);
     if (typeof ttsListen !== "undefined" && !ttsListen.stopped) ttsListen.armed = true;
+    const correction = parseTextPhraseCorrection(input);
+    if (correction) return executeTextPhraseCommand(correction);
     if (ttsControlCommand(input)) return;
-    const conversationInput = ttsConversationInput(input);
+    const conversationInput = replay ? typeof replay.speech === "string" ? { verb: "say", args: { text: replay.speech }, targetRef: G.activeNPC, conversationScene: textModeScene() } : null : ttsConversationInput(input);
     const single = conversationInput || parseTextCommand(input);
+    if (single && single.verb === "replay") return textModeReplayLastCommand();
     if (single && (single.verb === "stop" || single.verb === "cancel" && (textModeState.busy || textModeState.parsing))) { stopTextCommands(true); return; }
     if (single && /^(help|show)$/.test(single.verb)) { textModeHelp(single.args.topic, single.verb === "show" || /^help(?:\s|$)/i.test(input)); return; }
+    if (single && /^(exits|me|stats)$/.test(single.verb)) {
+        textModeState.lastPhraseInterpretation = null;
+        if (!replay) textModeRememberCommand(input, single);
+    }
     if (single && single.verb === "exits") return textModeShowExits();
     if (single && single.verb === "me") return textModeInspectSelf();
     if (single && single.verb === "stats") return textModeStatsSummary();
@@ -6117,9 +6200,11 @@ async function submitTextModeCommand(raw) {
     }
     let local = conversationInput ? input.length > TEXT_INPUT_LIMIT ? { error: "Please keep commands under " + TEXT_INPUT_LIMIT + " characters." } : { actions: [conversationInput] } : parseTextCommandBatch(input);
     if (local.error) { textModeResult("blocked", local.error); return; }
-    // A local parse whose person-target matches no one ("talk talk to talk to
-    // human") goes to the AI interpreter to infer intent. If the AI is off or
-    // can't help, the local action still runs and gives its usual message.
+    if (!single || !/^(choose|back|cancel)$/.test(single.verb)) textModeState.lastPhraseInterpretation = null;
+    if (!replay) textModeRememberCommand(input, single);
+    // A recognized verb with an unmatched person/search target (for example
+    // "search rat folk") still needs intent interpretation. If AI is off or
+    // cannot help, the original local action gives its usual refusal.
     if (local.actions && textLocalTargetMiss(local.actions)) local = { unresolved: true, localMiss: local.actions };
     if (textModeState.queue.length || textModeState.pending) {
         stopTextCommands(false);
@@ -6129,6 +6214,7 @@ async function submitTextModeCommand(raw) {
     const epoch = textModeState.epoch;
     let actions = local.actions;
     const phraseContext = textPhraseContext();
+    if (local.unresolved) textModeState.lastPhraseInterpretation = { phrase: input, key: textPhraseKey(input), context: phraseContext, player: G.player };
     let learnedFromAI = false;
     const learned = local.unresolved ? textPhraseLookup(input) : null;
     if (learned) actions = learned;
@@ -6208,6 +6294,8 @@ function setTextMode(enabled) {
     if (enabled) {
         initializeTextMode();
         if (textModeState.storyPlayer !== G.player) {
+            textModeState.lastCommand = null;
+            textModeState.lastPhraseInterpretation = null;
             textModeClearStoryTyping();
             const story = document.getElementById("chatLogEl"); if (story) story.innerHTML = "";
             const system = document.getElementById("textModeLogEl"); if (system) system.innerHTML = "";
@@ -6420,7 +6508,7 @@ function textCombatShow(topic) {
     const group = /^(spell|spells)$/.test(key) ? "Spells" : /^(ability|abilities|actions|verbs|commands|combat)?$/.test(key) ? "" : null;
     if (group === null) return null;
     const available = all.filter(function (action) { return !action.disabled && (!group || action.group === group); });
-    const lines = group ? [] : ["attack [style] [body part] — e.g. heavy head or attack head light", "Styles: light, balanced, heavy, precise. Default: balanced torso.", "Body parts here: " + getCombatTargetOptions(G.activeNPC).join(", "), "target <npc>; show targets; status; stats; exits; who am i; stop; continue", "inventory; equipment; examine <item>; equip <item>; unequip <item>; drop <item>", "drink <potion or alcohol>; eat <healing herb> — uses your combat turn"];
+    const lines = group ? [] : ["attack [style] [body part] — e.g. heavy head or attack head light", "Styles: light, balanced, heavy, precise. Default: balanced torso.", "Body parts here: " + getCombatTargetOptions(G.activeNPC).join(", "), "target <npc>; show targets; status; stats; exits; who am i; repeat action; stop; continue", "inventory; equipment; examine <item>; equip <item>; unequip <item>; drop <item>", "drink <potion or alcohol>; eat <healing herb> — uses your combat turn"];
     available.forEach(function (action) { lines.push(action.label + " — type " + (action.primary || action.name.toLowerCase())); });
     if (!group && G.activeNPC && !physicalEffectBlock(G.activeNPC)) lines.push("attempt <minor bare-hand action> with <opponent> — AI effects, normal combat response");
     return textModeResult("completed", (G.activeNPC ? "Current opponent: " + textModeNPCLabel(G.activeNPC) + ".\n" : "") + (lines.length ? lines.join("\n") : "No available actions in this group.") + "\nUse how <action> for details. Each combat action uses the normal turn and costs.");
@@ -7561,6 +7649,78 @@ function parseTextExplorationCommand(raw) {
     return null;
 }
 
+// Room discovery excludes carried items and retains source identity for choices.
+function textRoomObjects() {
+    const room = G.activeRoom, out = [], seen = new Set();
+    if (!room || !G.player) return out;
+    const add = function (object, list, kind, label) {
+        if (!object || seen.has(object) || object.hidden || object.isHidden || object.visible === false || object.concealed && !object.revealed) return;
+        if (kind === "body" && !isVisibleEntity(object)) return;
+        seen.add(object);
+        out.push({ object: object, room: room, list: list, kind: kind, label: label });
+    };
+    textExplorationFixtures().forEach(function (entry) { add(entry.fixture, entry.list, "fixture", entry.label); });
+    (room.items || []).forEach(function (item) { add(item, room.items, item && item.objectType === "body" ? "body" : "item", item && getEntityName(item)); });
+    return out;
+}
+function textRoomObjectFresh(ref) {
+    return ref && textRoomObjects().find(function (entry) { return entry.object === ref.object && entry.room === ref.room && entry.list === ref.list && entry.kind === ref.kind && entry.label === ref.label; });
+}
+function textRoomObjectList() {
+    const entries = textRoomObjects(), objects = entries.map(function (entry, index) { return { number: index + 1, name: entry.label, kind: entry.kind }; });
+    return textModeResult("completed", "Objects in this room:\n" + (objects.length ? objects.map(function (object) { return object.name; }).join("\n") : "None visible.") + "\nUse object options to choose an object by number.", { roomObjects: objects, narration: "Objects in this room: " + (objects.length ? ttsListWords(objects.map(function (object) { return object.name; })) + "." : "None visible."), guidance: "Use object options to choose an object by number." });
+}
+function textRoomObjectActions(entry) {
+    const actions = [], object = entry.object, name = entry.label;
+    const fixtureRef = { fixture: object, room: entry.room, list: entry.list, label: name };
+    const inventoryRef = function () { return textInventoryCandidates().find(function (value) { return value.item === object && value.list === entry.list && value.location === "floor"; }); };
+    const add = function (label, run, reason) { actions.push({ label: label, run: run, reason: reason || "" }); };
+    if (entry.kind === "fixture") {
+        add("Examine " + name, function () { return executeTextExplorationCommand({ verb: "interact", args: { fixture: name, action: "examine" }, fixtureRef: fixtureRef }); });
+        textFixtureActions(object).forEach(function (action) {
+            add(action.label + (action.note ? " — " + action.note : ""), function () {
+                return executeTextExplorationCommand({ verb: "interact", args: { fixture: name, action: action.id }, fixtureRef: fixtureRef, fixtureRoute: action.route ? action : null });
+            }, action.reason);
+        });
+    } else if (entry.kind !== "body") {
+        add("Examine " + name, function () {
+            const ref = inventoryRef();
+            return ref ? executeTextInventoryCommand({ verb: "examine", args: { item: name }, itemRef: ref }) : textModeResult("completed", name + ": " + (object.examineText || object.description || "You take a closer look."));
+        });
+        if (inventoryRef()) add("Take " + name, function () {
+            const ref = inventoryRef();
+            return ref ? executeTextInventoryCommand({ verb: "take", args: { item: name }, itemRef: ref }) : textModeResult("blocked", "That item is no longer available to take.");
+        });
+    }
+    const loot = textLootSources().find(function (source) { return source.source === object && source.list === entry.list; });
+    if (loot) ["contents", "open", "search"].forEach(function (verb) {
+        if (verb === "open" && entry.kind === "body") return;
+        add((verb === "contents" ? "List contents of " : verb === "open" ? "Open " : "Search ") + name, function () { return executeTextLootCommand({ verb: verb, args: { source: name }, sourceRef: loot }); });
+    });
+    return actions;
+}
+function openTextRoomObjectMenu(selected) {
+    const block = textExplorationBlock();
+    if (block) return textModeResult("blocked", block);
+    if (selected && !textRoomObjectFresh(selected)) return textModeResult("blocked", "That object is no longer available. Use object options to review the room.");
+    const entries = selected ? [selected] : textRoomObjects();
+    if (!entries.length) return textModeResult("completed", "There are no visible objects in this room.", { roomObjects: [] });
+    const el = document.getElementById("chatOptionsEl");
+    if (el) el.innerHTML = "";
+    const menu = beginSharedChoiceMenu("room-objects", null, selected ? "Actions for " + selected.label : "Choose an object", function () { return openTextRoomObjectMenu(selected); });
+    const valid = menu.valid, turn = getCurrentStoryTurn();
+    menu.valid = function () { return valid() && getCurrentStoryTurn() === turn && entries.every(textRoomObjectFresh); };
+    menu.publicData = { ttsReadOptions: true, roomObjects: entries.map(function (entry, index) { return { number: index + 1, name: entry.label, kind: entry.kind }; }) };
+    const add = function (label, run, reason, action) {
+        const button = createSharedChoiceButton(menu, label, run, { disabled: !!reason, title: reason || "", textChoice: { action: action || "object" } });
+        if (el) el.appendChild(button);
+    };
+    if (selected) textRoomObjectActions(selected).forEach(function (action) { add(action.label, action.run, action.reason); });
+    else entries.forEach(function (entry) { add(entry.label, function () { return openTextRoomObjectMenu(entry); }); });
+    add(selected ? "Back to objects" : "Leave objects", function () { return selected ? openTextRoomObjectMenu() : { status: "completed" }; }, "", "back");
+    publishSharedChoiceMenu(menu, el);
+    return { status: "needs_input" };
+}
 function textExplorationFixtures() {
     const room = G.activeRoom;
     return !room || !Array.isArray(room.structural) || !room.structural.length ? [] : (getVisibleRoomFixtures(room) || []).filter(function (fixture) {
@@ -8136,6 +8296,7 @@ function textSharedChoiceBlock() {
 
 function textSharedChoiceCanHandle(input, action) {
     const menu = sharedChoiceState.menu;
+    if (menu && menu.kind === "room-objects" && (action && /^(leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (menu && menu.kind === 'world-care' && (action && /^(back|cancel|leave)$/.test(action.verb) || (splitTextCommands(input || '').parts || []).length > 1)) return true;
     if (menu && /^bathhouse-/.test(menu.kind) && (action && /^(bathhouse|leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) return true;
     if (menu && /^conversation-actions(?:-root)?$/.test(menu.kind) && (splitTextCommands(input || "").parts || []).length > 1) return true;
@@ -8193,6 +8354,12 @@ async function textRunSharedChoice(menu, choice) {
 }
 
 async function textSharedChoiceInput(input, action) {
+    const objectMenu = sharedChoiceState.menu;
+    if (objectMenu && objectMenu.kind === "room-objects" && (action && /^(leave|cancel)$/.test(action.verb) || (splitTextCommands(input || "").parts || []).length > 1)) {
+        if ((splitTextCommands(input || "").parts || []).length > 1) textModeResult("needs_input", "Choose one object or action at a time.", { systemOnly: true });
+        else { clearSharedChoiceMenu(objectMenu); if (action.verb === "cancel") stopTextCommands(false); textModeResult("completed", "You leave the object choices.", { systemOnly: true }); }
+        return true;
+    }
     if(sharedChoiceState.menu&&sharedChoiceState.menu.kind==='guard-checkpoint'&&(!action||/^(checkpoint|say|leave|back|cancel)$/.test(action.verb)||(splitTextCommands(input||'').parts||[]).length>1)){await textCheckpointMenuInput(sharedChoiceState.menu,action,input);return true;}
     if (sharedChoiceState.menu && sharedChoiceState.menu.kind === 'world-care' && (action && /^(back|cancel|leave)$/.test(action.verb) || (splitTextCommands(input || '').parts || []).length > 1)) {
         await textWorldCareMenuInput(sharedChoiceState.menu,action,input);return true;
@@ -12881,7 +13048,7 @@ function textPhraseContext() {
 }
 function textPhrasePlan(input, actions, context) {
     const plan = validateTextAIPlan({actions:actions});
-    if (!plan || plan.some(function(a) { return /^(say|choose|help|show|stop|continue|back|cancel|phrases)$/.test(a.verb); })) return null;
+    if (!plan || plan.some(function(a) { return /^(say|choose|help|show|stop|continue|replay|back|cancel|phrases)$/.test(a.verb); })) return null;
     if (plan.some(function(a) { return Object.keys(a.args).length; }) && /\b(?:it|its|this|that|these|those|them|him|her|there|here|again|same)\b/i.test(input)) return null;
     if (!textPhraseAttackAllowed(input,plan,context)) return null;
     return plan;
@@ -12936,7 +13103,33 @@ function textPhraseComplete(epoch) {
     textPhraseState.entries.push({phrase:learning.phrase,key:learning.key,context:learning.context,actions:learning.actions});
     textPhraseSave();
 }
+function parseTextPhraseCorrection(input) {
+    const raw = String(input || "").trim();
+    if (/^i\s+(?:did\s+not|didn['’]t)\s+mean\s+to\s+say\s+that[.!?]*$/i.test(raw)) return { verb: "phrases", args: { action: "correct", phrase: "" } };
+    const match = /^no\s*,?\s*i\s+meant\b\s*,?\s*([\s\S]*)$/i.exec(raw);
+    if (!match) return null;
+    const replacement = match[1].trim();
+    return { verb: "phrases", args: { action: "correct", phrase: /^[.!?]*$/.test(replacement) ? "" : replacement } };
+}
+function textPhraseCorrectLast(replacement) {
+    textPhraseLoad();
+    const last = textModeState.lastPhraseInterpretation, current = last && last.player === G.player;
+    const before = textPhraseState.entries.length;
+    if (current) textPhraseState.entries = textPhraseState.entries.filter(function (entry) { return entry.key !== last.key || entry.context !== last.context; });
+    const removed = before - textPhraseState.entries.length;
+    // Invalidate pending learning too: an earlier AI/action completion must not
+    // recreate the mapping the player just rejected. Committed effects remain.
+    textPhraseState.generation++; textPhraseSave();
+    textModeState.lastPhraseInterpretation = null;
+    textModeState.lastCommand = null;
+    stopTextCommands(false);
+    const result = textModeResult("completed", removed ? "That learned phrase has been forgotten." : current ? "That interpretation will not be learned." : "There is no cached interpretation to remove.",
+        { phrases: { action: "correct", removed: removed, phrase: current ? last.phrase : null, replacement: replacement || null } });
+    return replacement ? submitTextModeCommand(replacement) : result;
+}
 function parseTextPhraseCommand(raw) {
+    const correction = parseTextPhraseCorrection(raw);
+    if (correction) return correction;
     if (/^(?:phrases|learned phrases)$/i.test(raw)) return {verb:"phrases",args:{action:"list"}};
     if (/^(?:clear phrases|clear learned phrases|forget all phrases)$/i.test(raw)) return {verb:"phrases",args:{action:"clear"}};
     const match = /^forget phrase(?:\s+([\s\S]+))?$/i.exec(raw);
@@ -12945,6 +13138,7 @@ function parseTextPhraseCommand(raw) {
 function executeTextPhraseCommand(action) {
     textPhraseLoad();
     const args = action.args || {},kind = args.action || "list";
+    if (kind === "correct") return textPhraseCorrectLast(args.phrase || "");
     if (kind === "forget") {
         if (!String(args.phrase || "").trim()) return textModeResult("blocked",'Use forget phrase "your exact phrase". No learned wording has been changed.');
         const key = textPhraseKey(args.phrase),before = textPhraseState.entries.length;
@@ -13684,8 +13878,11 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-28-006
-// Latest UI update: Gameplay failure narration reports outcomes without prompting the player to retry.
+// Core Engine Version: 2026-10-28-011
+// Latest UI update: Spoken correction controls forget the last phrase interpretation and accept replacement input.
+// Previous UI update: Unmatched search targets reach intent interpretation before the local loot refusal.
+// Previous UI update: Repeat action/replay resubmits the previous typed/spoken command with fresh engine checks.
+// Previous UI update: Gameplay failure narration reports outcomes without prompting the player to retry.
 // Previous UI update: Free stats command gives an abridged public character-sheet summary for text/TTS.
 // Previous UI update: Free who am I self-inspection with current SFW appearance and worn/held equipment for text/TTS.
 // Previous UI update: Free exits command, aliases and shared public exit facts for text/TTS.
@@ -13765,7 +13962,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-28-006";
+window.__ENGINE_CORE_VERSION = "2026-10-28-011";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -82937,6 +83134,8 @@ function ttsRenderSettings() {
         ? "Speak your commands. Hands-free opens the microphone after each narration; push to talk uses the microphone button. Uses your browser's selected microphone and its online speech service."
         : "Voice input isn't available in this browser (Opera, Brave and Firefox have no speech service). Chrome supports it. On Windows, Win+H types what you say into the command box.";
     ttsSetControl("ttsTurnCueInput", "checked", !!st.turnCue);
+    ttsSetControl("ttsMicOffCueInput", "checked", !!st.micOffCue);
+    ttsSetControl("ttsTapTalkSoundsInput", "checked", !!st.tapTalkSounds);
     ttsSetControl("ttsUrgentCueInput", "checked", !!st.urgentCue);
     ttsSetControl("ttsThinkingToneInput", "checked", !!st.thinkingTone);
     ["turnCueUrl", "urgentCueUrl", "thinkingToneUrl"].forEach(function (key) {
