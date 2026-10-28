@@ -2,7 +2,8 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-10-17-017
+ * Version: 2026-10-27-002
+ * Fix: body part menu actions showing as empty - increment version to force cache reload
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
@@ -12,7 +13,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-10-17-017";
+window.__INTIMACY_SYSTEM_VERSION = "2026-10-27-002";
 
 
 // ============================================================================
@@ -9515,7 +9516,8 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                 "Foot": "Lower Body",
                 "Arms": "Upper Body",
                 "Hands": "Upper Body",
-                "Body": "Upper Body"
+                "Body": "Upper Body",
+                "General": "Upper Body"
             };
             
             if (zoneToSection[bodyZone]) {
@@ -9673,21 +9675,28 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         const isSpecial = sectionDef.isSpecial;
         const bgColor = sectionDef.bgColor;
         
-        const actions = sectionedActions[sectionId];
-        if (!actions || !actions.length) continue;
+        const actions = sectionedActions[sectionId] || [];
         
-        // For non-special sections (body parts), check if NPC has that body part
-        // and if there are any enabled (non-disabled) actions
-        if (!isSpecial) {
-            // Check if there are any enabled actions for this section
-            const hasEnabledActions = actions.some(a => !a.disabled);
-            if (!hasEnabledActions) continue;
-            
-            // For Midsection, also check if NPC has any relevant anatomy
+        // Always include body part sections (Clothing, Head, Upper Body, Midsection, Lower Body, Requests)
+        // even if they have no actions or all actions are disabled
+        const isBodyPartSection = ["Clothing", "Head", "Upper Body", "Midsection", "Lower Body", "Requests"].includes(sectionId);
+        
+        // For body part sections, always include them
+        if (isBodyPartSection) {
+            // For Midsection, check if NPC has any relevant anatomy
             if (sectionId === "Midsection") {
                 const hasRelevantAnatomy = npcHasMidsection(npc) && 
                     (npcHasPenis(npc) || npcHasVagina(npc) || npcHasAnus(npc) || npcHasCloaca(npc) || npcHasTail(npc));
                 if (!hasRelevantAnatomy) continue;
+            }
+        } else {
+            // For other sections, skip if no actions
+            if (!actions || !actions.length) continue;
+            
+            // For non-special sections, check if there are any enabled actions
+            if (!isSpecial) {
+                const hasEnabledActions = actions.some(a => !a.disabled);
+                if (!hasEnabledActions) continue;
             }
         }
         
@@ -10079,14 +10088,17 @@ function handleNaturalLubrication(npc, act) {
     const intimacy = npc.intimacy;
     const npcArousal = intimacy.arousal.npc || 0;
     
-    // Ensure lube object exists
+    // Ensure lube object and all its properties exist
     if (!intimacy.lube) {
-        intimacy.lube = {
-            vagina: { hasLube: false, level: 0 },
-            anus: { hasLube: false, level: 0 },
-            mouth: { hasLube: false, level: 0 },
-            general: { hasLube: false, level: 0 }
-        };
+        intimacy.lube = {};
+    }
+    
+    // Initialize each lube part if missing
+    const lubeParts = ["vagina", "anus", "mouth", "general"];
+    for (const part of lubeParts) {
+        if (!intimacy.lube[part]) {
+            intimacy.lube[part] = { hasLube: false, level: 0 };
+        }
     }
     
     // Mouth is always lubricated (saliva) - no need to track

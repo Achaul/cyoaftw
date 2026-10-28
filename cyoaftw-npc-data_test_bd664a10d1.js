@@ -3,7 +3,7 @@
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-27-001";
+    window.NPC_DATA_VERSION = "2026-10-27-002";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -4817,7 +4817,7 @@ const NPC_CONVERSATION_CATALOGUE = [
     },
     // ========================================================================
     // DOMINATION OPTIONS FROM CONVERSATION (for surrendered NPCs)
-    // These allow starting dominant intimacy from conversation when NPC has surrendered
+    // These allow dominant actions and eventually intimacy when NPC has surrendered
     // ========================================================================
     {
         id: "assert-dominance-from-surrender",
@@ -4825,22 +4825,17 @@ const NPC_CONVERSATION_CATALOGUE = [
         repeat: "always",
         label: "Assert your dominance",
         textVariants: [
-            "You assert your dominance over them with a firm command, reminding them of their surrender.",
-            "You make it clear who is in charge, leveraging their defeated state.",
-            "With authority, you establish your dominance over them now that they've surrendered."
+            "You decide to physically assert your dominance over them.",
+            "You prepare to demonstrate who is in charge.",
+            "With authority, you consider how to remind them of their place."
         ],
-        intent: "intimacy",
-        action: "intimacy",
-        startEncounter: true,
+        intent: "aggression",
+        action: "dominance-menu",
+        menuType: "dominance",
         conditions: {
             surrenderedToPlayer: true
         },
-        onSelect: function(npc, ctx) {
-            // Set dominant demeanor for the encounter
-            if (!npc.intimacy) npc.intimacy = {};
-            npc.intimacy._demeanorMode = "dominant";
-        },
-        contextNote: (npc, ctx) => `Player asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered to them. Respond in character as someone who has accepted defeat.`
+        contextNote: (npc, ctx) => `Player wants to assert dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. This will open a menu of dominance actions.`
     },
     {
         id: "command-from-surrender",
@@ -4848,36 +4843,61 @@ const NPC_CONVERSATION_CATALOGUE = [
         repeat: "always",
         label: "Command them",
         textVariants: [
-            "You issue a firm command, knowing they must obey after surrendering.",
-            "You give them an order with the authority of their conqueror.",
-            "With a commanding voice, you tell them what to do, confident in their compliance."
+            "You decide to issue a command to your defeated foe.",
+            "You prepare to give them an order they must obey.",
+            "As their conqueror, you consider what to command of them."
         ],
-        intent: "intimacy",
-        action: "intimacy",
-        startEncounter: true,
+        intent: "aggression",
+        action: "command-menu",
+        menuType: "command",
         conditions: {
             surrenderedToPlayer: true
         },
-        onSelect: function(npc, ctx) {
-            // Set dominant demeanor for the encounter
-            if (!npc.intimacy) npc.intimacy = {};
-            npc.intimacy._demeanorMode = "dominant";
-        },
-        contextNote: (npc, ctx) => `Player commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. Respond as someone compelled to obey.`
+        contextNote: (npc, ctx) => `Player wants to command ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. This will open a menu of command actions.`
     },
     {
         id: "use-as-i-please-from-surrender",
         priority: 158,
         repeat: "always",
         label: "Use them as I please",
-        textVariants: [
-            "You make it clear you will use them as you please, now that they've surrendered.",
-            "You declare your intent to use their body as you see fit.",
-            "With a dominant tone, you let them know they exist for your pleasure now."
-        ],
+        textVariants: (npc, ctx) => {
+            // Generate context-aware narration
+            const player = typeof G !== "undefined" ? G.player : null;
+            const room = typeof G !== "undefined" ? G.activeRoom : null;
+            const npcName = ctx.nameKnown ? (npc.name || "them") : ("the " + (npc.epithet || npc.name || "NPC"));
+            
+            // Check if NPC is clothed
+            const isClothed = npc && npc.clothing && npc.clothing.length > 0;
+            const clothingDesc = isClothed ? " their trousers" : " what remains of their clothing";
+            
+            // Build the narrative text
+            let narrative = "You pin " + npcName + " to the ";
+            if (room && room.wallDescription) {
+                narrative += "wall";
+            } else {
+                narrative += "nearest surface";
+            }
+            narrative += " and pull down" + clothingDesc + ". You pull your ";
+            
+            // Get player's lower body clothing
+            const playerLower = player && player.clothing ? player.clothing.find(c => c.type === "lower" || c.slot === "lower") : null;
+            const fromClothing = playerLower ? playerLower.name.toLowerCase() : "greaves";
+            narrative += "cock out of your " + fromClothing + " and press it against ";
+            narrative += (npc.gender === "female" || npc.gender === "feminine") ? "her slick folds" : "their entrance";
+            narrative += ", rubbing it back and forth for a moment before sliding into ";
+            narrative += (npc.gender === "female" || npc.gender === "feminine") ? "her warm depths" : "their warm depths";
+            narrative += ".";
+            
+            return [narrative];
+        },
         intent: "intimacy",
         action: "intimacy",
+        intimacyAction: "use_as_i_please",
         startEncounter: true,
+        encounterStart: {
+            tone: "dominant",
+            arousalBoost: 2
+        },
         conditions: {
             surrenderedToPlayer: true
         },
@@ -4885,9 +4905,155 @@ const NPC_CONVERSATION_CATALOGUE = [
             // Set dominant demeanor for the encounter
             if (!npc.intimacy) npc.intimacy = {};
             npc.intimacy._demeanorMode = "dominant";
+            // Set last action for context
+            npc.intimacy._lastAction = "use_as_i_please";
         },
-        contextNote: (npc, ctx) => `Player declares they will use ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} as they please. Respond as someone who has surrendered control.`
+        contextNote: (npc, ctx) => `Player is using ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} as they please after surrender. Narrative has been generated. Route to intimacy menu with dominant demeanor. Respond in character as someone submitting to this use.`
     },
+    // ========================================================================
+    // DOMINANCE ACTIONS (for surrendered NPCs - conversation stage, not intimacy yet)
+    // These are shown when player selects "Assert your dominance" or "Command them"
+    // They execute dominance actions and get AI response, but do NOT start intimacy encounter
+    // ========================================================================
+    {
+        id: "dominance-chokehold",
+        priority: 155,
+        repeat: "always",
+        label: "Hold them in chokehold",
+        textVariants: [
+            "You grab them by the throat and pull them close, holding them in a firm chokehold to assert your control.",
+            "With a commanding grip, you seize their throat and hold them in a chokehold, making your dominance clear.",
+            "You wrap your arm around their throat and squeeze slightly, demonstrating who is in charge."
+        ],
+        intent: "aggression",
+        action: "dominance-action",
+        dominanceAction: "chokehold",
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
+        contextNote: (npc, ctx) => `Player has ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} in a chokehold after they surrendered. They are showing their submission. Respond in character based on your temperament (bold NPCs may challenge, meek NPCs may whimper, etc.).`
+    },
+    {
+        id: "dominance-grab-hair",
+        priority: 155,
+        repeat: "always",
+        label: "Grab a handful of their hair",
+        textVariants: [
+            "You grab a handful of their hair and pull their head back, forcing them to look up at you.",
+            "With a firm grip, you seize their hair and yank their head back, establishing your control.",
+            "You take hold of their hair and pull, making them gasp as you assert your dominance."
+        ],
+        intent: "aggression",
+        action: "dominance-action",
+        dominanceAction: "grab_hair",
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
+        contextNote: (npc, ctx) => `Player has grabbed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}'s hair and pulled their head back after surrender. Respond in character based on your temperament.`
+    },
+    {
+        id: "dominance-expose",
+        priority: 155,
+        repeat: "always",
+        label: "Expose their privates",
+        textVariants: [
+            "You roughly pull at their clothing, exposing their privates to make your intent clear.",
+            "With commanding force, you strip away their covering, revealing their body as a sign of your dominance.",
+            "You yank their clothes aside, exposing them as a demonstration of who is in control."
+        ],
+        intent: "aggression",
+        action: "dominance-action",
+        dominanceAction: "expose",
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        relationshipImpact: { mood: -3, favor: -4, hostility: 3, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
+        contextNote: (npc, ctx) => `Player has exposed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}'s privates after they surrendered. They are vulnerable and submitting. Respond in character based on your temperament - a bold personality might resist or comment, a meek one might show fear or submission.`
+    },
+    {
+        id: "dominance-oral-hint",
+        priority: 155,
+        repeat: "always",
+        label: "Expose yourself and hint at oral service",
+        textVariants: [
+            "You expose yourself and press forward, making it clear you expect oral service.",
+            "With a commanding motion, you present yourself and indicate what you want from them.",
+            "You free yourself from your clothing and guide their attention to what you expect them to service."
+        ],
+        intent: "aggression",
+        action: "dominance-action",
+        dominanceAction: "oral_hint",
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        relationshipImpact: { mood: -3, favor: -4, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
+        contextNote: (npc, ctx) => `Player has exposed themselves to ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} after they surrendered, making it clear oral service is expected. They have surrendered control. Respond in character based on your temperament - bold personalities may react differently than submissive ones.`
+    },
+
+    // ========================================================================
+    // COMMAND ACTIONS (for surrendered NPCs - conversation stage, not intimacy yet)
+    // These are shown when player selects "Command them"
+    // ========================================================================
+    {
+        id: "command-kneel",
+        priority: 154,
+        repeat: "always",
+        label: "Command them to kneel",
+        textVariants: [
+            "You command them to drop to their knees before you.",
+            "With authority, you order them to kneel in submission.",
+            "You point to the ground and command them to kneel, reminding them of their defeated state."
+        ],
+        intent: "aggression",
+        action: "command-action",
+        commandType: "kneel",
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        relationshipImpact: { mood: -1, favor: -2, hostility: 1, intent: "aggression", markMet: true, actionTag: "command-given" },
+        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to kneel after they surrendered. They must obey. Respond in character as someone who has accepted defeat, based on your temperament.`
+    },
+    {
+        id: "command-serve",
+        priority: 154,
+        repeat: "always",
+        label: "Command them to serve you",
+        textVariants: [
+            "You command them to begin serving you in whatever way you require.",
+            "With a firm voice, you order them to attend to your needs as their conqueror.",
+            "You make it clear that their purpose now is to serve you, and they must obey."
+        ],
+        intent: "aggression",
+        action: "command-action",
+        commandType: "serve",
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        relationshipImpact: { mood: -1, favor: -2, hostility: 1, intent: "aggression", markMet: true, actionTag: "command-given" },
+        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to serve them after surrender. Respond in character as someone compelled to obey, based on your temperament.`
+    },
+    {
+        id: "command-strip",
+        priority: 154,
+        repeat: "always",
+        label: "Command them to strip",
+        textVariants: [
+            "You command them to remove all their clothing.",
+            "With authority, you order them to strip completely for your inspection.",
+            "You tell them to take off their clothes, leaving them vulnerable before you."
+        ],
+        intent: "aggression",
+        action: "command-action",
+        commandType: "strip",
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "command-given" },
+        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to strip after they surrendered. Respond in character as someone who must obey despite the humiliation, based on your temperament.`
+    },
+
     // ========================================================================
     // BATHHOUSE SERVICES - SFW CONVERSATION OPTIONS
     // ========================================================================
@@ -5461,6 +5627,7 @@ function conversationConditionMatches(conditions, ctx) {
     if (conditions.demeanorMode && !_npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.demeanorMode))) return false;
     if (conditions.excludeDemeanorMode && _npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.excludeDemeanorMode))) return false;
     if (typeof conditions.intimacyActive === "boolean" && ctx.intimacyActive !== conditions.intimacyActive) return false;
+    if (typeof conditions.surrenderedToPlayer === "boolean" && ctx.surrenderedToPlayer !== conditions.surrenderedToPlayer) return false;
 
     if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
 
@@ -8332,7 +8499,17 @@ function _npcTasteValue(npc, axis) {
 function getPlayerTasteForNPC(npc) {
     var result = { raw: 0, score: 0, label: "" };
     if (!isAdultHumanoidNPC(npc)) return result;
-    var prefs = (typeof G === "object" && G && G.player) ? G.player.preferences : null;
+    var player = (typeof G === "object" && G) ? G.player : null;
+    // Display preference only: shared by the panel, look prose and text/TTS
+    // inspection. Legacy saves without orientation keep their existing scope.
+    var orientation = String(player && player.orientation || "bi").toLowerCase();
+    if (orientation === "none") return result;
+    if (String(player && player.gender || "").toLowerCase() === "male") {
+        var gender = String(npc.gender || "").toLowerCase();
+        if (orientation === "straight" && gender !== "female") return result;
+        if (orientation === "gay" && gender !== "male") return result;
+    }
+    var prefs = player ? player.preferences : null;
     if (!prefs) return result;
     var likes = Array.isArray(prefs.likes) ? prefs.likes : [];
     var dislikes = Array.isArray(prefs.dislikes) ? prefs.dislikes : [];
