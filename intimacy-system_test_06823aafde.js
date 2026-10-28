@@ -2,9 +2,10 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-10-27-002
- * Fix: body part menu actions showing as empty - increment version to force cache reload
+ * Version: 2026-10-27-004
+ * Remove all filtering from generateValidActions - show ALL actions in body part tabs for now
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
+ * Fixed: getActionCategory now returns proper categories for oral on genitals (Cock/Pussy/Anus instead of all Anus)
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -13,7 +14,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-10-27-002";
+window.__INTIMACY_SYSTEM_VERSION = "2026-10-27-004";
 
 
 // ============================================================================
@@ -1659,64 +1660,19 @@ function updateLastActivity(npc) {
 function generateValidActions(npc, player, positionId = null) {
     if (!npc || !player) return [];
     
-    // Always call initializeIntimacyState to ensure all properties exist
-    const intimacy = initializeIntimacyState(npc);
-    const clothingState = intimacy.clothing;
-    const currentPosition = positionId || intimacy.position.player;
-    const stage = getIntimacyStage(clothingState);
-    
-    const validActions = [];
+    // SIMPLIFIED: Bypass all filtering for now - just return ALL actions
+    // This ensures body part tabs show all relevant actions regardless of position/clothing
+    // We'll add filtering back gradually after confirming the base categorization works
     const actionIds = getAllActIds();
-
+    const allActions = [];
+    
     for (const actId of actionIds) {
         const act = getAct(actId);
         if (!act) continue;
-        
-        // Check if action is valid for current state
-        if (isActionValid(actId, npc, player, currentPosition, clothingState)) {
-            // Determine if player is the actor (true) or NPC is the actor (false)
-            // playerIsBottom means player is receiving, so NPC is actor
-            const isPlayerActor = !act.playerIsBottom;
-            
-            // For CLOTHING, END, and WATERSPORT actions, skip tool/target
-            // accessibility check. Clothing only needs clothing validation.
-            // END actions don't need accessibility. Watersports use penis/
-            // vagina as tools on body parts that need special validation.
-            if (act.type === ACT_TYPES.CLOTHING || act.type === ACT_TYPES.END || act.type === ACT_TYPES.WATERSPORT) {
-                validActions.push({ ...act, actId });
-            }
-            // For actions that work regardless of clothing (reqCloth: ANY), also skip accessibility check
-            // This allows "over clothes" actions like grope_breasts_clothed
-            else if (act.reqCloth === CLOTHING_REQUIREMENTS.ANY) {
-                validActions.push({ ...act, actId });
-            }
-            // For other actions, check position accessibility for tool-target
-            else if (checkToolTargetAccessibility(act.tool, act.target, currentPosition, clothingState, isPlayerActor)) {
-                validActions.push({ ...act, actId });
-            }
-        }
+        allActions.push({ ...act, actId });
     }
     
-    // Add stage-specific filtering first (before categorizing)
-    const filteredActions = applyStageFilteringToArray(validActions, stage);
-
-    // Sort actions by category for menu organization
-    const categorizedActions = {};
-    for (const action of filteredActions) {
-        const category = getActionCategory(action.actId);
-        if (!categorizedActions[category]) {
-            categorizedActions[category] = [];
-        }
-        categorizedActions[category].push(action);
-    }
-    
-    // Flatten back to array for consistency
-    const result = [];
-    for (const category in categorizedActions) {
-        result.push(...categorizedActions[category]);
-    }
-    
-    return result;
+    return allActions;
 }
 
 /**
@@ -2606,71 +2562,18 @@ function getDisabledHintForReason(reason, npc, player, act) {
 function generateAllActionsWithStatus(npc, player, positionId = null) {
     if (!npc || !player) return { valid: [], invalid: [] };
     
-    // Always call initializeIntimacyState to ensure all properties exist
-    const intimacy = initializeIntimacyState(npc);
-    
-    const clothingState = intimacy.clothing;
-    const currentPosition = positionId || intimacy.position.player;
-    const stage = getIntimacyStage(clothingState);
-    
-    const validActions = [];
-    const invalidActions = [];
+    // SIMPLIFIED: Return all actions without filtering
+    // This ensures we see all possible actions in the menu for debugging
     const actionIds = getAllActIds();
+    const allActions = [];
     
     for (const actId of actionIds) {
         const act = getAct(actId);
         if (!act) continue;
-        
-        const checkResult = checkActionValidity(actId, npc, player, currentPosition, clothingState);
-        
-        if (checkResult.valid) {
-            // Apply stage filtering
-            if (applyStageFilteringToSingleAction(act, stage)) {
-                validActions.push({ ...act, actId });
-            }
-        } else {
-            // Hidden actions (e.g. NPC-testicle acts for cloaca-bearing NPCs)
-            // never apply to this NPC and should not be shown at all.
-            if (checkResult.hidden) continue;
-            // Include invalid action with reason and hint
-            const disabledHint = getDisabledHintForReason(checkResult.reason, npc, player, act);
-            invalidActions.push({ ...act, actId, disabled: true, disabledReason: checkResult.reason, disabledHint });
-        }
+        allActions.push({ ...act, actId, disabled: false });
     }
     
-    // Sort invalid actions by category for menu organization
-    const categorizedInvalid = {};
-    for (const action of invalidActions) {
-        const category = getActionCategory(action.actId);
-        if (!categorizedInvalid[category]) {
-            categorizedInvalid[category] = [];
-        }
-        categorizedInvalid[category].push(action);
-    }
-    
-    // Flatten categorized invalid actions
-    const flatInvalid = [];
-    for (const category in categorizedInvalid) {
-        flatInvalid.push(...categorizedInvalid[category]);
-    }
-    
-    // Sort valid actions by category
-    const categorizedValid = {};
-    for (const action of validActions) {
-        const category = getActionCategory(action.actId);
-        if (!categorizedValid[category]) {
-            categorizedValid[category] = [];
-        }
-        categorizedValid[category].push(action);
-    }
-    
-    // Flatten valid actions
-    const flatValid = [];
-    for (const category in categorizedValid) {
-        flatValid.push(...categorizedValid[category]);
-    }
-    
-    return { valid: flatValid, invalid: flatInvalid };
+    return { valid: allActions, invalid: [] };
 }
 
 /**
@@ -9451,6 +9354,8 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                 "Ass": "Midsection",
                 "Cloaca": "Midsection",
                 "Tail": "Midsection",
+                "Testicles": "Midsection",
+                "Balls": "Midsection",
                 "Thighs": "Lower Body",
                 "Thigh": "Lower Body",
                 "Legs": "Lower Body",
@@ -9508,6 +9413,8 @@ function getMenuActions(npc, player, room = null, positionId = null) {
                 "Ass": "Midsection",
                 "Cloaca": "Midsection",
                 "Tail": "Midsection",
+                "Testicles": "Midsection",
+                "Balls": "Midsection",
                 "Thighs": "Lower Body",
                 "Thigh": "Lower Body",
                 "Legs": "Lower Body",

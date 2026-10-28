@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-09-10-001
+ * Version: 2026-10-27-002
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-10-13-001";
-    console.log("[Intimacy Acts] Loaded v2026-10-13-001 - choreography: pos arrays rebuilt from physical accessibility rules");
+    window.INTIMACY_ACTS_VERSION = "2026-10-27-002";
+    console.log("[Intimacy Acts] Loaded v2026-10-27-002 - fixed oral on genitals categorization, added testicles/balls to Cock category");
 }
 
 // ============================================================================
@@ -638,7 +638,7 @@ var SEX_ACTS = {
     demand_serve: { id: "demand_serve", tool: "voice", target: "body", verb: "demand", type: ACT_TYPES.TEASE, label: "Demand they serve you", desc: "Demand they serve you as their master", arousal: { p: 25, n: 20 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower" },
     demand_worship: { id: "demand_worship", tool: "voice", target: "body", verb: "demand", type: ACT_TYPES.TEASE, label: "Demand they worship you", desc: "Command them to show worship and devotion", arousal: { p: 20, n: 15 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower" },
     assert_dominance: { id: "assert_dominance", tool: "body", target: "body", verb: "assert", type: ACT_TYPES.TEASE, label: "Assert your dominance", desc: "Assert your authority and control over them", arousal: { p: 25, n: 20 }, pos: ["Standing", "Perched", "Missionary", "Astride Lap"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "physicalProwess" },
-    command_mouth: { id: "command_mouth", tool: "voice", target: "mouth", verb: "command", type: ACT_TYPES.TEASE, label: "Command their mouth", desc: "Order them to use their mouth on you", arousal: { p: 30, n: 25 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower" },
+    command_mouth: { id: "command_mouth", tool: "voice", target: "mouth", verb: "command", type: ACT_TYPES.TEASE, label: "Command their mouth", desc: "Order them to use their mouth on you", arousal: { p: 30, n: 25 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower", menuSection: "Requests" },
     demand_obey: { id: "demand_obey", tool: "voice", target: "body", verb: "demand", type: ACT_TYPES.TEASE, label: "Demand they obey", desc: "Demand their complete obedience to your commands", arousal: { p: 20, n: 15 }, pos: ["Standing", "Perched", "Kneeling", "Kneeling Before"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "willpower" },
     force_kneel: { id: "force_kneel", tool: "hand", target: "body", verb: "force", type: ACT_TYPES.TEASE, label: "Force them to their knees", desc: "Physically guide them to kneel before you", arousal: { p: 25, n: 20 }, pos: ["Standing", "Perched"], reqCloth: CLOTHING_REQUIREMENTS.ANY, playerIsBottom: false, requiresDemeanorMode: ["dominant"], requiresDominateCheck: true, resistanceStat: "physicalProwess" },
     
@@ -1163,17 +1163,40 @@ function getActionCategory(actId, npc) {
     // Categorize by body area first, then action type
     const actIdLower = (act.id || "").toLowerCase();
     const labelLower = (act.label || "").toLowerCase();
-    const target = act.target || "";
+    const target = (act.target || "").toLowerCase();
+    const tool = (act.tool || "").toLowerCase();
+    
+    // TOOL-BASED CATEGORIES: If tool is mouth/tongue on genitals, return genital category
+    // For non-genital targets, let the target-based checks below handle categorization
+    if (tool === "mouth" || tool === "tongue") {
+        // Oral on genital parts -> return specific genital category
+        const penisTargets = ["penis", "cock", "dick"];
+        const vaginaTargets = ["vagina", "pussy", "clitoris", "clit"];
+        const anusTargets = ["anus", "buttocks", "butt", "ass", "cloaca"];
+        const testicleTargets = ["testicles", "balls"];
+        
+        if (penisTargets.includes(target) || testicleTargets.includes(target)) {
+            return "Cock";
+        }
+        if (vaginaTargets.includes(target)) {
+            return "Pussy";
+        }
+        if (anusTargets.includes(target)) {
+            return _npcHasCloaca(npc) ? "Cloaca" : "Anus";
+        }
+        // For non-genital targets (mouth, lips, face, neck, cheek, hair, feet, etc.),
+        // fall through to the target-based checks below
+    }
     
     // First check target - this takes priority over action type
     // Feet/legs/thighs actions
     if (target === "feet" || target === "foot" || target === "legs" || target === "leg" ||
-        target === "thighs" || target === "thigh") {
+        target === "thighs" || target === "thigh" || target === "toes" || target === "toe") {
         return "Legs";
     }
     
     // Mouth/Lips/Face/Neck actions
-    if (target === "mouth" || target === "lips" || target === "face" || target === "neck") {
+    if (target === "mouth" || target === "lips" || target === "face" || target === "neck" || target === "cheek") {
         return "Mouth & Lips";
     }
     
@@ -1197,8 +1220,13 @@ function getActionCategory(actId, npc) {
         return "Cock";
     }
     
+    // Testicles/Balls
+    if (target === "testicles" || target === "balls") {
+        return "Cock";
+    }
+    
     // Anus/Buttocks
-    if (target === "anus" || target === "buttocks" || target === "butt" || target === "ass" || target === "sphincter") {
+    if (target === "anus" || target === "buttocks" || target === "butt" || target === "ass" || target === "sphincter" || target === "cloaca") {
         // Cloaca-bearing NPCs (reptilian-kin) have a cloacal vent instead of
         // a separate anus, so the section is labelled "Cloaca" for them.
         return _npcHasCloaca(npc) ? "Cloaca" : "Anus";
