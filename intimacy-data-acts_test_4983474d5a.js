@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - SEX ACT DEFINITIONS
  * Pre-defined intimacy actions with metadata
- * Version: 2026-09-10-001
+ * Version: 2026-10-27-001
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_ACTS_VERSION = "2026-10-13-001";
-    console.log("[Intimacy Acts] Loaded v2026-10-13-001 - choreography: pos arrays rebuilt from physical accessibility rules");
+    window.INTIMACY_ACTS_VERSION = "2026-10-27-001";
+    console.log("[Intimacy Acts] Loaded v2026-10-27-001 - tool-based oral categorization added");
 }
 
 // ============================================================================
@@ -1164,59 +1164,118 @@ function getActionCategory(actId, npc) {
     const actIdLower = (act.id || "").toLowerCase();
     const labelLower = (act.label || "").toLowerCase();
     const target = act.target || "";
+    const tool = (act.tool || "").toLowerCase();
+    
+    // TOOL-BASED CATEGORIES: If tool is mouth/tongue, categorize as oral regardless of target
+    // This ensures oral sex actions (mouth on penis/vagina) appear in Head section
+    if (tool === "mouth" || tool === "tongue") {
+        return "Mouth & Lips";
+    }
+    
+    // First check target - this takes priority over action type
+    // Feet/legs/thighs actions
+    if (target === "feet" || target === "foot" || target === "legs" || target === "leg" ||
+        target === "thighs" || target === "thigh") {
+        return "Legs";
+    }
     
     // Mouth/Lips/Face/Neck actions
-    if (target === "mouth" || target === "lips" || target === "face" || target === "neck" ||
-        actIdLower.includes("kiss") || labelLower.includes("kiss")) {
+    if (target === "mouth" || target === "lips" || target === "face" || target === "neck") {
         return "Mouth & Lips";
     }
     
     // Hair
-    if (target === "hair" || actIdLower.includes("hair") || labelLower.includes("hair")) {
+    if (target === "hair") {
         return "Hair";
     }
     
     // Breasts/Nipples
-    const isBreastAction = actIdLower.includes("breast") || actIdLower.includes("nipple") || 
-                           labelLower.includes("breast") || labelLower.includes("nipple") ||
-                           target === "nipples" || target === "chest";
-    if (isBreastAction) {
+    if (target === "nipples" || target === "breasts" || target === "chest") {
         return "Breasts";
     }
     
     // Vagina/Pussy/Clitoris
-    if (target === "vagina" || target === "pussy" || target === "clitoris" ||
-        actIdLower.includes("pussy") || actIdLower.includes("vagina") || actIdLower.includes("clitoris") ||
+    if (target === "vagina" || target === "pussy" || target === "clitoris" || target === "clit") {
+        return "Pussy";
+    }
+    
+    // Penis/Cock
+    if (target === "penis" || target === "cock" || target === "dick") {
+        return "Cock";
+    }
+    
+    // Anus/Buttocks
+    if (target === "anus" || target === "buttocks" || target === "butt" || target === "ass" || target === "sphincter") {
+        // Cloaca-bearing NPCs (reptilian-kin) have a cloacal vent instead of
+        // a separate anus, so the section is labelled "Cloaca" for them.
+        return _npcHasCloaca(npc) ? "Cloaca" : "Anus";
+    }
+    
+    // Tail (tailed species only — the acts are hidden without one)
+    if (target === "tail") {
+        return "Tail";
+    }
+    
+    // Body (general) - includes shoulders, back, stomach, arms, hands, groin, hips
+    if (target === "shoulders" || target === "back" || target === "stomach" || 
+        target === "arms" || target === "hands" || target === "groin" || target === "hips") {
+        return "Body";
+    }
+    
+    // Now check action ID and label for actions that don't have a specific target
+    // Mouth/Lips/Face/Neck actions (by action ID/label, for actions without explicit target)
+    if (actIdLower.includes("kiss") || labelLower.includes("kiss") ||
+        actIdLower.includes("mouth") || actIdLower.includes("oral") ||
+        labelLower.includes("mouth") || labelLower.includes("oral") ||
+        actIdLower.includes("lips") || labelLower.includes("lips")) {
+        return "Mouth & Lips";
+    }
+    
+    // Hair (by action ID/label)
+    if (actIdLower.includes("hair") || labelLower.includes("hair")) {
+        return "Hair";
+    }
+    
+    // Breasts/Nipples (by action ID/label)
+    if (actIdLower.includes("breast") || actIdLower.includes("nipple") || 
+        labelLower.includes("breast") || labelLower.includes("nipple") ||
+        labelLower.includes("tit")) {
+        return "Breasts";
+    }
+    
+    // Vagina/Pussy/Clitoris (by action ID/label)
+    if (actIdLower.includes("pussy") || actIdLower.includes("vagina") || actIdLower.includes("clitoris") ||
         labelLower.includes("pussy") || labelLower.includes("vagina") || labelLower.includes("clitoris") ||
         actIdLower.includes("clit") || labelLower.includes("clit") ||
         actIdLower.includes("fold") || labelLower.includes("fold")) {
         return "Pussy";
     }
     
-    // Penis/Cock
-    if (target === "penis" || target === "cock" ||
-        actIdLower.includes("cock") || actIdLower.includes("penis") ||
+    // Penis/Cock (by action ID/label)
+    if (actIdLower.includes("cock") || actIdLower.includes("penis") ||
         labelLower.includes("cock") || labelLower.includes("penis") ||
         actIdLower.includes("dick") || labelLower.includes("dick")) {
         return "Cock";
     }
     
-    // Anus/Buttocks
-    if (target === "anus" || target === "buttocks" || target === "butt" || target === "ass" ||
-        actIdLower.includes("anal") || actIdLower.includes("anus") || actIdLower.includes("butt") || actIdLower.includes("ass") ||
-        labelLower.includes("anal") || labelLower.includes("anus") || labelLower.includes("butt") || labelLower.includes("ass") ||
-        target === "sphincter") {
-        // Cloaca-bearing NPCs (reptilian-kin) have a cloacal vent instead of
-        // a separate anus, so the section is labelled "Cloaca" for them.
+    // Anus/Buttocks (by action ID/label)
+    if (actIdLower.includes("anal") || actIdLower.includes("anus") || actIdLower.includes("butt") || actIdLower.includes("ass") ||
+        labelLower.includes("anal") || labelLower.includes("anus") || labelLower.includes("butt") || labelLower.includes("ass")) {
         return _npcHasCloaca(npc) ? "Cloaca" : "Anus";
     }
     
-    // Body (general) - includes shoulders, hips, thighs, groin, chest, back, stomach, etc.
-    if (target === "chest" || target === "shoulders" || target === "back" || target === "stomach" || 
-        target === "arms" || target === "hands" || target === "legs" || target === "feet" ||
-        target === "groin" || target === "hips" || target === "thighs" ||
-        actIdLower.includes("groin") || actIdLower.includes("thigh") ||
-        labelLower.includes("groin") || labelLower.includes("thigh")) {
+    // Tail (by action ID/label)
+    if (actIdLower.includes("tail") || labelLower.includes("tail")) {
+        return "Tail";
+    }
+    
+    // Body parts by action ID/label
+    if (actIdLower.includes("groin") || actIdLower.includes("thigh") ||
+        labelLower.includes("groin") || labelLower.includes("thigh") ||
+        actIdLower.includes("shoulders") || actIdLower.includes("back") ||
+        actIdLower.includes("stomach") || actIdLower.includes("belly") ||
+        labelLower.includes("shoulders") || labelLower.includes("back") ||
+        labelLower.includes("stomach") || labelLower.includes("belly")) {
         return "Body";
     }
     
