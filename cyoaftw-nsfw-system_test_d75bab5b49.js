@@ -1,6 +1,6 @@
-// === cyoaftw-nsfw-system.js === - 2026-10-17-017              
-// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply, intimacy portrait toggle, DeepSeek prompt optimization
-window.__NSFW_SYSTEM_VERSION = "2026-10-17-017";
+// === cyoaftw-nsfw-system.js === - 2026-10-28-018              
+// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply, intimacy portrait toggle, DeepSeek prompt optimization, fixed missing closing brace
+window.__NSFW_SYSTEM_VERSION = "2026-10-28-018";
 console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
 try {
 (function() {
@@ -9,7 +9,7 @@ try {
 // NSFW conversation options are now defined in base catalogue (cyoaftw-npc-data.js)
 
 // NSFW options are defined in base catalogue - no injection needed
-console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptance + follow action fix + nsfw wrapper re-apply");
+console.log("[NSFW System] Loaded v2026-10-28-018 - stat-based fallback acceptance + follow action fix + nsfw wrapper re-apply + fixed missing closing brace");
 
   const NSFW_SYSTEM_ENABLED = true;
   function getEnvironmentalModifier(room) {
@@ -6272,33 +6272,6 @@ avoidNote,
       f.femaleEjaculate || f.urine || f.penisSaliva || f.penisSemen));
   };
 
-  // Position perspective shared by the part close-ups and the scene shot:
-  // the framing must match the scene's geometry ("butt" in doggy style is
-  // presented from behind, hips raised).
-  const POSITION_VIEW = {
-    "Doggy": "on all fours, hips raised, presented from behind",
-    "Bent Over": "bent forward over a surface, presented from behind",
-    "Standing From Behind": "standing, viewed from behind",
-    "Against Wall From Behind": "pressed against the wall, viewed from behind",
-    "Spooning": "lying on their side, viewed from behind",
-    "Missionary": "lying on their back, hips tilted up, viewed from the front",
-    "Cowgirl": "upright and straddling, viewed from the front",
-    "Reverse Cowgirl": "upright and straddling, viewed from behind",
-    "Astride Lap": "seated astride, viewed from the front",
-    "Perched": "perched on the lap, viewed from the front",
-    "Standing": "standing, viewed from the front",
-    "Against Wall": "pressed against the wall, viewed from the front",
-    "Kneeling": "kneeling upright, viewed from the front",
-    "Kneeling Before": "kneeling upright, viewed from the front",
-    "Kneeling By Face": "kneeling, viewed from the front",
-    "Squatting Before": "squatting, viewed from the front",
-    "Kneeling Over": "leaning over the partner, viewed from above",
-    "Sixty-Nine": "viewed from above",
-    "Oral Service": "kneeling between legs, viewed from the front",
-    "Prone Oral Service": "lying flat, viewed from above",
-    "Riding Face": "straddling above the partner, viewed from below"
-  };
-
   // Experimental two-body scene shot (the engine's dark cucumber button).
   // Offered only while the encounter's LAST act is the player's penis in
   // the NPC (vaginal or anal; oral would put a face in frame, which the
@@ -6828,6 +6801,7 @@ avoidNote,
   };
 
   initNSFWSystem();
+  }
 })();
 } catch (e) {
   console.error("[BODY-DEBUG] nsfw-system.js IIFE THREW:", e.message, e.stack);
