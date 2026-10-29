@@ -3,7 +3,7 @@
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-27-002";
+    window.NPC_DATA_VERSION = "2026-10-28-001";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -4833,7 +4833,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-menu",
         menuType: "dominance",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         contextNote: (npc, ctx) => `Player wants to assert dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. This will open a menu of dominance actions.`
     },
@@ -4851,15 +4851,15 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "command-menu",
         menuType: "command",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         contextNote: (npc, ctx) => `Player wants to command ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. This will open a menu of command actions.`
     },
     {
-        id: "use-as-i-please-from-surrender",
+        id: "take-your-pleasure-from-defeated",
         priority: 158,
         repeat: "always",
-        label: "Use them as I please",
+        label: "Take your pleasure",
         textVariants: (npc, ctx) => {
             // Generate context-aware narration
             const player = typeof G !== "undefined" ? G.player : null;
@@ -4899,16 +4899,16 @@ const NPC_CONVERSATION_CATALOGUE = [
             arousalBoost: 2
         },
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         onSelect: function(npc, ctx) {
             // Set dominant demeanor for the encounter
             if (!npc.intimacy) npc.intimacy = {};
             npc.intimacy._demeanorMode = "dominant";
             // Set last action for context
-            npc.intimacy._lastAction = "use_as_i_please";
+            npc.intimacy._lastAction = "take_your_pleasure";
         },
-        contextNote: (npc, ctx) => `Player is using ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} as they please after surrender. Narrative has been generated. Route to intimacy menu with dominant demeanor. Respond in character as someone submitting to this use.`
+        contextNote: (npc, ctx) => `Player is taking their pleasure with ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} after their defeat. Narrative has been generated. Route to intimacy menu with dominant demeanor. Respond in character as someone submitting to this use.`
     },
     // ========================================================================
     // DOMINANCE ACTIONS (for surrendered NPCs - conversation stage, not intimacy yet)
@@ -4929,7 +4929,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-action",
         dominanceAction: "chokehold",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
         contextNote: (npc, ctx) => `Player has ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} in a chokehold after they surrendered. They are showing their submission. Respond in character based on your temperament (bold NPCs may challenge, meek NPCs may whimper, etc.).`
@@ -4948,7 +4948,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-action",
         dominanceAction: "grab_hair",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
         contextNote: (npc, ctx) => `Player has grabbed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}'s hair and pulled their head back after surrender. Respond in character based on your temperament.`
@@ -4967,7 +4967,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-action",
         dominanceAction: "expose",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -3, favor: -4, hostility: 3, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
         contextNote: (npc, ctx) => `Player has exposed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}'s privates after they surrendered. They are vulnerable and submitting. Respond in character based on your temperament - a bold personality might resist or comment, a meek one might show fear or submission.`
@@ -4986,7 +4986,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-action",
         dominanceAction: "oral_hint",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -3, favor: -4, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
         contextNote: (npc, ctx) => `Player has exposed themselves to ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} after they surrendered, making it clear oral service is expected. They have surrendered control. Respond in character based on your temperament - bold personalities may react differently than submissive ones.`
@@ -5010,7 +5010,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "command-action",
         commandType: "kneel",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -1, favor: -2, hostility: 1, intent: "aggression", markMet: true, actionTag: "command-given" },
         contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to kneel after they surrendered. They must obey. Respond in character as someone who has accepted defeat, based on your temperament.`
@@ -5029,7 +5029,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "command-action",
         commandType: "serve",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -1, favor: -2, hostility: 1, intent: "aggression", markMet: true, actionTag: "command-given" },
         contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to serve them after surrender. Respond in character as someone compelled to obey, based on your temperament.`
@@ -5048,7 +5048,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "command-action",
         commandType: "strip",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "command-given" },
         contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to strip after they surrendered. Respond in character as someone who must obey despite the humiliation, based on your temperament.`
@@ -5472,7 +5472,9 @@ function getNPCConversationContext(npc, extraContext = {}) {
         // Whether an intimacy encounter is currently active
         intimacyActive: !!(npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active),
         // Whether NPC has surrendered to the player and it's still valid
-        surrenderedToPlayer: typeof isNPCSurrenderedToPlayer === "function" && isNPCSurrenderedToPlayer(npc, G.player)
+        surrenderedToPlayer: typeof isNPCSurrenderedToPlayer === "function" && isNPCSurrenderedToPlayer(npc, G.player),
+        // Whether NPC is defeated or has surrendered to the player
+        defeatedOrSurrendered: typeof isNPCDefeatedOrSurrendered === "function" && isNPCDefeatedOrSurrendered(npc, G.player)
     };
 }
 
@@ -5628,6 +5630,7 @@ function conversationConditionMatches(conditions, ctx) {
     if (conditions.excludeDemeanorMode && _npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.excludeDemeanorMode))) return false;
     if (typeof conditions.intimacyActive === "boolean" && ctx.intimacyActive !== conditions.intimacyActive) return false;
     if (typeof conditions.surrenderedToPlayer === "boolean" && ctx.surrenderedToPlayer !== conditions.surrenderedToPlayer) return false;
+    if (typeof conditions.defeatedOrSurrendered === "boolean" && ctx.defeatedOrSurrendered !== conditions.defeatedOrSurrendered) return false;
 
     if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
 
@@ -10736,3 +10739,161 @@ if (typeof window !== "undefined") {
     window.getStaffAvailabilityDescription = getStaffAvailabilityDescription;
     window.getStaffScheduleDescription = getStaffScheduleDescription;
 }
+
+// ============================================================================
+// NPC NEED TEMPLATES (2026-10-28)
+// An NPC asks for help only when the engine finds a real reason in their own
+// state (see commitmentCandidates in the engine): a wound, hunger, an empty
+// shop, a missing tool, a hurt relative, a theft, an unsafe shelter. Each entry
+// here is the authored voice for one reason: `reason` is the plain fact shown
+// in terms, `attention` finishes "<name> ..." in the narration when they try to
+// catch the player's eye, and `lines` are first-person asks by tone (warm /
+// plain / gruff). Placeholders: {item} {person} {place}. The AI may reword a
+// line but never change its facts. Add a template by adding a key; the engine
+// decides when it applies.
+// ============================================================================
+const NPC_NEED_TEMPLATES = {
+    bleeding: {
+        reason: "They are bleeding and need to bind the wound",
+        attention: "presses a hand to a bleeding wound and tries to catch your eye.",
+        lines: {
+            warm: ["Oh, thank goodness. I am bleeding and cannot make it stop. Could you spare {item}?", "Please, I have cut myself badly. If you have {item}, I would be so grateful."],
+            plain: ["I have cut myself badly and it will not stop bleeding. Do you have {item} you could spare?", "This wound will not close. {item} would help, if you can spare it."],
+            gruff: ["Bleeding. Need it bound. Got {item}?", "Cut myself open. If you have {item}, hand it over."]
+        }
+    },
+    hurt: {
+        reason: "Their wounds need a healing supply",
+        attention: "winces and tries to catch your eye.",
+        lines: {
+            warm: ["I took a bad knock and I am still hurting. Could you spare {item} to help me mend?", "I am not well, I am afraid. {item} might set me right, if you can spare it."],
+            plain: ["I am hurt, and it is not mending on its own. {item} would help, if you can spare it.", "These hurts are slow to heal. Do you have {item}?"],
+            gruff: ["Hurt. Need patching up. Got {item}?", "Not mending. {item}, if you have it."]
+        }
+    },
+    hungry: {
+        reason: "They need food to recover their strength",
+        attention: "looks worn thin and tries to catch your eye.",
+        lines: {
+            warm: ["I have not eaten properly in too long. Could you spare {item}?", "I am worn right down. Would you have {item} to share?"],
+            plain: ["I am running on empty. Do you have {item} to spare?", "It has been a long day without a proper meal. {item} would help."],
+            gruff: ["Haven't eaten. {item}, if you have it.", "Running on nothing. Spare {item}?"]
+        }
+    },
+    tool: {
+        reason: "They lack a tool needed for daily work",
+        attention: "turns a worn tool over in their hands and tries to catch your eye.",
+        lines: {
+            warm: ["My work has stalled for want of {item}. Could you find me one?", "I cannot do my day's work without {item}. Might you bring me one?"],
+            plain: ["I am short of {item} and cannot finish my work. Could you bring me one?", "My work is stuck without {item}. Can you find one for me?"],
+            gruff: ["Can't work without {item}. Find me one.", "Need {item}. Work is standing still."]
+        }
+    },
+    stock: {
+        reason: "Their shop has run out of ordinary stock",
+        attention: "eyes the empty shelves and tries to catch your eye.",
+        lines: {
+            warm: ["My shelves are nearly bare. If you could bring me {item}, I could open trade again.", "I have run out of stock. Would you bring me {item}? It would help me no end."],
+            plain: ["I am out of stock. Bring me {item} and I can sell again.", "My shelves are empty. Could you find {item} for me?"],
+            gruff: ["Nothing left to sell. Get me {item}.", "Shelves are bare. {item}, if you can."]
+        }
+    },
+    broke: {
+        reason: "They are short of money for daily expenses",
+        attention: "counts a few coins and tries to catch your eye.",
+        lines: {
+            warm: ["Things have been tight lately. Could you spare a coin? I will not forget it.", "I am short of money this week. A coin would go a long way."],
+            plain: ["I am short of coin right now. Could you spare one?", "Money is tight. Would you spare a coin?"],
+            gruff: ["Short on coin. Spare one?", "Pockets are empty. A coin, if you can."]
+        }
+    },
+    kinHurt: {
+        reason: "Someone close to them is badly hurt",
+        lines: {
+            warm: ["{person} is badly hurt, and I am sick with worry. Would you tell them I am asking after them?", "Have you seen {person}? They are hurt. Please let them know I am thinking of them."],
+            plain: ["{person} is badly hurt. Would you pass on that I am asking after them?", "I heard {person} is hurt. Will you tell them I would like to know how they are?"],
+            gruff: ["{person} is hurt. Tell them I asked.", "Heard {person} is hurt. Go tell them I want to know how they are."]
+        }
+    },
+    kinWorried: {
+        reason: "They are concerned about someone close to them",
+        lines: {
+            warm: ["I have been worried about {person}. Would you tell them I would love to hear from them?", "I have not heard from {person} in a while. Would you let them know I am thinking of them?"],
+            plain: ["I am worried about {person}. Would you let them know I would like to hear from them?", "Could you tell {person} I would like a word?"],
+            gruff: ["Tell {person} I want a word.", "{person} owes me news. Pass that on."]
+        }
+    },
+    kinFind: {
+        reason: "They are concerned about someone close to them",
+        lines: {
+            warm: ["I am worried about {person}. Could you find them and make sure they are well?", "Would you look for {person}? I would feel better knowing they are all right."],
+            plain: ["Could you find {person} and see that they are all right?", "I would like to know {person} is safe. Could you look for them?"],
+            gruff: ["Find {person}. Make sure they are all right.", "Go look for {person}. Tell me they are well."]
+        }
+    },
+    parcel: {
+        reason: "They have something meant for a person close to them",
+        lines: {
+            warm: ["I have something meant for {person}, and I cannot make the trip myself. Would you carry it for me?", "This parcel is for {person}. Could you take it to them?"],
+            plain: ["I have a parcel for {person} and cannot deliver it. Will you take it?", "Could you carry this to {person} for me?"],
+            gruff: ["Parcel for {person}. Can't take it myself. You do it.", "Take this to {person}."]
+        }
+    },
+    courier: {
+        reason: "They carry a parcel they cannot deliver themselves",
+        lines: {
+            warm: ["I am behind on my rounds. Could you carry this parcel to {person} for me?", "I cannot get this to {person} in time. Would you take it?"],
+            plain: ["I cannot make this delivery in time. Will you take this parcel to {person}?", "Could you deliver this to {person}? I am held up."],
+            gruff: ["Behind on my rounds. Take this to {person}.", "Deliver this to {person}. I am stuck here."]
+        }
+    },
+    robbed: {
+        reason: "They discovered that possessions were stolen",
+        attention: "pats down their belongings and tries to catch your eye.",
+        lines: {
+            warm: ["I have been robbed. Someone took my things. Would you report it to {person}?", "My belongings are gone. Please, would you tell {person}?"],
+            plain: ["I have been robbed. Would you report it to {person}?", "Someone has taken my things. Will you tell {person} for me?"],
+            gruff: ["Robbed. Tell {person}.", "Someone cleaned me out. Report it to {person}."]
+        }
+    },
+    shelter: {
+        reason: "Their usual shelter is unsafe",
+        attention: "glances about uneasily and tries to catch your eye.",
+        lines: {
+            warm: ["It is not safe where I sleep tonight. Would you meet me at {place}? I would feel safer.", "I cannot stay where I am. Could you meet me at {place}?"],
+            plain: ["My usual place is not safe right now. Will you meet me at {place}?", "I need somewhere safe. Meet me at {place}?"],
+            gruff: ["Can't stay put. Meet me at {place}.", "Not safe here. {place}. Come find me."]
+        }
+    },
+    fallenCare: {
+        reason: "A visible unconscious person needs care",
+        lines: {
+            warm: ["There is someone lying hurt not far from here. Would you ask {person} to help them?", "Someone needs care, and I cannot manage it alone. Please fetch {person}."],
+            plain: ["Someone is down and needs care. Ask {person} to help them.", "A person is lying hurt. Could you ask {person} to see to them?"],
+            gruff: ["Someone's down. Get {person} to look at them.", "Hurt person. Ask {person}."]
+        }
+    },
+    fallenReport: {
+        reason: "Report what can actually be established, without naming a culprit",
+        lines: {
+            warm: ["A person has fallen and I do not like it. Would you look them over and tell {person} what you find?", "Someone has died here. Could you examine them and report to {person}?"],
+            plain: ["A person has fallen. Examine them and report to {person}.", "Someone is dead. Look them over and tell {person} what you find."],
+            gruff: ["Body. Look it over. Report to {person}.", "Someone's dead. Tell {person} what you find."]
+        }
+    },
+    comfort: {
+        reason: "They would appreciate a small comfort or gift",
+        lines: {
+            warm: ["A small comfort would lift my spirits. If you happen to have {item}, I would treasure it.", "I would love {item}, if you can spare one. It would cheer me."],
+            plain: ["A small comfort would do me good, such as {item}, if you can spare it.", "I would be glad of {item}, if you have one."],
+            gruff: ["Wouldn't say no to {item}.", "{item}, if you have it."]
+        }
+    }
+};
+// Spoken when the player asks what they can help with and the NPC has no real need.
+const NPC_NEED_NONE_LINES = {
+    warm: ["Nothing I can think of, but thank you for asking. That is kind of you.", "I am all right for now. It is good of you to ask."],
+    plain: ["Nothing right now. I am managing.", "I do not need anything at the moment, but thank you."],
+    gruff: ["Nothing. I can handle my own business.", "Don't need a thing. Go bother someone else."]
+};
+if (typeof window !== "undefined") { window.NPC_NEED_TEMPLATES = NPC_NEED_TEMPLATES; window.NPC_NEED_NONE_LINES = NPC_NEED_NONE_LINES; }
