@@ -2,8 +2,9 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-10-27-004
+ * Version: 2026-10-27-005
  * Remove all filtering from generateValidActions - show ALL actions in body part tabs for now
+ * TEMPORARILY DISABLED: All action validation gates in executeIntimacyAction to allow all actions through
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
  * Fixed: getActionCategory now returns proper categories for oral on genitals (Cock/Pussy/Anus instead of all Anus)
  * This system provides:
@@ -14,7 +15,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-10-27-004";
+window.__INTIMACY_SYSTEM_VERSION = "2026-10-27-005";
 
 
 // ============================================================================
@@ -3703,18 +3704,18 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // Get encounter state for non-resisting checks
     const encounter = intimacy.encounter || {};
 
-    // Bypass validation for non-resisting NPCs (unconscious/sleeping/bound)
-    // All actions are allowed when the NPC cannot resist
-    if (encounter.unconsciousIntimacy === true || encounter.isSleepingEncounter === true || 
-        (npc.bound === true) || (npc._prisoner === true) || (npc._boundCaptiveFollower === true)) {
-        // Skip action validation - all actions permitted
-    } else {
-        // Validate action
-        if (!isActionValid(actId, npc, player, currentPosition, clothingState)) {
-            console.warn(`[Intimacy] Action ${actId} is not valid in current state`);
-            return null;
-        }
-    }
+    // TEMPORARILY DISABLED: Bypass all validation gates for debugging
+    // All actions are allowed - we'll re-introduce gates after confirming categorization works
+    // if (encounter.unconsciousIntimacy === true || encounter.isSleepingEncounter === true || 
+    //     (npc.bound === true) || (npc._prisoner === true) || (npc._boundCaptiveFollower === true)) {
+    //     // Skip action validation - all actions permitted
+    // } else {
+    //     // Validate action
+    //     if (!isActionValid(actId, npc, player, currentPosition, clothingState)) {
+    //         console.warn(`[Intimacy] Action ${actId} is not valid in current state`);
+    //         return null;
+    //     }
+    // }
     
     // WAKE-UP ROLL FOR SLEEPING NPCS
     // Check if this is a sleeping encounter and roll for wake-up chance
@@ -4995,7 +4996,7 @@ function buildActionContext(npc, player, act, intimacy, positionId) {
 
     return {
         npc: {
-            name: npc.name || "NPC",
+            name: npc.name || npc.epithet || "them",
             species: npc.species || "Human",
             gender: npc.gender || "female",
             temperament: temperament,

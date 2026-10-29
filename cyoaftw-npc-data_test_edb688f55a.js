@@ -4509,7 +4509,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} step on their face. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} step on their face. Respond in character.`
     },
     {
         id: "request-step-on-chest",
@@ -4529,7 +4529,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} step on their chest. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} step on their chest. Respond in character.`
     },
     {
         id: "request-squeeze-balls",
@@ -4549,7 +4549,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} squeeze their balls. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} squeeze their balls. Respond in character.`
     },
     {
         id: "request-spanking",
@@ -4569,7 +4569,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} spank them. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} spank them. Respond in character.`
     },
     {
         id: "beg-for-touch",
@@ -4589,7 +4589,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for their touch. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} for their touch. Respond in character.`
     },
     {
         id: "beg-for-attention",
@@ -4609,7 +4609,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for their attention. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} for their attention. Respond in character.`
     },
     {
         id: "beg-for-use",
@@ -4629,7 +4629,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to use them as they please. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to use them as they please. Respond in character.`
     },
     {
         id: "beg-for-praise",
@@ -4649,7 +4649,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for praise. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} for praise. Respond in character.`
     },
     
     // ===== DOMINANT DEMEANOR REQUESTS =====
@@ -4673,7 +4673,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and orders ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to kneel. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and orders ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to kneel. Respond in character.`
     },
     {
         id: "command-undress",
@@ -4693,7 +4693,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to undress. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to undress. Respond in character.`
     },
     {
         id: "demand-serve",
@@ -4713,7 +4713,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} serve them. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} serve them. Respond in character.`
     },
     {
         id: "demand-worship",
@@ -4733,7 +4733,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} worship them. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} worship them. Respond in character.`
     },
     {
         id: "assert-dominance",
@@ -4753,7 +4753,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")}. Respond in character.`
     },
     {
         id: "command-mouth",
@@ -4773,7 +4773,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to use their mouth. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to use their mouth. Respond in character.`
     },
     {
         id: "demand-obey",
@@ -4793,7 +4793,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} obey them. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} obey them. Respond in character.`
     },
     {
         id: "force-kneel",
@@ -4813,7 +4813,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and forces ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to their knees. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and forces ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to their knees. Respond in character.`
     },
     // ========================================================================
     // DOMINATION OPTIONS FROM CONVERSATION (for surrendered NPCs)
@@ -4833,9 +4833,9 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-menu",
         menuType: "dominance",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
-        contextNote: (npc, ctx) => `Player wants to assert dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. This will open a menu of dominance actions.`
+        contextNote: (npc, ctx) => `Player wants to assert dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} who has surrendered. This will open a menu of dominance actions.`
     },
     {
         id: "command-from-surrender",
@@ -4851,20 +4851,20 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "command-menu",
         menuType: "command",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
-        contextNote: (npc, ctx) => `Player wants to command ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. This will open a menu of command actions.`
+        contextNote: (npc, ctx) => `Player wants to command ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} who has surrendered. This will open a menu of command actions.`
     },
     {
-        id: "use-as-i-please-from-surrender",
+        id: "take-your-pleasure-from-defeated",
         priority: 158,
         repeat: "always",
-        label: "Use them as I please",
+        label: "Take your pleasure",
         textVariants: (npc, ctx) => {
             // Generate context-aware narration
             const player = typeof G !== "undefined" ? G.player : null;
             const room = typeof G !== "undefined" ? G.activeRoom : null;
-            const npcName = ctx.nameKnown ? (npc.name || "them") : ("the " + (npc.epithet || npc.name || "NPC"));
+            const npcName = ctx.nameKnown ? (npc.name || "them") : ("the " + (npc.epithet || npc.name || npc.epithet || "them"));
             
             // Check if NPC is clothed
             const isClothed = npc && npc.clothing && npc.clothing.length > 0;
@@ -4899,16 +4899,16 @@ const NPC_CONVERSATION_CATALOGUE = [
             arousalBoost: 2
         },
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         onSelect: function(npc, ctx) {
             // Set dominant demeanor for the encounter
             if (!npc.intimacy) npc.intimacy = {};
             npc.intimacy._demeanorMode = "dominant";
             // Set last action for context
-            npc.intimacy._lastAction = "use_as_i_please";
+            npc.intimacy._lastAction = "take_your_pleasure";
         },
-        contextNote: (npc, ctx) => `Player is using ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} as they please after surrender. Narrative has been generated. Route to intimacy menu with dominant demeanor. Respond in character as someone submitting to this use.`
+        contextNote: (npc, ctx) => `Player is taking their pleasure with ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} after their defeat. Narrative has been generated. Route to intimacy menu with dominant demeanor. Respond in character as someone submitting to this use.`
     },
     // ========================================================================
     // DOMINANCE ACTIONS (for surrendered NPCs - conversation stage, not intimacy yet)
@@ -4929,10 +4929,10 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-action",
         dominanceAction: "chokehold",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
-        contextNote: (npc, ctx) => `Player has ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} in a chokehold after they surrendered. They are showing their submission. Respond in character based on your temperament (bold NPCs may challenge, meek NPCs may whimper, etc.).`
+        contextNote: (npc, ctx) => `Player has ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} in a chokehold after they surrendered. They are showing their submission. Respond in character based on your temperament (bold NPCs may challenge, meek NPCs may whimper, etc.).`
     },
     {
         id: "dominance-grab-hair",
@@ -4948,10 +4948,10 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-action",
         dominanceAction: "grab_hair",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
-        contextNote: (npc, ctx) => `Player has grabbed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}'s hair and pulled their head back after surrender. Respond in character based on your temperament.`
+        contextNote: (npc, ctx) => `Player has grabbed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")}'s hair and pulled their head back after surrender. Respond in character based on your temperament.`
     },
     {
         id: "dominance-expose",
@@ -4967,10 +4967,10 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-action",
         dominanceAction: "expose",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -3, favor: -4, hostility: 3, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
-        contextNote: (npc, ctx) => `Player has exposed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}'s privates after they surrendered. They are vulnerable and submitting. Respond in character based on your temperament - a bold personality might resist or comment, a meek one might show fear or submission.`
+        contextNote: (npc, ctx) => `Player has exposed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")}'s privates after they surrendered. They are vulnerable and submitting. Respond in character based on your temperament - a bold personality might resist or comment, a meek one might show fear or submission.`
     },
     {
         id: "dominance-oral-hint",
@@ -4986,10 +4986,10 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "dominance-action",
         dominanceAction: "oral_hint",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -3, favor: -4, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
-        contextNote: (npc, ctx) => `Player has exposed themselves to ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} after they surrendered, making it clear oral service is expected. They have surrendered control. Respond in character based on your temperament - bold personalities may react differently than submissive ones.`
+        contextNote: (npc, ctx) => `Player has exposed themselves to ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} after they surrendered, making it clear oral service is expected. They have surrendered control. Respond in character based on your temperament - bold personalities may react differently than submissive ones.`
     },
 
     // ========================================================================
@@ -5010,10 +5010,10 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "command-action",
         commandType: "kneel",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -1, favor: -2, hostility: 1, intent: "aggression", markMet: true, actionTag: "command-given" },
-        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to kneel after they surrendered. They must obey. Respond in character as someone who has accepted defeat, based on your temperament.`
+        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to kneel after they surrendered. They must obey. Respond in character as someone who has accepted defeat, based on your temperament.`
     },
     {
         id: "command-serve",
@@ -5029,10 +5029,10 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "command-action",
         commandType: "serve",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -1, favor: -2, hostility: 1, intent: "aggression", markMet: true, actionTag: "command-given" },
-        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to serve them after surrender. Respond in character as someone compelled to obey, based on your temperament.`
+        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to serve them after surrender. Respond in character as someone compelled to obey, based on your temperament.`
     },
     {
         id: "command-strip",
@@ -5048,10 +5048,10 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: "command-action",
         commandType: "strip",
         conditions: {
-            surrenderedToPlayer: true
+            defeatedOrSurrendered: true
         },
         relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "command-given" },
-        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to strip after they surrendered. Respond in character as someone who must obey despite the humiliation, based on your temperament.`
+        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to strip after they surrendered. Respond in character as someone who must obey despite the humiliation, based on your temperament.`
     },
 
     // ========================================================================
@@ -5472,7 +5472,9 @@ function getNPCConversationContext(npc, extraContext = {}) {
         // Whether an intimacy encounter is currently active
         intimacyActive: !!(npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active),
         // Whether NPC has surrendered to the player and it's still valid
-        surrenderedToPlayer: typeof isNPCSurrenderedToPlayer === "function" && isNPCSurrenderedToPlayer(npc, G.player)
+        surrenderedToPlayer: typeof isNPCSurrenderedToPlayer === "function" && isNPCSurrenderedToPlayer(npc, G.player),
+        // Whether NPC is defeated or has surrendered to the player
+        defeatedOrSurrendered: typeof isNPCDefeatedOrSurrendered === "function" && isNPCDefeatedOrSurrendered(npc, G.player)
     };
 }
 
@@ -5628,6 +5630,7 @@ function conversationConditionMatches(conditions, ctx) {
     if (conditions.excludeDemeanorMode && _npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.excludeDemeanorMode))) return false;
     if (typeof conditions.intimacyActive === "boolean" && ctx.intimacyActive !== conditions.intimacyActive) return false;
     if (typeof conditions.surrenderedToPlayer === "boolean" && ctx.surrenderedToPlayer !== conditions.surrenderedToPlayer) return false;
+    if (typeof conditions.defeatedOrSurrendered === "boolean" && ctx.defeatedOrSurrendered !== conditions.defeatedOrSurrendered) return false;
 
     if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
 
