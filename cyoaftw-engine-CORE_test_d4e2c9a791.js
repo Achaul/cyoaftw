@@ -2115,46 +2115,334 @@ const bathhouseMigrationMaps = new WeakMap();
 
 // Older saves gain an establishment only where a street has a genuinely vacant
 // connection. Existing rooms, occupied cells and reserved onward routes survive.
+// Now handles all zones, not just Town. Creates dynamic private rooms based on zone species.
 function ensureTownBathhouse() {
+    return ensureZoneBathhouse("Town");
+}
+
+function ensureZoneBathhouse(zoneName) {
     const map = G.roomMap, active = G.activeRoom;
-    if (!map || !active || active.zone !== "Town" || !G.player || G.player.dead || G.player.hp <= 0 || G.activeNPC || G.activeObject || G.activeItemModal || G.combatEncounter || roomHasActiveHostile(active) || hasPendingPartyLoot() ||
+    if (!map || !active || !zoneName || !G.player || G.player.dead || G.player.hp <= 0 || G.activeNPC || G.activeObject || G.activeItemModal || G.combatEncounter || roomHasActiveHostile(active) || hasPendingPartyLoot() ||
         typeof _planBuildingInterior !== "function" || typeof instantiatePlannedRooms !== "function" || typeof assignGeneratedNPCs !== "function") return false;
+    
     const rooms = Object.values(map).filter(Boolean);
-    if (rooms.some(r => r.zone === "Town" && r.buildingType === "Bathhouse")) return false;
+    if (rooms.some(r => r.zone === zoneName && r.buildingType === "Bathhouse")) return false;
     if (bathhouseMigrationMaps.get(map) === rooms.length) return false;
     bathhouseMigrationMaps.set(map, rooms.length);
-    if (typeof MAP_MAX_ROOMS === "number" && rooms.length + 3 > MAP_MAX_ROOMS) return false;
+    
+    const maxRooms = typeof MAP_MAX_ROOMS === "number" ? MAP_MAX_ROOMS : 1000;
+    if (rooms.length + 10 > maxRooms) return false; // Reserve space for bathhouse + private rooms
+    
     const reserved = new Set(rooms.flatMap(r => Object.values(r.exits || {})));
-    const streets = rooms.filter(r => r.zone === "Town" && !r.isBuildingRoom && /^(Street|Avenue|Square)$/.test(r.type) && r.coords && !isRoomCollapsed(r));
+    
+    // Determine street types for this zone
+    const streetTypes = zoneName === "Town" ? ["Street", "Avenue", "Square"] : 
+                       zoneName === "Underground City" ? ["Underground Hallway", "Cavern"] :
+                       ["Street", "Path", "Clearing"];
+    
+    const streets = rooms.filter(r => r.zone === zoneName && !r.isBuildingRoom && 
+        streetTypes.some(t => r.type === t) && r.coords && !isRoomCollapsed(r));
+    
+    // Get zone species for dynamic private room creation
+    const zoneTemplate = typeof getZoneTemplate === "function" ? getZoneTemplate(zoneName) : null;
+    const zoneSpecies = zoneTemplate && Array.isArray(zoneTemplate.allowedSpecies) ? 
+        zoneTemplate.allowedSpecies : [];
+    
     for (const street of streets) {
         for (const dir of ["N", "S"]) {
-            if ((street.exits || {})[dir] || (street.doors || {})[dir] || (street.locks || {})[dir] || (street.linkExits || {})[dir] || (street.portalExits || {})[dir]) continue;
+            if ((street.exits || {})[dir] || (street.doors || {})[dir] || (street.locks || {})[dir] || 
+                (street.linkExits || {})[dir] || (street.portalExits || {})[dir]) continue;
             const coords = getAdjacentCoords(street.coords, dir);
             if (!coords || map[coords] || reserved.has(coords)) continue;
+            
             for (let index = 0; index < 1000; index++) {
-                const plan = { zone: "Town", rooms: {}, buildings: [] };
-                const entrance = _planAddRoom(plan, coords, "Bathhouse", "Town", {});
-                _planBuildingInterior(plan, "Bathhouse", index, entrance, dir === "N" ? 1 : -1, Math.random, null);
+                const plan = { zone: zoneName, rooms: {}, buildings: [] };
+                const entrance = _planAddRoom(plan, coords, "Bathhouse", zoneName, {});
+                const interiorResult = _planBuildingInterior(plan, "Bathhouse", index, entrance, dir === "N" ? 1 : -1, Math.random, null);
                 if (Object.keys(plan.rooms).some(key => map[key] || reserved.has(key))) continue;
-                const streetDesc = _planAddRoom(plan, street.coords, street.type, "Town", {});
+                
+                // Get the actual buildingId from the interior result or entrance
+                const buildingId = entrance.buildingId || interiorResult.buildingId || ("bathhouse-" + index);
+                const buildingName = entrance.buildingName || interiorResult.name || null;
+                const speciesWithRooms = [];
+                
+                // Create private rooms for each species (up to a reasonable limit)
+                const numPrivateRooms = Math.min(zoneSpecies.length, 6); // Max 6 private rooms
+                for (let i = 0; i < numPrivateRooms; i++) {
+                    const species = zoneSpecies[i];
+                    if (!species) continue;
+                    
+                    // Check if this coordinate is available
+                    const x0 = typeof BUILDING_PLANE_X0 !== "undefined" ? BUILDING_PLANE_X0 : 1000;
+                    const stride = typeof BUILDING_PLANE_X_STRIDE !== "undefined" ? BUILDING_PLANE_X_STRIDE : 1000;
+                    const floorStride = typeof BUILDING_FLOOR_Y_STRIDE !== "undefined" ? BUILDING_FLOOR_Y_STRIDE : 1000;
+                    const xOffset = 2 + i; // Start placing private rooms to the east of the core rooms
+                    const yOffset = 0;
+                    const roomCoords = (x0 + index * stride + xOffset) + "," + (0 * floorStride + yOffset * (dir === "N" ? 1 : -1));
+                    
+                    // Only add if not already in plan and coordinate is free
+                    if (!plan.rooms[roomCoords] && !map[roomCoords] && !reserved.has(roomCoords)) {
+                        const privateRoom = _planAddRoom(plan, roomCoords, "Private Bath Chamber", zoneName, {
+                            buildingId: buildingId,
+                            buildingType: "Bathhouse",
+                            buildingName: buildingName,
+                            isBuildingRoom: true,
+                            floor: 0,
+                            minNpcs: 0,
+                            // Mark this room for a specific species attendant
+                            speciesAttendant: species,
+                            attendeeSpecies: species
+                        });
+                        
+                        if (privateRoom) {
+                            speciesWithRooms.push({ species: species, room: privateRoom, coords: roomCoords });
+                            
+                            // Link to the massage room (or baths if massage doesn't exist)
+                            const coreRoomKey = Object.keys(plan.rooms).find(k => 
+                                plan.rooms[k].buildingId === buildingId && plan.rooms[k].type === "Massage Room");
+                            const bathsRoomKey = Object.keys(plan.rooms).find(k => 
+                                plan.rooms[k].buildingId === buildingId && plan.rooms[k].type === "Bathing Room");
+                            const coreRoom = plan.rooms[coreRoomKey] || plan.rooms[bathsRoomKey];
+                            
+                            if (coreRoom) {
+                                const backDir = xOffset > 0 ? "W" : "E";
+                                _planLink(plan, coreRoom.coords, privateRoom.coords, backDir, "door", false, 
+                                    { chance: 1, level: 1, keyId: "bathhouse-master-key" });
+                            }
+                        }
+                    }
+                }
+                
+                const streetDesc = _planAddRoom(plan, street.coords, street.type, zoneName, {});
                 _planLink(plan, streetDesc.coords, coords, dir, "door", false);
                 delete plan.rooms[street.coords]; // never instantiate a replacement street
+                
                 const added = instantiatePlannedRooms(plan);
                 street.exits = street.exits || {}; street.exits[dir] = coords;
                 street.doors = street.doors || {}; street.doors[dir] = "door";
+                
                 const previous = PLANNED_GENERATION_ACTIVE;
                 PLANNED_GENERATION_ACTIVE = true;
                 try {
+                    // Assign NPCs to non-bathhouse rooms normally
                     added.forEach(room => {
-                        assignGeneratedNPCs(room, "Town");
-                        (room.creatures || []).forEach(npc => { if (npc && typeof npc.hostility === "number") npc.hostility = Math.min(25, npc.hostility); });
+                        if (room.type !== "Bathhouse" && room.type !== "Bathing Room" && 
+                            room.type !== "Massage Room" && room.type !== "Private Bath Chamber") {
+                            assignGeneratedNPCs(room, zoneName);
+                            (room.creatures || []).forEach(npc => { 
+                                if (npc && typeof npc.hostility === "number") npc.hostility = Math.min(25, npc.hostility); 
+                            });
+                        }
                     });
+                    
+                    // Create and assign species-specific attendants to all bathhouse rooms
+                    createBathhouseAttendants(added, zoneName, zoneSpecies);
+                    
                 } finally { PLANNED_GENERATION_ACTIVE = previous; }
                 return true;
             }
         }
     }
     return false;
+}
+
+// Create species-specific bathhouse attendants and assign them to rooms
+function createBathhouseAttendants(bathhouseRooms, zoneName, zoneSpecies) {
+    if (!Array.isArray(bathhouseRooms) || !zoneName || !Array.isArray(zoneSpecies)) {
+        return;
+    }
+    
+    // Find the bathhouse entrance and building ID
+    const entrance = bathhouseRooms.find(r => r.type === "Bathhouse" && r.isEntrance);
+    if (!entrance) return;
+    
+    const buildingId = entrance.buildingId;
+    const buildingName = entrance.buildingName || "The Bathhouse";
+    
+    // Find all bathhouse rooms (including Private Bath Chambers)
+    const bathhouseOnlyRooms = bathhouseRooms.filter(r => 
+        r.buildingId === buildingId && 
+        (r.type === "Bathhouse" || r.type === "Bathing Room" || 
+         r.type === "Massage Room" || r.type === "Private Bath Chamber")
+    );
+    
+    // Find or create private rooms
+    const privateRooms = bathhouseOnlyRooms.filter(r => r.type === "Private Bath Chamber");
+    
+    // Clear existing creatures from bathhouse rooms (we'll recreate them properly)
+    bathhouseOnlyRooms.forEach(room => {
+        if (room.creatures) {
+            room.creatures = room.creatures.filter(npc => 
+                !npc || npc === G.player || (npc.role !== "BathhouseAttendant" && 
+                      npc.role !== "BathhousePractitioner" && npc.role !== "Bathkeeper" && npc.role !== "Matron")
+            );
+        }
+    });
+    
+    // Create Bathkeeper/Matron for the entrance
+    let bathkeeper = bathhouseOnlyRooms[0].creatures && bathhouseOnlyRooms[0].creatures.find(npc => 
+        npc && (npc.role === "Bathkeeper" || npc.role === "Matron")
+    );
+    
+    if (!bathkeeper) {
+        bathkeeper = generateBathhouseNPC(buildingId, buildingName, zoneName, "Bathkeeper", null);
+        if (bathkeeper && entrance) {
+            entrance.creatures = entrance.creatures || [];
+            entrance.creatures.push(bathkeeper);
+            ensureBathhouseMasterKey(bathkeeper);
+        }
+    } else {
+        ensureBathhouseMasterKey(bathkeeper);
+    }
+    
+    // Create one attendant per species, assign to private rooms
+    const speciesToAssign = zoneSpecies.slice(0, Math.min(privateRooms.length, zoneSpecies.length));
+    
+    for (let i = 0; i < speciesToAssign.length && i < privateRooms.length; i++) {
+        const species = speciesToAssign[i];
+        const privateRoom = privateRooms[i];
+        
+        // Check if there's already an attendant of this species
+        const existingForSpecies = bathhouseOnlyRooms.find(r => 
+            r.creatures && r.creatures.some(npc => 
+                npc && (npc.role === "BathhouseAttendant" || npc.role === "BathhousePractitioner") && 
+                npc.species === species
+            )
+        );
+        
+        if (existingForSpecies) {
+            const existingNpc = existingForSpecies.creatures.find(npc => 
+                npc && (npc.role === "BathhouseAttendant" || npc.role === "BathhousePractitioner") && 
+                npc.species === species
+            );
+            if (existingNpc) {
+                // Move to this private room if not already there
+                if (!privateRoom.creatures || !privateRoom.creatures.includes(existingNpc)) {
+                    privateRoom.creatures = privateRoom.creatures || [];
+                    privateRoom.creatures.push(existingNpc);
+                }
+                ensureBathhouseMasterKey(existingNpc);
+                continue;
+            }
+        }
+        
+        // Create new attendant for this species
+        const role = Math.random() < 0.5 ? "BathhouseAttendant" : "BathhousePractitioner";
+        const attendant = generateBathhouseNPC(buildingId, buildingName, zoneName, role, species);
+        
+        if (attendant) {
+            if (!privateRoom.creatures) privateRoom.creatures = [];
+            privateRoom.creatures.push(attendant);
+            ensureBathhouseMasterKey(attendant);
+        }
+    }
+    
+    // Also add some staff to the core rooms (Bathing Room, Massage Room)
+    const coreRooms = bathhouseOnlyRooms.filter(r => 
+        (r.type === "Bathing Room" || r.type === "Massage Room") && 
+        (!r.creatures || r.creatures.length === 0)
+    );
+    
+    // If we have more species than private rooms, assign remaining species to core rooms
+    for (let i = speciesToAssign.length; i < Math.min(zoneSpecies.length, speciesToAssign.length + coreRooms.length); i++) {
+        const species = zoneSpecies[i];
+        const coreRoom = coreRooms[i - speciesToAssign.length];
+        if (coreRoom) {
+            const role = Math.random() < 0.5 ? "BathhouseAttendant" : "BathhousePractitioner";
+            const attendant = generateBathhouseNPC(buildingId, buildingName, zoneName, role, species);
+            if (attendant) {
+                coreRoom.creatures = coreRoom.creatures || [];
+                coreRoom.creatures.push(attendant);
+                ensureBathhouseMasterKey(attendant);
+            }
+        }
+    }
+    
+    // Set hostility cap for all NPCs in bathhouse
+    bathhouseOnlyRooms.forEach(room => {
+        (room.creatures || []).forEach(npc => {
+            if (npc && typeof npc.hostility === "number") {
+                npc.hostility = Math.min(25, npc.hostility);
+            }
+        });
+    });
+}
+
+// Generate a bathhouse NPC with proper setup
+function generateBathhouseNPC(buildingId, buildingName, zoneName, role, species) {
+    if (typeof createNPC !== "function") return null;
+    
+    // Use the default NPC creation but with bathhouse-specific settings
+    const npc = createNPC({
+        zone: zoneName,
+        role: role,
+        buildingId: buildingId,
+        buildingType: "Bathhouse",
+        shopName: buildingName,
+        forcedSpecies: species || null
+    });
+    
+    if (!npc) return null;
+    
+    // Set bathhouse-specific properties
+    npc.bathhouseOnDuty = true;
+    npc.isBathhouseStaff = true;
+    
+    // Ensure they have a gender for the uniform system
+    if (!npc.gender) {
+        npc.gender = Math.random() < 0.5 ? "female" : "male";
+    }
+    
+    // Ensure they're not hostile
+    if (typeof npc.hostility === "number") {
+        npc.hostility = Math.min(25, npc.hostility);
+    }
+    
+    return npc;
+}
+
+// Find the Bathkeeper/Matron in a bathhouse building
+function findBathhouseMatron(room) {
+    if (!room || !room.buildingId) return null;
+    
+    // Search all rooms in the same building
+    for (const roomId in G.roomMap) {
+        const r = G.roomMap[roomId];
+        if (r && r.buildingId === room.buildingId) {
+            const matron = (r.creatures || []).find(npc => 
+                npc && (npc.role === "Bathkeeper" || npc.role === "Matron")
+            );
+            if (matron) return matron;
+        }
+    }
+    return null;
+}
+
+// Ensure a bathhouse staff member has a master key
+function ensureBathhouseMasterKey(npc) {
+    if (!npc || !npc.inventory || !Array.isArray(npc.inventory)) return;
+    
+    // Check if they already have a bathhouse master key
+    const hasKey = npc.inventory.some(item => 
+        item && item.opensLockId === BATHHOUSE_MASTER_KEY_ID
+    );
+    
+    if (!hasKey) {
+        const role = String(npc.role || "");
+        // Only bathhouse staff get master keys
+        if (["Bathkeeper", "Matron", "BathhouseAttendant", "BathhousePractitioner"].includes(role) && 
+            npc.buildingType === "Bathhouse") {
+            const key = assignLootUID({
+                id: "bathhouse-master-key",
+                name: "Bathhouse Master Key",
+                type: ["misc", "key"],
+                value: 5,
+                description: "A master key that opens all doors in the bathhouse.",
+                opensLockId: BATHHOUSE_MASTER_KEY_ID
+            });
+            npc.inventory.push(key);
+        }
+    }
 }
 
 function isBathhouseRoom(room) {
@@ -2186,7 +2474,9 @@ function bathhouseWorkBlock(job) {
 }
 
 function isPublicBathhouseStaff(npc) {
-    return !!npc && ["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner"].includes(npc.role);
+    if (!npc) return false;
+    const role = String(npc.role || "");
+    return ["Bathkeeper", "Matron", "BathhouseAttendant", "BathhousePractitioner"].includes(role);
 }
 
 function bathhouseProvider(room) {
@@ -3116,6 +3406,15 @@ async function performBathhouseAction(npc, action) {
             if (spec.cleans) cleanEntityAfterWashing(p);
             message = BATHHOUSE_TREATMENTS[action].text + " You recover " + recovered + " stamina.";
             Object.assign(result, { recovered, cleaned: spec.cleans });
+            // Track bathhouse service usage for reputation
+            if (!p.bathhouseServiceCount) p.bathhouseServiceCount = 0;
+            p.bathhouseServiceCount++;
+            // Track tipping: 20% chance to tip 10% of the fee
+            if (!p.bathhouseTipped && Math.random() < 0.20 && hasEnoughCoins(p, spec.fee + Math.round(spec.fee * 0.1))) {
+                const tipAmount = Math.round(spec.fee * 0.1);
+                adjustCoins(p, -tipAmount);
+                p.bathhouseTipped = true;
+            }
         } else if (action === "trial") {
             const roll = rollStatCheck(p, "flexibility", 11);
             if (!p.bathhouseTraining || typeof p.bathhouseTraining !== "object") p.bathhouseTraining = {};
@@ -3152,6 +3451,20 @@ function textBathhouseShow() {
     });
     return textModeResult("completed", reason || services.map(s => s.label + ": " + s.command + "; " + s.fee + " gold, " + s.turns + " turns" + (s.reason ? "; " + s.reason : "")).join("\n"),
         { bathhouse: { stage: "availability", qualified: bathhouseQualified(G.activeRoom), services } });
+}
+
+function parseTextBathhouseArrangeCommand(raw) {
+    const match = /^(?:arrange\s+private\s+service|book\s+private\s+service|request\s+attendant)$/i.exec(raw);
+    if (match) return { verb: "bathhouse_arrange" };
+    return null;
+}
+
+async function executeTextBathhouseArrangeCommand() {
+    const npc = G.activeNPC;
+    if (!npc || (npc.role !== "Bathkeeper" && npc.role !== "Matron")) {
+        return textModeResult("blocked", "You must be talking to a Bathkeeper or Matron to arrange private services.");
+    }
+    return openBathhousePrivateServiceMenu(npc, { id: "arrange_private_service" });
 }
 
 async function executeTextBathhouseCommand(action) {
@@ -3241,6 +3554,348 @@ function requestNPCService(npc, service) {
     // Native rendering owns narration; text uses the existing real-stock view.
     if (textModeState.enabled && G.activeNPC === npc && G.activeNPCMode === "trade") textTradeList("buy");
     return { status: "needs_input" };
+}
+
+// Handle player inquiring about private services with an attendant
+function handleBathhouseInquirePrivate(npc, choice) {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || !npc || G.activeNPC !== npc || !/^(talk|respond|menu)$/.test(G.activeNPCMode || "")) {
+        return sharedChoiceResult("blocked", "That inquiry is no longer available.");
+    }
+    
+    // Check if NPC is in a bathhouse room
+    const inBathhouse = isBathhouseRoom(room);
+    
+    // Check if this is an attendant or practitioner (Bathkeeper has separate flow)
+    const role = String(npc.role || "");
+    if (role === "Bathkeeper" || role === "Matron") {
+        // Redirect to the arrange service menu
+        return openBathhousePrivateServiceMenu(npc, choice);
+    }
+    
+    // Check if NPC is attracted to player (use favorability as proxy for attraction)
+    const isAttracted = (npc.memory && npc.memory.favorability || 0) > 50;
+    
+    // Check if player has bathhouse reputation
+    const hasReputation = p.bathhouseServiceCount && p.bathhouseServiceCount >= 5;
+    
+    if (!inBathhouse) {
+        // NPC will respond via AI that they're not on duty
+        return sharedChoiceResult("needs_input", "", { 
+            needsReply: true,
+            suppressDefaultAction: true
+        });
+    }
+    
+    if (!hasReputation) {
+        // Shouldn't happen due to conditions in catalogue, but just in case
+        return sharedChoiceResult("blocked", "You need to establish reputation at the bathhouse first.");
+    }
+    
+    if (!isAttracted) {
+        // NPC will respond professionally via AI
+        return sharedChoiceResult("needs_input", "", { 
+            needsReply: true,
+            suppressDefaultAction: true
+        });
+    }
+    
+    // NPC is attracted - generate flirty narrative and trigger walk to room
+    const gender = String(npc.gender || "female").toLowerCase();
+    const npcName = npc.name || "the attendant";
+    const species = String(npc.species || "human");
+    const isReturning = p.bathhouseServiceCount > 5;
+    
+    // Generate gender-appropriate SFW flirty narrative
+    let flirtyText = "";
+    
+    // First part: hesitation and glance
+    if (gender === "female") {
+        flirtyText = `${npcName} hesitates, her eyes flicking to the door. `;
+    } else if (gender === "male") {
+        flirtyText = `${npcName} pauses, checking the hallway before turning back to you. `;
+    } else {
+        flirtyText = `${npcName} hesitates, glancing at the door. `;
+    }
+    
+    // Second part: leaning in (SFW)
+    if (gender === "female") {
+        flirtyText += `A slow, knowing smile spreads across her face as she leans close, her warm breath tantalizing as she whispers, "Well... for you, I think we could work something special out."`;
+    } else if (gender === "male") {
+        flirtyText += `A knowing look in his eyes as he steps nearer, his voice low. "Well... for you, I think we could work something special out."`;
+    } else {
+        flirtyText += `A mischievous grin as they lean in, their voice a warm whisper. "Well... for you, I think we could work something special out."`;
+    }
+    
+    // Set the narrative
+    setNarration(flirtyText);
+    
+    // Determine price based on worker role - direct path is 20 gold cheaper (cutting out Matron's cut)
+    const basePrice = role === "BathhousePractitioner" ? 100 : 50;
+    const price = basePrice - 20; // Direct arrangement discount
+    
+    // Check if player can afford it
+    if (!hasEnoughCoins(p, price)) {
+        return sharedChoiceResult("blocked", `You cannot afford ${price} gold for this private service.`);
+    }
+    
+    // Deduct payment
+    adjustCoins(p, -price);
+    
+    // Risk: slight favor reduction with Bathkeeper/Matron for cutting them out
+    // Find the Bathkeeper/Matron in this bathhouse and reduce their favor slightly
+    if (typeof adjustNPFavorability === "function") {
+        const matron = findBathhouseMatron(room);
+        if (matron) {
+            // Reduce favor by 5-10 points for bypassing them
+            const favorReduction = 5 + Math.floor(Math.random() * 6); // 5-10 points
+            adjustNPFavorability(matron, -favorReduction);
+        }
+    }
+    
+    // Mark that this is a bathhouse service in progress
+    p._bathhouseServiceInProgress = { worker: npc, price: price, turn: G.storyTurn, arranged: false };
+    npc._bathhouseServiceInProgress = { client: p, price: price, turn: G.storyTurn, arranged: false };
+    
+    // Find a private room in this bathhouse
+    const privateRooms = [];
+    for (const roomId in G.roomMap) {
+        const r = G.roomMap[roomId];
+        if (r && r.buildingId === room.buildingId && r.type === "Private Bath Chamber") {
+            privateRooms.push(r);
+        }
+    }
+    
+    if (privateRooms.length > 0) {
+        // Pick the first available private room
+        const privateRoom = privateRooms[0];
+        
+        // Check if worker has the master key
+        const hasKey = npc.inventory && npc.inventory.some(item => 
+            item && item.opensLockId === BATHHOUSE_MASTER_KEY_ID
+        );
+        
+        if (hasKey) {
+            // Use the guide system to walk to the private room
+            const dest = { key: privateRoom.coords, name: privateRoom.displayName || "Private Bath Chamber", buildingId: privateRoom.buildingId };
+            
+            // Disengage from current conversation
+            if (G.activeNPC) {
+                G.activeNPC = null;
+                G.activeNPCMode = null;
+                if (typeof renderChatOptions === "function") renderChatOptions(null);
+            }
+            
+            // Start guiding
+            if (typeof startGuiding === "function") {
+                startGuiding(npc, dest);
+            }
+            
+            // After arrival, unlock the door and start the service
+            // This will be handled by the guide arrival system
+            npc._bathhouseServicePending = { client: p, targetRoom: privateRoom.coords };
+            
+            saveGameState();
+            return { status: "completed", outputPublished: true };
+        }
+    }
+    
+    // Fallback: if no private rooms or no guide system, start intimacy encounter directly
+    if (typeof window.startIntimacyEncounter === "function") {
+        if (typeof window.setIntimacyNPC === "function") {
+            window.setIntimacyNPC(npc);
+        }
+        return window.startIntimacyEncounter(npc, "bathhouseService");
+    }
+    
+    return { status: "completed", outputPublished: true };
+}
+
+// Open menu for Bathkeeper/Matron to arrange private services with available workers
+function openBathhousePrivateServiceMenu(npc, choice) {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || !npc || G.activeNPC !== npc || !/^(talk|respond|menu)$/.test(G.activeNPCMode || "")) {
+        return sharedChoiceResult("blocked", "That arrangement is no longer available.");
+    }
+    
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return sharedChoiceResult("blocked", "The service arrangement menu is unavailable.");
+    
+    // Find all available bathhouse workers in the same building
+    const workers = [];
+    const buildingId = room.buildingId;
+    const playerState = choiceEntitySnapshot(p);
+    const npcState = choiceEntitySnapshot(npc);
+    
+    // Search through all rooms in the building
+    for (const roomId in G.roomMap) {
+        const r = G.roomMap[roomId];
+        if (!r || r.buildingId !== buildingId) continue;
+        
+        (r.creatures || []).forEach(creature => {
+            if (!creature || creature === p || creature === npc || creature.dead || creature.hp <= 0) return;
+            const role = String(creature.role || "");
+            if (role === "BathhouseAttendant" || role === "BathhousePractitioner") {
+                // Check if worker is available (not busy, not off duty)
+                if (!creature._bathhouseServiceInProgress && !creature.offDuty) {
+                    workers.push(creature);
+                }
+            }
+        });
+    }
+    
+    if (workers.length === 0) {
+        return sharedChoiceResult("blocked", "No attendants or practitioners are currently available for private services.");
+    }
+    
+    // Build menu
+    G.activeNPCMode = "bathhouse-private";
+    const menu = beginSharedChoiceMenu("bathhouse-private-arrange", npc, "Arrange Private Service", () => openBathhousePrivateServiceMenu(npc, choice));
+    const turn = getCurrentStoryTurn();
+    const map = G.roomMap;
+    
+    menu.valid = () => G.player === p && G.activeRoom === room && G.roomMap === map && getCurrentStoryTurn() === turn && 
+                        G.activeNPC === npc && playerState() && npcState() && !p._bathhouseServiceInProgress;
+    
+    el.innerHTML = "";
+    
+    // Add worker options
+    workers.forEach(worker => {
+        const gender = String(worker.gender || "unknown").toLowerCase();
+        const species = String(worker.species || "human").toLowerCase();
+        const name = worker.name || "Attendant";
+        
+        // Determine price based on worker role
+        const price = worker.role === "BathhousePractitioner" ? 100 : 50; // Practitioner: 100g, Attendant: 50g
+        const services = worker.role === "BathhousePractitioner" ? "Full private services" : "Private bath and massage";
+        
+        const label = `${name} (${gender}, ${species}) - ${price} gold - ${services}`;
+        
+        el.appendChild(createSharedChoiceButton(menu, label, () => {
+            if (G.player !== p || G.activeRoom !== room || G.roomMap !== map || getCurrentStoryTurn() !== turn ||
+                G.activeNPC !== npc || !playerState() || !npcState()) {
+                return sharedChoiceResult("interrupted", "The arrangement was interrupted.");
+            }
+            
+            // Check if player can afford it
+            if (!hasEnoughCoins(p, price)) {
+                return sharedChoiceResult("blocked", `You cannot afford ${price} gold for this service.`);
+            }
+            
+            // Arrange the service
+            return arrangeBathhousePrivateService(npc, worker, price);
+        }, { textChoice: { action: "arrange", workerId: worker.id } }));
+    });
+    
+    // Add back button
+    el.appendChild(createSharedChoiceButton(menu, "Back to conversation", () => {
+        if (G.player === p && G.activeRoom === room && G.activeNPC === npc) {
+            G.activeNPCMode = "talk";
+            renderChatOptions(npc);
+        }
+        return { status: "completed" };
+    }, { textChoice: { action: "back" } }));
+    
+    menu.publicData = { bathhouse: { stage: "private_arrange", workers: workers.map(w => ({ name: w.name, gender: w.gender, species: w.species, price: w.role === "BathhousePractitioner" ? 100 : 50 })) } };
+    publishSharedChoiceMenu(menu, el);
+    
+    return { status: "needs_input", outputPublished: true };
+}
+
+// Execute the arrangement of a private service with a specific worker
+function arrangeBathhousePrivateService(bathkeeper, worker, price) {
+    const p = G.player, room = G.activeRoom;
+    if (!p || !room || !bathkeeper || !worker || p.dead || p.hp <= 0) {
+        return sharedChoiceResult("blocked", "The service cannot be arranged at this time.");
+    }
+    
+    // Deduct payment
+    adjustCoins(p, -price);
+    
+    // Generate narrative
+    const keeperRole = bathkeeper.role === "Matron" ? "Matron" : "Bathkeeper";
+    const keeperName = bathkeeper.name || (`the ${keeperRole}`);
+    const workerName = worker.name || "the attendant";
+    
+    const narrative = `${keeperName} nods professionally and calls out. A moment later, ${workerName} enters the room, nods respectfully to you, and leads you to a private chamber.`;
+    
+    setNarration(narrative);
+    
+    // Track that service is in progress
+    p._bathhouseServiceInProgress = { worker: worker, bathkeeper: bathkeeper, price: price, turn: G.storyTurn };
+    worker._bathhouseServiceInProgress = { client: p, bathkeeper: bathkeeper, price: price, turn: G.storyTurn };
+    
+    // Find a private room in this bathhouse
+    const privateRooms = [];
+    for (const roomId in G.roomMap) {
+        const r = G.roomMap[roomId];
+        if (r && r.buildingId === room.buildingId && r.type === "Private Bath Chamber") {
+            privateRooms.push(r);
+        }
+    }
+    
+    // If we have private rooms, guide the player to one
+    if (privateRooms.length > 0) {
+        // Pick the first available private room
+        const privateRoom = privateRooms[0];
+        
+        // Check if worker has the master key
+        const hasKey = worker.inventory && worker.inventory.some(item => 
+            item && item.opensLockId === BATHHOUSE_MASTER_KEY_ID
+        );
+        
+        if (hasKey) {
+            // Use the guide system to walk to the private room
+            const dest = { key: privateRoom.coords, name: privateRoom.displayName || "Private Bath Chamber", buildingId: privateRoom.buildingId };
+            
+            // Disengage from current conversation
+            if (G.activeNPC) {
+                G.activeNPC = null;
+                G.activeNPCMode = null;
+                if (typeof renderChatOptions === "function") renderChatOptions(null);
+            }
+            
+            // Start guiding
+            if (typeof startGuiding === "function") {
+                startGuiding(worker, dest);
+            }
+            
+            // After arrival, unlock the door and start the service
+            // This will be handled by the guide arrival system
+            // We need to hook into the completion to start the intimacy encounter
+            
+            // Store that this is a bathhouse service arrangement
+            worker._bathhouseServicePending = { client: p, bathkeeper: bathkeeper, price: price, targetRoom: privateRoom.coords };
+            
+            saveGameState();
+            return { status: "completed", outputPublished: true };
+        }
+    }
+    
+    // Fallback: if no private rooms or no guide system, start intimacy encounter directly
+    if (typeof window.startIntimacyEncounter === "function") {
+        // Set the worker as the intimacy NPC
+        if (typeof window.setIntimacyNPC === "function") {
+            window.setIntimacyNPC(worker);
+        }
+        // Start the encounter - using "bathhouseService" as the touch type
+        return window.startIntimacyEncounter(worker, "bathhouseService");
+    } else {
+        // Fallback if intimacy system is not available
+        setNarration("The private service begins...");
+    }
+    
+    // Log the transaction
+    saveGameState();
+    renderStats();
+    
+    // Publish text mode output
+    publishTextModeOutput("service", narrative, {
+        presentation: "supplement",
+        bathhouse: { stage: "private_arranged", worker: worker.id, price: price }
+    }, false);
+    
+    return { status: "completed", outputPublished: true };
 }
 
 function showNPCDrinkMenu(npc) {
@@ -3404,6 +4059,7 @@ const TEXT_COMMANDS = [
     { id: "stop", aliases: ["stop"], example: "stop", description: "Cancel pending commands. An action already in progress finishes normally." },
     { id: "continue", aliases: ["continue", "resume"], example: "continue", description: "Explicitly resume the remaining commands after a pause. A failed action is not retried." },
     { id: "bathhouse_services", conversationActions: true, bathhouse: true, args: ["action"], aliases: ["private services", "special services", "bathhouse special", "ask about services"], example: "private services; special services; ask about private services", description: "While talking to a bathhouse staff member, ask about private services. Uses the conversation catalogue entry 'ask_about_private_services'. Requires the NPC to be bathhouse staff or aware of services. Options/choose/back/cancel work normally." },
+    { id: "bathhouse_arrange", conversationActions: true, bathhouse: true, args: [], aliases: ["arrange private service", "book private service", "request attendant"], example: "arrange private service; book private service", description: "While talking to a Bathkeeper or Matron with reputation, arrange a private service with an available bathhouse worker. Lists available attendants/practitioners with name, gender, species, and price. Select a worker to arrange the service. The Matron calls the worker, who arrives, nods to you, and leads you to a private room." },
     { id: "touch", nsfw: true, args: ["target"], aliases: ["touch", "touch gently"], example: "touch elf; touch gently human", description: "Gently touch a visible humanoid NPC. Their reaction depends on your relationship, their temperament, and the context. Only works on romance-eligible NPCs." },
     { id: "grab", nsfw: true, args: ["target"], aliases: ["grab"], example: "grab elf; grab second human", description: "Firmly grab a visible humanoid NPC. Their reaction depends on your relationship and the context. Only works on romance-eligible NPCs." },
     { id: "hug", social: true, args: ["target"], aliases: ["hug", "embrace"], example: "hug elf; embrace human; contact give them a hug with elf", description: "Offer an ordinary hug through the shared contact-and-reply handler. The NPC may accept or decline. The narrated attempt costs one conversation turn and adds no special relationship reward." },
@@ -3485,6 +4141,7 @@ function parseTextCommand(input) {
     if (match) return { verb: "actions", args: { group: textCommandNormalize(match[1] || "") } };
     const mausoleum = parseTextMausoleumCommand(raw); if (mausoleum) return mausoleum;
     const bathhouse = parseTextBathhouseCommand(raw); if (bathhouse) return bathhouse;
+    const bathhouseArrange = parseTextBathhouseArrangeCommand(raw); if (bathhouseArrange) return bathhouseArrange;
     const npcService = parseTextNPCService(raw); if (npcService) return npcService;
     const checkpoint=typeof parseTextCheckpointCommand==='function'?parseTextCheckpointCommand(raw):null;if(checkpoint)return checkpoint;
     const commitment = parseTextCommitmentCommand(raw); if (commitment) return commitment;
@@ -3665,7 +4322,41 @@ function textAIPlanSalvage(value) {
     return usable;
 }
 
-async function interpretTextCommands(input) {
+// ROUTER ROOM AWARENESS (2026-10-29). The AI interpreter is told what is in the
+// room, so "search corpse" can be tied to the one corpse here. Names are the
+// same public names the player sees (exits, people, fixtures, floor items,
+// bodies); hidden things are left out.
+function textRoomObjectNames() {
+    const room = G.activeRoom, names = [];
+    if (!room) return names;
+    const add = function (name) {
+        name = String(name || "").replace(/\s+/g, " ").trim().replace(/^(?:a|an|the)\s+/i, "");
+        if (name && names.indexOf(name) < 0) names.push(name);
+    };
+    try {
+        const exits = room.exits || {};
+        TEXT_EXIT_ORDER.forEach(function (d) {
+            if (!exits[d]) return;
+            const vertical = d === "U" || d === "D";
+            const dir = vertical ? (d === "U" ? "up" : "down") : TEXT_EXIT_WORDS[d];
+            if (typeof isExitCollapsed === "function" && isExitCollapsed(room, d)) { add("rubble " + dir); return; }
+            const kind = typeof getExitDoor === "function" ? getExitDoor(room, d) : null;
+            add((kind === "door" ? "door " : kind === "arch" ? "archway " : vertical ? "way " : "exit ") + dir);
+        });
+    } catch (e) {}
+    try { textModeVisibleNPCs().forEach(function (npc) { add(typeof getNPCRoomSightName === "function" ? getNPCRoomSightName(npc) : getEntityName(npc)); }); } catch (e) {}
+    try { (getVisibleRoomFixtures(room) || []).forEach(function (fixture) { if (fixture && !fixture.hidden && !fixture.isHidden) add(getEntityName(fixture)); }); } catch (e) {}
+    try {
+        (room.items || []).forEach(function (item) {
+            if (!item || item.hidden || item.isHidden || item.concealed || item.visible === false) return;
+            let name = getEntityName(item);
+            if (item.objectType === "body" && !/\b(?:corpse|body|remains|carcass)\b/i.test(name)) name += " body";
+            add(name);
+        });
+    } catch (e) {}
+    return names.slice(0, 24);
+}
+async function interpretTextCommands(input, opts) {
     if (!aiAvailable()) return null;
     const shapes = [];
     TEXT_COMMANDS.filter(function(def) {
@@ -3708,7 +4399,12 @@ async function interpretTextCommands(input) {
         try { const names = { N: "north", NE: "northeast", E: "east", SE: "southeast", S: "south", SW: "southwest", W: "west", NW: "northwest", U: "up", D: "down" }; exitWords = Object.keys((G.activeRoom && G.activeRoom.exits) || {}).map(function (k) { return names[k] || k; }).join("|"); } catch (e) {}
         spokenWords = "\nSPOKEN via speech-to-text: words may be misheard sound-alikes (cancun=kenku, clarence north=go north). Map them to the closest here/exits word. Always give your best-guess action; never refuse." + (exitWords ? "\nexits=" + exitWords : "");
     }
-    const instruction = 'Dialect/typos→intents:{"actions":[{"verb":"","args":{}}]};say=raw\nExpand args keys: i=item,t=target,s=source,a=action,f=fixture,b=ability\n' + schema + combatWords + socialWords + objectWords + bathWords + peopleWords + spokenWords + '\n' + JSON.stringify(input);
+    // Objects in the room (exits, people, fixtures, floor items, bodies) so a vague
+    // target ("search corpse") can be tied to the one thing here that fits.
+    let roomWords = "";
+    try { const names = textRoomObjectNames(); if (names.length) roomWords = "\nObjects in room: " + names.join(", ").slice(0, 420); } catch (e) {}
+    const failWords = opts && opts.failure ? "\nThe game could not match this to anything here (" + String(opts.failure).replace(/[\r\n"]+/g, " ").slice(0, 110) + "). Pick the closest listed object or exit, or return no actions." : "";
+    const instruction = 'Dialect/typos→intents; vague target→the one matching listed object:{"actions":[{"verb":"","args":{}}]};say=raw\nExpand args keys: i=item,t=target,s=source,a=action,f=fixture,b=ability\n' + schema + combatWords + socialWords + objectWords + bathWords + peopleWords + spokenWords + roomWords + failWords + '\nPlayer said: ' + JSON.stringify(input);
     try {
         const raw = await textModeAIRequest(instruction, 12000);
         if (!raw) return null;
@@ -3851,7 +4547,7 @@ function textModeSeparateGuidance(event) {
 // Raw event text stays in event.text; the speakable version is event.spoken.
 const ttsModeState = { enabled: false, lastSpoken: null, lastNpcSpoken: null, lastDetails: null, pendingTone: null,
     systemVoice: true, npcVoices: true, readIntimate: false, narratorVoice: "", accent: "", rate: 1, volume: 1, variety: 1, pause: "normal",
-    urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", thinkingTone: false, thinkingToneUrl: "", cueVolume: 0.5,
+    urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", failCue: true, failNarrate: false, thinkingTone: false, thinkingToneUrl: "", cueVolume: 0.5,
     pronunciations: "", pronunciationMap: {}, speciesVoice: {}, micMode: "handsfree", autoSubmitWait: 2, silenceRetries: 1, shorterDescriptions: false };
 const TTS_FAILURE_LINES = {
     unresolved: "I pause, unsure how to put that into action.",
@@ -4004,11 +4700,19 @@ function ttsShortRoomStory(event, story) {
 function ttsAdjustEvent(event) {
     if (event.kind === "command") { ttsModeState.storySinceCommand = false; return; }
     if (!ttsModeActive()) return;
-    if (event.systemOnly && event.commandFailure && TTS_FAILURE_LINES[event.commandFailure]) {
-        event.guidance = event.guidance || event.text;
-        event.narration = TTS_FAILURE_LINES[event.commandFailure];
-        event.systemOnly = false;
-        return;
+    if (event.commandFailure && TTS_FAILURE_LINES[event.commandFailure]) {
+        // A failed action sounds a low buzz (Preferences > TTS). The spoken
+        // "I pause, unsure..." line is optional and off by default; the written
+        // message stays in the system log either way.
+        if (ttsModeState.failCue !== false) ttsPlayCue("fail");
+        if (event.systemOnly) {
+            if (ttsModeState.failNarrate === true) {
+                event.guidance = event.guidance || event.text;
+                event.narration = TTS_FAILURE_LINES[event.commandFailure];
+                event.systemOnly = false;
+            }
+            return;
+        }
     }
     if (event.systemOnly && event.ttsNarration && !ttsModeState.storySinceCommand) {
         event.guidance = event.guidance || event.text;
@@ -4273,6 +4977,7 @@ function ttsVoiceOn() { return ttsModeActive() && ttsModeState.systemVoice !== f
 function ttsPlayCue(kind, force) {
     if (!force && kind === "urgent" && ttsModeState.urgentCue === false) return;
     if (!force && kind === "turn" && ttsModeState.turnCue === false) return;
+    if (!force && kind === "fail" && ttsModeState.failCue === false) return;
     const url = kind === "urgent" ? ttsModeState.urgentCueUrl : kind === "turn" ? ttsModeState.turnCueUrl : "";
     if (url && typeof Audio === "function") {
         try {
@@ -4295,12 +5000,12 @@ function ttsPlayTone(kind) {
         if (!ttsSpeech.audio) ttsSpeech.audio = new C();
         const c = ttsSpeech.audio;
         if (c.state === "suspended" && c.resume) c.resume();
-        const now = c.currentTime, notes = kind === "urgent" ? [880, 660] : [660, 990], vol = 0.25 * (ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume);
+        const now = c.currentTime, notes = kind === "urgent" ? [880, 660] : kind === "fail" ? [196, 147] : [660, 990], vol = 0.25 * (ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume);
         notes.forEach(function (f, k) {
             const o = c.createOscillator(), g = c.createGain();
-            o.type = kind === "urgent" ? "square" : "sine"; o.frequency.value = f;
+            o.type = kind === "urgent" ? "square" : kind === "fail" ? "sawtooth" : "sine"; o.frequency.value = f;
             g.gain.setValueAtTime(0.0001, now + k * 0.12);
-            g.gain.exponentialRampToValueAtTime(Math.max(0.001, kind === "urgent" ? vol * 0.6 : vol), now + k * 0.12 + 0.02);
+            g.gain.exponentialRampToValueAtTime(Math.max(0.001, kind === "urgent" || kind === "fail" ? vol * 0.6 : vol), now + k * 0.12 + 0.02);
             g.gain.exponentialRampToValueAtTime(0.0001, now + k * 0.12 + 0.25);
             o.connect(g); g.connect(c.destination); o.start(now + k * 0.12); o.stop(now + k * 0.12 + 0.3);
         });
@@ -4405,7 +5110,7 @@ function ttsSpeechEnqueue(event) {
 const TTS_SETTINGS_KEY = "cyoaftwTTSSettings";
 const TTS_SETTING_DEFAULTS = {
     systemVoice: true, narratorVoice: "", accent: "", rate: 1, volume: 1, npcVoices: true, variety: 1, pause: "normal",
-    readIntimate: false, urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", thinkingTone: false, thinkingToneUrl: "",
+    readIntimate: false, urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", failCue: true, failNarrate: false, thinkingTone: false, thinkingToneUrl: "",
     cueVolume: 0.5, pronunciations: "", speciesVoice: {}, micMode: "handsfree", autoSubmitWait: 2, silenceRetries: 1, shorterDescriptions: false
 };
 const TTS_PAUSE_MS = { short: 0, normal: 250, long: 700 };
@@ -5229,7 +5934,20 @@ function textModeHelp(topic, show) {
     try { return textModeHelpContent(topic, show); } finally { textModeState.helpActive = previous; }
 }
 
+// "Not found" style failures ("No visible NPC matches...", "can't find that
+// here"). These get one pass through the AI router, and if that fails too they
+// end as the failure buzz instead of a spoken complaint.
+function textFailureIsMiss(text) {
+    return /\bno (?:visible|readable|available|sleeping|such|matching|scripted)\b[^.]*\b(?:match|matches|here|found)\b|\bcan(?:'|no)t (?:find|see) |\bnot (?:here|visible|in this)\b|\bis(?:n't| not) (?:here|in this source)\b|\bno longer (?:available|within reach|here)\b|\bthere is no exit\b|\bnothing (?:like|called)\b|\bnot in this source\b/i.test(String(text || ""));
+}
 function textModeResult(status, text, details) {
+    // While an action runs from the queue, blocked output is held so a not-found
+    // failure can be handed to the AI router before the player hears about it.
+    if (status === "blocked" && text && textModeState.deferBlocked) { textModeState.deferBlocked.push({ text: text, details: details }); return { status: status }; }
+    if (status === "blocked" && text && ttsModeActive() && !(details && details.commandFailure) && textFailureIsMiss(text)) {
+        details = Object.assign({}, details || {}, { systemOnly: true, commandFailure: "unresolved" });
+        delete details.narration;
+    }
     if (text) publishTextModeOutput(status === "needs_input" ? "choices" : "feedback", text, Object.assign({ status: status }, details || {}));
     return { status: status };
 }
@@ -5650,6 +6368,7 @@ async function executeTextCommand(action) {
     const physicalIntent = structuralLegacyIntent(action);
     if (physicalIntent) return executeTextStructuralTool(physicalIntent);
     if (action.verb === "bathhouse") return executeTextBathhouseCommand(action);
+    if (action.verb === "bathhouse_arrange") return executeTextBathhouseArrangeCommand();
     if (action.verb === "commitment") return executeTextCommitment(action);
     if (action.verb === "tool") return executeTextWorldToolCommand(action);
     if (action.verb === "object") return executeTextObjectCommand(action);
@@ -5812,7 +6531,7 @@ function textModeDialogueBusy(busy) {
         if (textModeState.dialogue) textModeState.dialogue.resolve();
         textModeState.dialogue = null;
     } else if (textModeState.capture && !textModeState.dialogue) {
-        const latch = { scene: textModeScene(), capture: textModeState.capture };
+        const latch = { scene: textModeScene() };
         const promise = new Promise(function (resolve) { latch.resolve = resolve; });
         textModeState.dialogue = latch;
         textModeState.capture.push(promise);
@@ -5833,11 +6552,22 @@ async function runTextCommandQueue() {
             const beforeCombat = textCombatSnapshot();
             textModeState.capture = [];
             renderTextModeStatus("Doing: " + action.verb);
-            const result = await executeTextCommand(action);
+            let result, held;
+            textModeState.deferBlocked = [];
+            try { result = await executeTextCommand(action); }
+            finally { held = textModeState.deferBlocked || []; textModeState.deferBlocked = null; }
             // Tasks can enqueue another task as they complete. Drain by index.
             for (let i = 0; i < textModeState.capture.length; i++) await textModeState.capture[i];
             textModeState.capture = null;
             if (epoch !== textModeState.epoch) break;
+            if (held.length) {
+                // A not-found failure on a locally parsed action gets one pass through
+                // the AI router, which now knows the objects in the room.
+                const rerouted = result.status === "blocked" && held.some(function (h) { return textFailureIsMiss(h.text); }) ? await textRerouteFailedAction(action, held[0].text) : null;
+                if (epoch !== textModeState.epoch) break;
+                if (rerouted) { textModeState.queue.unshift.apply(textModeState.queue, rerouted); continue; }
+                held.forEach(function (h) { textModeResult("blocked", h.text, h.details); });
+            }
             if (result.status !== "completed") { textModeState.paused = true; break; }
             const combatBoundary = textCombatQueueBoundary(beforeCombat, action);
             if (combatBoundary && textModeState.queue.length) { textModeResult("interrupted", combatBoundary); textModeState.paused = true; break; }
@@ -5862,6 +6592,23 @@ async function runTextCommandQueue() {
         renderTextModeStatus();
         focusTextModeInput();
     }
+}
+
+async function textRerouteFailedAction(action, failure) {
+    const raw = action && action.rawText;
+    if (!raw || action.rerouted || !aiAvailable() || !textModeState.enabled) return null;
+    const scene = textModeScene(), epoch = textModeState.epoch;
+    renderTextModeStatus("Checking what you meant...");
+    let plan = null;
+    try { plan = await interpretTextCommands(raw, { failure: failure }); }
+    catch (e) { plan = null; }
+    finally { renderTextModeStatus(); }
+    if (!textModeState.enabled || epoch !== textModeState.epoch || !textModeSameScene(scene) || !plan || !plan.length) return null;
+    const sig = function (a) { return a.verb + "|" + JSON.stringify(a.args || {}); };
+    if (plan.length === 1 && sig(plan[0]) === sig(action)) return null;
+    plan.forEach(function (a) { a.rerouted = true; });
+    console.info("[Text commands] Router re-matched a failed action:", raw, "->", plan.map(sig));
+    return plan;
 }
 
 function stopTextCommands(announce) {
@@ -5932,6 +6679,9 @@ async function submitTextModeCommand(raw) {
     }
     let local = parseTextCommandBatch(input);
     if (local.error) { textModeResult("blocked", local.error); return; }
+    // Remember each local action's own words (not enumerable, so plans compare
+    // as before) so a not-found failure can be re-sent to the AI router.
+    if (local.actions) { try { const parts = splitTextCommands(input).parts || []; local.actions.forEach(function (a, i) { if (a && typeof a === "object" && parts[i]) Object.defineProperty(a, "rawText", { value: String(parts[i]), enumerable: false, writable: true, configurable: true }); }); } catch (e) {} }
     // A local parse whose person-target matches no one ("talk talk to talk to
     // human") goes to the AI interpreter to infer intent. If the AI is off or
     // can't help, the local action still runs and gives its usual message.
@@ -6884,21 +7634,11 @@ function lootItemQuote(entry, group) {
 }
 
 function createLootItemNameButton(entry, group) {
-    // Browsing is read-only. Resolve this same source/item against live data;
-    // only the resulting action menu needs an execution quote.
-    const player = G.player, room = G.activeRoom, actor = G.activeNPC, mode = G.activeNPCMode;
-    const object = G.activeObject, modal = G.activeItemModal;
+    const fresh = lootItemQuote(entry, group);
     const name = labelWithCount(getItemName(group.item), group.quantity) + (group.slot ? " (worn)" : "");
     const button = createCombatButton(name, function () {
-        if (button.isConnected === false || G.player !== player || G.activeRoom !== room || G.activeNPC !== actor ||
-            G.activeNPCMode !== mode || G.activeObject !== object || G.activeItemModal !== modal) return { status: "blocked", outputPublished: true };
-        if (sharedChoiceState.menu) return { status: "needs_input", outputPublished: true };
-        const current = lootItemSourceEntry(entry.source, entry.kind);
-        const liveGroup = current && lootItemGroup(current, group);
-        if (!current || !liveGroup || current.kind === "body" && !/^(corpse|unconscious)$/.test(current.source.bodyState || "")) return returnToLootSource(entry);
-        const reason = lootItemBlock(current, liveGroup);
-        if (reason) return sharedChoiceResult("blocked", reason);
-        return openLootItemDetail(current, liveGroup);
+        if (button.isConnected === false || !fresh()) return sharedChoiceResult("blocked", "That loot list changed. Open it again.");
+        return openLootItemDetail(entry, group);
     });
     button.className += " loot-item-name";
     button.title = "Description, comparison and item actions";
@@ -6926,7 +7666,7 @@ function lootItemInfo(entry, group) {
         ? ["Compared with your " + getItemName(G.player.rucksack) + ": " + describeExamineDeltas(item, G.player.rucksack).text + "."]
         : buildEquipmentCompareLines(item, slot, false);
     return { name: getItemName(item), quantity: group.quantity, source: getEntityName(entry.source),
-        description: item.examineText || item.description || "You look over " + withIndefiniteArticle(getItemName(item)) + ".",
+        description: getRecipeProtectedText(item) || item.examineText || item.description || "You look over " + withIndefiniteArticle(getItemName(item)) + ".",
         stats: stats, comparison: comparison };
 }
 
@@ -6947,14 +7687,7 @@ function lootItemEquipmentSource(origin, item, list) {
 }
 
 function returnToLootSource(entry) {
-    // Refresh by source identity, never by a possibly reused name or row index.
-    entry = lootItemSourceEntry(entry.source, entry.kind);
-    if (!entry || !textLootReady(entry) || entry.kind === "body" && !/^(corpse|unconscious)$/.test(entry.source.bodyState || "")) {
-        textModeState.lootContext = null;
-        if (G.activeItemModal) closeItemModal();
-        if (typeof returnToRoomView === "function") returnToRoomView();
-        return textModeState.enabled ? textLootShow("containers") : { status: "completed", outputPublished: true };
-    }
+    if (!textLootFresh(entry) || !textLootReady(entry)) return sharedChoiceResult("blocked", "That loot source is no longer available.");
     if (textModeState.enabled) { textLootSelect(entry); return textLootList(entry); }
     if (entry.kind === "fixture") openFixtureCard(entry.source);
     else if (entry.kind === "body") renderRoomObjectActionMenu(entry.source);
@@ -6965,13 +7698,10 @@ function returnToLootSource(entry) {
 function closeLootItemDetail(restore) {
     const state = lootItemDetailState;
     if (!state) return;
-    const scene = state.menu.scene;
-    const sameScene = G.player === state.player && G.activeRoom === state.room && G.activeNPC === scene.npc &&
-        G.activeNPCMode === scene.mode && G.activeObject === scene.object && (state.textMode || G.activeItemModal === state.entry.source);
     lootItemDetailState = null;
     if (sharedChoiceState.menu === state.menu) clearSharedChoiceMenu(state.menu);
-    if (!state.textMode && sameScene) closeItemModal();
-    if (restore && sameScene) return returnToLootSource(state.entry);
+    if (!state.textMode && G.player === state.player && G.activeRoom === state.room && G.activeItemModal === state.entry.source) closeItemModal();
+    if (restore && G.player === state.player && G.activeRoom === state.room) return returnToLootSource(state.entry);
 }
 
 function openLootItemDetail(entry, ref) {
@@ -6995,12 +7725,8 @@ function openLootItemDetail(entry, ref) {
         G.activeItemModal = entry.source;
     }
     const menu = beginSharedChoiceMenu("loot-item", null, info.name, function () {
-        const current = lootItemSourceEntry(entry.source, entry.kind);
-        const liveGroup = current && lootItemGroup(current, group);
-        if (liveGroup && !lootItemBlock(current, liveGroup) && (current.kind !== "body" || /^(corpse|unconscious)$/.test(current.source.bodyState || "")))
-            return openLootItemDetail(current, liveGroup);
-        closeLootItemDetail(false);
-        return returnToLootSource(entry);
+        if (fresh()) return openLootItemDetail(entry, group);
+        return closeLootItemDetail(true);
     });
     menu.preserveView = true;
     const valid = menu.valid;
@@ -7707,7 +8433,7 @@ function serviceStateStamp(value, working) {
     return JSON.stringify(value, working ? function (key, entry) { return key === "grime" ? undefined : entry; } : undefined);
 }
 
-function captureServiceRecovery(presentationOnly) {
+function captureServiceRecovery() {
     const player = G.player, room = G.activeRoom, actor = G.activeNPC, mode = G.activeNPCMode;
     const modal = G.activeItemModal, object = G.activeObject, epoch = textModeState.epoch;
     const sequence = sharedChoiceState.sequence, el = document.getElementById("chatOptionsEl");
@@ -7717,8 +8443,8 @@ function captureServiceRecovery(presentationOnly) {
             G.activeItemModal !== modal || G.activeObject !== object || textModeState.epoch !== epoch ||
             sharedChoiceState.sequence !== sequence || sharedChoiceState.menu ||
             document.getElementById("chatOptionsEl") !== el || el && (el.children.length !== children.length || children.some(function (child, i) { return el.children[i] !== child; })) ||
-            !player || !presentationOnly && (player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing ||
-            G.combatEncounter || roomHasActiveHostile(room) || isRoomCollapsed(room) || typeof isPlayerJailed === "function" && isPlayerJailed() || hasPendingPartyLoot())) return;
+            !player || player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing ||
+            G.combatEncounter || roomHasActiveHostile(room) || isRoomCollapsed(room) || isPlayerJailed() || hasPendingPartyLoot()) return;
         restore();
     };
 }
@@ -7739,142 +8465,33 @@ function showSharedChoiceMenu(menu) {
     return textModeResult("needs_input", menu.title + "\n" + menu.options.map(function (choice, index) { return (index + 1) + ". " + choice.label + (choice.disabled ? " — unavailable" + (choice.reason ? ": " + choice.reason : "") : ""); }).join("\n") + "\nType choose <number> (or the number alone). Use back or cancel where available. Later commands stay paused.", Object.assign({}, menu.publicData || {}, { systemOnly: menu.kind === "world-tools", menu: { id: menu.id, kind: menu.kind }, choices: menu.options.map(function (choice, index) { return { number: index + 1, label: choice.label, response: "choose " + (index + 1), disabled: choice.disabled }; }) }));
 }
 
-function sharedChoiceOwnsScene(menu) {
-    const scene = menu.scene;
-    return sharedChoiceState.menu === menu && menu.ownsView() && G.player === scene.player && G.activeRoom === scene.room &&
-        G.activeNPC === scene.npc && G.activeNPCMode === scene.mode && G.activeItemModal === scene.modal && G.activeObject === scene.object;
-}
-
-function refreshSharedChoiceMenu(menu) {
-    // A stale reply never executes, nor replaces a newer scene/decision.
-    if (!sharedChoiceOwnsScene(menu)) {
-        clearSharedChoiceMenu(menu);
-        return { status: "blocked", outputPublished: true };
-    }
-    clearSharedChoiceMenu(menu);
-    if (hasPendingPartyLoot()) {
-        if (G.activeItemModal && typeof closeItemModal === "function") closeItemModal();
-        // Keep the native completion callback when refreshing an allocation.
-        if (/^loot-(division|objection)$/.test(menu.kind) && typeof menu.refresh === "function") menu.refresh();
-        else if (typeof renderPartyLootDivision === "function") renderPartyLootDivision();
-        return { status: "needs_input", outputPublished: true };
-    }
-    // Rendering current availability is safe even when danger or incapacity
-    // prevents actions. Keep scene/panel ownership and cancellation checks.
-    const recover = captureServiceRecovery(true);
-    let result;
-    recover(function () {
-        if (typeof menu.refresh === "function") {
-            try { result = menu.refresh(); }
-            catch (err) { console.warn("[Choices] refresh failed: " + menu.kind, err); }
-        }
-    });
-    if (sharedChoiceState.menu) return { status: "needs_input", outputPublished: true };
-    // A refresh may have navigated away, published a current list, or rebuilt
-    // native controls. Only the still-owned empty view needs a fallback.
-    recover(function () {
-        if (G.activeItemModal && typeof closeItemModal === "function") closeItemModal();
-        if (G.activeObject && typeof returnToRoomView === "function") returnToRoomView();
-        else restoreSharedChoiceControls(Object.assign({}, menu, { refresh: null }), true);
-    });
-    return result && result.status ? Object.assign({}, result, { outputPublished: true }) : { status: "blocked", outputPublished: true };
-}
-
 async function runSharedChoice(menu, choice, how) {
     if (sharedChoiceState.menu !== menu || !menu.valid()) {
-        // Navigation remains usable after inventory/quote changes, in both
-        // presentations, but only for this exact menu and original scene.
-        const leaving = choice && menu.options.includes(choice) && !choice.disabled && /^(back|cancel|leave)$/.test(choice.meta.action || "");
-        if (leaving && sharedChoiceOwnsScene(menu) && G.player && !G.player.dead && G.player.hp > 0 && G.activeNPCMode !== "combat") {
-            clearSharedChoiceMenu(menu);
-            await choice.run();
-            return { status: "completed", outputPublished: true };
+        const textMode = typeof textModeState !== "undefined" && textModeState.enabled;
+        if (!textMode && how && how.fromButton) {
+            // Menu mode: a visible Back/Leave/Cancel button always works. It only
+            // closes the view, so a stale snapshot is no reason to trap the player.
+            const p = G.player, leaving = choice && /^(back|cancel|leave)$/.test(choice.meta && choice.meta.action || "");
+            if (leaving && menu.ownsView() && p && !p.dead && p.hp > 0 && G.activeNPCMode !== "combat") {
+                clearSharedChoiceMenu(menu);
+                await choice.run();
+                return { status: "completed" };
+            }
+            if (typeof menu.refresh === "function" && menu.ownsView()) { try { menu.refresh(); } catch (err) { console.warn("[Choices] refresh failed", err); } }
+            return sharedChoiceResult("blocked", "That option is no longer available.");
         }
-        refreshSharedChoiceMenu(menu);
-        return { status: "blocked", outputPublished: true };
+        return sharedChoiceResult("blocked", "That choice changed or is no longer available. Type options for the current choices.");
     }
     if (!choice || menu.options.indexOf(choice) < 0 || choice.disabled) return sharedChoiceResult("blocked", choice && choice.reason || "Choose an available option from the list.");
-    if (choice.meta.target && (!isVisibleEntity(choice.meta.target) || getLootMembersInRoom(G.activeRoom).indexOf(choice.meta.target) < 0)) {
-        refreshSharedChoiceMenu(menu);
-        return { status: "blocked", outputPublished: true };
-    }
+    if (choice.meta.target && (!isVisibleEntity(choice.meta.target) || getLootMembersInRoom(G.activeRoom).indexOf(choice.meta.target) < 0)) return sharedChoiceResult("blocked", "That companion is no longer available. Type options to refresh the choices.");
     clearSharedChoiceMenu(menu); // consume before running: no double allocation
-    const recover = captureServiceRecovery(), outputSequence = textModeOutputMeta.seq;
-    let result, failure;
-    const capture = textModeState.capture;
-    try { result = await choice.run(); }
-    catch (err) { failure = err; }
-    if (failure && textModeState.dialogue && textModeState.dialogue.capture === capture) textModeDialogueBusy(false);
-    // Drain registered foreground work even after a rejection. Rebuilding early
-    // would let another choice race the still-running action.
-    if (capture) for (let index = 0; index < capture.length; index++) {
-        try { await capture[index]; }
-        catch (err) {
-            failure = failure || err;
-            capture[index] = Promise.resolve();
-            if (textModeState.dialogue && textModeState.dialogue.capture === capture) textModeDialogueBusy(false);
-        }
-    }
-    if (failure) {
-        console.error("[Choices] Choice failed: " + menu.kind + " / " + choice.id, failure);
-        if (textModeState.dialogue && textModeState.dialogue.capture === capture) textModeDialogueBusy(false);
-        result = { status: "interrupted", message: "That choice was interrupted." };
-    }
-    if (result && result.status === "needs_input") return result;
+    const result = await choice.run();
     // Keep an action's published outcome; a queue pause is not a presentation failure.
-    if (result && result.status && result.status !== "completed") {
-        const published = result.outputPublished || textModeState.events.some(function (event) {
-            return event.seq > outputSequence && (/^(narration|dialogue)$/.test(event.kind) || event.kind === "feedback" && event.status === result.status);
-        });
-        recover(function () {
-            if (!published) sharedChoiceResult(result.status, result.message || "That choice was interrupted.");
-            restoreSharedChoiceControls(menu);
-        });
-        return result;
-    }
     if (result && result.outputPublished) return result;
+    if (result && result.status === "needs_input" && (/^(mausoleum|notice|material|shrine)-/.test(menu.kind) || menu.kind === "structure-magic" || menu.kind === "gift" || /^(nectar|travel|synergy|casting)-/.test(menu.kind))) return result;
+    if (result && result.status && result.status !== "completed") return sharedChoiceResult(result.status, result.message || "The choice could not finish. Pending commands are paused.");
     if (result && result.accepted === false) return sharedChoiceResult("blocked", "The gift was refused; you keep it.");
     return { status: "completed" };
-}
-
-function restoreSharedChoiceControls(menu, presentationOnly) {
-    // Rebuild controls, never reinstall consumed callbacks or replay effects.
-    const fallback = captureServiceRecovery(presentationOnly);
-    if (typeof menu.refresh === "function") {
-        try { menu.refresh(); }
-        catch (err) { console.warn("[Choices] Recovery failed: " + menu.kind, err); }
-    }
-    fallback(function () {
-        const el = document.getElementById("chatOptionsEl");
-        if (el && el.children.length || G.activeItemModal || G.activeObject) return;
-        if (G.combatEncounter || G.activeNPCMode === "combat") {
-            if (G.activeNPC && typeof renderCombatActionMenu === "function") renderCombatActionMenu(G.activeNPC);
-            return;
-        }
-        if (G.activeNPC) {
-            if (!isVisibleEntity(G.activeNPC) || !(G.activeRoom.creatures || []).includes(G.activeNPC) || G.activeNPC.dead || G.activeNPC.hp <= 0 || G.activeNPC.unconscious) {
-                G.activeNPC = null;
-                G.activeNPCMode = null;
-                if (typeof returnToRoomView === "function") returnToRoomView();
-                else {
-                    if (typeof renderRoom === "function") renderRoom();
-                    if (typeof setExitGridVisible === "function") setExitGridVisible(true);
-                }
-                return;
-            }
-            if (/^(talk|respond)$/.test(G.activeNPCMode) && !G.activeNPC.dead && G.activeNPC.hp > 0 && !G.activeNPC.unconscious) {
-                G.activeNPCMode = "talk";
-                if (typeof renderChatOptions === "function") renderChatOptions(G.activeNPC);
-            } else {
-                G.activeNPCMode = "menu";
-                if (typeof renderNPCActionMenu === "function") renderNPCActionMenu(G.activeNPC);
-            }
-        } else {
-            G.activeNPCMode = null;
-            if (typeof renderRoom === "function") renderRoom();
-            if (typeof setExitGridVisible === "function") setExitGridVisible(true);
-        }
-    });
 }
 
 // Async gifts retain their original player/room/NPC and exact stack members.
@@ -7964,11 +8581,46 @@ function textPartyShow(topic) {
 
 function textSharedOptions() {
     const menu = sharedChoiceState.menu;
+    const owned = menu && menu.ownsView();
     if (menu && menu.valid()) return showSharedChoiceMenu(menu);
-    if (menu) return refreshSharedChoiceMenu(menu);
-    if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) {
-        renderPartyLootDivision();
-        return sharedChoiceState.menu ? { status: "needs_input", outputPublished: true } : textModeListOptions();
+    if (menu) clearSharedChoiceMenu(menu);
+    if(menu&&owned&&menu.kind==='guard-checkpoint'&&menu.scene.player===G.player&&menu.scene.room===G.activeRoom&&menu.npc===G.activeNPC&&typeof activeGuardCheckpoint==='function'&&activeGuardCheckpoint())return renderGuardCheckpointMenu(menu.npc);
+    if (menu && menu.kind === "sleep-spot") {
+        if (owned && menu.scene.player === G.player && menu.scene.room === G.activeRoom && menu.scene.npc === G.activeNPC &&
+            menu.scene.mode === G.activeNPCMode && menu.scene.modal === G.activeItemModal && menu.scene.object === G.activeObject &&
+            !getSleepActionBlock(menu.sleepMode, G.activeRoom)) return menu.refresh();
+        return textModeResult("blocked", "Those sleeping choices changed. Use sleep again to review the current places.");
+    }
+    if (menu && owned && /^shrine-/.test(menu.kind)) { returnToRoomView(); return textModeResult("blocked", "That shrine choice changed. Use shrine to inspect it again; no new prayer costs were spent."); }
+    if (menu && owned && menu.kind === "structure-magic") { returnToRoomView(); return textModeResult("blocked", "That structural choice changed. Inspect the exit again."); }
+    if (menu && owned && /^material-/.test(menu.kind)) { closeItemModal(); returnToRoomView(); return textModeResult("blocked", "The item menu changed. Repeat the command; no new action was taken."); }
+    if (menu && owned && /^notice-/.test(menu.kind)) { closeItemModal(); returnToRoomView(); return textModeResult("blocked", "The notice changed. Start the notice command again; nothing was posted."); }
+    if (menu && owned && /^training-/.test(menu.kind)) {
+        if (menu.fixture && !trainingSceneBlock(null, menu.fixture)) return trainingDummyMenu(menu.fixture);
+        if (menu.npc && !trainingSceneBlock(menu.npc, null)) return trainingMenu(menu.npc, menu.kind === "training-forget");
+    }
+    if (menu && owned && menu.kind === "commission-board" && !commissionBoardBlock(menu.commissionBoard)) return openForgeCommissionBoard(menu.commissionBoard);
+    if (menu && owned && /^tailor-/.test(menu.kind) && !tailorServiceBlock(menu.npc)) { return tailorMenu(menu.npc, "services"); }
+    if (menu && owned && /^bathhouse-/.test(menu.kind) && !bathhouseBlock(menu.npc)) return openBathhouseMenu(menu.npc);
+    if (menu && owned && /^casting-/.test(menu.kind) && !castingBlock(menu.caster, menu.scene.mode === "combat")) return menu.refresh();
+    if (menu && owned && /^synergy-/.test(menu.kind) && !synergyActionBlock(menu.room, menu.synergyKind !== "self")) return menu.refresh();
+    if (menu && owned && /^travel-/.test(menu.kind) && !travelNPCBlock(menu.npc, menu.kind.replace("travel-", ""))) { return menu.refresh(); }
+    if (menu && owned && /^nectar-/.test(menu.kind) && !nectarActionBlock(menu.npc)) { return openSlimeNectarMenu(menu.npc, menu.nectarEntry && menu.nectarEntry.key); }
+    if (menu && owned && /^trade-extra-/.test(menu.kind) && !merchantExtraBlock(menu.npc)) { menu.refresh(); return { status: "needs_input" }; }
+    if (menu && owned && /^enchanter-/.test(menu.kind) && !enchanterServiceBlock(menu.npc)) { return enchanterMenu(menu.npc, "services"); }
+    if (menu && owned && /^forge-/.test(menu.kind) && !forgeServiceBlock(menu.npc)) { return forgeMenu(menu.npc, "services"); }
+    if (menu && owned && /^craft-/.test(menu.kind) && !craftSceneBlock()) { menu.refresh(); return sharedChoiceState.menu ? { status: "needs_input" } : textModeResult("blocked", "Repeat the crafting command."); }
+    if (menu && owned && menu.kind === "reading" && !readableActionBlock()) return openTextReadingMenu(menu.readingEntry);
+    if (menu && owned && /^goods-/.test(menu.kind) && textGoodsAvailable()) return openClothierDismantle(menu.npc);
+    if (menu && owned && /^jobs-/.test(menu.kind) && menu.scene.player === G.player && menu.scene.room === G.activeRoom && menu.scene.npc === G.activeNPC && !textModeInCombat() && !roomHasActiveHostile(G.activeRoom) && !isRoomCollapsed(G.activeRoom) && !isPlayerJailed()) {
+        menu.refresh();
+        return sharedChoiceState.menu ? { status: "needs_input" } : textModeResult("blocked", "That work menu is no longer available.");
+    }
+    if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) { renderPartyLootDivision(); return sharedChoiceState.menu ? showSharedChoiceMenu(sharedChoiceState.menu) : textModeResult("blocked", "That loot decision is no longer available."); }
+    if (menu && owned && (menu.kind === "companion" || menu.kind === "gift") && G.activeNPC === menu.npc && textModeVisibleNPCs().indexOf(menu.npc) >= 0 && !textModeInCombat()) {
+        if (menu.kind === "companion" && isCompanionNPC(menu.npc)) openCompanionGearMenu(menu.npc);
+        else if (menu.kind === "gift") openGiveMenu(menu.npc);
+        return sharedChoiceState.menu ? { status: "needs_input" } : textModeResult("blocked", "That menu is no longer available.");
     }
     return textModeListOptions();
 }
@@ -8505,7 +9157,7 @@ function readableActions(entry) {
         if (isGenericLoreItem(item)) return readLoreNoteEntry(entry.key, context);
         if (isSpellbookItem(item)) return describeSpellbookText(player, item);
         if (isSpellScrollItem(item)) { const spell = WIZARD_SPELLS[item.spellId]; return getItemName(item) + "\n" + spell.summary + "\nCopy progress: " + (item.copyProgress || 0) + "%. Use copy <scroll> for one sitting."; }
-        if (isPoisonRecipeNote(item)) { const recipe = POISON_RECIPES[item.poisonRecipeKey]; return recipe.name + ": " + (item.description || "Study this note to learn its recipe."); }
+        if (isPoisonRecipeNote(item)) return getPoisonRecipeNoteText(item);
         return item.description || "There is no authored passage in this item. Study actions, if available, are listed separately.";
     });
     if (isClassPrimerItem(item)) add("study", "Study primer (" + CLASS_PRIMER_TURNS + " turns; uses one book)", getPrimerBlockReason(item), function (context) { return studyClassPrimer(entry.key, context); });
@@ -8743,7 +9395,7 @@ function craftQuoteSpec(kind,data) {
     if(kind==="process"){
         const steps=data.steps,info=getAlchemyProcessInfo(steps),keys=info.adds.map(function(s){return s.key;});
         const recipe=info.acts.length&&!autoPrepIsReplay(steps)?findAlchemyRecipeFor(keys):null;
-        const canonical=recipe&&keys.every(function(k){return countAlchemyIngredient(k)>0;});
+        const canonical=recipe&&!getAlchemyIngredientBlock(keys,!!data.autoPrep);
         return {reason:getAlchemyStartBlockReason(steps,!!data.autoPrep),revision:canonical?JSON.stringify(recipe):"",title:"Your queued process: "+describeAlchemyQueue(steps),stamina:ALCHEMY_STAMINA,turns:getCraftAlchemyTurns(canonical?0:steps.length,countCraftAutoPrep(keys,canonical||data.autoPrep)),ingredients:keys.map(function(k){return getAlchemyIngredientDef(k).name;})};
     }
     if(getRogueRank(G.player)<ROGUE_POISON_MIN_RANK)return {reason:"You need poison training to work at this bench."};
@@ -8811,6 +9463,8 @@ function parseTextCraftCommand(raw) {
     m=/^dip\s+(.+?)(?:\s+in\s+(?:the\s+)?(?:mixture|bowl))?$/i.exec(raw);if(m)return {verb:"craft",args:{action:"dip",target:textCommandUnquote(m[1])}};
     m=/^coat(?:\s+weapon)?\s+with\s+(.+)$/i.exec(raw);if(m)return {verb:"craft",args:{action:"coat",target:textCommandUnquote(m[1])}};
     m=/^name\s+mixture(?:\s+(.+))?$/i.exec(raw);if(m)return {verb:"craft",args:{action:"name",target:textCommandUnquote(m[1]||"")}};
+    m=/^recipe\s+(.+)$/i.exec(raw);if(m)return {verb:"craft",args:{action:"recipe",target:textCommandUnquote(m[1])}};
+    m=/^load(?:\s+recipe)?(?:\s+(.+))?$/i.exec(raw);if(m)return {verb:"craft",args:{action:"load",target:textCommandUnquote(m[1]||"")}};
     return null;
 }
 function textCraftShow(topic) {
@@ -8823,7 +9477,7 @@ function textCraftShow(topic) {
     if(topic==="bowl")return textModeResult("completed",table?describeAlchemyBowl(table)+". Use bottle mixture, taste mixture, dab mixture, drink mixture, dip <item>, or discard bowl.":"There is no visible alchemy table here.",{craft:{view:"bowl",description:table?describeAlchemyBowl(table):"No bowl."}});
     const recipes=Object.keys(ALCHEMY_RECIPES).filter(function(id){return a.known[id];}).map(function(id){const r=ALCHEMY_RECIPES[id];return {name:r.name,ingredients:r.ingredients.map(function(k){return getAlchemyIngredientDef(k).name;}),blockedReason:getAlchemyBlockReason()||getAlchemyIngredientBlock(r.ingredients,true)};});
     const poisons=Object.keys(POISON_RECIPES).filter(function(id){return known[id];}).map(function(id){const r=POISON_RECIPES[id];return {name:r.name,ingredients:r.ingredients.map(function(k){return POISON_INGREDIENTS[k].name;}),blockedReason:getPoisonBrewBlockReason(r)};});
-    return textModeResult("completed","Known recipes:\n"+recipes.concat(poisons).map(function(r){return r.name+": "+r.ingredients.join(" + ")+(r.blockedReason?" — unavailable: "+r.blockedReason:"");}).join("\n")+"\nUse alchemy or poisons for numbered actions. Brew <recipe> reviews ingredients, stamina and turns before confirmation. Experiment outcomes remain unknown until tested.",{craft:{view:"recipes",recipes:recipes,poisons:poisons}});
+    return textModeResult("completed","Known recipes:\n"+recipes.concat(poisons).map(function(r){return r.name+": "+r.ingredients.join(" + ")+(r.blockedReason?" — unavailable: "+r.blockedReason:"");}).join("\n")+"\nUse alchemy or poisons for numbered actions. Brew <recipe> reviews ingredients, stamina and turns before confirmation. Use recipe <name> to read one and load <name> to set its steps on the workbench. Experiment outcomes remain unknown until tested.",{craft:{view:"recipes",recipes:recipes,poisons:poisons}});
 }
 function craftMatches(menu,action,target) {
     let options=menu.options.filter(function(c){return c.meta.action===action;});
@@ -8844,6 +9498,21 @@ async function routeCraftIntent(action,foreground) {
     if(verb==="poisons"){openPoisonMenu();return {status:"needs_input"};}
     if(verb==="poisonmix"){if(getRogueRank(G.player)<ROGUE_POISON_MIN_RANK)return textModeResult("blocked","You need poison training to experiment at this bench.");openPoisonMixMenu(null);return {status:"needs_input"};}
     if(verb==="mix"){openAlchemyQueueMenu();return {status:"needs_input"};}
+    if(verb==="recipe"){
+        if(!menu||menu.kind!=="craft-alchemy")openAlchemyMenu();
+        return chooseCraftIntent(sharedChoiceState.menu,"recipe",target,foreground);
+    }
+    if(verb==="load"){
+        if(menu&&menu.kind==="craft-recipe")return chooseCraftIntent(menu,"load","",foreground);
+        if(!target)return textModeResult("needs_input","Say which recipe: load recipe <name>.");
+        if(!menu||menu.kind!=="craft-alchemy")openAlchemyMenu();
+        menu=sharedChoiceState.menu;
+        const picks=craftMatches(menu,"recipe",target);
+        if(picks.length!==1)return textModeResult("needs_input","Choose one recipe by number from the menu.");
+        const opened=await runSharedChoice(menu,picks[0]);
+        if(opened.status!=="completed"&&opened.status!=="needs_input")return opened;
+        return chooseCraftIntent(sharedChoiceState.menu,"load","",foreground);
+    }
     if(verb==="brew"){
         if(!menu||!/^craft-(alchemy|poisons)$/.test(menu.kind))openAlchemyMenu();
         menu=sharedChoiceState.menu;
@@ -13191,7 +13860,7 @@ async function executeTextAdjudication(action) {
         if (!textModeSameScene(scene) || epoch !== textModeState.epoch) return textModeResult("interrupted", "The moment passed while you considered it.", { systemOnly: true });
         entry = adjudicationFresh(entry);
         if (!entry) return textModeResult("interrupted", "That object is no longer within reach.");
-        if (!ruling) return textModeResult("blocked", "I can't see how to make that work.", { systemOnly: false, commandFailure: "unresolved" });
+        if (!ruling) return textModeResult("blocked", "I can't see how to make that work.", { systemOnly: true, commandFailure: "unresolved" });
         keys = adjudicationKeys(entry, actionText, ruling);
         adjudicationRemember(keys, actionText + " " + entry.label, ruling);
     } else saved.uses = (saved.uses || 0) + 1;
@@ -24831,6 +25500,22 @@ function maybeGiveNPCKey(npc, room) {
     const guard = typeof isGuardNPC === "function" && isGuardNPC(npc);
     const chance = staff ? KEY_STAFF_CHANCE : (guard ? KEY_GUARD_CHANCE : KEY_OTHER_CHANCE);
     if (Math.random() >= chance) return;
+    
+    // Bathhouse staff get a master key that opens all bathhouse doors
+    const isBathhouseStaff = ["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner"].includes(npc.role);
+    if (isBathhouseStaff && room.buildingType === "Bathhouse") {
+        const key = assignLootUID({
+            id: "bathhouse-master-key",
+            name: "Bathhouse Master Key",
+            type: ["misc", "key"],
+            value: 5,
+            description: "A master key that opens all doors in the bathhouse.",
+            opensLockId: BATHHOUSE_MASTER_KEY_ID
+        });
+        npc.inventory.push(key);
+        return;
+    }
+    
     const key = createBoundKey(room);
     if (key) npc.inventory.push(key);
 }
@@ -33205,7 +33890,7 @@ function getKnownAdjacentRoomCoords(room) {
 // player opens doors for them). Every move goes through relocateNPCBetweenRooms,
 // so wandering, fleeing, guards answering trouble and thieves all obey it.
 const NPC_GUARD_FORCE_CHANCE = 0.35;
-const NPC_STAFF_KEY_ROLES = ["Bathkeeper", "Innkeeper", "Shopkeeper", "Vendor", "Bartender", "Blacksmith", "Archivist", "Healer", "Priest", "Guildmaster"];
+const NPC_STAFF_KEY_ROLES = ["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Innkeeper", "Shopkeeper", "Vendor", "Bartender", "Blacksmith", "Archivist", "Healer", "Priest", "Guildmaster"];
 
 function getNPCExitDirTo(room, toCoords) {
     if (!room || !room.exits) return null;
@@ -37496,6 +38181,63 @@ function guideSay(npc, text) {
 function completeGuidedArrival(g, text) {
     if (getGuiding() !== g || G.activeRoom.coords !== g.destKey || guideBlocked()) return "blocked";
     const npc = g.npc;
+    
+    // Check if this is a bathhouse service arrangement
+    const isBathhouseService = npc && npc._bathhouseServicePending;
+    
+    if (isBathhouseService) {
+        // This is a bathhouse service - unlock the door and start intimacy encounter
+        const room = G.activeRoom;
+        const pending = npc._bathhouseServicePending;
+        
+        // Find the door from the hallway to this private room
+        let entryDir = null;
+        for (const dir in room.exits) {
+            const exitCoords = room.exits[dir];
+            const exitRoom = G.roomMap[exitCoords];
+            if (exitRoom && exitRoom.type !== "Private Bath Chamber") {
+                entryDir = dir;
+                break;
+            }
+        }
+        
+        // Unlock the door if it exists
+        if (entryDir && room.locks && room.locks[entryDir] && room.locks[entryDir].state === "locked") {
+            // Check if worker has the master key
+            const hasKey = npc.inventory && npc.inventory.some(item => 
+                item && item.opensLockId === BATHHOUSE_MASTER_KEY_ID
+            );
+            
+            if (hasKey) {
+                // Unlock the door to let player in
+                setExitLockState(room, entryDir, "unlocked");
+                
+                // Narrative: worker unlocks the door
+                guideAct(npc, `${npc.name || "The attendant"} uses their master key to unlock the door, gestures for you to enter the private chamber, then locks it behind you for privacy.`);
+                
+                // Lock the door for privacy
+                setExitLockState(room, entryDir, "locked");
+            }
+        }
+        
+        // End guiding
+        endGuiding(g, "");
+        
+        // Clean up the pending service flag
+        delete npc._bathhouseServicePending;
+        
+        // Start intimacy encounter with the worker
+        if (typeof window.startIntimacyEncounter === "function") {
+            if (typeof window.setIntimacyNPC === "function") {
+                window.setIntimacyNPC(npc);
+            }
+            window.startIntimacyEncounter(npc, "bathhouseService");
+        }
+        
+        saveGameState();
+        return "arrived";
+    }
+    
     const canTalk = !guideDecisionPending() && canConverseWithNPC(npc);
     endGuiding(g, "");
     applyNPCImpact(npc, { mood: 1, favor: 2, intent: "friendly", markMet: true, actionTag: "led-player" });
@@ -37800,6 +38542,7 @@ const LODGING_DAY_TURNS = typeof STORY_DAY_TURNS === "number" ? STORY_DAY_TURNS 
 const LODGING_WEEK_DAYS = 7;
 const LODGING_WEEKLY_RENT = 35;       // a week of nightly tokens would be 42
 const LODGING_KEY_ID = "room-key";
+const BATHHOUSE_MASTER_KEY_ID = "bathhouse-master-key";
 
 function getLodgingWeekTurns() { return LODGING_DAY_TURNS * LODGING_WEEK_DAYS; }
 
@@ -41242,6 +41985,7 @@ function buildItemExamineInstruction(item) {
 
 async function generateItemExamineText(item) {
     if (!item) return null;
+    if (isPoisonRecipeNote(item)) { delete item.examineText; return getPoisonRecipeNoteText(item); }
     if (item.examineText) return item.examineText;
 
     let text = null;
@@ -57549,6 +58293,8 @@ function chooseChatOption(option) {
     if (choice.action === "conversation-group") return showConversationActionMenu(npc, choice.conversationGroup);
     if (choice.action === "contact-hug") return performPlayerInteraction(npc, { family: "contact", action: "give them a hug" });
     if (choice.service) return requestNPCService(npc, choice.service);
+    if (choice.action === "bathhouse_arrange_private") return openBathhousePrivateServiceMenu(npc, choice);
+    if (choice.action === "bathhouse_inquire_private") return handleBathhouseInquirePrivate(npc, choice);
     if (npc && npc.guide) _guideReplySequence += 1;
     
     // Debug: Log conversation action selection
@@ -59912,7 +60658,15 @@ function renderRoom() {
     if (!room) return;
     if (room.type === "Portal Chamber" && typeof syncPortalChamberWaygates === "function") syncPortalChamberWaygates(room);
     if (typeof ensureUndergroundStairRoutes === "function") ensureUndergroundStairRoutes();
-    if (typeof ensureTownBathhouse === "function") ensureTownBathhouse();
+    if (typeof ensureZoneBathhouse === "function") {
+        // Create bathhouse for the current zone if needed
+        const room = G.activeRoom;
+        if (room && room.zone) {
+            ensureZoneBathhouse(room.zone);
+        }
+    } else if (typeof ensureTownBathhouse === "function") {
+        ensureTownBathhouse();
+    }
     if (typeof ensureSettlementMausoleum === "function") ensureSettlementMausoleum();
     if (typeof ensureMausoleumCapacities === "function") ensureMausoleumCapacities();
     if (typeof ensureRoomImage === "function") ensureRoomImage(room);
@@ -64235,6 +64989,18 @@ function isPoisonVialItem(item) {
 
 function isPoisonRecipeNote(item) {
     return !!(item && item.poisonRecipeKey && POISON_RECIPES[item.poisonRecipeKey]);
+}
+
+// Recipe text is rules text: it is always rebuilt from the recipe data and is never
+// replaced by an AI "examine" paragraph (see generateItemExamineText).
+function getPoisonRecipeNoteText(item) {
+    const r = isPoisonRecipeNote(item) ? POISON_RECIPES[item.poisonRecipeKey] : null;
+    if (!r) return "";
+    const names = r.ingredients.map(function (i) { return POISON_INGREDIENTS[i] ? POISON_INGREDIENTS[i].name : i; });
+    return "Recipe: " + r.name + ". Ingredients: " + names.join(" + ") + ". Needs " + getClassRankName(r.minRank) + " subterfuge to brew. " + describePoisonEffect(r) + ". Study the note to learn it; it is brewed at a poison bench.";
+}
+function getRecipeProtectedText(item) {
+    return isPoisonRecipeNote(item) ? getPoisonRecipeNoteText(item) : "";
 }
 
 function getPlayerPoisonVials(player) {
@@ -71776,7 +72542,7 @@ async function startAlchemyProcess(steps, autoPrep) {
 
     // A queue that is a defined recipe, with some heat or work, is that recipe.
     const recipe = info.acts.length && !autoPrepIsReplay(steps) ? findAlchemyRecipeFor(addKeys) : null;
-    if (recipe && addKeys.every(function (k) { return countAlchemyIngredient(k) > 0; })) {
+    if (recipe && !getAlchemyIngredientBlock(addKeys, !!autoPrep)) {
         alchemyQueue = [];
         return await attemptAlchemyRecipe(recipe.id);
     }
@@ -71865,6 +72631,17 @@ function openAlchemyMenu(message) {
         }));
     });
     appendCombatGroup(el, `Recipes (review before brewing) - you work as ${getAlchemyRank(player) < 1 ? "an untrained hand" : "a " + getAlchemyRankName(getAlchemyRank(player)).toLowerCase() + " alchemist"}`, recipeButtons);
+
+    // Every known recipe and tried mixture can be read, loaded onto the workbench, or brewed from there.
+    const readButtons = Object.keys(ALCHEMY_RECIPES).filter(function (id) { return a.known[id]; }).map(function (id) {
+        const r = ALCHEMY_RECIPES[id];
+        return craftButton("Read: " + r.name, craftIntent(function () { openAlchemyRecipeMenu("recipe", id); }, "recipe", r.name, id), { title: `${describeAlchemyIngredients(r.ingredients)}. Read the method, or load it onto the workbench.` });
+    });
+    Object.keys(a.mixLog).filter(function (sig) { const d = a.mixLog[sig]; return d && d.tested && Array.isArray(d.steps) && d.steps.length; }).forEach(function (sig) {
+        const d = a.mixLog[sig], nm = d.playerName || "Untitled " + d.vial + " mixture";
+        readButtons.push(craftButton("Read: " + nm, craftIntent(function () { openAlchemyRecipeMenu("mixture", sig); }, "recipe", nm, sig), { title: `${describeAlchemyQueue(d.steps)}. Read it, or load the steps onto the workbench.` }));
+    });
+    if (readButtons.length) appendCombatGroup(el, "Read a recipe (and load it onto the workbench)", readButtons);
 
     // Mixtures you have tried but not yet named.
     const unnamed = Object.keys(a.mixLog).filter(function (sig) { const d = a.mixLog[sig]; return d && d.tested && !d.playerName && d.kind !== "nothing" && sig.indexOf("recipe:") !== 0; });
@@ -72008,14 +72785,15 @@ function openAlchemyQueueMenu(message) {
     claimCraftDraft();
     const craftMenu = beginCraftMenu("queue", "Process: " + describeAlchemyQueue(alchemyQueue), function () { openAlchemyQueueMenu(); });
     const craftButton = function (label, run, opts) { return createCraftButton(craftMenu, label, run, opts); };
-    const startBlock = getAlchemyStartBlockReason(alchemyQueue, false);
+    const queueAutoPrep = isLoadedRecipeQueue();
+    const startBlock = getAlchemyStartBlockReason(alchemyQueue, queueAutoPrep);
     const full = alchemyQueue.length >= ALCHEMY_MAX_STEPS;
     appendCombatGroup(el, "Add a step", [
         craftButton("Ingredient...", craftIntent(function () { openAlchemyIngredientPicker(); }, "ingredient", "", ""), { disabled: full, title: full ? "The queue is full." : "Any plant in any form, or any consumable in your pack." }),
         craftButton("Action...", craftIntent(function () { openAlchemyActionPicker(); }, "action", "", ""), { disabled: full, title: full ? "The queue is full." : "Boil, stir, simmer or extract." })
     ]);
     appendCombatGroup(el, "", [
-        craftButton(`Start (${alchemyQueue.length} step${alchemyQueue.length === 1 ? "" : "s"})`, craftIntent(function () { return quoteCraft("process", { steps: alchemyQueue.map(function (s) { return Object.assign({}, s); }), autoPrep: false }); }, "start", "", ""), {
+        craftButton(`Start (${alchemyQueue.length} step${alchemyQueue.length === 1 ? "" : "s"})`, craftIntent(function () { return quoteCraft("process", { steps: alchemyQueue.map(function (s) { return Object.assign({}, s); }), autoPrep: queueAutoPrep }); }, "start", "", ""), {
             disabled: !!startBlock, title: startBlock || "Begin. Costs stamina and a few turns, and the result fills the extraction bowl."
         }),
         craftButton("Undo last", craftIntent(function () { alchemyQueue.pop(); openAlchemyQueueMenu(); }, "undo", "", ""), { disabled: !alchemyQueue.length }),
@@ -72023,6 +72801,77 @@ function openAlchemyQueueMenu(message) {
         craftButton("Back", craftIntent(function () { alchemyQueue = []; openAlchemyMenu(); }, "back", "", ""))
     ]);
     setNarration(message || `On the table, in order: ${describeAlchemyQueue(alchemyQueue)}.`);
+    publishCraftMenu(craftMenu, el);
+}
+
+// ── readable recipes ─────────────────────────────────────────────────────
+// A recipe page is built only from recipe data (never AI text). From it the sequence
+// can be loaded onto the workbench queue, and brewed if the ingredients are in the pack.
+function getAlchemyRecipeSteps(recipe) {
+    const steps = recipe.ingredients.map(function (k) { const d = getAlchemyIngredientDef(k); return { t: "add", key: k, label: d ? d.name : k }; });
+    steps.push({ t: "act", a: recipe.heatAction && ALCHEMY_ACTIONS[recipe.heatAction] ? recipe.heatAction : "simmer" });
+    return steps;
+}
+
+function isLoadedRecipeQueue() {
+    return !!(alchemyQueue.recipeSig && alchemyQueue.recipeSig === getAlchemyProcessSignature(alchemyQueue));
+}
+
+function getAlchemyRecipeEntry(kind, id) {
+    const state = ensureAlchemyState(G.player);
+    if (kind === "recipe") {
+        const r = ALCHEMY_RECIPES[id];
+        if (!r || !state.known[id]) return null;
+        const steps = getAlchemyRecipeSteps(r);
+        return {
+            name: r.name, steps: steps, loadedAutoPrep: true,
+            text: `${r.name}. Ingredients: ${describeAlchemyIngredients(r.ingredients)}. Method: ${describeAlchemyQueue(steps)}. Makes ${r.yield}. Needs a steady hand (DC ${r.dc}). Prepared plants are used first; raw ones are prepared for you.`,
+            brewBlock: function () { return getAlchemyBlockReason() || getAlchemyIngredientBlock(r.ingredients, true); },
+            brew: function () { return quoteCraft("recipe", { id: id }); }
+        };
+    }
+    const d = state.mixLog[id];
+    if (!d || !d.tested || !Array.isArray(d.steps) || !d.steps.length) return null;
+    const nm = d.playerName || "Untitled " + d.vial + " mixture";
+    const adds = d.steps.filter(function (s) { return s.t === "add"; }).map(function (s) { return s.key; });
+    return {
+        name: nm, steps: d.steps.map(function (s) { return Object.assign({}, s); }), loadedAutoPrep: false,
+        text: `${nm}. Method: ${describeAlchemyQueue(d.steps)}. You noticed that it ${describeObservedEffect(d)}.${d.sideEffectKnown ? " Afterwards, you seem to get " + d.sideEffectKnown + "." : ""} It fills the extraction bowl.`,
+        brewBlock: function () { return getAlchemyBlockReason() || getAlchemyIngredientBlock(adds, true) || (findAlchemyTableFixture(G.activeRoom) && getAlchemyBowl(findAlchemyTableFixture(G.activeRoom)) ? "The extraction bowl still has something in it." : ""); },
+        brew: function () { const steps = d.steps.map(function (s) { return Object.assign({}, s); }); steps.replay = true; return quoteCraft("process", { steps: steps, autoPrep: true }); }
+    };
+}
+
+function loadAlchemyRecipeIntoQueue(entry) {
+    const block = getAlchemyBlockReason();
+    if (block) { setNarration(block); return sharedChoiceResult("blocked", block); }
+    claimCraftDraft();
+    const loaded = entry.steps.map(function (s) { return Object.assign({}, s); });
+    if (loaded.length > ALCHEMY_MAX_STEPS) { setNarration(`That sequence is too long for the workbench (${ALCHEMY_MAX_STEPS} steps at most).`); return sharedChoiceResult("blocked", "That sequence is too long."); }
+    alchemyQueue = loaded;
+    if (entry.loadedAutoPrep) alchemyQueue.recipeSig = getAlchemyProcessSignature(loaded);
+    const adds = loaded.filter(function (s) { return s.t === "add"; }).map(function (s) { return s.key; });
+    const missing = getAlchemyIngredientBlock(adds, !!entry.loadedAutoPrep);
+    openAlchemyQueueMenu(`You set out ${entry.name} on the workbench, in order: ${describeAlchemyQueue(loaded)}. ` + (missing ? `You cannot brew it yet. ${missing}` : "You have what it needs. Start when you are ready."));
+}
+
+function openAlchemyRecipeMenu(kind, id) {
+    const el = document.getElementById("chatOptionsEl");
+    if (!el) return;
+    const entry = getAlchemyRecipeEntry(kind, id);
+    if (!entry) { openAlchemyMenu("That recipe is no longer available."); return; }
+    G.activeNPCMode = "alchemy";
+    el.innerHTML = "";
+    const craftMenu = beginCraftMenu("recipe", "Recipe: " + entry.name, function () { openAlchemyRecipeMenu(kind, id); });
+    const craftButton = function (label, run, opts) { return createCraftButton(craftMenu, label, run, opts); };
+    const block = getAlchemyBlockReason();
+    const brewBlock = entry.brewBlock();
+    appendCombatGroup(el, "", [
+        craftButton("Load into workbench", craftIntent(function () { return loadAlchemyRecipeIntoQueue(entry); }, "load", entry.name, id), { disabled: !!block, title: block || "Set these steps out on the workbench, ready to start. You can still change them." }),
+        craftButton("Brew now", craftIntent(function () { return entry.brew(); }, "brew", entry.name, id), { disabled: !!brewBlock, title: brewBlock || "Review the costs, then brew it from what is in your pack." }),
+        craftButton("Back", craftIntent(function () { openAlchemyMenu(); }, "back", "", ""))
+    ]);
+    setNarration(entry.text);
     publishCraftMenu(craftMenu, el);
 }
 
@@ -80277,7 +81126,7 @@ function openItemModal(item) {
 
     const name = getEntityName(item);
     titleEl.textContent = name.charAt(0).toUpperCase() + name.slice(1);
-    descEl.textContent = item.examineText || item.description || `You look over ${withIndefiniteArticle(name)}. Nothing about it stands out.`;
+    descEl.textContent = getRecipeProtectedText(item) || item.examineText || item.description || `You look over ${withIndefiniteArticle(name)}. Nothing about it stands out.`;
 
     const statBits = [];
     const itemTypes = Array.isArray(item.type) ? item.type.filter(Boolean) : [];
@@ -82207,6 +83056,8 @@ function ttsRenderSettings() {
         : "Voice input isn't available in this browser (Opera, Brave and Firefox have no speech service). Chrome supports it. On Windows, Win+H types what you say into the command box.";
     ttsSetControl("ttsTurnCueInput", "checked", !!st.turnCue);
     ttsSetControl("ttsUrgentCueInput", "checked", !!st.urgentCue);
+    ttsSetControl("ttsFailCueInput", "checked", st.failCue !== false);
+    ttsSetControl("ttsFailNarrateInput", "checked", st.failNarrate === true);
     ttsSetControl("ttsThinkingToneInput", "checked", !!st.thinkingTone);
     ["turnCueUrl", "urgentCueUrl", "thinkingToneUrl"].forEach(function (key) {
         const el = document.getElementById("tts" + key.charAt(0).toUpperCase() + key.slice(1) + "Input");
@@ -84099,6 +84950,15 @@ function selectNPC(npc, options = {}) {
         window.recomputeNPCAttraction(npc);
     }
 
+    // Auto-open bathhouse service menu for bathhouse staff (Bathkeeper, BathhouseAttendant, BathhousePractitioner)
+    // Also check for matron/owner roles
+    const bathhouseRoles = ["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Matron", "Owner"];
+    if (bathhouseRoles.includes(npc.role) && typeof openBathhouseMenu === "function" && typeof isPublicBathhouseStaff === "function" && isPublicBathhouseStaff(npc)) {
+        // Small delay to ensure UI is ready
+        setTimeout(() => openBathhouseMenu(npc), 50);
+        return;
+    }
+
     const previousNPC = G.activeNPC;
     const isNewNPC = !previousNPC ||
         (previousNPC.id && npc.id ? previousNPC.id !== npc.id : previousNPC !== npc);
@@ -84128,14 +84988,6 @@ function selectNPC(npc, options = {}) {
     G.activeObject = null;
     G.activeNPCMode = "menu";
 
-    // Auto-open bathhouse service menu for bathhouse staff (Bathkeeper, BathhouseAttendant, BathhousePractitioner)
-    // Also check for matron/owner roles
-    const bathhouseRoles = ["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Matron", "Owner"];
-    if (bathhouseRoles.includes(npc.role) && typeof openBathhouseMenu === "function" && typeof isPublicBathhouseStaff === "function" && isPublicBathhouseStaff(npc)) {
-        // Small delay to ensure UI is ready
-        setTimeout(() => openBathhouseMenu(npc), 50);
-        return;
-    }
     document.getElementById("npcPlaceholderEl").style.display = "none";
     document.getElementById("npcDetailEl").classList.add("active");
     refreshNPCPortraitIfStale(npc);
@@ -87705,7 +88557,7 @@ function openEquipmentExamine(item, options) {
 
     const name = getItemName(item);
     titleEl.textContent = name.charAt(0).toUpperCase() + name.slice(1);
-    descEl.textContent = item.examineText || item.description || ("You look over " + withIndefiniteArticle(name) + ".");
+    descEl.textContent = getRecipeProtectedText(item) || item.examineText || item.description || ("You look over " + withIndefiniteArticle(name) + ".");
 
     const slot = opts.slot || getItemEquipSlot(item);
     const lines = buildEquipmentExamineLines(item, slot).concat(buildItemEffectLines(item)).concat(buildEquipmentCompareLines(item, slot, !!opts.equipped));
