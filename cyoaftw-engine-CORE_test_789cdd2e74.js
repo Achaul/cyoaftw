@@ -3954,6 +3954,7 @@ function textNPCServicesShow() {
 
 
 const TEXT_COMMANDS = [
+    { id: "fighting", conversationActions: true, args: [], aliases: ["fighting", "fighting experience", "ask about fighting", "ask about their fighting"], example: "talk to human; fighting; show fighting; how fighting", description: "Ask the current humanoid about their fighting experience through the shared scripted conversation action. Free; no AI call, combat roll or hidden tactical score is shown. The answer uses current fights survived, practice, class training and guard experience. Later queued commands pause after the reply." },
     {id:'checkpoint',checkpoint:true,args:['action'],aliases:['checkpoint','gate entry','state business','pay toll','ask toll waiver','refuse entry questions','turn back'],example:'checkpoint; state business trade; state business work; state business visit; state business official; pay toll; ask toll waiver; turn back; show checkpoint; how checkpoint',description:'Answer an actual guard checkpoint using shared conversation choices. Explain lawful business, then pay a two-coin day toll or verify local business for a waiver. One hardship appeal costs one turn and a Charisma check. Refusing blocks onward movement; the return exit stays available. No payment or admission comes from AI narration.'},
     { id: "mausoleum", mausoleum: true, args: ["action", "target", "niche", "message"], aliases: ["mausoleum", "tomb", "niches", "plaques", "inter", "entomb", "engrave", "plaque"], example: 'mausoleum; inter body; inter body Mira; engrave niche 1 "Always remembered"; show niches; how mausoleum', description: "A mausoleum has fifty permanent body niches per burial vault. Interment requires a confirmed deceased NPC here or carried by you, one turn, no gold and separate confirmation. No retrieval service is available yet. Plaques include the recorded name and your exact single-line message (1 to 240 characters), cost five gold and one turn, and require a separate numbered confirmation. A working Keeper of the Quiet must be available for engraving. Each niche accepts one plaque. Back/cancel are free; continue explicitly resumes an older batch. When all existing vaults are full, another fifty-niche floor opens automatically. Bier Bearers collect the dead in pairs during working hours, using safe same-zone routes. No player dispatch or construction command is needed." },
     { id: "bathhouse", bathhouse: true, args: ["action"], aliases: ["bathhouse", "baths", "spa", "take a bath", "get bathed", "get a massage", "massage trial", "audition massage", "trial shift"], example: "bathhouse; bathhouse bath; get bathed; get a massage; bathhouse trial; bathhouse attendant; bathhouse practitioner; show baths; how bathhouse", description: "Visit a bathhouse and ask the available bathkeeper for services. Hot bath: 4 gold/2 turns/up to 3 stamina; assisted wash: 7 gold/3 turns/up to 5 stamina; massage: 9 gold/3 turns/up to 7 stamina. Prices scale with town tier. Bath and wash clean you and worn gear; massage does not. Treatments do not heal wounds or replace sleep. A practical massage trial costs 1 stamina and 2 turns and uses flexibility against difficulty 11; failure can be retried tomorrow. Ordinary attendant work needs no trial. Qualified massage work pays more and may earn tips. Work uses the existing job system: leave the conversation, go to the stated site, work, collect pay. Answer menus one step at a time; back/cancel/leave are free; continue resumes an older batch explicitly." },
@@ -4131,6 +4132,7 @@ function parseTextCommand(input) {
     if (/^(?:"[\s\S]*"|“[\s\S]*”|'[\s\S]*')$/.test(raw)) return { verb: "say", args: { text: textCommandUnquote(raw) } };
     match = /^(?:say|reply|respond)\s+([\s\S]+)$/i.exec(original);
     if (match) return { verb: "say", args: { text: textCommandUnquote(match[1]) } };
+    if (/^(?:fighting|fighting experience|ask about (?:their )?fighting)$/i.test(raw)) return { verb: "fighting", args: {} };
     if (/^(?:dismiss(?: request)?|ignore(?: request)?|avoid eye contact)$/i.test(raw)) {
         const action = { verb: "dismiss_request", args: {} };
         if (typeof getNPCHelpAttention === "function") Object.defineProperty(action, "attentionRef", { value: getNPCHelpAttention() });
@@ -4360,6 +4362,7 @@ async function interpretTextCommands(input, opts) {
     if (!aiAvailable()) return null;
     const shapes = [];
     TEXT_COMMANDS.filter(function(def) {
+        if (def.id === "fighting") return typeof npcFightingInquiryBlock === "function" && !npcFightingInquiryBlock(G.activeNPC);
         if(def.id==="resume_conversation")return typeof canResumeNPCConversation==="function"&&canResumeNPCConversation(G.activeNPC);
         if(def.attention)return typeof getNPCHelpAttention==='function'&&!!getNPCHelpAttention();
         if(def.checkpoint)return false; // Local checkpoint replies never enlarge unrelated AI prompts.
@@ -4547,7 +4550,7 @@ function textModeSeparateGuidance(event) {
 // Raw event text stays in event.text; the speakable version is event.spoken.
 const ttsModeState = { enabled: false, lastSpoken: null, lastNpcSpoken: null, lastDetails: null, pendingTone: null,
     systemVoice: true, npcVoices: true, readIntimate: false, narratorVoice: "", accent: "", rate: 1, volume: 1, variety: 1, pause: "normal",
-    urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", failCue: true, failNarrate: false, thinkingTone: false, thinkingToneUrl: "", cueVolume: 0.5,
+    urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", failCue: true, failNarrate: false, micOffCue: true, tapTalkSounds: true, thinkingTone: false, thinkingToneUrl: "", cueVolume: 0.5,
     pronunciations: "", pronunciationMap: {}, speciesVoice: {}, micMode: "handsfree", autoSubmitWait: 2, silenceRetries: 1, shorterDescriptions: false };
 const TTS_FAILURE_LINES = {
     unresolved: "I pause, unsure how to put that into action.",
@@ -4994,13 +4997,14 @@ function ttsPlayCue(kind, force) {
     ttsPlayTone(kind);
 }
 function ttsPlayTone(kind) {
+    if (!(ttsModeState.cueVolume > 0)) return;
     try {
         const C = typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext);
         if (!C) return;
         if (!ttsSpeech.audio) ttsSpeech.audio = new C();
         const c = ttsSpeech.audio;
         if (c.state === "suspended" && c.resume) c.resume();
-        const now = c.currentTime, notes = kind === "urgent" ? [880, 660] : kind === "fail" ? [196, 147] : [660, 990], vol = 0.25 * (ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume);
+        const now = c.currentTime, notes = kind === "urgent" ? [880, 660] : kind === "fail" ? [196, 147] : kind === "mic-off" ? [660, 440] : [660, 990], vol = 0.25 * (ttsModeState.cueVolume == null ? 0.5 : ttsModeState.cueVolume);
         notes.forEach(function (f, k) {
             const o = c.createOscillator(), g = c.createGain();
             o.type = kind === "urgent" ? "square" : kind === "fail" ? "sawtooth" : "sine"; o.frequency.value = f;
@@ -5110,7 +5114,7 @@ function ttsSpeechEnqueue(event) {
 const TTS_SETTINGS_KEY = "cyoaftwTTSSettings";
 const TTS_SETTING_DEFAULTS = {
     systemVoice: true, narratorVoice: "", accent: "", rate: 1, volume: 1, npcVoices: true, variety: 1, pause: "normal",
-    readIntimate: false, urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", failCue: true, failNarrate: false, thinkingTone: false, thinkingToneUrl: "",
+    readIntimate: false, urgentCue: true, urgentCueUrl: "", turnCue: true, turnCueUrl: "", failCue: true, failNarrate: false, micOffCue: true, tapTalkSounds: true, thinkingTone: false, thinkingToneUrl: "",
     cueVolume: 0.5, pronunciations: "", speciesVoice: {}, micMode: "handsfree", autoSubmitWait: 2, silenceRetries: 1, shorterDescriptions: false
 };
 const TTS_PAUSE_MS = { short: 0, normal: 250, long: 700 };
@@ -5224,7 +5228,7 @@ const ttsListen = { rec: null, listening: false, starting: false, armed: true, s
     draft: null, submitTimer: null, requested: false, focusPending: false, session: null,
     retryLeft: 1, quiet: false, hardError: false, watchReason: "", watchSince: 0, watchLogged: false };
 // Session-only tap surface; microphone settings and game actions stay shared.
-const ttsTapTalk = { enabled: false, player: null, request: null };
+const ttsTapTalk = { enabled: false, player: null, request: null, cueUntil: 0 };
 function ttsTapTalkAvailable() { return ttsModeActive() && ttsVoiceInputAvailable() && ttsMicMode() !== "off"; }
 function ttsSyncTapTalk() {
     if (typeof document === "undefined") return;
@@ -5261,6 +5265,15 @@ function ttsSetTapTalk(on) {
     if (ttsTapTalk.enabled) ttsListenEnsureLoop();
     focusTextModeInput();
 }
+// A tap is acknowledged with a rising chime; the mic opens just after it so the
+// microphone never hears the chime.
+const TTS_TAP_CUE_MS = 400;
+function ttsTapTalkOpen() {
+    ttsSyncTapTalk();
+    if (!ttsTapTalk.enabled || !ttsListen.requested || !ttsGameIdle()) return;
+    ttsListen.requested = false; ttsTapTalk.request = null;
+    ttsStartListening(false);
+}
 function ttsTapToTalk() {
     ttsSyncTapTalk();
     const overlay = document.getElementById("ttsTapTalkOverlay");
@@ -5269,9 +5282,14 @@ function ttsTapToTalk() {
     if (input && input.value.trim() && !ttsListen.draft) { focusTextModeInput(); return; }
     // Repeated taps must not toggle off an open mic or discard its transcript.
     if (!ttsListen.listening && !ttsListen.starting && !ttsListen.draft && !ttsListen.requested) {
-        ttsMicButton();
-        if (ttsListen.requested) ttsTapTalk.request = { scene: textModeScene(), token: textModeSceneToken(), epoch: textModeState.epoch,
-            pending: textModeState.pending, choices: textModeState.choices };
+        const sound = ttsModeState.tapTalkSounds !== false && ttsCueAudible();
+        if (sound) { ttsPlayCue("tap"); ttsTapTalk.cueUntil = Date.now() + TTS_TAP_CUE_MS; }
+        ttsMicButton(sound);
+        if (ttsListen.requested) {
+            ttsTapTalk.request = { scene: textModeScene(), token: textModeSceneToken(), epoch: textModeState.epoch,
+                pending: textModeState.pending, choices: textModeState.choices };
+            if (sound) setTimeout(ttsTapTalkOpen, TTS_TAP_CUE_MS);
+        }
     }
     ttsSetMicButton();
 }
@@ -5478,7 +5496,22 @@ function ttsPickAlternative(alternatives) {
     }
     return list[0];
 }
+// Mic-closed and tap-acknowledge sounds. They play only when something could be
+// heard (visible page, cue volume above zero, Web Audio available). In tap to
+// talk the mic-off sound also needs "Sounds in tap to talk"; leaving tap to talk
+// counts as tap to talk.
+function ttsCueAudible() {
+    return typeof document !== "undefined" && !document.hidden && ttsModeState.cueVolume > 0 && typeof window !== "undefined" && !!(window.AudioContext || window.webkitAudioContext);
+}
+function ttsPlayMicOffCue(reason) {
+    if (ttsModeState.micOffCue === false || !ttsCueAudible()) return;
+    if ((ttsTapTalk.enabled || reason === "tap-talk") && ttsModeState.tapTalkSounds === false) return;
+    ttsPlayCue("mic-off");
+}
 function ttsListenAbort(reason) {
+    // Only a microphone that was really open sounds closed (never one still opening).
+    const wasOpen = !!(ttsListen.rec && ttsListen.listening);
+    if (wasOpen) ttsPlayMicOffCue(reason);
     ttsCancelVoiceDraft(reason === "typing");
     ttsListen.session = null;
     ttsListen.requested = false;
@@ -5595,11 +5628,13 @@ function ttsStartListening(auto) {
         r.onend = function () {
             if (ttsListen.rec !== r) return;
             if (ttsListen.rec === r) {
+                const wasOpen = ttsListen.listening;
                 ttsListen.rec = null; ttsListen.listening = false; ttsListen.starting = false;
+                let quietClose = false;
                 if (!ttsListen.gotResult) {
                     // Silence: reopen quietly (no chime) while retries remain, then wait for the next narration.
                     const retry = !ttsListen.hardError && !ttsListen.aborting && !ttsListen.stopped && Math.min(ttsListen.retryLeft, ttsModeState.silenceRetries) > 0 && ttsModeActive();
-                    if (retry) { ttsListen.retryLeft--; ttsListen.armed = true; ttsListen.quiet = true; }
+                    if (retry) { ttsListen.retryLeft--; ttsListen.armed = true; ttsListen.quiet = true; quietClose = ttsMicMode() === "handsfree" && !ttsTapTalk.enabled; }
                     else ttsListen.armed = false;
                     if (!retry && !ttsListen.heardSound && !ttsListen.aborting) {
                         ttsListen.silentEnds++;
@@ -5609,6 +5644,8 @@ function ttsStartListening(auto) {
                         }
                     }
                 }
+                // A quiet silence retry reopens without a sound; every other close is announced once.
+                if (wasOpen && !quietClose) ttsPlayMicOffCue("end");
             }
             const input = typeof document !== "undefined" ? document.getElementById("textModeInputEl") : null;
             if (input && input.dataset && input.dataset.ttsInterim === "1" && !ttsListen.gotResult) { input.value = ""; input.dataset.ttsInterim = ""; }
@@ -5747,7 +5784,10 @@ function ttsListenTick() {
         if (!ttsVoiceDraftFresh(ttsListen.draft)) ttsListenAbort("stale");
         ttsListen.idleSince = 0; return;
     }
-    if (ttsListen.requested && ttsGameIdle()) { ttsListen.requested = false; ttsStartListening(false); return; }
+    if (ttsListen.requested && ttsGameIdle()) {
+        if (Date.now() < (ttsTapTalk.cueUntil || 0)) return; // let the tap chime finish first
+        ttsListen.requested = false; ttsStartListening(false); return;
+    }
     if (ttsTapTalk.enabled || ttsMicMode() !== "handsfree" || ttsListen.stopped || !ttsListen.armed || ttsListen.listening || ttsListen.starting || ttsIntimacyMuted()) { ttsListen.idleSince = 0; return; }
     if (!ttsGameIdle()) { ttsListen.idleSince = 0; return; }
     const input = document.getElementById("textModeInputEl");
@@ -5798,14 +5838,14 @@ if (typeof document !== "undefined" && typeof document.addEventListener === "fun
     });
 }
 // Mic button in the text-mode dock, and typed "listen".
-function ttsMicButton() {
+function ttsMicButton(afterCue) {
     if (ttsListen.listening || ttsListen.starting || ttsListen.draft || ttsListen.requested) { ttsListenAbort("button"); return; }
     const input = document.getElementById("textModeInputEl");
     if (input && input.value.trim()) { textModeGuidanceOutput("Submit or clear your command before starting the microphone."); input.focus({ preventScroll: true }); return; }
     ttsListen.stopped = false; ttsListenRearm();
     if (typeof textStoryTyping !== "undefined" && textStoryTyping.queue && textStoryTyping.queue.length) textModeClearStoryTyping();
     if (ttsSpeech.current || ttsSpeech.queue.length) ttsSpeechStop("mic");
-    if (ttsGameIdle()) ttsStartListening(false); else ttsListen.requested = true;
+    if (ttsGameIdle() && !afterCue) ttsStartListening(false); else ttsListen.requested = true;
     ttsListenEnsureLoop();
 }
 
@@ -6110,6 +6150,10 @@ function textModeInspectNPC(action) {
 }
 
 function textModeHelpContent(topic, show) {
+    if (/^(fighting|fighting experience|ask about (?:their )?fighting)$/.test(textCommandNormalize(topic))) {
+        const block = typeof npcFightingInquiryBlock === "function" ? npcFightingInquiryBlock(G.activeNPC) : "Start a conversation first.";
+        return textModeResult("completed", (show && block ? block + "\n" : "") + textCommandDefinition("fighting").description + "\nExamples: " + textCommandDefinition("fighting").example);
+    }
     if (/^(?:resume|continue) conversation$/i.test(textCommandNormalize(topic))) {
         const available = typeof canResumeNPCConversation === "function" && canResumeNPCConversation(G.activeNPC);
         return textModeResult("completed", show ? available ? "Use resume conversation to pick up this conversation without another greeting." : "There is no recent conversation to resume here."
@@ -6179,6 +6223,7 @@ function textModeHelpContent(topic, show) {
     if (key) return textModeResult("completed", "I don't have help for that yet. Type help to see the supported commands.");
     const ids = ["act", "help", "show", "attack", "inventory", "equipment", "examine", "equip", "unequip", "drop", "drink", "eat", "take", "open", "search", "contents", "loot", "store", "close", "taste", "unlock", "pick", "force", "trade", "stock", "buy", "sell", "look", "glance", "move", "npcs", "wake", "talk", "say", "options", "choose", "leave", "rest", "sleep", "status", "stop", "continue"];
     const entries = TEXT_COMMANDS.filter(function (def) {
+        if (def.id === "fighting") return typeof npcFightingInquiryBlock === "function" && !npcFightingInquiryBlock(G.activeNPC);
         if(def.id==="resume_conversation")return typeof canResumeNPCConversation==="function"&&canResumeNPCConversation(G.activeNPC);
         if (def.attention) return typeof getNPCHelpAttention === "function" && !!getNPCHelpAttention();
         if(def.checkpoint)return typeof activeGuardCheckpoint==='function'&&!!activeGuardCheckpoint();
@@ -6352,6 +6397,15 @@ async function executeTextCommand(action) {
     if (action.verb === 'communication') return executeTextCommunication(action);
     if (action.verb === 'checkpoint') return executeTextCheckpoint(action.args);
     if (action.verb === "actions") return showConversationActionMenu(G.activeNPC, args.group || "");
+    if (action.verb === "fighting") {
+        const npc = G.activeNPC, block = npcFightingInquiryBlock(npc);
+        if (block) return textModeResult("blocked", block);
+        const choice = getChatOptions(npc, true).find(function (entry) { return entry.id === "ask-companion-fighting"; });
+        if (!choice || choice.disabled) return textModeResult("blocked", "That fighting question is not available now.");
+        const result = await chooseChatOption(choice);
+        if (result && /^(blocked|interrupted)$/.test(result.status)) return result;
+        return textModeResult("needs_input", "Choice selected. Pending commands are paused; finish any open interaction above before continuing.", { systemOnly: true });
+    }
     if (action.verb === "service") {
         if (!args.service) return textNPCServicesShow();
         return requestNPCService(G.activeNPC, args.service);
@@ -6905,6 +6959,7 @@ function textCombatActionMatches(action, value) {
 function parseTextCombatCommand(raw) {
     const words = textCommandNormalize(raw).split(" ").filter(Boolean);
     if (!words.length) return null;
+    if (textModeInCombat() && /^(?:focus fire|concentrate fire)$/i.test(raw.trim())) return { verb: "use", args: { ability: "focus fire" } };
     if (/^(?:target|focus)(?:\s+(.+))?$/i.test(raw)) return { verb: "target", args: { target: raw.replace(/^(?:target|focus)\s*/i, "") } };
     if ((words[0] === TEXT_COMBAT_KEYWORDS.use.primary || TEXT_COMBAT_KEYWORDS.use.aliases.indexOf(words[0]) >= 0) && words.length > 1) return { verb: "use", args: { ability: raw.replace(/^\S+\s+/, "") } };
     let explicit = false;
@@ -6939,7 +6994,9 @@ function textCombatFoes() {
 }
 
 function textCombatSnapshot() {
-    return { active: textModeInCombat(), npc: G.activeNPC, encounter: G.combatEncounter, room: G.activeRoom, foes: textCombatFoes() };
+    return { active: textModeInCombat(), npc: G.activeNPC, encounter: G.combatEncounter, room: G.activeRoom, foes: textCombatFoes(),
+        controlLoss: typeof npcPlayerControlSerial === "function" ? npcPlayerControlSerial() : 0,
+        windups: typeof combatPendingFoes === "function" ? combatPendingFoes(G.combatEncounter) : [] };
 }
 
 function textCombatQueueBoundary(before, action) {
@@ -6951,6 +7008,8 @@ function textCombatQueueBoundary(before, action) {
         if (before.npc !== after.npc && action.verb !== "target" && action.combatTarget !== after.npc) return "Your opponent changed. Pending commands are paused; choose your next action.";
         if (before.room !== after.room) return "You changed rooms. Pending commands are paused.";
         if (after.foes.some(function (foe) { return before.foes.indexOf(foe) < 0; })) return "Another opponent joined. Pending commands are paused; type show targets.";
+        if (after.controlLoss > (before.controlLoss || 0)) return "You lost a turn to a hostile technique. Pending commands are paused; choose your response and continue explicitly.";
+        if (after.windups.some(function (foe) { return (before.windups || []).indexOf(foe) < 0; })) return "A foe is preparing a powerful blow. Pending commands are paused; choose a response, then continue explicitly.";
     }
     return "";
 }
@@ -6982,7 +7041,7 @@ function textCombatShow(topic) {
         const primary = action.primary || action.name.toLowerCase();
         return action.name + ": " + action.title + (action.disabled ? "\nCurrently unavailable." : "") + "\nCommand: " + primary + " (or use " + primary + ")";
     }).join("\n"));
-    const group = /^(spell|spells)$/.test(key) ? "Spells" : /^(ability|abilities|actions|verbs|commands|combat)?$/.test(key) ? "" : null;
+    const group = /^(spell|spells)$/.test(key) ? "Spells" : /^(orders|party orders)$/.test(key) ? "Party orders" : /^(ability|abilities|actions|verbs|commands|combat)?$/.test(key) ? "" : null;
     if (group === null) return null;
     const available = all.filter(function (action) { return !action.disabled && (!group || action.group === group); });
     const lines = group ? [] : ["attack [style] [body part] — e.g. heavy head or attack head light", "Styles: light, balanced, heavy, precise. Default: balanced torso.", "Body parts here: " + getCombatTargetOptions(G.activeNPC).join(", "), "target <npc>; show targets; status; stop; continue", "inventory; equipment; examine <item>; equip <item>; unequip <item>; drop <item>", "drink <potion or alcohol>; eat <healing herb> — uses your combat turn"];
@@ -14265,7 +14324,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-29-001";
+window.__ENGINE_CORE_VERSION = "2026-10-30-006";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -23168,6 +23227,7 @@ function spawnNPCsForRoom(room, zoneName) {
     // Templates can ask for one too (the chapel always has its priest).
     if (roomTemplateForCount && typeof roomTemplateForCount.minNpcs === "number") count = Math.max(count, roomTemplateForCount.minNpcs);
     const takenRoles = getTakenRoomRoles(room, npcs);
+    const composition = planHostileRoomGroup(room, zone, count);
     // Once this room has picked a non-civilized species for one NPC, every
     // other NPC generated for the room is restricted to a civilized species
     // or that same non-civilized one - never a second, different
@@ -23192,8 +23252,11 @@ function spawnNPCsForRoom(room, zoneName) {
             if (restricted.length) speciesPool = restricted;
         }
 
-        const species = rand(speciesPool);
-        const npc = createNPC(species, room, zone, { takenRoles });
+        const species = composition ? composition.species : rand(speciesPool);
+        const slot = composition && composition.slots[i];
+        const npc = createNPC(species, room, zone, { takenRoles,
+            forceRole: slot ? HOSTILE_GROUP_PROFILES[slot].role : undefined,
+            hostileCombatProfile: slot || undefined, skipHome: composition ? true : undefined });
         if (npc) {
             npcs.push(npc);
             if (!lockedNonCivilizedSpecies && !getSpeciesIsCivilized(species)) {
@@ -23221,6 +23284,8 @@ function spawnNPCsForRoom(room, zoneName) {
             }
         }
     }
+
+    if (composition) bindHostileRoomGroup(npcs, composition);
 
     // This zone's boss room, landed on naturally (flat odds) or via the
     // guarantee safety net in chooseRoomTypeForZone - drop the boss in as
@@ -24064,6 +24129,7 @@ function createNPC(species, room, zoneTemplate, options = {}) {
     if (typeof syncNPCSpeechProfile === "function") syncNPCSpeechProfile(npc, room, zoneTemplate);
 
     seedNPCStartingLoot(npc, room, zoneTemplate);
+    if (options.hostileCombatProfile) applyHostileGroupProfile(npc, options.hostileCombatProfile);
     seedNPCCombatSkills(npc);
     applyPortalTierToNPC(npc);
 
@@ -24137,6 +24203,7 @@ function createNPC(species, room, zoneTemplate, options = {}) {
     // Clerics always have a patron deity from the start (see ensureNPCDeity).
     if (typeof isNPCClericRole === "function" && isNPCClericRole(npc.role) && typeof ensureNPCDeity === "function") ensureNPCDeity(npc);
 
+    seedNPCTacticalProfile(npc);
     return npc;
 }
 
@@ -24236,6 +24303,70 @@ window.addToParty = addToParty;
 window.removeFromParty = removeFromParty;
 window.restorePartyMembers = restorePartyMembers;
 
+// -- HOSTILE GROUP COMPOSITIONS ---------------------------------------------
+// These use normal NPC-party membership, movement, load repair and skirmishes.
+// Composition changes the existing spawn budget; it never adds extra residents.
+const HOSTILE_GROUP_COMPOSITIONS = {
+    raidingBand: { slots: ["brute", "archer", "shaman", "brute"] },
+    hexGuard: { slots: ["brute", "shaman", "archer", "brute"] }
+};
+const HOSTILE_GROUP_PROFILES = {
+    brute: { role: "Raider", ranks: { fighter: 3 }, weapon: { id: "raider-club", name: "Heavy club", weaponType: "hammer", damage: 6, value: 10 } },
+    archer: { role: "Scout", ranks: { rogue: 2 }, weapon: { id: "raider-bow", name: "Short bow", weaponType: "bow", damage: 5, value: 14 } },
+    shaman: { role: "Shaman", ranks: { wizard: 2 }, weapon: { id: "raider-staff", name: "Knotted staff", weaponType: "staff", damage: 4, value: 8 } }
+};
+const HOSTILE_GROUP_ROOM_TYPES = ["Chamber", "Corridor", "Passage", "Tunnel", "Hallway", "Ruins Passage", "Tower", "Marsh", "Broken Ground", "Submerged Ruin"];
+const HOSTILE_GROUP_CHANCE = 0.25;
+
+function planHostileRoomGroup(room, zone, count) {
+    if (!room || !zone || !zone.hostileArea || !Number.isInteger(count) || count < 2 || count > NPC_PARTY_MAX ||
+        !HOSTILE_GROUP_ROOM_TYPES.includes(room.type) || room.isBuildingRoom || room.buildingType || room.isNPCHome ||
+        room.skirmish || (room.creatures || []).length || room.type === ZONE_BOSS_ROOMS[zone.name]) return null;
+    const template = getRoomTemplate(room.type);
+    if (template && (template.noNpcs || template.isShrine) || FORGE_ROOM_TYPES.includes(room.type)) return null;
+    const base = Array.isArray(room.npcSpecies) && room.npcSpecies.length ? room.npcSpecies : zone.allowedSpecies || [];
+    const species = base.filter(function (s) { return ["Goblin", "Orc", "Kobold"].includes(s) && getSpeciesHumanoidFlag(s) === true && !getSpeciesIsCivilized(s); });
+    if (!species.length || Math.random() >= HOSTILE_GROUP_CHANCE) return null;
+    const key = rand(Object.keys(HOSTILE_GROUP_COMPOSITIONS));
+    return { key: key, species: rand(species), slots: HOSTILE_GROUP_COMPOSITIONS[key].slots.slice(0, count) };
+}
+
+function applyHostileGroupProfile(npc, key) {
+    const profile = HOSTILE_GROUP_PROFILES[key];
+    if (!profile || !npc || npc.isHumanoid !== true || npc.role !== profile.role) return false;
+    npc.equipped.weapon = assignLootUID(Object.assign({ type: ["weapon"], slot: "weapon", description: "A worn but serviceable raiding weapon." }, profile.weapon));
+    npc.combatRanks = Object.assign({}, profile.ranks);
+    npc.classSkills = npc.classSkills || {};
+    Object.keys(profile.ranks).forEach(function (cls) {
+        const previous = npc.classSkills[cls];
+        npc.classSkills[cls] = { rank: Math.max(profile.ranks[cls], previous && previous.rank || 0), xp: previous && previous.xp || 0 };
+    });
+    npc._hostileCombatSlot = key;
+    return true;
+}
+
+function isHostileNPCPartyMember(npc) {
+    const state = npc && npc._npcParty;
+    return !!(state && Object.prototype.hasOwnProperty.call(HOSTILE_GROUP_COMPOSITIONS, state.hostileComposition) &&
+        Object.prototype.hasOwnProperty.call(HOSTILE_GROUP_PROFILES, npc._hostileCombatSlot) &&
+        Array.isArray(state.memberIds) && state.memberIds.length >= 2 && state.memberIds.length <= NPC_PARTY_MAX && state.memberIds.includes(npc.id));
+}
+
+function bindHostileRoomGroup(members, plan) {
+    if (!plan || !Object.prototype.hasOwnProperty.call(HOSTILE_GROUP_COMPOSITIONS, plan.key) || !Array.isArray(members) ||
+        members.length < 2 || members.length > NPC_PARTY_MAX || new Set(members.map(function (n) { return n && n.id; })).size !== members.length ||
+        members.some(function (npc) { return !npc || !npc.id || npc.isHumanoid !== true || npc.species !== plan.species ||
+            !Object.prototype.hasOwnProperty.call(HOSTILE_GROUP_PROFILES, npc._hostileCombatSlot) || npc._npcParty || isCompanionNPC(npc); })) return false;
+    members.forEach(function (npc) {
+        npc.hostility = Math.max(75, npc.hostility || 0);
+        npc.memory = npc.memory || {}; npc.memory.favorability = Math.min(-40, npc.memory.favorability || 0);
+    });
+    writeNPCParty(members, { id: "hostile-group:" + members[0].id, leaderId: members[0].id,
+        formedTurn: getCurrentStoryTurn(), hostileComposition: plan.key });
+    return true;
+}
+// -- END HOSTILE GROUP COMPOSITIONS -----------------------------------------
+
 // -- AUTONOMOUS NPC TRAVEL PARTIES -------------------------------------------
 // Stable ids only in saved membership. These parties never share player standing.
 const NPC_PARTY_COOLDOWN_TURNS = 12;
@@ -24277,10 +24408,10 @@ function canBelongToNPCParty(npc) {
     if (isCompanionDownForTravel(npc) || npc.surrendered || npc.bound || npc._prisoner || npc._boundCaptiveFollower) return false;
     if (npc._guardDuty || isNPCScheduled(npc) || npc.stationary || npc._onCall || npc._fleeRun || npc._drunkBlackout) return false;
     if (typeof isNPCWanted === "function" && isNPCWanted(npc)) return false;
-    if (npcPartyBaseHostility(npc) >= 30) return false;
+    if (npcPartyBaseHostility(npc) >= 30 && !isHostileNPCPartyMember(npc)) return false;
     // Stall owners and scheduled workers keep their existing jobs.
     if (/merchant|shopkeeper|vendor/i.test(npc.role || "")) return false;
-    return isExplorerNPC(npc) || isPastimeNPC(npc);
+    return isHostileNPCPartyMember(npc) || isExplorerNPC(npc) || isPastimeNPC(npc);
 }
 
 function npcPartyPairCompatible(a, b) {
@@ -24337,8 +24468,11 @@ function publishNPCPartyEvent(stage, members, room, text) {
 }
 
 function writeNPCParty(members, state) {
+    const previous = members[0] && members[0]._npcParty;
+    const composition = state.hostileComposition || previous && previous.id === state.id && previous.hostileComposition;
     members.forEach(function (npc) {
         npc._npcParty = { id: state.id, leaderId: state.leaderId, memberIds: members.map(function (m) { return m.id; }), formedTurn: state.formedTurn };
+        if (Object.prototype.hasOwnProperty.call(HOSTILE_GROUP_COMPOSITIONS, composition)) npc._npcParty.hostileComposition = composition;
         rememberNPCParty(npc, members);
     });
 }
@@ -24528,18 +24662,23 @@ function detachNPCPartySkirmisher(npc, room) {
 function resolveNPCPartySkirmishRound(room, lines) {
     const fight = room.skirmish, sides = fight.npcPartySides;
     const ready = function (ids) {
-        return (room.creatures || []).filter(function (m) { return m && ids.includes(m.id) && !isCompanionDownForTravel(m) && !m.surrendered && !isCompanionNPC(m); });
+        return (room.creatures || []).filter(function (m) { return m && ids.includes(m.id) && combatTargetReady(m) && !isCompanionDownForTravel(m) && !isCompanionNPC(m); });
     };
     let a = ready(sides.a), b = ready(sides.b);
     if (!a.length || !b.length || a.some(function (x) { return b.some(function (y) { return areNPCPartyMates(x, y); }); })) {
         clearNPCPartySkirmish(room); delete room.skirmish; return;
     }
+    advanceNPCSkirmishTactics(fight, a.concat(b));
     const order = a.map(function (m) { return { actor: m, enemies: sides.b }; }).concat(b.map(function (m) { return { actor: m, enemies: sides.a }; }));
     order.forEach(function (step) {
         const actor = step.actor, foes = ready(step.enemies);
         if (isCompanionDownForTravel(actor) || isCompanionNPC(actor) || !foes.length) return;
-        const target = foes[Math.floor(Math.random() * foes.length)];
-        npcVersusTurn(actor, target, lines);
+        const targeting = {};
+        const target = combatPickThreatTarget(fight, actor, foes.map(function (foe) {
+            return { e: foe, w: 1 + combatRecentRevengeBonus(fight, actor, foe) };
+        }), targeting);
+        if (!target) return;
+        npcVersusTurn(actor, target, lines, { targeting: targeting, scope: fight });
         if (isEntityCollapsed(target)) {
             target._inSkirmish = false; target._versusReason = null; releaseSkirmishHostility(target);
             const outcome = target._skirmishOutcome || determineCombatDefeatOutcome({ lethal: Math.random() < getVersusLethality(actor, target) });
@@ -24550,6 +24689,7 @@ function resolveNPCPartySkirmishRound(room, lines) {
     a = ready(sides.a); b = ready(sides.b);
     if (!a.length || !b.length) {
         if (a.length || b.length) lines.push(npcPartyNames(a.length ? a : b) + " won the fight.");
+        creditNPCCombatSurvivors(fight, room);
         clearNPCPartySkirmish(room); delete room.skirmish; return;
     }
     // Keep the original pair-based watch/guard UI pointed at living fighters.
@@ -24557,7 +24697,7 @@ function resolveNPCPartySkirmishRound(room, lines) {
     const spent = a.every(isEntityExhausted) && b.every(isEntityExhausted) ||
         a.every(isEntityExhausted) && b.every(function (m) { return isEntityIncorporeal(m); }) ||
         b.every(isEntityExhausted) && a.every(function (m) { return isEntityIncorporeal(m); });
-    if (spent) { lines.push("The exhausted travellers break off the fight."); clearNPCPartySkirmish(room); delete room.skirmish; }
+    if (spent) { lines.push("The exhausted travellers break off the fight."); creditNPCCombatSurvivors(fight, room); clearNPCPartySkirmish(room); delete room.skirmish; }
 }
 
 // Same urgency, resource costs and treatment handler as player companions.
@@ -34749,6 +34889,7 @@ function resolveSkirmishRound(room, lines) {
         return;
     }
 
+    advanceNPCSkirmishTactics(room.skirmish, [a, b]);
     npcVersusTurn(a, b, roundLines);
     if (b.hp > 0) npcVersusTurn(b, a, roundLines);
 
@@ -34769,6 +34910,7 @@ function resolveSkirmishRound(room, lines) {
         const reason = room.skirmish.reason;
         a._versusReason = null;
         b._versusReason = null;
+        creditNPCCombatSurvivors(room.skirmish, room);
         if (reason === "arrest" && isGuardNPC(winner) && isNPCWanted(loser) && skirmishOutcome !== "corpse" &&
             arrestNPCThief(loser, winner, room, roundLines)) {
             clearNPCPartySkirmish(room); delete room.skirmish;
@@ -34788,14 +34930,16 @@ function resolveSkirmishRound(room, lines) {
     // (well - one drifts away) rather than the fight running forever.
     const aStalemated = isEntityIncorporeal(b) && !isEntityIncorporeal(a) && isEntityExhausted(a);
     const bStalemated = isEntityIncorporeal(a) && !isEntityIncorporeal(b) && isEntityExhausted(b);
-    if (aStalemated || bStalemated) {
-        roundLines.push(`${(aStalemated ? a : b).name || "The exhausted fighter"} gives up the fight, spent.`);
+    const bothSpent = isEntityExhausted(a) && isEntityExhausted(b);
+    if (aStalemated || bStalemated || bothSpent) {
+        roundLines.push(bothSpent ? "Both fighters break off the fight, exhausted." : `${(aStalemated ? a : b).name || "The exhausted fighter"} gives up the fight, spent.`);
         a._inSkirmish = false;
         b._inSkirmish = false;
         a._versusReason = null;
         b._versusReason = null;
         releaseSkirmishHostility(a);
         releaseSkirmishHostility(b);
+        creditNPCCombatSurvivors(room.skirmish, room);
         clearNPCPartySkirmish(room); delete room.skirmish;
     }
 }
@@ -42406,6 +42550,7 @@ function getWeaponTypeFromName(name = "", fallback = "generic") {
 // Edge is "a bit of both": it keeps the original crit/heavy/torso bleed rule
 // and is the only type that can sever a limb on a finishing crit.
 const WEAPON_DAMAGE_TYPE = {
+    bow: "puncture",
     dagger: "puncture",
     spear: "puncture",
     sword: "edge",
@@ -42583,6 +42728,7 @@ function pickNaturalAttackMode(entity, weaponProfile) {
 // Base-form verbs per weapon type. Phrasal verbs ("sink its teeth into") are
 // conjugated on the first word only.
 const STRIKE_VERBS_BY_WEAPON = {
+    bow: ["shoot", "loose an arrow at"],
     sword: ["slash", "cut", "carve", "slice"],
     axe: ["hew", "chop", "cleave", "hack"],
     polearm: ["slash", "hew", "cut"],
@@ -43351,14 +43497,16 @@ function getCombatActionGroups(npc) {
         }).map(function (k) {
             const m = getFighterManeuverDef(k);
             const block = getManeuverBlockReason(k, npc);
-            return combatActionDescriptor(`${m.label} (${m.stamina + (COMBAT_ATTACK_STYLES[m.style] ? COMBAT_ATTACK_STYLES[m.style].staminaCost : 0)} stamina)`, () => attemptManeuver(npc, k), {
-                disabled: !!block, title: block || m.tip
+            const run = () => attemptManeuver(npc, k);
+            return combatActionDescriptor(`${m.label} (${m.stamina + (COMBAT_ATTACK_STYLES[m.style] ? COMBAT_ATTACK_STYLES[m.style].staminaCost : 0)} stamina)`, k === "taunt" ? combatTacticCallback(npc, run) : run, {
+                disabled: !!block, title: block || m.tip, aliases: m.aliases || []
             });
         });
         Object.keys(FIGHTER_STANCES).filter(function (k) { return playerHasTechnique(G.player, k); }).forEach(function (k) {
             const s = FIGHTER_STANCES[k];
-            const block = getStanceBlockReason(k);
-            fighterButtons.push(combatActionDescriptor(`${s.label} (${s.stamina} stamina)`, () => useFighterStance(npc, k), { disabled: !!block, title: block || s.tip }));
+            const block = getStanceBlockReason(k, npc);
+            const run = () => useFighterStance(npc, k);
+            fighterButtons.push(combatActionDescriptor(`${s.label} (${s.stamina} stamina)`, k === "guard" || k === "immovable" ? combatTacticCallback(npc, run) : run, { disabled: !!block, title: block || s.tip, aliases: s.aliases || [] }));
         });
         const windBlock = getSecondWindBlockReason();
         fighterButtons.push(combatActionDescriptor("Second wind", () => useSecondWind(npc), {
@@ -43366,6 +43514,9 @@ function getCombatActionGroups(npc) {
         }));
         addGroup("Fighter", fighterButtons);
     }
+
+    const orderActions = getCombatPartyOrderActions(npc);
+    if (orderActions.length) addGroup("Party orders", orderActions);
 
     addGroup("Defense", [
         combatActionDescriptor("Defend", () => performCombatDefense(npc, "defend"), { title: COMBAT_STANCES.defend.tip }),
@@ -44227,6 +44378,7 @@ const STATUS_EFFECT_DEFINITIONS = {
     bracedStance: { label: "Braced", combatMods: { armorBonus: 2 }, durationTurns: 4, selfNarration: "You settle low and solid." },
     endured: { label: "Enduring", combatMods: { damageTaken: -2 }, durationTurns: 4, selfNarration: "You steel yourself against the pain." },
     riposteStance: { label: "Riposte", durationTurns: 3, selfNarration: "You watch for the opening." },
+    staggerOpening: { label: "Off balance", durationTurns: 2, narration: "{name} has been staggered and is open to a crushing follow-up." },
     heldAtBay: { label: "Held at Bay", combatMods: { counterHit: -3 }, durationTurns: 3, narration: "{name} cannot get inside your reach." },
     wallOfSteel: { label: "Wall of Steel", combatMods: { armorBonus: 3 }, durationTurns: 5, selfNarration: "Your guard is a wall of steel." },
     immovableStance: { label: "Immovable", combatMods: { armorBonus: 3, damageTaken: -2 }, durationTurns: 6, selfNarration: "You are rooted to the spot." },
@@ -45108,6 +45260,11 @@ function applyCombatDamage(entity, amount, targetKey, options = {}) {
     }
     const comboRule = options.noCombo ? null : getElementComboRule(entity, damageType);
     if (comboRule) damage = Math.max(damage + 1, Math.ceil(damage * comboRule.mult));
+    const techniqueCombo = options.noCombo ? null : combatTechniqueCombo(entity, options.actionKey);
+    if (techniqueCombo) {
+        damage += techniqueCombo.bonus;
+        if (techniqueCombo.consume) removeStatusEffect(entity, techniqueCombo.consume);
+    }
 
     // Remembered for the body description if this entity ends up a corpse
     // or an unconscious body (see buildBodyDescription).
@@ -45186,6 +45343,7 @@ function applyCombatDamage(entity, amount, targetKey, options = {}) {
     // Element combos: what this hit did on top of its damage, and the states it leaves.
     const notes = [];
     if (Array.isArray(G._gearBreakNotes) && G._gearBreakNotes.length) { G._gearBreakNotes.forEach(function (l) { notes.push(l); }); G._gearBreakNotes = []; }
+    if (techniqueCombo) notes.push(techniqueCombo.text);
     let shattered = false;
     const who = entity === G.player ? "you" : (entity.name || "the target");
     const el = normalizeDamageElement(damageType);
@@ -45217,7 +45375,7 @@ function applyCombatDamage(entity, amount, targetKey, options = {}) {
         notes.push(`Wind whips around ${who}, stirring the air.`);
     }
 
-    return { severed, limbKey, newlyDisabledLimb, bled, damage, hpLost, hpBefore: hpBeforeHit, hpAfter: Math.max(0, hpBeforeHit - damage), notes, shattered, combo: comboRule ? comboRule.kind : null };
+    return { severed, limbKey, newlyDisabledLimb, bled, damage, hpLost, hpBefore: hpBeforeHit, hpAfter: Math.max(0, hpBeforeHit - damage), notes, shattered, combo: comboRule ? comboRule.kind : null, techniqueCombo: techniqueCombo ? options.actionKey : null };
 }
 
 function getWoundAttackPenalty(entity) {
@@ -49408,7 +49566,7 @@ function attackNPC(npc, options = {}) {
     const maneuver = options.maneuver && getFighterManeuverDef(options.maneuver) ? getFighterManeuverDef(options.maneuver) : null;
     const maneuverRank = maneuver ? getFighterRank(player) : 0;
     const wasHidden = isPlayerHidden();
-    const npcArmor = getEntityArmorClass(npc, targetKey) +
+    const npcArmor = getEntityArmorClass(npc, targetKey) + getStatusCombatModifier(npc, "armorBonus") +
         target.hitMod +
         -Math.max(0, getWoundDefensePenalty(npc)) -
         (maneuver && maneuver.key === "runThrough" ? getRunThroughArmorIgnore(maneuverRank) : 0);
@@ -49428,7 +49586,7 @@ function attackNPC(npc, options = {}) {
         (maneuver ? maneuver.hit + Math.floor(maneuverRank / 2) : 0) -
         offClassWeapon.hit -
         getWoundAttackPenalty(player) +
-        getStatusCombatModifier(player, "hitBonus");
+        getStatusCombatModifier(player, "hitBonus") + getStatusCombatModifier(player, "counterHit");
     const hit = attackRoll === 20 || (attackRoll !== 1 && attackTotal >= npcArmor);
     // A Potion of Lethality (critMarginBonus) narrows the margin needed to
     // crit rather than lowering the roll needed to hit - see
@@ -49512,7 +49670,7 @@ function attackNPC(npc, options = {}) {
             damageRoll +
             Math.max(0, player.attackBonus || 0) +
             statBonus +
-            playerWeapon.damageBonus +
+            playerWeapon.damageBonus + getStatusCombatModifier(player, "damageDealt") +
             style.damageBonus +
             target.damageMod +
             preciseBonus +
@@ -49530,6 +49688,7 @@ function attackNPC(npc, options = {}) {
         // Relic powers: Rising Power spends on a hit; the foe's Mirror/Shadow roll.
         damage = applyRisingPower(player, "physical", damage, lines);
         relicOnWeaponSwing(player, true);
+        damage = Math.max(1, damage + getStatusCombatModifier(npc, "damageTaken"));
         const relicIn = resolveRelicIncomingHit(npc, damage, lines);
         damage = relicIn.damage;
         const relicDeflected = relicIn.deflected;
@@ -49563,9 +49722,11 @@ function attackNPC(npc, options = {}) {
             crit,
             damageType,
             heavy: styleKey === "heavy",
+            actionKey: maneuver ? maneuver.key : sneak ? "backstab" : styleKey,
             bleed: crit || styleKey === "heavy" || targetKey === "torso",
             aggressor: "player"
         });
+        recordCombatThreatDamage(player, npc, damageResult.hpLost);
         applyNPCImpact(npc, {
             mood: crit || damage >= Math.max(3, Math.ceil((npc.hpMax || 10) * 0.2)) ? -2 : -1,
             favor: crit ? -16 : -10,
@@ -49610,7 +49771,7 @@ function attackNPC(npc, options = {}) {
             if (woundText) lines.push(`${npcName}'s ${woundText}.`);
         }
 
-        if (!finishOutcome) pushComboNotes(lines, damageResult);
+        if (!finishOutcome || damageResult.techniqueCombo) pushComboNotes(lines, damageResult);
         if (damageResult.newlyDisabledLimb) {
             const statusLine = applyLimbDisableStatusEffect(npc, npcName, damageResult.newlyDisabledLimb, { damageType: damageType });
             if (statusLine && !finishOutcome) lines.push(statusLine);
@@ -50971,6 +51132,10 @@ function reinforcementOpeningStrike(attacker, defender, lines, options) {
     }
 
     const weapon = getEntityWeaponProfile(attacker);
+    const tacticalStrike = options && options.strike;
+    const actionKey = tacticalStrike && tacticalStrike.key || "balanced";
+    const staminaCost = tacticalStrike ? tacticalStrike.staminaCost : COMBAT_ATTACK_STYLES.balanced.staminaCost;
+    if (tacticalStrike && !attackerIsIncorporeal && attacker.stamina < staminaCost) return;
     // Unarmed creatures swing with a natural attack (a spider bites, a wolf
     // bites or claws) - same pick and damage-type rule as resolveNPCCounter.
     const naturalMode = pickNaturalAttackMode(attacker, weapon);
@@ -50979,11 +51144,17 @@ function reinforcementOpeningStrike(attacker, defender, lines, options) {
         : getWeaponDamageType(weapon.type);
     const statBonus = getEntityStatCombatBonus(attacker, "physicalProwess");
     const roll = randInt(1, 20);
-    const defenderArmor = getEntityArmorClass(defender, "torso");
-    const hit = roll === 20 || (roll !== 1 && (roll + statBonus + weapon.hitBonus) >= defenderArmor);
+    const proficiencyHitBonus = getWeaponProficiencyHitBonus(attacker, weapon.type) +
+        getActionProficiencyHitBonus(attacker, actionKey);
+    const attackBonus = statBonus + weapon.hitBonus + proficiencyHitBonus +
+        getStatusCombatModifier(attacker, "counterHit") +
+        getStatusCombatModifier(attacker, "hitBonus") + (tacticalStrike && tacticalStrike.hit || 0);
+    const defenderArmor = getEntityArmorClass(defender, "torso") +
+        getStatusCombatModifier(defender, "armorBonus");
+    const hit = roll === 20 || (roll !== 1 && (roll + attackBonus) >= defenderArmor);
 
     if (!attackerIsIncorporeal) {
-        spendEntityStamina(attacker, COMBAT_ATTACK_STYLES.balanced.staminaCost, lines, { name: attackerName });
+        spendEntityStamina(attacker, staminaCost, lines, { name: attackerName });
     }
 
     if (!hit) {
@@ -51003,6 +51174,7 @@ function reinforcementOpeningStrike(attacker, defender, lines, options) {
     if (attackerIsIncorporeal) {
         const staminaDamage = Math.max(1, Math.round(Math.max(1, randInt(1, weapon.damageDie) + weapon.damageBonus + statBonus) * getNPCDamageMultiplier(attacker)));
         spendEntityStamina(defender, staminaDamage, lines, { name: defenderName });
+        if (attacker !== G.player) trackCombatSkillGain(attacker, { weaponType: weapon.type, actionKey: actionKey, statKey: "physicalProwess" });
         lines.push(formatCombatActionLine(attacker, defender, watched
             ? `${attackerName}'s chilling touch saps the strength from ${defenderName}.`
             : `${attackerName}'s chilling touch saps ${defenderName}'s stamina for ${staminaDamage}!`));
@@ -51016,12 +51188,31 @@ function reinforcementOpeningStrike(attacker, defender, lines, options) {
         return;
     }
 
-    const damage = Math.max(1, Math.round(Math.max(1, randInt(1, weapon.damageDie) + weapon.damageBonus + statBonus) * getNPCDamageMultiplier(attacker)));
-    const strikeResult = applyCombatDamage(defender, damage, "torso", { damageType: strikeDamageType });
+    let rawDamage = Math.max(1, Math.round(Math.max(1, randInt(1, weapon.damageDie) + weapon.damageBonus + statBonus +
+        getStatusCombatModifier(attacker, "damageDealt") + (tacticalStrike && tacticalStrike.damageBonus || 0) +
+        (hasActiveStatusEffect(defender, "markedPrey") ? 1 : 0)) * getNPCDamageMultiplier(attacker)));
+    if (tacticalStrike && tacticalStrike.damageMult) rawDamage = Math.max(1, Math.floor(rawDamage * tacticalStrike.damageMult));
+    // These are physical weapon/natural strikes. Enchanted weapons retain
+    // physical armour reduction and also meet the target's element resistance.
+    // Ghost stamina drain above deliberately bypasses this HP-damage path.
+    const damageTypes = weapon.elementalType ? ["physical", weapon.elementalType] : "physical";
+    const blocked = getTargetDamageReduction(defender, "torso", damageTypes);
+    const afterArmor = Math.max(1, rawDamage - blocked);
+    const damage = Math.max(1, afterArmor + getStatusCombatModifier(defender, "damageTaken"));
+    const strikeResult = applyCombatDamage(defender, damage, "torso", { damageType: strikeDamageType, actionKey: actionKey, heavy: actionKey === "shatter" || actionKey === "pulverize" });
+    pushComboNotes(lines, strikeResult);
+    recordCombatThreatDamage(attacker, defender, strikeResult.hpLost, options && options.scope);
+    if (attacker !== G.player && strikeResult.hpLost > 0) trackCombatSkillGain(attacker, { weaponType: weapon.type, actionKey: actionKey, statKey: "physicalProwess" });
+    if (tacticalStrike && strikeResult.hpLost > 0) applyNPCTacticalStrikeEffect(attacker, defender, tacticalStrike, options && options.scope, lines);
+    // applyCombatDamage can amplify a hit (for example against a frozen foe)
+    // or absorb it. Both presentation paths describe the committed result.
+    const resolvedDamage = strikeResult.damage ?? damage;
+    const hpLost = strikeResult.hpLost ?? resolvedDamage;
     const watchedCtx = {
         attackerName: attackerName, defenderName: defenderName, defenderIsPlayer: false,
         weapon: weapon, naturalMode: naturalMode, damageType: strikeDamageType,
-        targetKey: "torso", damage: damage, hpMax: defender.hpMax || defender.hp,
+        targetKey: "torso", damage: resolvedDamage, hpLost: hpLost, blocked: blocked,
+        hpBefore: strikeResult.hpBefore, hpAfter: strikeResult.hpAfter, hpMax: defender.hpMax || defender.hp,
         crit: roll === 20, bled: strikeResult.bled, watched: true,
         defenderBody: getBodyKind(defender)
     };
@@ -51036,7 +51227,7 @@ function reinforcementOpeningStrike(attacker, defender, lines, options) {
             });
             lines.push(buildFinishingBlowLine(watchedCtx, defender._skirmishOutcome));
         } else {
-            lines.push(formatCombatActionLine(attacker, defender, `${attackerName} catches ${defenderName} off guard for ${damage} damage!`));
+            lines.push(formatCombatActionLine(attacker, defender, `${attackerName} catches ${defenderName} off guard for ${hpLost} damage!`));
             lines.push(`${defenderName} is finished off by the timely strike!`);
         }
         return;
@@ -51044,7 +51235,7 @@ function reinforcementOpeningStrike(attacker, defender, lines, options) {
 
     lines.push(watched
         ? buildWatchedStrikeHitLine(watchedCtx)
-        : formatCombatActionLine(attacker, defender, `${attackerName} catches ${defenderName} off guard for ${damage} damage!`));
+        : formatCombatActionLine(attacker, defender, `${attackerName} catches ${defenderName} off guard for ${hpLost} damage!`));
 }
 
 function summonPeerReinforcement(enemy, room, lines) {
@@ -51736,6 +51927,12 @@ function beginEncounter(primary, initiator, lines, opts) {
 // room, stepped back, nobody left to fight). Knocked-out allies come to.
 function encounterDispose(enc, reason) {
     if (!enc) return;
+    // Solo player defeats can go directly through cleanup rather than the
+    // normal conclusion UI. Both routes share the same one-time award.
+    if (!enc.ended && (reason === "victory" || reason === "defeat")) {
+        registerNPCCombatParticipants(enc, enc.order.map(function (entry) { return entry.entity; }));
+        creditNPCCombatSurvivors(enc, enc.room);
+    }
     enc.order.forEach(function (c) {
         const e = c.entity;
         if (!e || c.isPlayer) return;
@@ -51778,7 +51975,119 @@ function encWeightedPick(items) {
     return items[items.length - 1].e;
 }
 
-function encPickPartyTarget(enc, foe, forcePlayer) {
+// Private, per-fight targeting memory. Never saved or published as a threat meter.
+const combatTargetingState = new WeakMap();
+const COMBAT_THREAT = { guard: 4, immovable: 6, taunt: 8, softTarget: 3, recentDamage: 2, recentTurns: 2, tauntTurns: 3 };
+
+function combatThreatState(scope) {
+    if (!scope || typeof scope !== "object") return null;
+    let state = combatTargetingState.get(scope);
+    if (!state) { state = { damage: new Map(), lastHit: new Map(), lastTargets: new Map(), taunt: null }; combatTargetingState.set(scope, state); }
+    return state;
+}
+
+function recordCombatThreatDamage(attacker, defender, amount, scope) {
+    if (!attacker || !defender || !(amount > 0)) return;
+    if (!scope) {
+        const enc = G.combatEncounter;
+        const inEncounter = function (e) { return e === G.player ? G.activeRoom === enc.room : encEntityInRoom(enc.room, e); };
+        if (enc && !enc.ended && inEncounter(attacker) && inEncounter(defender)) scope = enc;
+        else {
+            const room = Object.values(G.roomMap || {}).find(function (r) {
+                return r && r.skirmish && (r.creatures || []).includes(attacker) && r.creatures.includes(defender);
+            });
+            if (room) scope = room.skirmish;
+        }
+    }
+    const state = combatThreatState(scope);
+    if (!state) return;
+    if (!state.damage.has(defender)) state.damage.set(defender, new Map());
+    state.damage.get(defender).set(attacker, { amount: amount, at: combatFightClock(scope) });
+    state.lastHit.set(defender, attacker);
+}
+
+function combatRecentDamage(scope, attacker, target) {
+    const state = combatThreatState(scope), hits = state && state.damage.get(attacker), hit = hits && hits.get(target);
+    const now = combatFightClock(scope);
+    return hit && now >= hit.at && now - hit.at <= COMBAT_THREAT.recentTurns ? hit.amount : 0;
+}
+
+function combatRecentRevengeBonus(scope, attacker, target) {
+    const state = combatThreatState(scope);
+    return state && state.lastHit.get(attacker) === target && combatRecentDamage(scope, attacker, target) > 0 ? 1 : 0;
+}
+
+function combatTargetReady(entity) {
+    return !!entity && entity.hp > 0 && !entity.dead && !entity.unconscious && !entity.isUnconsciousBody &&
+        !entity.surrendered && !entity.hidden && !entity.isHidden && !isEntityCollapsed(entity);
+}
+
+function combatDrawAttentionBonus(entity) {
+    if (hasActiveStatusEffect(entity, "immovableStance")) return COMBAT_THREAT.immovable;
+    return hasActiveStatusEffect(entity, "wallOfSteel") ? COMBAT_THREAT.guard : 0;
+}
+
+function combatSoftTarget(entity) {
+    return /wizard|mage|sorcer|witch|warlock|shaman|cleric|healer|priest|acolyte|druid/i.test(String(entity.role || "") + " " + String(entity.class || ""));
+}
+
+function combatCanIntercept(entity) {
+    if (!combatTargetReady(entity) || !combatDrawAttentionBonus(entity) || isEntityExhausted(entity)) return false;
+    if (entity.bound || entity.frozen || entity.stunnedRounds > 0 || entity.currentState && entity.currentState.sleeping) return false;
+    const rank = entity === G.player ? getFighterRank(entity) : Math.max(getNPCClassRank(entity, "fighter"),
+        entity.classSkills && entity.classSkills.fighter && Number(entity.classSkills.fighter.rank) || 0);
+    return rank >= 3;
+}
+
+function combatPickThreatTarget(scope, attacker, options, targeting) {
+    options = options.filter(function (o) { return combatTargetReady(o.e); });
+    if (!options.length) return null;
+    // Preserve the ghost's authored vice above ordinary threat AND interception.
+    const vicePick = ghostViceTargetPick(attacker, options.map(function (o) { return o.e; }));
+    if (vicePick) { const memory = combatThreatState(scope); if (memory) memory.lastTargets.set(attacker, vicePick); return vicePick; }
+    const state = combatThreatState(scope), now = combatFightClock(scope);
+    if (state && state.taunt && (state.taunt.until <= now || !combatTargetReady(state.taunt.source) || !combatTargetReady(state.taunt.target) ||
+        state.taunt.target === attacker && !options.some(function (o) { return o.e === state.taunt.source; }))) state.taunt = null;
+    const temperament = String(attacker.temperament || attacker.personalityProfile && attacker.personalityProfile.temperament || "");
+    const cunning = /cunning|sly|calculating|scheming|tactical/i.test(temperament) || combatSoftTarget(attacker);
+    const feral = !cunning && (attacker.isHumanoid === false || /feral|savage|wild|aggressive|ravenous/i.test(temperament));
+    const highestDamage = Math.max.apply(null, options.map(function (o) { return combatRecentDamage(scope, attacker, o.e); }));
+    const weighted = options.map(function (o) {
+        let weight = o.w + combatDrawAttentionBonus(o.e);
+        if (state && state.taunt && state.taunt.target === attacker && state.taunt.source === o.e) weight += COMBAT_THREAT.taunt;
+        if (cunning && combatSoftTarget(o.e)) weight += COMBAT_THREAT.softTarget;
+        if (feral && highestDamage > 0 && combatRecentDamage(scope, attacker, o.e) === highestDamage) weight += COMBAT_THREAT.recentDamage;
+        return { e: o.e, w: weight };
+    });
+    const selected = encWeightedPick(weighted);
+    let target = selected;
+    // One eligible guard, one check. More guards do not multiply the chance.
+    if (!(attacker.stunnedRounds > 0) && !attacker.frozen && (isEntityIncorporeal(attacker) || !isEntityExhausted(attacker))) {
+        const guards = options.map(function (o) { return o.e; }).filter(function (e) { return e !== selected && combatCanIntercept(e); });
+        guards.sort(function (a, b) { return combatDrawAttentionBonus(b) - combatDrawAttentionBonus(a); });
+        const guard = guards[0];
+        if (guard && Math.random() < (hasActiveStatusEffect(guard, "immovableStance") ? 0.6 : 0.4)) target = guard;
+    }
+    if (targeting && options.length > 1) {
+        targeting.attacker = attacker; targeting.selected = selected; targeting.target = target;
+        targeting.intercepted = target !== selected;
+        targeting.announce = targeting.intercepted || combatDrawAttentionBonus(target) > 0 ||
+            !!(state && state.taunt && state.taunt.target === attacker && state.taunt.source === target) || cunning && combatSoftTarget(target) || feral && highestDamage > 0;
+    }
+    if (state) state.lastTargets.set(attacker, target);
+    return target;
+}
+
+function combatNarrateTargeting(targeting, lines) {
+    if (!targeting || !targeting.announce || targeting.announced) return;
+    targeting.announced = true;
+    const name = function (e) { return e === G.player ? "you" : e.name || "their companion"; };
+    if (targeting.intercepted) {
+        lines.push((targeting.target === G.player ? "You step" : name(targeting.target) + " steps") + " in front of " + name(targeting.selected) + ".");
+    } else lines.push((targeting.attacker.name || "The foe") + " turns on " + name(targeting.target) + ".");
+}
+
+function encPickPartyTarget(enc, foe, forcePlayer, targeting) {
     const playerUp = !enc.playerDown;
     if (forcePlayer && playerUp) return G.player;
     const options = [];
@@ -51792,22 +52101,23 @@ function encPickPartyTarget(enc, foe, forcePlayer) {
         if (foe._encLastHitById && foe._encLastHitById === encEntityKey(a)) w += ENCOUNTER_REVENGE_TARGET_BONUS;
         options.push({ e: a, w: w });
     });
-    const viceCands = options.map(function (o) { return o.e; });
-    const vicePick = ghostViceTargetPick(foe, viceCands);
-    if (vicePick) return vicePick;
-    return options.length ? encWeightedPick(options) : null;
+    return combatPickThreatTarget(enc, foe, options, targeting);
 }
 
-function encPickFoeTarget(enc, ally) {
+function encPickFoeTarget(enc, ally, targeting) {
     const foes = encounterStandingFoes(enc);
     if (!foes.length) return null;
-    return encWeightedPick(foes.map(function (f) {
+    const skill = getNPCTacticalSkill(ally);
+    const ordered = combatAllyOrder(enc, ally);
+    return combatPickThreatTarget(enc, ally, foes.map(function (f, index) {
         let w = 1;
-        if (f === G.activeNPC) w += 1; // pile onto the player's target
+        if (ordered && ordered.response.obeys && ordered.order.key === "focusFire" && ordered.order.target === f) w += 8;
+        if (skill.tier === "green" && index === 0) w += 1;
+        if (skill.tier !== "green" && f === G.activeNPC) w += 1; // experienced allies focus the player's target
         const ratio = (f.hp || 0) / Math.max(1, f.hpMax || f.hp || 1);
         if (ratio < 0.5) w += 1;       // finish off the hurt
         return { e: f, w: w };
-    }));
+    }), targeting);
 }
 
 function encPickNextTarget(enc, prev) {
@@ -51824,20 +52134,21 @@ function encPickNextTarget(enc, prev) {
 // -- crowd control for combatants that are NOT acting against the player ----
 
 function encCrowdControlled(c, lines) {
-    const name = c.name || "They";
+    if (c.stunnedRounds > 0 || c.frozen) combatCancelTelegraph(c, null, lines);
+    const name = c.name || "They", self = c === G.player;
     if (c.stunnedRounds > 0) {
         c.stunnedRounds -= 1;
-        lines.push(`${name} is stunned, jerking and twitching, and cannot act.`);
+        lines.push(self ? "You are stunned and lose this turn." : `${name} is stunned, jerking and twitching, and cannot act.`);
         return true;
     }
     if (c.frozen) {
         const check = rollStatCheck(c, c.frozen.breakStat || "physicalProwess", c.frozen.breakDC || 12);
         if (check.success) {
             c.frozen = null;
-            lines.push(`${name} strains until the ice cracks and falls away, but it costs them the round.`);
+            lines.push(self ? "You strain free of the ice, but it costs your turn." : `${name} strains until the ice cracks and falls away, but it costs them the round.`);
         } else {
             c.frozen.breakDC = Math.max(2, (c.frozen.breakDC || 12) - SPELL_FREEZE_BREAK_DC_STEP);
-            lines.push(`${name} strains against the ice but cannot break free.`);
+            lines.push(self ? "You strain against the ice but cannot break free." : `${name} strains against the ice but cannot break free.`);
         }
         return true;
     }
@@ -51851,15 +52162,16 @@ function encCrowdControlled(c, lines) {
 function encounterFoeTurn(enc, foe, lines, context, opts) {
     if (!encFoeStanding(enc, foe)) return;
     enc.lastFoe = foe;
-    const target = encPickPartyTarget(enc, foe, !!(opts && opts.forcePlayer));
+    const targeting = {};
+    const target = encPickPartyTarget(enc, foe, !!(opts && opts.forcePlayer), targeting);
     if (!target) return;
     if (target === G.player) {
-        resolveNPCCounterSingle(foe, lines, Object.assign({}, context || {}, { encounterTurn: true }));
+        resolveNPCCounterSingle(foe, lines, Object.assign({}, context || {}, { encounterTurn: true, targeting: targeting, forcedOpening: !!(opts && opts.forcePlayer) }));
         return;
     }
     if (encCrowdControlled(foe, lines)) return;
     if (ghostViceLosesTurn(foe, lines)) return;
-    npcVersusTurn(foe, target, lines);
+    npcVersusTurn(foe, target, lines, { targeting: targeting, scope: enc, crowdChecked: true });
     if (isEntityCollapsed(target) && target._encDowned !== enc.id && encEntityInRoom(enc.room, target)) {
         encounterAllyDown(enc, target, foe, lines);
     }
@@ -51980,21 +52292,29 @@ function encounterAllyTurn(enc, ally, lines) {
         return;
     }
     if (encFollowerTryFlee(enc, ally, lines)) return;
-    let foe = encPickFoeTarget(enc, ally);
+    if (combatFollowPartyOrder(enc, ally, G.activeNPC, lines, true)) return;
+    let targeting = {};
+    let foe = encPickFoeTarget(enc, ally, targeting);
     if (!foe) return;
 
     // Healers and clerics have more to do than swing: the AI (or, failing
     // that, a heuristic) picks from the legal options. See encBuildActionOptions.
     const supportOptions = encBuildActionOptions(enc, ally);
+    const supporter = encSupportRank(ally) > 0;
     if (encHasRealChoice(supportOptions)) {
-        const chosen = encChooseSupportAction(enc, ally, supportOptions);
+        const chosen = supporter ? encChooseSupportAction(enc, ally, supportOptions) : encHeuristicChoice(enc, ally, supportOptions);
         if (chosen && chosen.kind === "attack") {
-            foe = chosen.target;
+            const ordered = combatAllyOrder(enc, ally);
+            if (!(ordered && ordered.response.obeys && ordered.order.key === "focusFire")) {
+                foe = chosen.target;
+                targeting = {};
+            } // a supporter's chosen attack keeps its own current target
         } else if (chosen && encExecuteSupport(enc, ally, chosen, lines)) {
             return;
         }
     }
 
+    if (combatFollowPartyOrder(enc, ally, foe, lines, false)) return;
     const ratio = (ally.hp || 0) / Math.max(1, ally.hpMax || ally.hp || 1);
     if (!isSlimeEntity(ally) && ratio < ENCOUNTER_ALLY_RETREAT_HP_RATIO && encIsCautious(ally) && Math.random() < ENCOUNTER_ALLY_RETREAT_CHANCE) {
         restoreEntityStamina(ally, 2);
@@ -52008,7 +52328,7 @@ function encounterAllyTurn(enc, ally, lines) {
 
     foe._encLastHitById = encEntityKey(ally);
     const foeName = foe.name || "the creature";
-    npcVersusTurn(ally, foe, lines);
+    npcVersusTurn(ally, foe, lines, { targeting: targeting, scope: enc, crowdChecked: true, supporterChoice: supporter });
     if (isEntityCollapsed(foe) && encEntityInRoom(enc.room, foe)) {
         // The watched strike already wrote the finishing-blow line and decided
         // whether they died or dropped senseless (foe._skirmishOutcome).
@@ -52100,6 +52420,12 @@ function encBuildActionOptions(enc, ally) {
                 });
             }
         }
+        const foe = encounterStandingFoes(enc)[0];
+        const ctx = foe && npcTacticalContext(ally, foe, enc);
+        if (ctx) getNPCTacticalActions(ally, foe, ctx).filter(function (o) { return o.id === "bless" || o.id === "ward"; }).forEach(function (o) {
+            options.push({ id: o.id + ":" + encKeyOf(o.target), kind: o.id, target: o.target,
+                label: (o.id === "bless" ? "bless " : "ward ") + (o.target === ally ? "themselves" : o.target === G.player ? "the player" : o.target.name || "an ally") });
+        });
     }
     return options;
 }
@@ -52124,6 +52450,12 @@ function encHeuristicChoice(enc, ally, options) {
     if (res) return res;
     if (heals.length) return heals[0];
     if (potion) return potion;
+    const ward = by("ward").find(function (o) { return encHpRatio(o.target) < 0.6; });
+    if (ward) return ward;
+    const blessing = by("bless")[0];
+    if (blessing) return blessing;
+    const spareWard = by("ward")[0];
+    if (spareWard) return spareWard;
     return null;
 }
 
@@ -52145,6 +52477,11 @@ function encSupportHealAmount(ally) {
 function encExecuteSupport(enc, ally, opt, lines) {
     const name = ally.name || "Your companion";
     const t = opt.target;
+    if (opt.kind === "bless" || opt.kind === "ward") {
+        const foe = encounterStandingFoes(enc)[0], ctx = foe && npcTacticalContext(ally, foe, enc);
+        const action = ctx && getNPCTacticalActions(ally, foe, ctx).find(function (o) { return o.id === opt.kind && o.target === t; });
+        return !!(action && performNPCTacticalAction(ally, foe, action, ctx, lines));
+    }
     if (opt.kind === "guard") {
         restoreEntityStamina(ally, 2);
         lines.push(`${name} falls back a step, catching their breath.`);
@@ -52242,6 +52579,7 @@ function encPrefetchSupportPlans(enc) {
     if (!enc || enc.ended || enc.aiPending || !aiAvailable()) return;
     const supporters = [];
     encounterStandingAllies(enc).forEach(function (a) {
+        if (encSupportRank(a) <= 0) return;
         const opts = encBuildActionOptions(enc, a);
         if (encHasRealChoice(opts)) supporters.push({ ally: a, options: opts });
     });
@@ -52337,6 +52675,9 @@ function encounterSweep(enc, lines) {
         if (!encEntityInRoom(enc.room, a)) return;
         if (isEntityCollapsed(a)) encounterAllyDown(enc, a, null, lines);
     });
+    if (G.combatEncounter === enc && !enc.playerDown && isEntityCollapsed(G.player)) {
+        handlePlayerCombatDefeat(lines, { defeatedBy: enc.lastFoe || G.activeNPC || null });
+    }
 }
 
 // Start of a new round: late arrivals are weighed up, and damage-over-time
@@ -52373,6 +52714,7 @@ function encounterAdvance(enc, lines) {
             if (G.combatEncounter !== enc || enc.ended) return "gone";
 
             encounterSweep(enc, lines);
+            if (G.combatEncounter !== enc || enc.ended) return "gone";
             if (!encounterHasStandingFoe(enc)) return "victory";
             if (encounterPartyStandingCount(enc) === 0) return "defeat";
 
@@ -52398,6 +52740,7 @@ function encounterAdvance(enc, lines) {
             }
             if (c.isPlayer) {
                 if (enc.playerDown) { enc.cursor += 1; continue; }
+                if (encCrowdControlled(G.player, lines)) { enc.cursor += 1; continue; }
                 return "player"; // the player's slot: stop here, cursor stays parked on it
             }
 
@@ -52547,6 +52890,10 @@ function resolveNPCCounter(npc, lines, context) {
 
 function encounterConclude(enc, lines, result) {
     if (!enc || enc.concluding || enc.ended) return;
+    if (result === "victory" || result === "defeat") {
+        registerNPCCombatParticipants(enc, enc.order.map(function (entry) { return entry.entity; }));
+        creditNPCCombatSurvivors(enc, enc.room);
+    }
     enc.concluding = true;
     const wasDown = enc.playerDown;
     const body = enc.lastBody;
@@ -52750,6 +53097,7 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
 
     // Stunned by a Lightning Arc: loses this round entirely.
     if (npc.stunnedRounds > 0) {
+        combatCancelTelegraph(npc, null, lines);
         npc.stunnedRounds -= 1;
         lines.push(`${npcName} is stunned, jerking and twitching, and cannot act.`);
         clearPlayerCombatStance();
@@ -52758,6 +53106,7 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
 
     // Frozen by Frost Shard: spends the round trying to break free.
     if (npc.frozen) {
+        combatCancelTelegraph(npc, null, lines);
         const check = rollStatCheck(npc, npc.frozen.breakStat || "physicalProwess", npc.frozen.breakDC || 12);
         if (check.success) {
             npc.frozen = null;
@@ -52779,16 +53128,24 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
     }
 
     if (maybeNPCSecondWind(npc, lines)) {
+        combatCancelTelegraph(npc, null, lines);
         clearPlayerCombatStance();
         return;
     }
 
     noteBossRelicLoss(npc, lines);
-    const npcPlan = chooseNPCCombatPlan(npc, context);
+    const telegraph = combatTelegraphTurn(npc, player, G.combatEncounter, context.targeting, lines);
+    if (telegraph && telegraph.windup) { clearPlayerCombatStance(); return; }
+    const tactic = !(telegraph && telegraph.release) && prepareNPCPlayerTactic(npc, context, lines);
+    if (tactic && tactic.used && !tactic.counterAction) { clearPlayerCombatStance(); return; }
+    const tacticalPlan = tactic && tactic.counterAction && npcTacticalCounterPlan(tactic.counterAction, npc);
+    const npcPlan = tacticalPlan || (telegraph && telegraph.release ? { type: "attack", target: "torso", styleKey: "balanced", hitBonus: 0,
+        damageDie: getEntityWeaponProfile(npc).damageDie, damageBonus: 1 + telegraph.damageBonus,
+        line: (npc.name || "The creature") + " follows through with the prepared attack." } : chooseNPCCombatPlan(npc, context));
     const npcWeapon = getEntityWeaponProfile(npc);
     // Unarmed creatures fight with a natural attack picked per swing (a wolf
     // mostly bites, sometimes claws) - see STRIKE NARRATION.
-    const naturalMode = pickNaturalAttackMode(npc, npcWeapon);
+    const naturalMode = npcPlan.type === "spell" ? { noun: "spell", verbs: ["blast"], damageType: npcPlan.spell.element } : pickNaturalAttackMode(npc, npcWeapon);
     const damageType = (naturalMode && NATURAL_ATTACKS_AFFECT_DAMAGE_TYPE)
         ? naturalMode.damageType
         : getWeaponDamageType(npcWeapon.type);
@@ -52796,7 +53153,7 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
     // player down (see buildFinishingBlowLine) - tells the collapse/death
     // sequence not to describe the same moment a second time.
     let playerFinishNarrated = false;
-    const elemAtk = pickNPCElementAttack(npc, npcWeapon, naturalMode);
+    const elemAtk = npcPlan.type === "spell" ? { element: npcPlan.spell.element, source: "spell", line: npcPlan.line } : pickNPCElementAttack(npc, npcWeapon, naturalMode);
 
     if (npcPlan.type === "recover") {
         lines.push(formatCombatActionLine(npc, npc, `${npcName} hangs back and tries to recover their guard.`));
@@ -52822,11 +53179,11 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
     }
     if (!npcIsIncorporeal) {
         const npcStyle = COMBAT_ATTACK_STYLES[npcPlan.styleKey];
-        if (npcStyle && typeof npcStyle.staminaCost === "number") {
-            spendEntityStamina(npc, npcStyle.staminaCost, lines, { name: npcName });
-        }
+        const staminaCost = npcPlan.tactical ? npcPlan.staminaCost : npcStyle && npcStyle.staminaCost;
+        if (typeof staminaCost === "number" && staminaCost > 0) spendEntityStamina(npc, staminaCost, lines, { name: npcName });
     }
 
+    combatNarrateTargeting(context.targeting, lines);
     const stanceAtResolution = player.combatState && player.combatState.stance;
     let counterRoll = rollD20(npc);
     if (npc._twistCharges > 0 && playerHasActiveStatus(npc, "twistedFate")) {
@@ -52836,20 +53193,20 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
         if (npc._twistCharges <= 0) removeStatusEffect(npc, "twistedFate");
         lines.push(`Fate twists against ${npcName}'s swing.`);
     }
-    const npcProficiencyHitBonus = getWeaponProficiencyHitBonus(npc, npcWeapon.type) +
+    const npcProficiencyHitBonus = (npcPlan.type === "spell" ? 0 : getWeaponProficiencyHitBonus(npc, npcWeapon.type)) +
         getActionProficiencyHitBonus(npc, npcPlan.styleKey);
     // physicalProwess bonus for the NPC, mirroring the player's statBonus in
     // attackNPC - NPCs had no stat-driven combat bonus at all before this
     // pass, so this is new: an NPC that's leveled physicalProwess through
     // combat now actually hits harder and more often, not just on paper.
-    const npcStatBonus = getEntityStatCombatBonus(npc, "physicalProwess");
+    const npcStatBonus = getEntityStatCombatBonus(npc, npcPlan.type === "spell" ? "willpower" : "physicalProwess");
     const counterBonus = Math.max(0, Math.floor((npc.hostility || 0) / 35)) +
         npcPlan.hitBonus -
         getWoundAttackPenalty(npc) +
-        npcWeapon.hitBonus +
+        (npcPlan.type === "spell" ? 0 : npcWeapon.hitBonus) +
         npcProficiencyHitBonus +
         npcStatBonus +
-        getStatusCombatModifier(npc, "counterHit") -
+        getStatusCombatModifier(npc, "counterHit") + getStatusCombatModifier(npc, "hitBonus") -
         (isLargeFoe(npc) ? getPlayerSpeciesTrait("largeFoeHitPenalty", 0) : 0) +
         (context.openingBonus || 0);
     // A boss whose Rising Shadow just turned a blow strikes back from cover.
@@ -52878,8 +53235,11 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
         lines.push(formatRollLine(`${npcName} attack`, counterRoll, counterBonus, counterTotal, playerArmor, counterHits, counterRoll === 20));
     }
 
-    if (counterHits) {
-        let rawDamage = Math.max(1, Math.round(Math.max(1, randInt(1, npcPlan.damageDie) + npcPlan.damageBonus + npcWeapon.damageBonus + npcStatBonus + getStatusCombatModifier(npc, "damageDealt") + (relicAmbush ? BOSS_SHADOW_AMBUSH_DAMAGE : 0)) * getNPCDamageMultiplier(npc)));
+    if (counterHits && npcPlan.spell && npcPlan.spell.debuffTarget) {
+        applyNPCTacticalPlayerSpell(npc, npcPlan, lines, 0);
+    } else if (counterHits) {
+        let rawDamage = Math.max(1, Math.round(Math.max(1, randInt(1, npcPlan.damageDie) + npcPlan.damageBonus + (npcPlan.type === "spell" ? 0 : npcWeapon.damageBonus) + npcStatBonus + (npcPlan.type !== "spell" && hasActiveStatusEffect(player, "markedPrey") ? 1 : 0) + getStatusCombatModifier(npc, "damageDealt") + (relicAmbush ? BOSS_SHADOW_AMBUSH_DAMAGE : 0)) * getNPCDamageMultiplier(npc)));
+        if (npcPlan.damageMult) rawDamage = Math.max(1, Math.floor(rawDamage * npcPlan.damageMult));
         // Relic powers: Rising Power spends on this hit (Magic only on a spell
         // or breath swing); a weapon swing builds the Magic charges instead.
         const npcMagicSwing = !!(elemAtk && elemAtk.source !== "weapon" && elemAtk.source !== "natural");
@@ -52938,11 +53298,18 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
         const damageResult = counterDamage > 0 ? applyCombatDamage(player, counterDamage, npcPlan.target, {
             crit: counterRoll === 20,
             damageType: (elemAtk && elemAtk.source !== "weapon") ? elemAtk.element : damageType,
-            bleed: counterRoll === 20
+            actionKey: npcPlan.styleKey,
+            heavy: npcPlan.styleKey === "pulverize" || npcPlan.styleKey === "shatter",
+            bleed: counterRoll === 20 && npcPlan.type !== "spell"
         }) : { bled: false, severed: false, newlyDisabledLimb: null };
         consumeArmorBuffHits(player, npcPlan.target, lines);
         speciesSurviveLethal(lines);
-        if (elemAtk && counterDamage > 0) applyNPCElementRider(elemAtk, npc, counterDamage, lines);
+        if (npcPlan.tactical && damageResult.hpLost > 0) {
+            recordCombatThreatDamage(npc, player, damageResult.hpLost, G.combatEncounter);
+            if (npcPlan.spell) applyNPCTacticalPlayerSpell(npc, npcPlan, lines, damageResult.hpLost);
+            else applyNPCTacticalStrikeEffect(npc, player, npcPlan.tactical.strike, G.combatEncounter, lines);
+        }
+        if (!npcPlan.spell && elemAtk && counterDamage > 0) applyNPCElementRider(elemAtk, npc, counterDamage, lines);
         const npcStrikeCtx = {
             attackerName: npcName, attackerIsPlayer: false,
             defenderName: player.name || "you", defenderIsPlayer: true,
@@ -52959,8 +53326,9 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
             if (damageResult.severed) lines.push(buildStrikeSeverLine(npcStrikeCtx));
         }
 
-        if (!isEntityCollapsed(player)) applyNPCPoisonOnHit(npc, naturalMode, lines);
-        if (!isEntityCollapsed(player)) applyNPCManeuverOnHit(npc, naturalMode, lines);
+        if (npcPlan.tactical) pushComboNotes(lines, damageResult);
+        if (!npcPlan.spell && (!npcPlan.tactical || damageResult.hpLost > 0) && !isEntityCollapsed(player)) applyNPCPoisonOnHit(npc, naturalMode, lines);
+        if (!npcPlan.tactical && !isEntityCollapsed(player)) applyNPCManeuverOnHit(npc, naturalMode, lines);
 
         if (damageResult.newlyDisabledLimb) {
             const statusLine = applyLimbDisableStatusEffect(player, "You", damageResult.newlyDisabledLimb, { isPlayer: true, damageType: damageType });
@@ -52970,11 +53338,11 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
         // Skill tracking only, for now. NPC landed a hit: weapon/style
         // proficiency + physicalProwess XP for the NPC. Player took a hit:
         // endurance XP for the player.
-        const npcHitGain = trackCombatSkillGain(npc, {
-            weaponType: npcWeapon.type,
+        const npcHitGain = (!npcPlan.tactical || damageResult.hpLost > 0) ? trackCombatSkillGain(npc, {
+            weaponType: npcPlan.spell ? null : npcWeapon.type,
             actionKey: npcPlan.styleKey,
-            statKey: "physicalProwess"
-        });
+            statKey: npcPlan.spell ? "willpower" : "physicalProwess"
+        }) : null;
         const playerHitGain = trackCombatSkillGain(player, { statKey: "endurance" });
         if (playerHitGain && playerHitGain.leveledUp && playerHitGain.leveledUp.hpGained > 0) {
             const restored = playerHitGain.leveledUp.hpGained;
@@ -53017,7 +53385,7 @@ function resolveNPCCounterSingle(npc, lines, context = {}) {
         }
     } else {
         relicOnAvoidedHit(player);
-        relicOnWeaponSwing(npc, false);
+        if (!npcPlan.spell) relicOnWeaponSwing(npc, false);
         lines.push(buildStrikeMissLine({
             attackerName: npcName, attackerIsPlayer: false,
             defenderName: player.name || "you", defenderIsPlayer: true,
@@ -65594,12 +65962,610 @@ function tickWorldPoison() {
 const NPC_CLASS_ROLE_RANKS = {
     "Delver": { rogue: 3 }, "Scavenger": { rogue: 2 }, "Scout": { rogue: 2 }, "Wanderer": { rogue: 1 },
     "Raider": { rogue: 1, fighter: 2 }, "Adventurer": { fighter: 3, rogue: 1 },
-    "Guildmaster": { fighter: 4, rogue: 2 }, "Town Guard": { fighter: 3 }, "Stone Guard": { fighter: 3 }, "Blacksmith": { fighter: 2 }, "Miner": { fighter: 1 }
+    "Guildmaster": { fighter: 4, rogue: 2 }, "Town Guard": { fighter: 3 }, "Stone Guard": { fighter: 3 }, "Blacksmith": { fighter: 2 }, "Miner": { fighter: 1 },
+    "Mercenary": { fighter: 2 }, "Soldier": { fighter: 3 }, "Arcanist": { wizard: 3 }, "Enchanter": { wizard: 3 },
+    "Scholar": { wizard: 1 }, "Archivist": { wizard: 1 }, "Shaman": { wizard: 2 }
 };
 function getNPCClassRank(npc, key) {
+    if (!npc) return 0;
+    const saved = npc.combatRanks && npc.combatRanks[key];
+    const trained = npc.classSkills && npc.classSkills[key] && npc.classSkills[key].rank;
+    if (Number.isFinite(saved) && saved >= 0) return Math.max(saved, Number.isFinite(trained) ? trained : 0);
+    if (Number.isFinite(trained) && trained > 0) return trained;
+    if (key === "cleric" && isNPCClericRole(npc.role)) return npc.role === "Healer" ? 2 : 1;
     const entry = npc && NPC_CLASS_ROLE_RANKS[npc.role];
     return entry && entry[key] ? entry[key] : 0;
 }
+
+// -- TEAM COMBAT STRATEGY ----------------------------------------------------
+// Session-only intent, orders and acknowledgements. No hidden weights enter saves.
+const combatStrategyFights = new WeakMap();
+function combatStrategyState(scope) {
+    if (!scope || typeof scope !== "object") return null;
+    if (!combatStrategyFights.has(scope)) combatStrategyFights.set(scope, { actors: new Map(), order: null });
+    return combatStrategyFights.get(scope);
+}
+
+function combatPendingFoes(scope) {
+    const state = scope && combatStrategyFights.get(scope);
+    return state ? encounterStandingFoes(scope).filter(function (foe) {
+        const intent = state.actors.get(foe); return intent && intent.pending;
+    }) : [];
+}
+
+function combatTelegraphScope(actor, scope) {
+    scope = scope || G.combatEncounter;
+    if (!scope || scope.ended || !combatTargetReady(actor) || actor === G.player || isEntityIncorporeal(actor)) return null;
+    if (Array.isArray(scope.order)) {
+        if (scope !== G.combatEncounter || scope.room !== G.activeRoom || !encEntityInRoom(scope.room, actor) ||
+            !encounterStandingFoes(scope).includes(actor)) return null;
+    } else {
+        const room = Object.values(G.roomMap || {}).find(function (r) { return r && r.skirmish === scope && (r.creatures || []).includes(actor); });
+        if (!room) return null;
+    }
+    return scope;
+}
+
+function combatCancelTelegraph(actor, scope, lines) {
+    if (!scope) {
+        const room = Object.values(G.roomMap || {}).find(function (r) { return r && r.skirmish && (r.creatures || []).includes(actor); });
+        scope = room && room.skirmish || G.combatEncounter;
+    }
+    const state = scope && combatStrategyFights.get(scope), intent = state && state.actors.get(actor);
+    if (!intent || !intent.pending) return;
+    intent.pending = false; intent.turns = 0;
+    lines.push((actor.name || "The foe") + " loses the opening for the powerful blow.");
+}
+
+// Two ordinary turns, one visible wind-up turn, then a paid strike. The target
+// is chosen afresh at release, so interception and current eligibility still apply.
+function combatTelegraphTurn(actor, defender, scope, targeting, lines) {
+    scope = combatTelegraphScope(actor, scope);
+    if (!scope) return null;
+    const state = combatStrategyState(scope);
+    if (!state.actors.has(actor)) state.actors.set(actor, { turns: 0, pending: false });
+    const intent = state.actors.get(actor);
+    if (actor.bound || actor.stunnedRounds > 0 || actor.frozen || isEntityExhausted(actor)) {
+        combatCancelTelegraph(actor, scope, lines); return null;
+    }
+    if (intent.pending) {
+        intent.pending = false; intent.turns = 0;
+        const intercepted = targeting && targeting.intercepted;
+        const braced = hasActiveStatusEffect(defender, "bracedStance") || hasActiveStatusEffect(defender, "immovableStance");
+        const held = hasActiveStatusEffect(actor, "heldAtBay");
+        const answered = held || braced || intercepted;
+        lines.push((actor.name || "The foe") + (answered
+            ? held ? " cannot build momentum while held at bay; the great blow becomes an ordinary strike."
+                : intercepted ? " has the powerful blow spoiled by the interception."
+                : " meets a braced defence; the great blow loses its force."
+            : " commits to the powerful blow they prepared!"));
+        return { release: true, damageBonus: answered ? 0 : 3 };
+    }
+    intent.turns++;
+    if (intent.turns < 3) return null;
+    intent.pending = true;
+    lines.push((actor.name || "The foe") + " draws back for a powerful blow. It will land on their next turn unless you disrupt it or meet it with a braced defence.");
+    if (Array.isArray(scope.order) && typeof markTextModeUrgent === "function") markTextModeUrgent("foe-windup");
+    return { windup: true };
+}
+
+function combatTechniqueCombo(entity, key) {
+    if (key === "pulverize" && hasActiveStatusEffect(entity, "staggerOpening"))
+        return { bonus: 3, consume: "staggerOpening", text: "The stagger leaves an opening; Pulverize drives through it with extra force." };
+    if (key === "backstab" && hasActiveStatusEffect(entity, "markedPrey"))
+        return { bonus: 2, consume: "markedPrey", text: "The sneak attack finds the marked weak point and bites deeper." };
+    if (key === "shatter" && entity.frozen)
+        return { bonus: 3, text: "Shatter exploits the frozen opening, driving through the ice with extra force." };
+    return null;
+}
+
+const COMBAT_PARTY_ORDERS = {
+    focusFire: { label: "Focus fire", aliases: ["concentrate fire"], tip: "Ask companions to favour your current foe for three rounds." },
+    protectMe: { label: "Protect me", aliases: ["cover me"], tip: "For three rounds, ask fighters to guard and draw attention, while supporters keep their healing priorities." },
+    holdLine: { label: "Hold the line", aliases: ["hold line"], tip: "Ask fighters to establish a defensive stance for three rounds; other companions keep fighting and supporting." },
+    fallBack: { label: "Fall back", aliases: ["regroup"], tip: "Ask companions to catch their breath on their turns for three rounds. This does not leave the fight." }
+};
+
+function combatOrderAllies(enc) {
+    return encounterStandingAllies(enc).filter(function (ally) {
+        return ally.isHumanoid !== false && !ally.bound && !(ally.currentState && ally.currentState.sleeping);
+    });
+}
+
+function combatPartyOrderBlock(npc) {
+    const block = combatPlayerTacticBlock(npc), enc = getActiveEncounter();
+    if (block) return block;
+    if (G.player.bound || G.player.frozen || G.player.stunnedRounds > 0) return "You cannot call an order while restrained or unable to act.";
+    if (!enc || !combatOrderAllies(enc).length) return "There are no standing companions here who can follow an order.";
+    if (isEntityExhausted(G.player) || G.player.stamina < 1) return "You need one stamina to call an order.";
+    return "";
+}
+
+function getCombatPartyOrderActions(npc) {
+    const enc = getActiveEncounter();
+    if (!enc || !combatOrderAllies(enc).length) return [];
+    const block = combatPartyOrderBlock(npc);
+    return Object.keys(COMBAT_PARTY_ORDERS).map(function (key) {
+        const def = COMBAT_PARTY_ORDERS[key];
+        return combatActionDescriptor(def.label + " (1 stamina)", combatTacticCallback(npc, function () { return performCombatPartyOrder(npc, key); }), {
+            id: key, primary: def.label.toLowerCase(), aliases: def.aliases, disabled: !!block,
+            title: block || def.tip + " Costs one stamina and your turn. Replaces your previous order; experience affects compliance."
+        });
+    });
+}
+
+function performCombatPartyOrder(npc, key) {
+    const block = combatPartyOrderBlock(npc), def = COMBAT_PARTY_ORDERS[key];
+    if (block || !def) { setNarration(block || "That is not a party order."); return; }
+    const enc = getActiveEncounter(), player = G.player, lines = [];
+    combatStrategyState(enc).order = { key: key, player: player, room: enc.room, target: npc,
+        untilRound: enc.round + 2, recipients: new Set(combatOrderAllies(enc)), responses: new Map() };
+    spendEntityStamina(player, 1, lines, { isPlayer: true });
+    lines.push("You call, \"" + def.label + (key === "focusFire" ? " on " + (npc.name || "this foe") : "") + "!\" Your companions have heard the order.");
+    if (resolveNPCCounter(npc, lines, { playerPassed: true })) return;
+    if (!combatTargetReady(npc) || G.activeNPC !== npc || G.player !== player) return;
+    renderStats(); renderCombatActionMenu(npc); renderCombatNarrationLines(lines); saveGameState();
+}
+
+function combatAllyOrder(enc, ally) {
+    const state = combatStrategyFights.get(enc), order = state && state.order;
+    if (!order || order.player !== G.player || order.room !== G.activeRoom || enc !== G.combatEncounter || enc.ended ||
+        enc.round > order.untilRound || !order.recipients.has(ally) || !combatOrderAllies(enc).includes(ally) ||
+        order.key === "focusFire" && !encounterStandingFoes(enc).includes(order.target)) return null;
+    let response = order.responses.get(ally);
+    if (!response || response.round !== enc.round) {
+        response = { round: enc.round, obeys: Math.random() >= getNPCTacticalSkill(ally).mistakeChance, narrated: false };
+        order.responses.set(ally, response);
+    }
+    return { order: order, response: response };
+}
+
+function combatFollowPartyOrder(enc, ally, foe, lines, early) {
+    const current = combatAllyOrder(enc, ally);
+    if (!current) return false;
+    const order = current.order, response = current.response;
+    if (!response.obeys) {
+        if (!response.narrated) { lines.push((ally.name || "Your companion") + " misreads the order and follows their own judgement."); response.narrated = true; }
+        return false;
+    }
+    if (order.key === "fallBack" && early) {
+        restoreEntityStamina(ally, 2);
+        lines.push((ally.name || "Your companion") + " follows your call to fall back, catching their breath.");
+        return true;
+    }
+    if (early || !/^(protectMe|holdLine)$/.test(order.key)) return false;
+    const ctx = npcTacticalContext(ally, foe, enc);
+    const options = getNPCTacticalActions(ally, foe, ctx);
+    const guard = options.find(function (o) { return o.id === "guard"; });
+    if (guard) return !!performNPCTacticalAction(ally, foe, guard, ctx, lines);
+    const taunt = order.key === "protectMe" && options.find(function (o) { return o.id === "taunt"; });
+    return !!(taunt && performNPCTacticalAction(ally, foe, taunt, ctx, lines));
+}
+// -- END TEAM COMBAT STRATEGY ------------------------------------------------
+
+// -- PLAYER-FACING NPC TACTICS ----------------------------------------------
+const npcPlayerControlLosses = new WeakMap();
+function npcPlayerControlSerial() { return G.player && npcPlayerControlLosses.get(G.player) || 0; }
+function noteNPCPlayerControlLoss() {
+    npcPlayerControlLosses.set(G.player, npcPlayerControlSerial() + 1);
+    if (typeof markTextModeUrgent === "function") markTextModeUrgent("player-stunned");
+}
+
+function prepareNPCPlayerTactic(npc, context, lines) {
+    if (context.forcedOpening || isEntityIncorporeal(npc)) return null;
+    const ctx = npcTacticalContext(npc, G.player, G.combatEncounter);
+    if (!ctx || !ctx.scope.foes.includes(npc)) return null;
+    ctx.playerCounter = true; ctx.targeting = context.targeting;
+    return takeNPCTacticalTurn(npc, G.player, ctx, lines);
+}
+
+function npcTacticalCounterPlan(action, npc) {
+    const spell = action.kind === "spell" && WIZARD_SPELLS[action.id];
+    const strike = action.strike || {};
+    return { type: spell ? "spell" : "attack", target: "torso", styleKey: action.id,
+        damageDie: spell ? spell.damageDie || 0 : getEntityWeaponProfile(npc).damageDie,
+        damageBonus: spell ? spell.damageBonus || 0 : strike.damageBonus || 0,
+        hitBonus: spell ? 0 : strike.hit || 0, damageMult: strike.damageMult || 1,
+        staminaCost: action.stamina, tactical: action, spell: spell || null,
+        line: (npc.name || "The foe") + " uses " + (spell ? spell.name : action.id === "backstab" ? "a sneak attack" : getFighterManeuverDef(action.id)?.label || action.id) + "." };
+}
+
+function applyNPCTacticalStrikeEffect(attacker, defender, strike, scope, lines) {
+    if (!strike || isEntityCollapsed(defender)) return;
+    const self = defender === G.player, name = self ? "You" : defender.name || "The fighter";
+    if (strike.onHit === "feinted") {
+        applyNPCTacticalStatus(scope, defender, "feinted");
+        lines.push(name + (self ? " are" : " is") + " thrown off balance by the feint.");
+    } else if (strike.onHit === "stagger" && Math.random() < 0.35) {
+        defender.stunnedRounds = Math.max(1, defender.stunnedRounds || 0);
+        applyNPCTacticalStatus(scope, defender, "staggerOpening");
+        lines.push(name + (self ? " stagger" : " staggers") + ", stunned by the blow.");
+        if (self) noteNPCPlayerControlLoss();
+    } else if (strike.onHit === "pulverize" || strike.onHit === "shatter") {
+        const current = defender.sundered && getStatusClock() <= defender.sundered.untilTurn ? defender.sundered.amount : 0;
+        defender.sundered = { amount: Math.min(FIGHTER_SUNDER_MAX, current + (strike.onHit === "shatter" ? 2 : 1)), untilTurn: getStatusClock() + FIGHTER_SUNDER_TURNS };
+        trackNPCTacticalArmourDamage(scope, defender);
+        if (strike.onHit === "shatter") {
+            defender.stunnedRounds = Math.max(1, defender.stunnedRounds || 0);
+            if (self) noteNPCPlayerControlLoss();
+        }
+        lines.push(self ? "You reel as the crushing blow cracks your armour." : name + " reels as the crushing blow cracks their armour.");
+    }
+}
+
+function applyNPCTacticalPlayerSpell(npc, plan, lines, hpLost) {
+    const spell = plan.spell;
+    if (spell.debuffTarget) {
+        applyNPCTacticalStatus(G.combatEncounter, G.player, spell.debuffTarget);
+        lines.push("Rime stiffens your movements.");
+        trackCombatSkillGain(npc, { actionKey: plan.styleKey, statKey: "willpower" });
+    }
+    if (spell.drainStamina && (spell.debuffTarget || hpLost > 0)) {
+        spendEntityStamina(G.player, spell.drainStamina, lines, { isPlayer: true });
+        lines.push("The cold saps your strength.");
+    }
+}
+// -- END PLAYER-FACING NPC TACTICS ------------------------------------------
+
+// -- COMBAT LIFETIME CLOCKS --------------------------------------------------
+// A watched fight advances local rounds without consuming player story time.
+// World progress and those rounds are alternate clocks, not additive costs.
+function combatFightClock(scope) {
+    if (!scope || Array.isArray(scope.order)) return getStatusClock();
+    const state = npcTacticalFight(scope);
+    return state.clock + Math.max(0, getStatusClock() - state.worldAtRound);
+}
+
+function trackNPCTacticalArmourDamage(scope, target) {
+    if (!scope || Array.isArray(scope.order) || !target.sundered) return;
+    const state = npcTacticalFight(scope);
+    state.armourEnds.set(target, { value: target.sundered, until: combatFightClock(scope) + FIGHTER_SUNDER_TURNS });
+}
+
+function restoreNPCSkirmishLifetimes(scope, participants) {
+    const state = npcTacticalFight(scope), now = combatFightClock(scope), world = getStatusClock();
+    const keys = FIGHTER_DEFENSIVE_STATUSES.concat(["feinted", "staggerOpening", "markedPrey", "distracted", "hoarfrosted", "blessed", "sanctuaryWard"]);
+    (participants || []).forEach(function (target) {
+        if (!target || target === G.player) return;
+        if (!state.statusEnds.has(target)) state.statusEnds.set(target, new Map());
+        const tracked = state.statusEnds.get(target);
+        getActiveStatusEffects(target).forEach(function (effect) {
+            if (!keys.includes(effect.key) || !Number.isFinite(effect.expiresAtTurn) || tracked.has(effect.key)) return;
+            tracked.set(effect.key, { until: now + Math.max(0, effect.expiresAtTurn - world), effect: effect, expiresAtTurn: effect.expiresAtTurn });
+        });
+        const armour = target.sundered;
+        if (armour && Number.isFinite(armour.untilTurn) && !state.armourEnds.has(target))
+            state.armourEnds.set(target, { until: now + Math.max(0, armour.untilTurn - world), value: armour });
+    });
+}
+// -- END COMBAT LIFETIME CLOCKS ---------------------------------------------
+
+// -- NPC TACTICAL SKILL AND ACTIONS ------------------------------------------
+// Derived scores and pending decisions are private. Only experience counters,
+// seeded ranks and real resources live on the NPC and survive a save.
+const npcTacticalFights = new WeakMap();
+const NPC_TACTICAL_MISTAKES = { green: 0.35, seasoned: 0.12, veteran: 0.03 };
+
+function npcCombatCount(npc, key) {
+    const value = npc && npc[key];
+    return Number.isFinite(value) ? Math.max(0, Math.min(Number.MAX_SAFE_INTEGER - 1, Math.floor(value))) : 0;
+}
+
+function getNPCTacticalSkill(npc) {
+    const ranks = ["fighter", "rogue", "wizard", "cleric"].map(function (key) { return getNPCClassRank(npc, key); });
+    const skills = npc && npc.combatSkills || {};
+    const total = function (values) { return Object.values(values || {}).reduce(function (sum, n) { return sum + (Number.isFinite(n) ? Math.max(0, Math.min(1000000, n)) : 0); }, 0); };
+    const weapons = total(skills.weapons), actions = total(skills.actions), stats = npc && npc.stats || {};
+    const prowess = Number.isFinite(stats.physicalProwess) ? stats.physicalProwess : 3;
+    const will = Number.isFinite(stats.willpower) ? stats.willpower : 3;
+    const temperament = String(npc && (npc.temperament || npc.personalityProfile && npc.personalityProfile.temperament) || "");
+    let score = Math.max.apply(null, ranks) * 3 + Math.min(12, Math.floor(Math.log2(1 + weapons))) +
+        Math.min(8, Math.floor(Math.log2(1 + actions))) + Math.min(10, Math.max(0, prowess - 3)) +
+        Math.min(15, Math.floor(npcCombatCount(npc, "combatSurvived") / 2)) + Math.max(-1, Math.min(1, Math.floor((will - 3) / 2)));
+    if (/cunning|calculating|disciplined/i.test(temperament)) score++;
+    if (/reckless|impulsive/i.test(temperament)) score--;
+    const tier = score >= 25 ? "veteran" : score >= 12 ? "seasoned" : "green";
+    return { tier: tier, score: score, mistakeChance: NPC_TACTICAL_MISTAKES[tier], weapons: weapons, actions: actions };
+}
+
+function ensureNPCTacticalMana(npc) {
+    if (!npc || Math.max(getNPCClassRank(npc, "wizard"), getNPCClassRank(npc, "cleric")) < 1) return;
+    if (!(Number.isFinite(npc.manaMax) && npc.manaMax > 0)) {
+        npc.manaMax = 6 + 2 * Math.max(getNPCClassRank(npc, "wizard"), getNPCClassRank(npc, "cleric"));
+        npc.mana = npc.manaMax;
+    } else if (!Number.isFinite(npc.mana)) npc.mana = 0;
+}
+
+function seedNPCTacticalProfile(npc) {
+    if (!npc || npc.isHumanoid === false || npc._tacticalSeeded) return npc;
+    npc._tacticalSeeded = true;
+    if (isNPCClericRole(npc.role)) ensureNPCClericProfile(npc);
+    const tier = Math.max(0, getPortalTier()), bonus = Math.min(3, Math.ceil(tier / 2));
+    npc.combatRanks = {};
+    let trained = false;
+    ["fighter", "rogue", "wizard", "cleric"].forEach(function (key) {
+        const base = getNPCClassRank(npc, key);
+        const rank = base > 0 ? base + bonus : 0;
+        npc.combatRanks[key] = rank;
+        if (rank > 0) {
+            trained = true; npc.classSkills = npc.classSkills || {};
+            npc.classSkills[key] = { rank: rank, xp: npc.classSkills[key] && npc.classSkills[key].xp || 0 };
+        }
+    });
+    if (!Number.isFinite(npc.combatSurvived)) npc.combatSurvived = trained ? Math.min(40, tier * 4) : 0;
+    ensureNPCTacticalMana(npc);
+    return npc;
+}
+
+function npcTacticalFight(scope) {
+    if (!scope || typeof scope !== "object") return null;
+    let state = npcTacticalFights.get(scope);
+    if (!state) { state = { participants: new Set(), actors: new Map(), statusEnds: new Map(), armourEnds: new Map(), clock: getStatusClock(), worldAtRound: getStatusClock(), round: 0, credited: false }; npcTacticalFights.set(scope, state); }
+    return state;
+}
+
+function registerNPCCombatParticipants(scope, participants) {
+    const state = npcTacticalFight(scope);
+    if (state && !state.credited) (participants || []).forEach(function (npc) { if (npc && npc !== G.player) state.participants.add(npc); });
+}
+
+function creditNPCCombatSurvivors(scope, room) {
+    const state = npcTacticalFight(scope);
+    if (!state || state.credited) return;
+    state.credited = true;
+    state.participants.forEach(function (npc) {
+        if (combatTargetReady(npc) && npc.bodyState !== "corpse" && npc.bodyState !== "unconscious" &&
+            !(npc.currentState && npc.currentState.sleeping) && encEntityInRoom(room, npc)) {
+            npc.combatSurvived = npcCombatCount(npc, "combatSurvived") + 1;
+        }
+    });
+}
+
+function advanceNPCSkirmishTactics(scope, participants) {
+    registerNPCCombatParticipants(scope, participants);
+    const state = npcTacticalFight(scope);
+    if (state.round === 0) restoreNPCSkirmishLifetimes(scope, participants);
+    state.clock += Math.max(1, getStatusClock() - state.worldAtRound);
+    state.worldAtRound = getStatusClock();
+    state.round++;
+    state.armourEnds.forEach(function (entry, target) {
+        if (target.sundered !== entry.value) { state.armourEnds.delete(target); return; }
+        if (entry.until <= state.clock) {
+            target.sundered = null;
+            state.armourEnds.delete(target);
+        } else target.sundered.untilTurn = getStatusClock() + entry.until - state.clock;
+    });
+    state.statusEnds.forEach(function (effects, target) {
+        effects.forEach(function (entry, key) {
+            const effect = getActiveStatusEffects(target).find(function (e) { return e.key === key; });
+            if (!effect || effect !== entry.effect || effect.expiresAtTurn !== entry.expiresAtTurn) { effects.delete(key); return; }
+            if (entry.until <= state.clock) {
+                removeStatusEffect(target, key);
+                effects.delete(key);
+            } else {
+                effect.expiresAtTurn = getStatusClock() + entry.until - state.clock;
+                entry.expiresAtTurn = effect.expiresAtTurn;
+            }
+        });
+        if (!effects.size) state.statusEnds.delete(target);
+    });
+}
+
+function applyNPCTacticalStatus(scope, target, key) {
+    applyStatusEffect(target, key, target.name || "They");
+    // Watching a skirmish does not advance the global encounter clock. Bound
+    // new NPC buffs/debuffs by its own rounds as well as their normal clock.
+    if (scope && !Array.isArray(scope.order)) {
+        const state = npcTacticalFight(scope), def = STATUS_EFFECT_DEFINITIONS[key];
+        if (!state.statusEnds.has(target)) state.statusEnds.set(target, new Map());
+        const effect = getActiveStatusEffects(target).find(function (e) { return e.key === key; });
+        if (effect) state.statusEnds.get(target).set(key, { until: combatFightClock(scope) + (def && def.durationTurns || 2),
+            effect: effect, expiresAtTurn: effect.expiresAtTurn });
+    }
+}
+
+function npcTacticalContext(actor, defender, scope) {
+    const enc = G.combatEncounter;
+    if (!scope && enc && !enc.ended && encEntityInRoom(enc.room, actor) &&
+        (defender === G.player || encEntityInRoom(enc.room, defender))) scope = enc;
+    const room = scope && scope.room || Object.values(G.roomMap || {}).find(function (r) {
+        return r && r.skirmish && (!scope || r.skirmish === scope) && (r.creatures || []).includes(actor) && r.creatures.includes(defender);
+    });
+    if (!scope && room) scope = room.skirmish;
+    if (!scope || !room || !encEntityInRoom(room, actor)) return null;
+    let team, enemies;
+    if (Array.isArray(scope.foes) && Array.isArray(scope.allies)) {
+        if (G.combatEncounter !== scope || scope.ended || scope.room !== G.activeRoom) return null;
+        const party = (scope.playerDown ? [] : [G.player]).concat(encounterStandingAllies(scope));
+        const foes = encounterStandingFoes(scope);
+        if (foes.includes(actor)) { team = foes; enemies = party; }
+        else if (party.includes(actor)) { team = party; enemies = foes; }
+        else return null;
+    } else if (scope.npcPartySides) {
+        if (room.skirmish !== scope) return null;
+        const sides = scope.npcPartySides, side = sides.a.includes(actor.id) ? "a" : sides.b.includes(actor.id) ? "b" : "";
+        if (!side) return null;
+        team = room.creatures.filter(function (e) { return sides[side].includes(e.id); });
+        enemies = room.creatures.filter(function (e) { return sides[side === "a" ? "b" : "a"].includes(e.id); });
+    } else {
+        if (room.skirmish !== scope || ![scope.aId, scope.bId].includes(actor.id)) return null;
+        team = [actor]; enemies = [defender];
+    }
+    team = team.filter(combatTargetReady); enemies = enemies.filter(combatTargetReady);
+    if (!team.includes(actor) || !enemies.includes(defender)) return null;
+    const state = npcTacticalFight(scope);
+    registerNPCCombatParticipants(scope, team.concat(enemies));
+    if (!state.actors.has(actor)) state.actors.set(actor, { turn: 0, cooldowns: {} });
+    state.actors.get(actor).turn = Array.isArray(scope.order) ? scope.round || 1 : state.round;
+    return { actor: actor, defender: defender, room: room, scope: scope, team: team, enemies: enemies, state: state.actors.get(actor) };
+}
+
+function npcCanUseTactics(actor) {
+    return actor && actor !== G.player && actor.isHumanoid !== false && combatTargetReady(actor) && !actor.bound &&
+        !(actor.currentState && actor.currentState.sleeping) && !(actor.stunnedRounds > 0) && !actor.frozen && !isEntityExhausted(actor);
+}
+
+function getNPCTacticalActions(actor, defender, ctx) {
+    if (!ctx || !npcCanUseTactics(actor) || ctx.actor !== actor || ctx.defender !== defender) return [];
+    ensureNPCTacticalMana(actor);
+    const skill = getNPCTacticalSkill(actor), fighter = getNPCClassRank(actor, "fighter"), rogue = getNPCClassRank(actor, "rogue");
+    const wizard = getNPCClassRank(actor, "wizard"), cleric = getNPCClassRank(actor, "cleric");
+    const others = ctx.team.filter(function (e) { return e !== actor; });
+    const hurt = others.some(function (e) { return encHpRatio(e) < 0.6; });
+    const strategy = combatStrategyFights.get(ctx.scope);
+    const threatened = ctx.enemies.some(function (e) { const intent = strategy && strategy.actors.get(e); return intent && intent.pending; });
+    const targets = ctx.team.slice().sort(function (a, b) { return encHpRatio(a) - encHpRatio(b); });
+    const lowest = targets[0] || actor, options = [];
+    const add = function (id, kind, target, stamina, mana, priority, extra) {
+        if ((ctx.state.cooldowns[id] || 0) > ctx.state.turn || (actor.stamina || 0) < stamina || (actor.mana || 0) < mana) return;
+        options.push(Object.assign({ id: id, kind: kind, target: target, stamina: stamina, mana: mana, priority: priority }, extra || {}));
+    };
+    const retreatAt = skill.tier === "veteran" ? 0.35 : skill.tier === "seasoned" ? 0.2 : 0.1;
+    if (encHpRatio(actor) < retreatAt) add("retreat", "retreat", actor, 0, 0, 110);
+    if (fighter > 0) {
+        const guarding = FIGHTER_DEFENSIVE_STATUSES.some(function (key) { return hasActiveStatusEffect(actor, key); });
+        if (!guarding) add("guard", "stance", actor, fighter >= 3 ? 3 : 2, 0,
+            hurt || threatened ? 100 : encHpRatio(actor) < 0.6 ? 85 : skill.tier === "veteran" && others.length ? 65 : 20,
+            { status: fighter >= 3 ? "wallOfSteel" : "bracedStance" });
+        if (fighter >= 3 && hasActiveStatusEffect(defender, "staggerOpening")) add("pulverize", "strike", defender, 3 + COMBAT_ATTACK_STYLES.heavy.staminaCost, 0, 95,
+            { strike: { hit: -1, damageBonus: 3, onHit: "pulverize" } });
+        if (fighter >= 5 && defender.frozen) add("shatter", "strike", defender, 4 + COMBAT_ATTACK_STYLES.heavy.staminaCost, 0, 100,
+            { strike: { hit: -1, damageBonus: 1, onHit: "shatter" } });
+        const blunt = getWeaponDamageType(getEntityWeaponProfile(actor).type) === "blunt";
+        if (blunt || !hasActiveStatusEffect(defender, "feinted")) add(blunt ? "stagger" : "feint", "strike", defender, 4, 0, 60,
+            { strike: { hit: blunt ? -1 : 0, damageMult: blunt ? 1 : 0.5, onHit: blunt ? "stagger" : "feinted" } });
+        if (others.length && defender !== G.player) add("taunt", "taunt", defender, 2, 0, hurt && guarding ? 90 : 0);
+    }
+    if (rogue > 0) {
+        const last = combatThreatState(ctx.scope).lastTargets;
+        const occupied = defender === G.player ? G.activeNPC !== actor && ctx.team.includes(G.activeNPC) && combatTargetReady(G.activeNPC) :
+            last && last.get(defender) && last.get(defender) !== actor && combatTargetReady(last.get(defender));
+        if (occupied || defender.frozen || defender.stunnedRounds > 0) {
+            add("backstab", "strike", defender, 2 + ROGUE_BACKSTAB_STAMINA, 0, 80,
+                { strike: { hit: 2, damageBonus: 3, onHit: "backstab" } });
+            if (!hasActiveStatusEffect(defender, "markedPrey")) add("mark", "status", defender, 2, 0, 85, { status: "markedPrey" });
+        }
+        if (!hasActiveStatusEffect(defender, "distracted")) add("distract", "status", defender, 2, 0, occupied ? 45 : 65, { status: "distracted" });
+    }
+    if (wizard > 0) {
+        if (elementCanHurtTarget(defender, "frost")) add("chillTouch", "spell", defender, 0, WIZARD_SPELLS.chillTouch.manaCost, 60);
+        if (wizard >= 3 && !hasActiveStatusEffect(defender, "hoarfrosted") && elementCanHurtTarget(defender, "frost"))
+            add("hoarfrost", "spell", defender, 0, WIZARD_SPELLS.hoarfrost.manaCost, skill.tier === "green" ? 35 : 75);
+    }
+    if (cleric > 0) {
+        if (encHpRatio(lowest) < 0.6) add("heal", "heal", lowest, 0, 3, 100);
+        if (!hasActiveStatusEffect(actor, "blessed")) add("bless", "status", actor, 0, 2, 40, { status: "blessed" });
+        if (cleric >= 2 && !hasActiveStatusEffect(lowest, "sanctuaryWard")) add("ward", "status", lowest, 0, 3, encHpRatio(lowest) < 0.6 ? 80 : 30, { status: "sanctuaryWard" });
+    }
+    return options;
+}
+
+function performNPCTacticalAction(actor, defender, option, ctx, lines) {
+    const live = npcTacticalContext(actor, defender, ctx && ctx.scope);
+    if (!live || live.room !== ctx.room) return null;
+    const current = getNPCTacticalActions(actor, defender, live).find(function (o) { return o.id === option.id && o.target === option.target; });
+    if (!current) return null;
+    const playerAttack = defender === G.player && (current.kind === "strike" || current.kind === "spell");
+    if (playerAttack && !ctx.playerCounter) return null;
+    const target = current.target, name = actor.name || "The fighter", who = target === actor ? "themselves" : target === G.player ? "you" : target.name || "their foe";
+    if (current.mana && !spendPlayerMana(actor, current.mana)) return null;
+    if (current.kind !== "strike" && current.stamina) spendEntityStamina(actor, current.stamina, lines, { name: name });
+    live.state.cooldowns[current.id] = live.state.turn + (current.id === "taunt" || current.id === "retreat" ? 3 : 2);
+    if (playerAttack) return { used: true, counterAction: current };
+    if (current.kind === "strike") {
+        combatNarrateTargeting(ctx.targeting, lines);
+        reinforcementOpeningStrike(actor, defender, lines, { watched: true, scope: live.scope,
+            strike: Object.assign({ key: current.id, staminaCost: current.stamina }, current.strike) });
+        return { used: true, weapon: true };
+    }
+    if (current.kind === "retreat") {
+        restoreEntityStamina(actor, 2); lines.push(name + " falls back a step, catching their breath.");
+    } else if (current.kind === "stance") {
+        FIGHTER_DEFENSIVE_STATUSES.forEach(function (key) { if (key !== current.status) removeStatusEffect(actor, key); });
+        applyNPCTacticalStatus(live.scope, actor, current.status);
+        actor.combatHeldLine = npcCombatCount(actor, "combatHeldLine") + 1;
+        lines.push(name + (current.status === "wallOfSteel" ? " sets a guard between their companions and the fighting." : " braces against the next blow."));
+    } else if (current.kind === "taunt") {
+        combatThreatState(live.scope).taunt = { source: actor, target: defender, until: combatFightClock(live.scope) + COMBAT_THREAT.tauntTurns };
+        lines.push(name + " challenges " + who + " to face them.");
+    } else if (current.kind === "heal") {
+        const before = target.hp;
+        target.hp = Math.min(target.hpMax || target.hp, target.hp + encSupportHealAmount(actor));
+        lines.push(name + " lays a glowing hand on " + who + ", mending " + (target.hp - before) + " HP.");
+    } else if (current.kind === "status") {
+        const possessive = target === G.player ? "your" : who + "'s";
+        applyNPCTacticalStatus(live.scope, target, current.status);
+        lines.push(name + (current.id === "mark" ? " marks the openings in " + possessive + " guard." :
+            current.id === "distract" ? " draws " + possessive + " attention aside." :
+            current.id === "bless" ? " murmurs a blessing, steadying their aim." : " places a ward around " + who + "."));
+    } else if (current.kind === "spell") {
+        const spell = WIZARD_SPELLS[current.id];
+        if (spell.debuffTarget) {
+            applyNPCTacticalStatus(live.scope, defender, spell.debuffTarget);
+            spendEntityStamina(defender, spell.drainStamina || 0, lines, { name: who });
+            lines.push(name + " casts " + spell.name + "; rime stiffens " + who + "'s movements.");
+        } else {
+            const raw = randInt(1, spell.damageDie) + spell.damageBonus + getEntityStatCombatBonus(actor, "willpower");
+            const damage = Math.max(1, raw - getTargetDamageReduction(defender, "torso", spell.element));
+            const result = applyCombatDamage(defender, damage, "torso", { damageType: spell.element });
+            recordCombatThreatDamage(actor, defender, result.hpLost, live.scope);
+            lines.push(formatCombatActionLine(actor, defender, name + " casts " + spell.name + " at " + who + " for " + result.hpLost + " " + spell.element + " damage."));
+            pushComboNotes(lines, result);
+            if (spell.drainStamina && result.hpLost > 0) spendEntityStamina(defender, spell.drainStamina, lines, { name: who });
+            if (spell.burn && defender.hp > 0) {
+                defender.burning = { rounds: spell.burn.rounds, damage: spell.burn.damage, untilTurn: getStatusClock() + SPELL_BURN_EXPIRY_TURNS };
+                lines.push((defender.name || "The foe") + " catches fire.");
+            }
+            if (isEntityCollapsed(defender)) defender._skirmishOutcome = determineCombatDefeatOutcome({ lethal: Math.random() < getVersusLethality(actor, defender) });
+        }
+    }
+    trackCombatSkillGain(actor, { actionKey: current.id, statKey: current.mana ? "willpower" : undefined });
+    return { used: true, weapon: false };
+}
+
+function takeNPCTacticalTurn(actor, defender, ctx, lines) {
+    if (!ctx || !npcCanUseTactics(actor)) return null;
+    const options = getNPCTacticalActions(actor, defender, ctx).filter(function (o) { return o.priority > 0; });
+    if (!options.length) return null;
+    const skill = getNPCTacticalSkill(actor);
+    if (Math.random() < skill.mistakeChance) {
+        if (skill.tier === "green") lines.push((actor.name || "The novice") + " hesitates, then falls back on a hurried swing.");
+        return null;
+    }
+    if (Math.random() >= (skill.tier === "veteran" ? 0.8 : skill.tier === "seasoned" ? 0.6 : 0.35)) return null;
+    options.sort(function (a, b) { return b.priority - a.priority; });
+    return performNPCTacticalAction(actor, defender, options[0], ctx, lines);
+}
+function npcFightingInquiryBlock(npc) {
+    if (!npc || npc.isHumanoid === false || !canConverseWithNPC(npc)) return "Start a conversation with someone who can answer first.";
+    const block = conversationActionMenuBlock(npc);
+    if (block) return block;
+    const used = npc.memory && npc.memory.conversationState && npc.memory.conversationState.sessionUsedOptionIds || [];
+    if (!used.some(function (id) { return /^greet-/.test(id) || id === "service-opened" || id === "resume-conversation"; })) return "Greet them or resume the conversation before asking about their fighting.";
+    return "";
+}
+
+function describeNPCFighting(npc) {
+    const block = npcFightingInquiryBlock(npc);
+    if (block) return { status: "blocked" };
+    const skill = getNPCTacticalSkill(npc), survived = npcCombatCount(npc, "combatSurvived"), held = npcCombatCount(npc, "combatHeldLine");
+    const classes = ["fighter", "rogue", "wizard", "cleric"].sort(function (a, b) { return getNPCClassRank(npc, b) - getNPCClassRank(npc, a); });
+    const rank = getNPCClassRank(npc, classes[0]), labels = { fighter: "martial arms", rogue: "the quiet arts", wizard: "arcane magic", cleric: "divine work" };
+    const parts = [];
+    if (survived) parts.push("I have come through " + survived + (survived === 1 ? " fight" : " fights") + " on my feet.");
+    else parts.push(skill.weapons < 4 ? "I have no serious fights behind me, only a few scuffles." : "I have no finished battles to boast of, but I do practise.");
+    parts.push(skill.weapons >= 20 ? "I have put in a great deal of weapon practice." : skill.weapons >= 4 ? "I practise with my weapons regularly." : "I am still finding my feet with a weapon.");
+    if (rank > 0) parts.push("My strongest training is " + getClassRankName(rank).toLowerCase() + " " + labels[classes[0]] + ".");
+    else parts.push("I have no formal combat training.");
+    if (held) parts.push("I have held a guard under pressure " + held + (held === 1 ? " time." : " times."));
+    const temperament = String(npc.temperament || npc.personalityProfile && npc.personalityProfile.temperament || "");
+    if (/braggart|boastful|arrogant|proud/i.test(temperament)) parts.unshift("Better than most, I would say.");
+    else if (skill.tier === "green") parts.push("I will not pretend I know every trick.");
+    else if (skill.tier === "veteran") parts.push("The important thing is keeping your head when someone beside you falters.");
+    addChatMessage("left", npc.name || "They", parts.join(" "), { mode: "auto" });
+    return { status: "completed" };
+}
+// -- END NPC TACTICAL SKILL AND ACTIONS --------------------------------------
 
 // Crime of opportunity (rogue NPCs).
 const NPC_THIEF_SHARE_BY_RANK = { 1: 0.15, 2: 0.35, 3: 0.6 };
@@ -66278,11 +67244,37 @@ function startNPCConflict(room, a, b, reason) {
 
 // One side's turn in a skirmish round: a second wind, or a maneuver, then the
 // ordinary strike, then any blade poison taking hold.
-function npcVersusTurn(attacker, defender, lines) {
-    if (maybeNPCSecondWind(attacker, lines)) return;
-    maybeNPCVersusManeuver(attacker, defender, lines);
+function npcVersusTurn(attacker, defender, lines, options) {
+    if (!combatTargetReady(attacker) || !combatTargetReady(defender)) return;
+    if (!(options && options.crowdChecked) && encCrowdControlled(attacker, lines)) return;
+    if (maybeNPCSecondWind(attacker, lines)) { combatCancelTelegraph(attacker, options && options.scope, lines); return; }
+    if (!isEntityIncorporeal(attacker) && isEntityExhausted(attacker)) {
+        combatCancelTelegraph(attacker, options && options.scope, lines);
+        const recoveryContext = npcTacticalContext(attacker, defender, options && options.scope);
+        if (recoveryContext && Array.isArray(recoveryContext.scope.order)) restoreEntityStamina(attacker, NPC_EXHAUSTED_RECOVERY);
+        lines.push(describeEntityCannotAct(attacker.name || "The fighter", false));
+        return;
+    }
+    const telegraphContext = npcTacticalContext(attacker, defender, options && options.scope);
+    const telegraph = combatTelegraphTurn(attacker, defender, telegraphContext && telegraphContext.scope, options && options.targeting, lines);
+    if (telegraph && telegraph.windup) return;
     const hpBefore = defender.hp;
-    reinforcementOpeningStrike(attacker, defender, lines, { watched: true });
+    const ctx = npcTacticalContext(attacker, defender, options && options.scope);
+    if (ctx) ctx.targeting = options && options.targeting;
+    const tactic = !(telegraph && telegraph.release) && !(options && options.supporterChoice) && defender !== G.player && takeNPCTacticalTurn(attacker, defender, ctx, lines);
+    if (tactic && tactic.used) {
+        if (tactic.weapon) npcVersusStrikeAftermath(attacker, defender, hpBefore, lines);
+        else if (defender.hp < hpBefore && typeof noteNPCSocialStrike === "function") noteNPCSocialStrike(attacker, defender, hpBefore);
+        return;
+    }
+    if (isEntityIncorporeal(attacker) || !isEntityExhausted(attacker)) combatNarrateTargeting(options && options.targeting, lines);
+    if (!ctx) maybeNPCVersusManeuver(attacker, defender, lines);
+    reinforcementOpeningStrike(attacker, defender, lines, { watched: true, scope: options && options.scope,
+        strike: telegraph && telegraph.release ? { key: "balanced", staminaCost: COMBAT_ATTACK_STYLES.balanced.staminaCost, damageBonus: telegraph.damageBonus } : null });
+    npcVersusStrikeAftermath(attacker, defender, hpBefore, lines);
+}
+
+function npcVersusStrikeAftermath(attacker, defender, hpBefore, lines) {
     if(typeof noteNPCSocialStrike==='function')noteNPCSocialStrike(attacker,defender,hpBefore);
     const wp = attacker.weaponPoison;
     if (wp && wp.hits > 0 && defender.hp < hpBefore && defender.hp > 0) {
@@ -66762,6 +67754,10 @@ function getManeuverBlockReason(key, npc) {
     const player = G.player;
     const m = getFighterManeuverDef(key);
     if (!m || !npc || !player) return "No target.";
+    if (key === "taunt") {
+        const sceneBlock = combatPlayerTacticBlock(npc);
+        if (sceneBlock) return sceneBlock;
+    }
     if (!playerHasTechnique(player, key)) return "You have not learned that.";
     if (key === "hamstring" && isEntityIncorporeal(npc)) return "There is no leg to cut.";
     if (getFighterRank(player) < m.minRank) return `Needs ${getClassRankName(m.minRank)} martial arms.`;
@@ -66785,7 +67781,47 @@ function attemptManeuver(npc, key) {
     const block = getManeuverBlockReason(key, npc);
     if (block) { setNarration(block); return; }
     const m = getFighterManeuverDef(key);
+    if (key === "taunt") return performCombatTaunt(npc);
     attackNPC(npc, { style: m.style, target: m.target, maneuver: key });
+}
+
+function combatTacticCallback(npc, run) {
+    const player = G.player, room = G.activeRoom, enc = G.combatEncounter, clock = getStatusClock();
+    const round = enc && enc.round, cursor = enc && enc.cursor;
+    return function () {
+        if (G.player !== player || G.activeRoom !== room || G.activeNPC !== npc || G.combatEncounter !== enc ||
+            getStatusClock() !== clock || enc && (enc.round !== round || enc.cursor !== cursor)) {
+            setNarration("The fight has changed since that action was offered."); return;
+        }
+        return run();
+    };
+}
+
+function combatPlayerTacticBlock(npc) {
+    if (!G.player || !combatTargetReady(G.player)) return "You cannot act in this fight.";
+    if (!combatTargetReady(npc) || G.activeNPC !== npc || G.activeNPCMode !== "combat" ||
+        !G.activeRoom || !encEntityInRoom(G.activeRoom, npc)) return "That opponent is no longer in your fight.";
+    if (G.activeObject || G.activeItemModal) return "Close the open object or item interaction first.";
+    const enc = getActiveEncounter();
+    if (enc && (enc.running || enc.beginning || enc.concluding || enc.playerDown)) return "The current combat turn is still resolving.";
+    if (enc && (enc.foes.indexOf(npc) < 0 || !encFoeStanding(enc, npc))) return "That opponent is no longer standing against you.";
+    return "";
+}
+
+function performCombatTaunt(npc) {
+    const block = getManeuverBlockReason("taunt", npc);
+    if (block) { setNarration(block); return; }
+    const player = G.player, lines = [];
+    const enc = getActiveEncounter() || beginEncounter(npc, "player", lines);
+    if (!enc || enc.foes.indexOf(npc) < 0) { setNarration("You cannot draw their attention into this fight."); return; }
+    spendEntityStamina(player, getFighterManeuverDef("taunt").stamina, lines, { isPlayer: true });
+    combatThreatState(enc).taunt = { source: player, target: npc, until: getStatusClock() + COMBAT_THREAT.tauntTurns };
+    lines.push(formatCombatActionLine(player, npc, "You challenge " + (npc.name || "the foe") + " to face you."));
+    gainClassSkillXP("fighter", 1, lines);
+    gainBranchXP(player, "taunt", 1);
+    if (resolveNPCCounter(npc, lines, { playerPassed: true })) return;
+    if (!combatTargetReady(npc) || G.activeNPC !== npc || G.player !== player) return;
+    renderStats(); renderCombatActionMenu(npc); renderCombatNarrationLines(lines); saveGameState();
 }
 
 // Runs inside attackNPC on a landed hit that did not finish the target.
@@ -76372,17 +77408,18 @@ const CLASS_TECHNIQUES = {
     setSpear: { name: "Set Spear", cls: "fighter", tier: "basic", summary: "2 stamina stance: foe -2 to hit for 3 rounds, and the first miss against you takes a jab." },
     brace: { name: "Brace", cls: "fighter", tier: "basic", summary: "2 stamina stance: +2 armour for 4 rounds." },
     endure: { name: "Endure", cls: "fighter", tier: "basic", summary: "2 stamina stance: blows that hit you do 2 less damage for 4 rounds." },
+    taunt: { name: "Taunt", cls: "fighter", tier: "basic", summary: "2 stamina and a turn: challenge one foe, drawing its attention for 3 rounds without attacking." },
     riposte: { name: "Riposte", cls: "fighter", tier: "advanced", summary: "3 stamina stance: counter-hit when a foe misses you, 3 rounds." },
     hamstring: { name: "Hamstring", cls: "fighter", tier: "advanced", summary: "3 stamina precise leg strike, 60% damage; foe -1 to hit for 5 rounds and cannot flee." },
     cleave: { name: "Cleave", cls: "fighter", tier: "advanced", have: true, summary: "Wide swing that hits every other hostile; they take less damage until Master, bonus damage beyond." },
     pulverize: { name: "Pulverize", cls: "fighter", tier: "advanced", summary: "3 stamina heavy blow, +3 damage, cracks the foe's armour." },
     impale: { name: "Impale", cls: "fighter", tier: "advanced", summary: "4 stamina precise thrust that bleeds and pins the foe (-2 to hit, cannot flee)." },
     holdAtBay: { name: "Hold at Bay", cls: "fighter", tier: "advanced", summary: "3 stamina stance: the foe is -3 to hit for 3 rounds." },
-    guard: { name: "Guard", cls: "fighter", tier: "advanced", summary: "3 stamina stance: +3 armour for 5 rounds." },
+    guard: { name: "Stand Guard", cls: "fighter", tier: "advanced", summary: "3 stamina stance: +3 armour for 5 rounds, draws attention and may intercept attacks on companions." },
     flurry: { name: "Flurry", cls: "fighter", tier: "master", summary: "5 stamina, a swing plus a follow-up blow; past Master a chance of up to two more." },
     runThrough: { name: "Run Through", cls: "fighter", tier: "master", summary: "5 stamina precise thrust, +5 damage, ignores 3+ armour, deep bleed, pins the foe (-2 to hit, cannot flee)." },
     shatter: { name: "Shatter", cls: "fighter", tier: "master", summary: "4 stamina heavy blow, +1 damage, wrecks armour (-2) and stuns for a round." },
-    immovable: { name: "Immovable", cls: "fighter", tier: "master", summary: "5 stamina stance: +3 armour and 2 less damage from blows for 6 rounds." },
+    immovable: { name: "Immovable", cls: "fighter", tier: "master", summary: "5 stamina stance: +3 armour and 2 less damage for 6 rounds, draws more attention and improves interception." },
     // ── Rogue ──
     pickpocket: { name: "Pickpocket", cls: "rogue", tier: "basic", have: true, summary: "Lift small items from a target." },
     distract: { name: "Distract", cls: "rogue", tier: "basic", summary: "2 stamina, foe is -2 to hit and open to a sneak attack for your next action only." },
@@ -76451,7 +77488,7 @@ const CLASS_BRANCHES = {
     blades: { cls: "fighter", name: "Blades", related: ["polearms"], slots: { basic: ["disarm", "feint"], advanced: ["riposte", "hamstring"], master: ["flurry"] } },
     crushers: { cls: "fighter", name: "Crushers", related: ["bulwark"], slots: { basic: ["sunder", "stagger"], advanced: ["cleave", "pulverize"], master: ["shatter"] } },
     polearms: { cls: "fighter", name: "Polearms", related: ["blades", "bulwark"], slots: { basic: ["setSpear", "feint"], advanced: ["impale", "holdAtBay"], master: ["runThrough"] } },
-    bulwark: { cls: "fighter", name: "Bulwark", related: ["polearms", "crushers"], slots: { basic: ["brace", "endure"], advanced: ["guard", "holdAtBay"], master: ["immovable"] } },
+    bulwark: { cls: "fighter", name: "Bulwark", related: ["polearms", "crushers"], slots: { basic: ["brace", "endure", "taunt"], advanced: ["guard", "holdAtBay"], master: ["immovable"] } },
     cutpurse: { cls: "rogue", name: "Cutpurse", related: ["burglar"], slots: { basic: ["pickpocket", "distract"], advanced: ["fence", "mark"], master: ["sleightMaster"] } },
     burglar: { cls: "rogue", name: "Burglar", related: ["cutpurse", "shadowblade"], slots: { basic: ["sneakHide", "lockDoor"], advanced: ["silentPicks", "casePlace"], master: ["vanish"] } },
     shadowblade: { cls: "rogue", name: "Shadowblade", related: ["burglar"], slots: { basic: ["backstab", "sneakHide"], advanced: ["garrote", "throwDirt"], master: ["assassinate"] } },
@@ -77799,18 +78836,20 @@ function dealPowerDamageToOther(c, power, spec, willBonus, lines) {
 // and blows taken feed Bulwark.
 // ══════════════════════════════════════════════════════════════════
 const FIGHTER_EXTRA_MANEUVERS = {
+    taunt: { key: "taunt", label: "Taunt", aliases: ["draw attention"], minRank: 1, stamina: 2, xp: 1,
+        tip: "Challenge this foe for 2 stamina and your turn. It is more likely to attack you for 3 rounds; no weapon attack is made." },
     feint: { key: "feint", label: "Feint", minRank: 1, stamina: 2, style: "precise", target: "torso", hit: 0, damage: 0, damageMult: 0.5, xp: 1,
         text: "You fake high and cut low.",
         tip: "Half damage; on a hit the foe's next swing is thrown off (-3 to hit for 2 turns)." },
     stagger: { key: "stagger", label: "Stagger", minRank: 1, stamina: 2, style: "heavy", target: "torso", hit: -1, damage: -1, xp: 1,
         text: "You put your weight behind a rocking blow.",
-        tip: "A heavy blow with a 35% chance to stun for a round." },
+        tip: "A heavy blow with a 35% chance to stun for a round, interrupt a prepared blow and leave an opening for Pulverize." },
     hamstring: { key: "hamstring", label: "Hamstring", minRank: 3, stamina: 3, style: "precise", target: "legs", hit: -1, damage: 0, damageMult: 0.6, xp: 2,
         text: "You cut low at the back of the leg.",
         tip: "Strike the legs for reduced damage; on a hit the foe is slowed (-1 to hit for 5 turns) and cannot flee." },
     pulverize: { key: "pulverize", label: "Pulverize", minRank: 3, stamina: 3, style: "heavy", target: "torso", hit: -1, damage: 3, xp: 2,
         text: "You bring everything down in one crushing blow.",
-        tip: "A crushing blow for +3 damage that also cracks the foe's armour." },
+        tip: "A crushing blow for +3 damage that also cracks the foe's armour. A fresh Stagger opening adds another 3 damage and is consumed." },
     impale: { key: "impale", label: "Impale", minRank: 3, stamina: 4, style: "precise", target: "torso", hit: -1, damage: 2, xp: 2,
         text: "You drive the point in and lean on it.",
         tip: "A deep thrust for +2 damage that leaves the foe bleeding and pinned on the point: -2 to hit and unable to flee for 5 turns." },
@@ -77819,7 +78858,7 @@ const FIGHTER_EXTRA_MANEUVERS = {
         tip: "A swing followed by a second blow for 60% damage. Past Master, each rank adds a chance of one more follow-up (up to two extra)." },
     shatter: { key: "shatter", label: "Shatter", minRank: 5, stamina: 4, style: "heavy", target: "torso", hit: -1, damage: 1, xp: 3,
         text: "You swing with every ounce of weight you have.",
-        tip: "A huge blow that wrecks armour (-2) and stuns for a round." },
+        tip: "A huge blow that wrecks armour (-2) and stuns for a round. Against a frozen foe, adds 3 damage after the ice combo and breaks the ice." },
     runThrough: { key: "runThrough", label: "Run Through", minRank: 5, stamina: 5, style: "precise", target: "torso", hit: -1, damage: 5, xp: 3,
         text: "You step in behind the point and drive it home.",
         tip: "A finishing thrust: +5 damage, ignores 3 points of the foe's armour (more past Master), leaves a deep bleed and pins them on the point (-2 to hit, cannot flee, 5 turns)." }
@@ -77832,7 +78871,7 @@ const FIGHTER_STANCES = {
         tip: "-2 to the foe's hit for 3 turns, and the first foe to miss you takes a jab." },
     brace: { key: "brace", label: "Brace", minRank: 1, stamina: 2, status: "bracedStance",
         text: "You drop your weight and brace.",
-        tip: "+2 armour for 4 turns." },
+        tip: "+2 armour for 4 turns; spoils the extra force of a prepared powerful blow." },
     endure: { key: "endure", label: "Endure", minRank: 1, stamina: 2, status: "endured",
         text: "You grit your teeth and take it.",
         tip: "Blows that hit you do 2 less damage for 4 turns." },
@@ -77841,13 +78880,13 @@ const FIGHTER_STANCES = {
         tip: "For 3 turns, each foe swing that misses is answered with a counter-blow." },
     holdAtBay: { key: "holdAtBay", label: "Hold at Bay", minRank: 3, stamina: 3, status: "heldAtBay",
         text: "You keep the foe at the end of your reach.",
-        tip: "The foe is -3 to hit for 3 turns." },
-    guard: { key: "guard", label: "Guard", minRank: 3, stamina: 3, status: "wallOfSteel",
+        tip: "The foe is -3 to hit for 3 turns and cannot build the extra force for a prepared powerful blow." },
+    guard: { key: "guard", label: "Stand Guard", aliases: ["fighter guard", "guard stance"], minRank: 3, stamina: 3, status: "wallOfSteel",
         text: "You set a wall of steel in front of you.",
-        tip: "+3 armour for 5 turns." },
+        tip: "+3 armour for 5 turns. Draws hostile attention and may intercept attacks on companions in the same fight." },
     immovable: { key: "immovable", label: "Immovable", minRank: 5, stamina: 5, status: "immovableStance",
         text: "You become a wall. Nothing will move you.",
-        tip: "+3 armour and 2 less damage from blows for 6 turns." }
+        tip: "+3 armour and 2 less damage from blows for 6 turns. Draws more attention and improves interception." }
 };
 
 function getFighterManeuverDef(key) {
@@ -77884,10 +78923,14 @@ function dealFighterBonusStrike(npc, lines, mult, opts) {
     lines.push(formatCombatActionLine(player, npc, `Your follow-up blow lands on ${name} for ${dmg}.`));
 }
 
-function getStanceBlockReason(key) {
+function getStanceBlockReason(key, npc) {
     const player = G.player;
     const s = FIGHTER_STANCES[key];
     if (!s || !player) return "No.";
+    if (npc && (key === "guard" || key === "immovable")) {
+        const sceneBlock = combatPlayerTacticBlock(npc);
+        if (sceneBlock) return sceneBlock;
+    }
     if (!playerHasTechnique(player, key)) return "You have not learned that.";
     if (getFighterRank(player) < s.minRank) return `Needs ${getClassRankName(s.minRank)} martial arms.`;
     if (isEntityExhausted(player)) return "You are too exhausted.";
@@ -77899,7 +78942,7 @@ const FIGHTER_DEFENSIVE_STATUSES = ["bracedStance", "endured", "wallOfSteel", "i
 
 function useFighterStance(npc, key) {
     const player = G.player;
-    const block = getStanceBlockReason(key);
+    const block = getStanceBlockReason(key, npc);
     if (block) { setNarration(block); return; }
     if (!npc || npc.unconscious || npc.isUnconsciousBody || npc.hidden || npc.isHidden) return;
     const s = FIGHTER_STANCES[key];
@@ -77953,7 +78996,7 @@ function applyFighterExtraManeuverEffect(key, npc, npcName, lines, crit) {
         applyStatusEffect(npc, "feinted", npcName);
         lines.push(`${npcName} lunges to block the wrong line and is thrown off balance.`);
     } else if (key === "stagger") {
-        if (Math.random() < 0.35) { npc.stunnedRounds = 1; lines.push(`${npcName} staggers, dazed by the blow!`); }
+        if (Math.random() < 0.35) { npc.stunnedRounds = 1; applyNPCTacticalStatus(G.combatEncounter, npc, "staggerOpening"); lines.push(`${npcName} staggers, dazed by the blow!`); }
     } else if (key === "hamstring") {
         applyStatusEffect(npc, "hamstrung", npcName);
         npc.hamstrung = true;
@@ -78016,7 +79059,7 @@ const ROGUE_TRICKS = {
         tip: "The foe is blinded (-4 to hit for 2 turns)." },
     mark: { key: "mark", label: "Mark", stamina: 2, status: "markedPrey", branchTech: "mark",
         text: "You study the foe's guard and fix the weak points in your mind.",
-        tip: "Your attacks deal +1 damage to this foe for 6 turns." }
+        tip: "Attacks deal +1 damage to this foe for 6 turns. A landed sneak attack exploits the mark for 2 more damage, consuming it." }
 };
 const ROGUE_FINISHERS = {
     // `stamina` is the TOTAL cost, shown on the button. The sneak strike itself
@@ -83056,6 +84099,8 @@ function ttsRenderSettings() {
         : "Voice input isn't available in this browser (Opera, Brave and Firefox have no speech service). Chrome supports it. On Windows, Win+H types what you say into the command box.";
     ttsSetControl("ttsTurnCueInput", "checked", !!st.turnCue);
     ttsSetControl("ttsUrgentCueInput", "checked", !!st.urgentCue);
+    ttsSetControl("ttsMicOffCueInput", "checked", !!st.micOffCue);
+    ttsSetControl("ttsTapTalkSoundsInput", "checked", !!st.tapTalkSounds);
     ttsSetControl("ttsFailCueInput", "checked", st.failCue !== false);
     ttsSetControl("ttsFailNarrateInput", "checked", st.failNarrate === true);
     ttsSetControl("ttsThinkingToneInput", "checked", !!st.thinkingTone);
@@ -83123,7 +84168,7 @@ function ttsCheckMicrophone() {
     }, function (e) { say("The microphone was not allowed (" + (e && e.name || "error") + "). Allow it for this site in the browser."); });
 }
 window.ttsCheckMicrophone = ttsCheckMicrophone;
-window.ttsMicButton = ttsMicButton;
+window.ttsMicButton = function () { return ttsMicButton(false); };
 window.ttsSetTapTalk = ttsSetTapTalk;
 window.ttsTapToTalk = ttsTapToTalk;
 window.ttsTapTalkKeydown = ttsTapTalkKeydown;

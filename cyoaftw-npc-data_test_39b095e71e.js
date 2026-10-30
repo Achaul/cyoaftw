@@ -3,7 +3,7 @@
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-26-002";
+    window.NPC_DATA_VERSION = "2026-10-30-001";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -996,6 +996,7 @@ const NPC_OPTION_TAGS = {
     "offer-help": ["work", "help", "debt"],
     "keep-calm": ["danger"],
     "ask-standing": ["self", "work"],
+    "ask-companion-fighting": ["self", "danger", "work"],
     "ask-need": ["money", "work", "help"],
     "ask-worry": ["self", "danger"],
     "ask-liking": ["self", "food"],
@@ -3049,6 +3050,19 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: (npc) => {
             if (typeof askFollowerToStay === "function") askFollowerToStay(npc);
         }
+    },
+    {
+        id: "ask-companion-fighting",
+        priority: 42,
+        rankBoost: 30,
+        repeat: "always",
+        kind: "action",
+        label: "Ask about their fighting",
+        text: "You ask about their fighting experience.",
+        playerText: "How much fighting have you done?",
+        intent: "curious",
+        conditions: { maxHostility: 59, custom: (npc, ctx) => ctx.isHumanoid && typeof npcFightingInquiryBlock === "function" && !npcFightingInquiryBlock(npc) },
+        action: (npc) => { if (typeof describeNPCFighting === "function") return describeNPCFighting(npc); }
     },
     {
         id: "npc-travel-party",
@@ -5286,6 +5300,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
 
     return {
         npc,
+        player: (typeof G === "object" && G && G.player) ? G.player : null,
         room,
         role: String(npc.role || "").toLowerCase(),
         species: String(npc.species || "").toLowerCase(),
@@ -5377,7 +5392,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
         // Whether NPC has surrendered to the player and it's still valid
         surrenderedToPlayer: typeof isNPCSurrenderedToPlayer === "function" && isNPCSurrenderedToPlayer(npc, G.player),
         // Bathhouse reputation: has player used services 5+ times and tipped
-        bathhouseReputation: ctx.player && ctx.player.bathhouseServiceCount >= 5 && ctx.player.bathhouseTipped
+        bathhouseReputation: !!(typeof G === "object" && G && G.player && G.player.bathhouseServiceCount >= 5 && G.player.bathhouseTipped)
     };
 }
 
