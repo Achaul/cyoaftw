@@ -3,7 +3,7 @@
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-26-002";
+    window.NPC_DATA_VERSION = "2026-10-30-002";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -996,6 +996,7 @@ const NPC_OPTION_TAGS = {
     "offer-help": ["work", "help", "debt"],
     "keep-calm": ["danger"],
     "ask-standing": ["self", "work"],
+    "ask-companion-fighting": ["self", "danger", "work"],
     "ask-need": ["money", "work", "help"],
     "ask-worry": ["self", "danger"],
     "ask-liking": ["self", "food"],
@@ -3049,6 +3050,19 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: (npc) => {
             if (typeof askFollowerToStay === "function") askFollowerToStay(npc);
         }
+    },
+    {
+        id: "ask-companion-fighting",
+        priority: 42,
+        rankBoost: 30,
+        repeat: "always",
+        kind: "action",
+        label: "Ask about their fighting",
+        text: "You ask about their fighting experience.",
+        playerText: "How much fighting have you done?",
+        intent: "curious",
+        conditions: { maxHostility: 59, custom: (npc, ctx) => ctx.isHumanoid && typeof npcFightingInquiryBlock === "function" && !npcFightingInquiryBlock(npc) },
+        action: (npc) => { if (typeof describeNPCFighting === "function") return describeNPCFighting(npc); }
     },
     {
         id: "npc-travel-party",
@@ -5533,6 +5547,7 @@ function conversationConditionMatches(conditions, ctx) {
     if (conditions.demeanorMode && !_npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.demeanorMode))) return false;
     if (conditions.excludeDemeanorMode && _npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.excludeDemeanorMode))) return false;
     if (typeof conditions.intimacyActive === "boolean" && ctx.intimacyActive !== conditions.intimacyActive) return false;
+    if (typeof conditions.surrenderedToPlayer === "boolean" && ctx.surrenderedToPlayer !== conditions.surrenderedToPlayer) return false;
 
     if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
 
@@ -6343,7 +6358,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
 // ============================================================================
 const SOCIAL_FACT_QUESTIONS = {
     standing: { label: "Ask about their place in {group}", ask: "Tell me about your place in {group}." },
-    need: { label: "Ask what they need", ask: "Is there anything you need?" },
+    need: { label: "Ask if they need help", ask: "Do you need any help?" },
     worry: { label: "Ask what is weighing on them", ask: "You look troubled. What is weighing on you?" },
     liking: { label: "Ask what they enjoy", ask: "What do you enjoy, when you have the time?" },
     secret: { label: "Ask what they are not saying", ask: "I think you are holding something back. Tell me." },
@@ -6506,7 +6521,7 @@ function _socialStandingPhrase(social) {
 function getSocialFactLabel(npc, key) {
     const social = ensureNPCSocial(npc);
     const q = SOCIAL_FACT_QUESTIONS[key];
-    if (key === "need" && typeof ensureNPCNeeds === "function") return "Requests and promises";
+    if (key === "need" && typeof ensureNPCNeeds === "function") return "Ask if they need help";
     if (key === "standing") return _socialStandingPhrase(social).label;
     return q ? q.label : "";
 }

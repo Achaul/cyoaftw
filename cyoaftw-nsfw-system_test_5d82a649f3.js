@@ -1,6 +1,6 @@
-// === cyoaftw-nsfw-system.js === - 2026-10-28-018              
+// === cyoaftw-nsfw-system.js === - 2026-10-17-017              
 // Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply, intimacy portrait toggle, DeepSeek prompt optimization, fixed missing closing brace
-window.__NSFW_SYSTEM_VERSION = "2026-10-28-018";
+window.__NSFW_SYSTEM_VERSION = "2026-10-17-017";
 console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
 try {
 (function() {
@@ -9,7 +9,7 @@ try {
 // NSFW conversation options are now defined in base catalogue (cyoaftw-npc-data.js)
 
 // NSFW options are defined in base catalogue - no injection needed
-console.log("[NSFW System] Loaded v2026-10-28-018 - stat-based fallback acceptance + follow action fix + nsfw wrapper re-apply + fixed missing closing brace");
+console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptance + follow action fix + nsfw wrapper re-apply + fixed missing closing brace");
 
   const NSFW_SYSTEM_ENABLED = true;
   function getEnvironmentalModifier(room) {
