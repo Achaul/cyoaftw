@@ -3,7 +3,7 @@
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-28-001";
+    window.NPC_DATA_VERSION = "2026-10-26-002";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -1167,6 +1167,7 @@ const NPC_ROUTINES = {
     "Vigil Tender": { duties: "tending the memorial gallery, cleaning the laying-out room, preparing shrouds and helping mourners", pay: "wages from the mausoleum keeper", shifts: ["cleaning the gallery and preparing linen", "tending lamps and helping visitors", "laying fresh coverings and trimming the vigil lamps", "home"], pastime: "tending a small pot of rosemary" },
     "Bier Bearer": { duties: "collecting the dead with a work partner, carrying the bier back to the mausoleum and laying the departed in numbered burial niches", pay: "a settlement stipend through the mausoleum keeper", shifts: ["checking the bier and straps before the first collection round", "collecting the dead and bringing them to the burial vaults together", "finishing the last collection and cleaning the carrying equipment", "home"], pastime: "sharing a quiet meal with a workmate" },
     Bathkeeper: { duties: "running the bathhouse, tending hot water and linen, offering washes and shoulder and back massage, and supervising practical trials", pay: "customer fees, with wages paid to attendants and qualified practitioners", shifts: ["warming water and setting out clean linen", "serving bathers and supervising staff", "finishing treatments and washing linen", "home"], pastime: "a quiet cup of herbal tea and news from travelers" },
+    Matron: { duties: "running the bathhouse, tending hot water and linen, offering washes and shoulder and back massage, and supervising practical trials", pay: "customer fees, with wages paid to attendants and qualified practitioners", shifts: ["warming water and setting out clean linen", "serving bathers and supervising staff", "finishing treatments and washing linen", "home"], pastime: "a quiet cup of herbal tea and news from travelers" },
     Innkeeper: { duties: "running the inn: rooms, the common room, the cellar and keeping order", pay: "what guests pay for rooms and meals; you answer for the till", shifts: ["lighting the fires and starting the cooking", "settling rooms and keeping stock", "the common room fills and you keep the peace", "closing up, then bed"], pastime: "talking with regulars and tallying the week's takings" },
     Bartender: { duties: "pouring drinks, keeping the bar clean and watching the room", pay: "wages from the house plus whatever tips come over the bar", shifts: ["home", "cleaning and stocking the bar", "pouring for the evening crowd", "last pours, then clearing up"], pastime: "listening to the room's gossip" },
     Cook: { duties: "cooking for the house and keeping the pantry stocked", pay: "wages and your own meals from the kitchen", shifts: ["baking and prepping", "cooking the midday meal", "the supper rush", "scrubbing pots, then home"], pastime: "trying small changes to old recipes" },
@@ -3763,15 +3764,18 @@ const NPC_CONVERSATION_CATALOGUE = [
             excludedActionTags: ["ask-deity"]
         }
     },
-    // Personal devotion, including an honest no-patron answer. The engine
-    // assigns faith once and owns the reply; generic deity lore is separate.
+    // Distinct from "ask-deity" above (generic lore, gated by role) - this
+    // is for an NPC who personally follows a specific deity (npc.deity,
+    // set once when they were generated inside a shrine room - see
+    // spawnNPCsForRoom in cyoaftw-engine-CORE.js). hasOwnDeity gates it to
+    // exactly those NPCs, regardless of role.
     {
         id: "ask-their-deity",
         priority: 96,
         repeat: "session",
         label: "Ask who they pray to",
         contextNote: npc => typeof getNPCFaithContext === "function" ? getNPCFaithContext(npc) : "Use the NPC's stored patron only.",
-        cacheSig: npc => String((typeof getNPCFaithPatron === "function" ? getNPCFaithPatron(npc) : npc.deity) || "none"),
+        cacheSig: npc => String(npc.deity || "none"),
         textVariants: [
             "You ask which god or spirit they personally hold to.",
             "You ask who they kneel before when no one else is watching.",
@@ -3780,7 +3784,7 @@ const NPC_CONVERSATION_CATALOGUE = [
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 2, intent: "curious", markMet: true, actionTag: "ask-their-deity" },
         conditions: {
-            isHumanoid: true,
+            hasOwnDeity: true,
             minFavor: 10,
             maxHostility: 70,
             excludedActionTags: ["ask-their-deity"]
@@ -4509,7 +4513,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} step on their face. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} step on their face. Respond in character.`
     },
     {
         id: "request-step-on-chest",
@@ -4529,7 +4533,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} step on their chest. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} step on their chest. Respond in character.`
     },
     {
         id: "request-squeeze-balls",
@@ -4549,7 +4553,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} squeeze their balls. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} squeeze their balls. Respond in character.`
     },
     {
         id: "request-spanking",
@@ -4569,7 +4573,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} spank them. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} spank them. Respond in character.`
     },
     {
         id: "beg-for-touch",
@@ -4589,7 +4593,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} for their touch. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for their touch. Respond in character.`
     },
     {
         id: "beg-for-attention",
@@ -4609,7 +4613,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} for their attention. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for their attention. Respond in character.`
     },
     {
         id: "beg-for-use",
@@ -4629,7 +4633,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to use them as they please. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to use them as they please. Respond in character.`
     },
     {
         id: "beg-for-praise",
@@ -4649,7 +4653,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["submissive"]
         },
-        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} for praise. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for praise. Respond in character.`
     },
     
     // ===== DOMINANT DEMEANOR REQUESTS =====
@@ -4673,7 +4677,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and orders ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to kneel. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and orders ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to kneel. Respond in character.`
     },
     {
         id: "command-undress",
@@ -4693,7 +4697,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to undress. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to undress. Respond in character.`
     },
     {
         id: "demand-serve",
@@ -4713,7 +4717,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} serve them. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} serve them. Respond in character.`
     },
     {
         id: "demand-worship",
@@ -4733,7 +4737,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} worship them. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} worship them. Respond in character.`
     },
     {
         id: "assert-dominance",
@@ -4753,7 +4757,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")}. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}. Respond in character.`
     },
     {
         id: "command-mouth",
@@ -4773,7 +4777,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to use their mouth. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to use their mouth. Respond in character.`
     },
     {
         id: "demand-obey",
@@ -4793,7 +4797,7 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} obey them. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} obey them. Respond in character.`
     },
     {
         id: "force-kneel",
@@ -4813,11 +4817,11 @@ const NPC_CONVERSATION_CATALOGUE = [
             intimacyActive: true,
             demeanorMode: ["dominant"]
         },
-        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and forces ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to their knees. Respond in character.`
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and forces ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to their knees. Respond in character.`
     },
     // ========================================================================
     // DOMINATION OPTIONS FROM CONVERSATION (for surrendered NPCs)
-    // These allow dominant actions and eventually intimacy when NPC has surrendered
+    // These allow starting dominant intimacy from conversation when NPC has surrendered
     // ========================================================================
     {
         id: "assert-dominance-from-surrender",
@@ -4825,17 +4829,22 @@ const NPC_CONVERSATION_CATALOGUE = [
         repeat: "always",
         label: "Assert your dominance",
         textVariants: [
-            "You decide to physically assert your dominance over them.",
-            "You prepare to demonstrate who is in charge.",
-            "With authority, you consider how to remind them of their place."
+            "You assert your dominance over them with a firm command, reminding them of their surrender.",
+            "You make it clear who is in charge, leveraging their defeated state.",
+            "With authority, you establish your dominance over them now that they've surrendered."
         ],
-        intent: "aggression",
-        action: "dominance-menu",
-        menuType: "dominance",
+        intent: "intimacy",
+        action: "intimacy",
+        startEncounter: true,
         conditions: {
-            defeatedOrSurrendered: true
+            surrenderedToPlayer: true
         },
-        contextNote: (npc, ctx) => `Player wants to assert dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} who has surrendered. This will open a menu of dominance actions.`
+        onSelect: function(npc, ctx) {
+            // Set dominant demeanor for the encounter
+            if (!npc.intimacy) npc.intimacy = {};
+            npc.intimacy._demeanorMode = "dominant";
+        },
+        contextNote: (npc, ctx) => `Player asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered to them. Respond in character as someone who has accepted defeat.`
     },
     {
         id: "command-from-surrender",
@@ -4843,217 +4852,46 @@ const NPC_CONVERSATION_CATALOGUE = [
         repeat: "always",
         label: "Command them",
         textVariants: [
-            "You decide to issue a command to your defeated foe.",
-            "You prepare to give them an order they must obey.",
-            "As their conqueror, you consider what to command of them."
+            "You issue a firm command, knowing they must obey after surrendering.",
+            "You give them an order with the authority of their conqueror.",
+            "With a commanding voice, you tell them what to do, confident in their compliance."
         ],
-        intent: "aggression",
-        action: "command-menu",
-        menuType: "command",
-        conditions: {
-            defeatedOrSurrendered: true
-        },
-        contextNote: (npc, ctx) => `Player wants to command ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} who has surrendered. This will open a menu of command actions.`
-    },
-    {
-        id: "take-your-pleasure-from-defeated",
-        priority: 158,
-        repeat: "always",
-        label: "Take your pleasure",
-        textVariants: (npc, ctx) => {
-            // Generate context-aware narration
-            const player = typeof G !== "undefined" ? G.player : null;
-            const room = typeof G !== "undefined" ? G.activeRoom : null;
-            const npcName = ctx.nameKnown ? (npc.name || "them") : ("the " + (npc.epithet || npc.name || npc.epithet || "them"));
-            
-            // Check if NPC is clothed
-            const isClothed = npc && npc.clothing && npc.clothing.length > 0;
-            const clothingDesc = isClothed ? " their trousers" : " what remains of their clothing";
-            
-            // Build the narrative text
-            let narrative = "You pin " + npcName + " to the ";
-            if (room && room.wallDescription) {
-                narrative += "wall";
-            } else {
-                narrative += "nearest surface";
-            }
-            narrative += " and pull down" + clothingDesc + ". You pull your ";
-            
-            // Get player's lower body clothing
-            const playerLower = player && player.clothing ? player.clothing.find(c => c.type === "lower" || c.slot === "lower") : null;
-            const fromClothing = playerLower ? playerLower.name.toLowerCase() : "greaves";
-            narrative += "cock out of your " + fromClothing + " and press it against ";
-            narrative += (npc.gender === "female" || npc.gender === "feminine") ? "her slick folds" : "their entrance";
-            narrative += ", rubbing it back and forth for a moment before sliding into ";
-            narrative += (npc.gender === "female" || npc.gender === "feminine") ? "her warm depths" : "their warm depths";
-            narrative += ".";
-            
-            return [narrative];
-        },
         intent: "intimacy",
         action: "intimacy",
-        intimacyAction: "use_as_i_please",
         startEncounter: true,
-        encounterStart: {
-            tone: "dominant",
-            arousalBoost: 2
-        },
         conditions: {
-            defeatedOrSurrendered: true
+            surrenderedToPlayer: true
         },
         onSelect: function(npc, ctx) {
             // Set dominant demeanor for the encounter
             if (!npc.intimacy) npc.intimacy = {};
             npc.intimacy._demeanorMode = "dominant";
-            // Set last action for context
-            npc.intimacy._lastAction = "take_your_pleasure";
         },
-        contextNote: (npc, ctx) => `Player is taking their pleasure with ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} after their defeat. Narrative has been generated. Route to intimacy menu with dominant demeanor. Respond in character as someone submitting to this use.`
-    },
-    // ========================================================================
-    // DOMINANCE ACTIONS (for surrendered NPCs - conversation stage, not intimacy yet)
-    // These are shown when player selects "Assert your dominance" or "Command them"
-    // They execute dominance actions and get AI response, but do NOT start intimacy encounter
-    // ========================================================================
-    {
-        id: "dominance-chokehold",
-        priority: 155,
-        repeat: "always",
-        label: "Hold them in chokehold",
-        textVariants: [
-            "You grab them by the throat and pull them close, holding them in a firm chokehold to assert your control.",
-            "With a commanding grip, you seize their throat and hold them in a chokehold, making your dominance clear.",
-            "You wrap your arm around their throat and squeeze slightly, demonstrating who is in charge."
-        ],
-        intent: "aggression",
-        action: "dominance-action",
-        dominanceAction: "chokehold",
-        conditions: {
-            defeatedOrSurrendered: true
-        },
-        relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
-        contextNote: (npc, ctx) => `Player has ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} in a chokehold after they surrendered. They are showing their submission. Respond in character based on your temperament (bold NPCs may challenge, meek NPCs may whimper, etc.).`
+        contextNote: (npc, ctx) => `Player commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. Respond as someone compelled to obey.`
     },
     {
-        id: "dominance-grab-hair",
-        priority: 155,
+        id: "use-as-i-please-from-surrender",
+        priority: 158,
         repeat: "always",
-        label: "Grab a handful of their hair",
+        label: "Use them as I please",
         textVariants: [
-            "You grab a handful of their hair and pull their head back, forcing them to look up at you.",
-            "With a firm grip, you seize their hair and yank their head back, establishing your control.",
-            "You take hold of their hair and pull, making them gasp as you assert your dominance."
+            "You make it clear you will use them as you please, now that they've surrendered.",
+            "You declare your intent to use their body as you see fit.",
+            "With a dominant tone, you let them know they exist for your pleasure now."
         ],
-        intent: "aggression",
-        action: "dominance-action",
-        dominanceAction: "grab_hair",
+        intent: "intimacy",
+        action: "intimacy",
+        startEncounter: true,
         conditions: {
-            defeatedOrSurrendered: true
+            surrenderedToPlayer: true
         },
-        relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
-        contextNote: (npc, ctx) => `Player has grabbed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")}'s hair and pulled their head back after surrender. Respond in character based on your temperament.`
-    },
-    {
-        id: "dominance-expose",
-        priority: 155,
-        repeat: "always",
-        label: "Expose their privates",
-        textVariants: [
-            "You roughly pull at their clothing, exposing their privates to make your intent clear.",
-            "With commanding force, you strip away their covering, revealing their body as a sign of your dominance.",
-            "You yank their clothes aside, exposing them as a demonstration of who is in control."
-        ],
-        intent: "aggression",
-        action: "dominance-action",
-        dominanceAction: "expose",
-        conditions: {
-            defeatedOrSurrendered: true
+        onSelect: function(npc, ctx) {
+            // Set dominant demeanor for the encounter
+            if (!npc.intimacy) npc.intimacy = {};
+            npc.intimacy._demeanorMode = "dominant";
         },
-        relationshipImpact: { mood: -3, favor: -4, hostility: 3, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
-        contextNote: (npc, ctx) => `Player has exposed ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")}'s privates after they surrendered. They are vulnerable and submitting. Respond in character based on your temperament - a bold personality might resist or comment, a meek one might show fear or submission.`
+        contextNote: (npc, ctx) => `Player declares they will use ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} as they please. Respond as someone who has surrendered control.`
     },
-    {
-        id: "dominance-oral-hint",
-        priority: 155,
-        repeat: "always",
-        label: "Expose yourself and hint at oral service",
-        textVariants: [
-            "You expose yourself and press forward, making it clear you expect oral service.",
-            "With a commanding motion, you present yourself and indicate what you want from them.",
-            "You free yourself from your clothing and guide their attention to what you expect them to service."
-        ],
-        intent: "aggression",
-        action: "dominance-action",
-        dominanceAction: "oral_hint",
-        conditions: {
-            defeatedOrSurrendered: true
-        },
-        relationshipImpact: { mood: -3, favor: -4, hostility: 2, intent: "aggression", markMet: true, actionTag: "dominance-asserted" },
-        contextNote: (npc, ctx) => `Player has exposed themselves to ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} after they surrendered, making it clear oral service is expected. They have surrendered control. Respond in character based on your temperament - bold personalities may react differently than submissive ones.`
-    },
-
-    // ========================================================================
-    // COMMAND ACTIONS (for surrendered NPCs - conversation stage, not intimacy yet)
-    // These are shown when player selects "Command them"
-    // ========================================================================
-    {
-        id: "command-kneel",
-        priority: 154,
-        repeat: "always",
-        label: "Command them to kneel",
-        textVariants: [
-            "You command them to drop to their knees before you.",
-            "With authority, you order them to kneel in submission.",
-            "You point to the ground and command them to kneel, reminding them of their defeated state."
-        ],
-        intent: "aggression",
-        action: "command-action",
-        commandType: "kneel",
-        conditions: {
-            defeatedOrSurrendered: true
-        },
-        relationshipImpact: { mood: -1, favor: -2, hostility: 1, intent: "aggression", markMet: true, actionTag: "command-given" },
-        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to kneel after they surrendered. They must obey. Respond in character as someone who has accepted defeat, based on your temperament.`
-    },
-    {
-        id: "command-serve",
-        priority: 154,
-        repeat: "always",
-        label: "Command them to serve you",
-        textVariants: [
-            "You command them to begin serving you in whatever way you require.",
-            "With a firm voice, you order them to attend to your needs as their conqueror.",
-            "You make it clear that their purpose now is to serve you, and they must obey."
-        ],
-        intent: "aggression",
-        action: "command-action",
-        commandType: "serve",
-        conditions: {
-            defeatedOrSurrendered: true
-        },
-        relationshipImpact: { mood: -1, favor: -2, hostility: 1, intent: "aggression", markMet: true, actionTag: "command-given" },
-        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to serve them after surrender. Respond in character as someone compelled to obey, based on your temperament.`
-    },
-    {
-        id: "command-strip",
-        priority: 154,
-        repeat: "always",
-        label: "Command them to strip",
-        textVariants: [
-            "You command them to remove all their clothing.",
-            "With authority, you order them to strip completely for your inspection.",
-            "You tell them to take off their clothes, leaving them vulnerable before you."
-        ],
-        intent: "aggression",
-        action: "command-action",
-        commandType: "strip",
-        conditions: {
-            defeatedOrSurrendered: true
-        },
-        relationshipImpact: { mood: -2, favor: -3, hostility: 2, intent: "aggression", markMet: true, actionTag: "command-given" },
-        contextNote: (npc, ctx) => `Player has commanded ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || npc.epithet || "them")} to strip after they surrendered. Respond in character as someone who must obey despite the humiliation, based on your temperament.`
-    },
-
     // ========================================================================
     // BATHHOUSE SERVICES - SFW CONVERSATION OPTIONS
     // ========================================================================
@@ -5076,41 +4914,106 @@ const NPC_CONVERSATION_CATALOGUE = [
         intent: "inquiry",
         isInquiry: true,
         kind: "topic",
+        action: "bathhouse_inquire_private",
+
         relationshipImpact: { mood: 0, favor: 0, hostility: 0, intent: "inquiry" },
         conditions: {
             custom: function(npc, ctx) {
-                // Only show if NPC is bathhouse staff or the player is in a bathhouse
+                // Only show if NPC is bathhouse staff and player has reputation
                 if (!npc) return false;
-                if (npc.role === "BathhouseAttendant" || npc.role === "BathhousePractitioner" || npc.role === "Bathkeeper") {
-                    return true;
+                if (npc.role !== "BathhouseAttendant" && npc.role !== "BathhousePractitioner" && npc.role !== "Bathkeeper") {
+                    return false;
                 }
-                // Check if we're in a bathhouse room
-                if (ctx && ctx.room && typeof isBathhouseRoom === "function" && isBathhouseRoom(ctx.room)) {
-                    return true;
-                }
-                // Check if NPC knows about bathhouse services (rumor system)
-                if (npc.bathhouseAware === true) {
-                    return true;
-                }
-                return false;
+                // Check if player has established reputation (5 services + tipped)
+                if (!ctx.bathhouseReputation) return false;
+                return true;
             }
         },
         contextNote: (npc, ctx) => {
-            let note = "This NPC";
-            if (npc.role === "BathhouseAttendant" || npc.role === "BathhousePractitioner" || npc.role === "Bathkeeper") {
-                note += " works at the bathhouse. They ";
-                if (npc.traits && (npc.traits.includes("professional") || npc.traits.includes("flirty") || npc.traits.includes("dominant"))) {
-                    note += "have a " + (npc.traits.includes("dominant") ? "firm, controlling manner" : npc.traits.includes("flirty") ? "playful, teasing manner" : "professional, courteous manner") + " when discussing services.";
-                } else {
-                    note += "can provide information about available services.";
-                }
-            } else if (npc.bathhouseAware) {
-                note += " has heard rumors about bathhouse private services through word of mouth.";
+            let note = "This NPC works at the bathhouse. ";
+            
+            // Determine NPC gender for appropriate response
+            const gender = String(npc.gender || "female").toLowerCase();
+            const isAttracted = ctx && ctx.attraction > 50;
+            const role = String(npc.role || "");
+            
+            // Check if NPC is currently in a bathhouse room
+            const inBathhouse = ctx && ctx.room && typeof isBathhouseRoom === "function" && isBathhouseRoom(ctx.room);
+            
+            // Context: first time vs returning client
+            if (ctx && ctx.player && ctx.player.bathhouseServiceCount) {
+                note += "This is a returning client with " + ctx.player.bathhouseServiceCount + " previous bathhouse service(s). ";
             } else {
-                note += " may not know about private services.";
+                note += "This is a first-time client for private services. ";
             }
-            note += " Answer in character. If you provide private services yourself, describe what you offer and your manner. If you don't, you might refer them to someone who does, or simply be unaware.";
+            
+            note += "They have a ";
+            if (npc.traits && (npc.traits.includes("professional") || npc.traits.includes("flirty") || npc.traits.includes("dominant"))) {
+                note += (npc.traits.includes("dominant") ? "firm, controlling manner" : npc.traits.includes("flirty") ? "playful, teasing manner" : "professional, courteous manner") + ". ";
+            } else {
+                note += "neutral demeanor. ";
+            }
+            
+            // Add location context
+            if (!inBathhouse) {
+                note += "You are NOT currently at the bathhouse. Respond that they should ask you when you are on duty at the bathhouse.";
+                return note;
+            }
+            
+            // Add guidance for AI response based on attraction
+            if (isAttracted) {
+                note += "The player has established reputation and you are attracted to them. ";
+                note += "Respond flirtatiously with character-appropriate hints: hesitate and glance at the door, then lean close with warm breath, whisper suggestions about special treatment, and mention you can work something out. Keep it SFW - implication and suggestion only, no explicit physical descriptions. ";
+                note += "Species: " + (npc.species || "human") + ". Gender: " + gender + ". ";
+                note += "End your response with a clear indication that you are locking the door.";
+            } else {
+                note += "The player has established reputation but you're not particularly attracted. ";
+                note += "Respond professionally: \"You should speak to the Matron about this.\" or \"The Bathkeeper handles those arrangements.\"";
+            }
+            
+            note += " Answer in character. Use narrative style appropriate to the situation.";
             return note;
+        }
+    },
+    // ========================================================================
+    // BATHKEEPER/MATRON - ARRANGE PRIVATE SERVICE (business-like flow)
+    // ========================================================================
+    {
+        id: "arrange_private_service",
+        priority: 35,
+        repeat: "session",
+        label: (npc, ctx) => {
+            return "Arrange private service";
+        },
+        textVariants: [
+            "You ask the Bathkeeper/Matron to arrange a private service with one of their attendants."
+        ],
+        intent: "service",
+        action: "bathhouse_arrange_private",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show for Bathkeeper (Matron is an alias for Bathkeeper)
+                if (!npc) return false;
+                const role = String(npc.role || "");
+                if (role !== "Bathkeeper" && role !== "Matron") {
+                    return false;
+                }
+                // Player must have established reputation
+                if (!ctx.bathhouseReputation) return false;
+                // Check if we're in a bathhouse room
+                if (ctx && ctx.room && typeof isBathhouseRoom === "function" && !isBathhouseRoom(ctx.room)) {
+                    return false;
+                }
+                return true;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            return "You are asking the Bathkeeper/Matron to arrange a private service. " +
+                   "List the available bathhouse workers (BathhouseAttendant, BathhousePractitioner) in this building " +
+                   "with their name, gender, and species. " +
+                   "For each worker, show their price and available services. " +
+                   "Present this as a professional business arrangement. " +
+                   "Mention that the Matron will call the selected worker, who will then arrive, nod to the player, and lead them to a private room.";
         }
     },
     // ========================================================================
@@ -5383,6 +5286,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
 
     return {
         npc,
+        player: (typeof G === "object" && G && G.player) ? G.player : null,
         room,
         role: String(npc.role || "").toLowerCase(),
         species: String(npc.species || "").toLowerCase(),
@@ -5416,8 +5320,8 @@ function getNPCConversationContext(npc, extraContext = {}) {
             : "neutral",
         isHumanoid: npc.isHumanoid === true,
         // True when the NPC follows a deity: a shrine devotee, any cleric, or
-        // a civilized NPC with a saved one-time devotion result
-        // (ensureNPCDeity in cyoaftw-engine-CORE.js).
+        // a civilized NPC who rolled as devout the first time this was asked
+        // (ensureNPCDeity in cyoaftw-engine-CORE.js). Gates "ask-their-deity".
         hasOwnDeity: !!(typeof getNPCFaithPatron === "function" ? getNPCFaithPatron(npc) : typeof ensureNPCDeity === "function" ? ensureNPCDeity(npc) : npc.deity),
         romanceEligible: typeof isAdultHumanoidNPC === "function" ? isAdultHumanoidNPC(npc) : false,
         tradeAvailable: typeof shouldShowPostReplyTradeAction === "function" ? shouldShowPostReplyTradeAction(npc) : false,
@@ -5473,8 +5377,8 @@ function getNPCConversationContext(npc, extraContext = {}) {
         intimacyActive: !!(npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active),
         // Whether NPC has surrendered to the player and it's still valid
         surrenderedToPlayer: typeof isNPCSurrenderedToPlayer === "function" && isNPCSurrenderedToPlayer(npc, G.player),
-        // Whether NPC is defeated or has surrendered to the player
-        defeatedOrSurrendered: typeof isNPCDefeatedOrSurrendered === "function" && isNPCDefeatedOrSurrendered(npc, G.player)
+        // Bathhouse reputation: has player used services 5+ times and tipped
+        bathhouseReputation: !!(typeof G === "object" && G && G.player && G.player.bathhouseServiceCount >= 5 && G.player.bathhouseTipped)
     };
 }
 
@@ -5629,8 +5533,6 @@ function conversationConditionMatches(conditions, ctx) {
     if (conditions.demeanorMode && !_npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.demeanorMode))) return false;
     if (conditions.excludeDemeanorMode && _npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.excludeDemeanorMode))) return false;
     if (typeof conditions.intimacyActive === "boolean" && ctx.intimacyActive !== conditions.intimacyActive) return false;
-    if (typeof conditions.surrenderedToPlayer === "boolean" && ctx.surrenderedToPlayer !== conditions.surrenderedToPlayer) return false;
-    if (typeof conditions.defeatedOrSurrendered === "boolean" && ctx.defeatedOrSurrendered !== conditions.defeatedOrSurrendered) return false;
 
     if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
 
@@ -8502,17 +8404,7 @@ function _npcTasteValue(npc, axis) {
 function getPlayerTasteForNPC(npc) {
     var result = { raw: 0, score: 0, label: "" };
     if (!isAdultHumanoidNPC(npc)) return result;
-    var player = (typeof G === "object" && G) ? G.player : null;
-    // Display preference only: shared by the panel, look prose and text/TTS
-    // inspection. Legacy saves without orientation keep their existing scope.
-    var orientation = String(player && player.orientation || "bi").toLowerCase();
-    if (orientation === "none") return result;
-    if (String(player && player.gender || "").toLowerCase() === "male") {
-        var gender = String(npc.gender || "").toLowerCase();
-        if (orientation === "straight" && gender !== "female") return result;
-        if (orientation === "gay" && gender !== "male") return result;
-    }
-    var prefs = player ? player.preferences : null;
+    var prefs = (typeof G === "object" && G && G.player) ? G.player.preferences : null;
     if (!prefs) return result;
     var likes = Array.isArray(prefs.likes) ? prefs.likes : [];
     var dislikes = Array.isArray(prefs.dislikes) ? prefs.dislikes : [];
@@ -10739,161 +10631,3 @@ if (typeof window !== "undefined") {
     window.getStaffAvailabilityDescription = getStaffAvailabilityDescription;
     window.getStaffScheduleDescription = getStaffScheduleDescription;
 }
-
-// ============================================================================
-// NPC NEED TEMPLATES (2026-10-28)
-// An NPC asks for help only when the engine finds a real reason in their own
-// state (see commitmentCandidates in the engine): a wound, hunger, an empty
-// shop, a missing tool, a hurt relative, a theft, an unsafe shelter. Each entry
-// here is the authored voice for one reason: `reason` is the plain fact shown
-// in terms, `attention` finishes "<name> ..." in the narration when they try to
-// catch the player's eye, and `lines` are first-person asks by tone (warm /
-// plain / gruff). Placeholders: {item} {person} {place}. The AI may reword a
-// line but never change its facts. Add a template by adding a key; the engine
-// decides when it applies.
-// ============================================================================
-const NPC_NEED_TEMPLATES = {
-    bleeding: {
-        reason: "They are bleeding and need to bind the wound",
-        attention: "presses a hand to a bleeding wound and tries to catch your eye.",
-        lines: {
-            warm: ["Oh, thank goodness. I am bleeding and cannot make it stop. Could you spare {item}?", "Please, I have cut myself badly. If you have {item}, I would be so grateful."],
-            plain: ["I have cut myself badly and it will not stop bleeding. Do you have {item} you could spare?", "This wound will not close. {item} would help, if you can spare it."],
-            gruff: ["Bleeding. Need it bound. Got {item}?", "Cut myself open. If you have {item}, hand it over."]
-        }
-    },
-    hurt: {
-        reason: "Their wounds need a healing supply",
-        attention: "winces and tries to catch your eye.",
-        lines: {
-            warm: ["I took a bad knock and I am still hurting. Could you spare {item} to help me mend?", "I am not well, I am afraid. {item} might set me right, if you can spare it."],
-            plain: ["I am hurt, and it is not mending on its own. {item} would help, if you can spare it.", "These hurts are slow to heal. Do you have {item}?"],
-            gruff: ["Hurt. Need patching up. Got {item}?", "Not mending. {item}, if you have it."]
-        }
-    },
-    hungry: {
-        reason: "They need food to recover their strength",
-        attention: "looks worn thin and tries to catch your eye.",
-        lines: {
-            warm: ["I have not eaten properly in too long. Could you spare {item}?", "I am worn right down. Would you have {item} to share?"],
-            plain: ["I am running on empty. Do you have {item} to spare?", "It has been a long day without a proper meal. {item} would help."],
-            gruff: ["Haven't eaten. {item}, if you have it.", "Running on nothing. Spare {item}?"]
-        }
-    },
-    tool: {
-        reason: "They lack a tool needed for daily work",
-        attention: "turns a worn tool over in their hands and tries to catch your eye.",
-        lines: {
-            warm: ["My work has stalled for want of {item}. Could you find me one?", "I cannot do my day's work without {item}. Might you bring me one?"],
-            plain: ["I am short of {item} and cannot finish my work. Could you bring me one?", "My work is stuck without {item}. Can you find one for me?"],
-            gruff: ["Can't work without {item}. Find me one.", "Need {item}. Work is standing still."]
-        }
-    },
-    stock: {
-        reason: "Their shop has run out of ordinary stock",
-        attention: "eyes the empty shelves and tries to catch your eye.",
-        lines: {
-            warm: ["My shelves are nearly bare. If you could bring me {item}, I could open trade again.", "I have run out of stock. Would you bring me {item}? It would help me no end."],
-            plain: ["I am out of stock. Bring me {item} and I can sell again.", "My shelves are empty. Could you find {item} for me?"],
-            gruff: ["Nothing left to sell. Get me {item}.", "Shelves are bare. {item}, if you can."]
-        }
-    },
-    broke: {
-        reason: "They are short of money for daily expenses",
-        attention: "counts a few coins and tries to catch your eye.",
-        lines: {
-            warm: ["Things have been tight lately. Could you spare a coin? I will not forget it.", "I am short of money this week. A coin would go a long way."],
-            plain: ["I am short of coin right now. Could you spare one?", "Money is tight. Would you spare a coin?"],
-            gruff: ["Short on coin. Spare one?", "Pockets are empty. A coin, if you can."]
-        }
-    },
-    kinHurt: {
-        reason: "Someone close to them is badly hurt",
-        lines: {
-            warm: ["{person} is badly hurt, and I am sick with worry. Would you tell them I am asking after them?", "Have you seen {person}? They are hurt. Please let them know I am thinking of them."],
-            plain: ["{person} is badly hurt. Would you pass on that I am asking after them?", "I heard {person} is hurt. Will you tell them I would like to know how they are?"],
-            gruff: ["{person} is hurt. Tell them I asked.", "Heard {person} is hurt. Go tell them I want to know how they are."]
-        }
-    },
-    kinWorried: {
-        reason: "They are concerned about someone close to them",
-        lines: {
-            warm: ["I have been worried about {person}. Would you tell them I would love to hear from them?", "I have not heard from {person} in a while. Would you let them know I am thinking of them?"],
-            plain: ["I am worried about {person}. Would you let them know I would like to hear from them?", "Could you tell {person} I would like a word?"],
-            gruff: ["Tell {person} I want a word.", "{person} owes me news. Pass that on."]
-        }
-    },
-    kinFind: {
-        reason: "They are concerned about someone close to them",
-        lines: {
-            warm: ["I am worried about {person}. Could you find them and make sure they are well?", "Would you look for {person}? I would feel better knowing they are all right."],
-            plain: ["Could you find {person} and see that they are all right?", "I would like to know {person} is safe. Could you look for them?"],
-            gruff: ["Find {person}. Make sure they are all right.", "Go look for {person}. Tell me they are well."]
-        }
-    },
-    parcel: {
-        reason: "They have something meant for a person close to them",
-        lines: {
-            warm: ["I have something meant for {person}, and I cannot make the trip myself. Would you carry it for me?", "This parcel is for {person}. Could you take it to them?"],
-            plain: ["I have a parcel for {person} and cannot deliver it. Will you take it?", "Could you carry this to {person} for me?"],
-            gruff: ["Parcel for {person}. Can't take it myself. You do it.", "Take this to {person}."]
-        }
-    },
-    courier: {
-        reason: "They carry a parcel they cannot deliver themselves",
-        lines: {
-            warm: ["I am behind on my rounds. Could you carry this parcel to {person} for me?", "I cannot get this to {person} in time. Would you take it?"],
-            plain: ["I cannot make this delivery in time. Will you take this parcel to {person}?", "Could you deliver this to {person}? I am held up."],
-            gruff: ["Behind on my rounds. Take this to {person}.", "Deliver this to {person}. I am stuck here."]
-        }
-    },
-    robbed: {
-        reason: "They discovered that possessions were stolen",
-        attention: "pats down their belongings and tries to catch your eye.",
-        lines: {
-            warm: ["I have been robbed. Someone took my things. Would you report it to {person}?", "My belongings are gone. Please, would you tell {person}?"],
-            plain: ["I have been robbed. Would you report it to {person}?", "Someone has taken my things. Will you tell {person} for me?"],
-            gruff: ["Robbed. Tell {person}.", "Someone cleaned me out. Report it to {person}."]
-        }
-    },
-    shelter: {
-        reason: "Their usual shelter is unsafe",
-        attention: "glances about uneasily and tries to catch your eye.",
-        lines: {
-            warm: ["It is not safe where I sleep tonight. Would you meet me at {place}? I would feel safer.", "I cannot stay where I am. Could you meet me at {place}?"],
-            plain: ["My usual place is not safe right now. Will you meet me at {place}?", "I need somewhere safe. Meet me at {place}?"],
-            gruff: ["Can't stay put. Meet me at {place}.", "Not safe here. {place}. Come find me."]
-        }
-    },
-    fallenCare: {
-        reason: "A visible unconscious person needs care",
-        lines: {
-            warm: ["There is someone lying hurt not far from here. Would you ask {person} to help them?", "Someone needs care, and I cannot manage it alone. Please fetch {person}."],
-            plain: ["Someone is down and needs care. Ask {person} to help them.", "A person is lying hurt. Could you ask {person} to see to them?"],
-            gruff: ["Someone's down. Get {person} to look at them.", "Hurt person. Ask {person}."]
-        }
-    },
-    fallenReport: {
-        reason: "Report what can actually be established, without naming a culprit",
-        lines: {
-            warm: ["A person has fallen and I do not like it. Would you look them over and tell {person} what you find?", "Someone has died here. Could you examine them and report to {person}?"],
-            plain: ["A person has fallen. Examine them and report to {person}.", "Someone is dead. Look them over and tell {person} what you find."],
-            gruff: ["Body. Look it over. Report to {person}.", "Someone's dead. Tell {person} what you find."]
-        }
-    },
-    comfort: {
-        reason: "They would appreciate a small comfort or gift",
-        lines: {
-            warm: ["A small comfort would lift my spirits. If you happen to have {item}, I would treasure it.", "I would love {item}, if you can spare one. It would cheer me."],
-            plain: ["A small comfort would do me good, such as {item}, if you can spare it.", "I would be glad of {item}, if you have one."],
-            gruff: ["Wouldn't say no to {item}.", "{item}, if you have it."]
-        }
-    }
-};
-// Spoken when the player asks what they can help with and the NPC has no real need.
-const NPC_NEED_NONE_LINES = {
-    warm: ["Nothing I can think of, but thank you for asking. That is kind of you.", "I am all right for now. It is good of you to ask."],
-    plain: ["Nothing right now. I am managing.", "I do not need anything at the moment, but thank you."],
-    gruff: ["Nothing. I can handle my own business.", "Don't need a thing. Go bother someone else."]
-};
-if (typeof window !== "undefined") { window.NPC_NEED_TEMPLATES = NPC_NEED_TEMPLATES; window.NPC_NEED_NONE_LINES = NPC_NEED_NONE_LINES; }
