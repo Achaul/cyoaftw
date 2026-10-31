@@ -2028,6 +2028,31 @@ function _dominantBypassActive(npc) {
     return demeanor === "dominant";
 }
 
+/**
+ * True when the NPC cannot speak or react consciously — unconscious or
+ * fast asleep. All verbal NPC output (dialogue, moans, requests, demands)
+ * is suppressed while this is true; only involuntary physical reflexes
+ * may be narrated.
+ */
+function npcCannotSpeak(npc) {
+    if (!npc) return false;
+    if (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) return true;
+    if (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true) return true;
+    if (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) return true;
+    if (npc.currentState && npc.currentState.sleeping === true) return true;
+    return false;
+}
+
+/**
+ * Unwrap <...> speech markers to plain narration. Used for NPCs who cannot
+ * speak: the display layer turns <...> into quoted dialogue, so reflexive
+ * reaction lines must have their brackets stripped to stay non-verbal.
+ */
+function stripSpeechFromText(text) {
+    if (!text || typeof text !== "string") return text;
+    return text.replace(/<([^>]*)>/g, "$1").replace(/<|>/g, "");
+}
+
 function checkActionValidity(actId, npc, player, positionId, clothingState) {
     const act = getAct(actId);
     if (!act) return { valid: false, reason: "unknown action" };
@@ -3171,6 +3196,7 @@ var FULL_DEPTH_MOAN_POOLS = {
 
 function maybeFullDepthMoan(npc, act, intimacy) {
     if (!npc || !act || !intimacy) return null;
+    if (npcCannotSpeak(npc)) return null; // unconscious/sleeping NPCs make no vocal sounds
     if (act.playerIsBottom === true) return null;
     if (act.type !== ACT_TYPES.CONTINUE) return null;
     var pen = intimacy.penetration;
@@ -3186,6 +3212,7 @@ function maybeFullDepthMoan(npc, act, intimacy) {
 
 function maybeConsentHint(npc, act, intimacy) {
     if (!npc || !act || !intimacy) return null;
+    if (npcCannotSpeak(npc)) return null; // unconscious/sleeping NPCs give no consent cues
     if (act.playerIsBottom === true) return null;
     if (act.type !== ACT_TYPES.TEASE) return null;
     var target = String(act.target || "").toLowerCase();
@@ -3219,6 +3246,7 @@ function maybeConsentHint(npc, act, intimacy) {
 
 function maybeNpcIntercourseRequest(npc, player, act, intimacy) {
     if (!npc || !act || !intimacy) return null;
+    if (npcCannotSpeak(npc)) return null; // an unconscious/sleeping NPC cannot ask for anything
     // Only after foreplay on HER body — she asks while being worked up.
     if (act.type !== ACT_TYPES.TEASE) return null;
     if (act.playerIsBottom === true) return null;
@@ -3562,6 +3590,7 @@ function buildAnalRebuffLine(npc, player, intimacy) {
 
 function maybeNpcNeglectDemand(npc, player, intimacy) {
     if (!npc || !intimacy) return null;
+    if (npcCannotSpeak(npc)) return null; // an unconscious/sleeping NPC cannot demand attention
     if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
     var flags = intimacy.encounterFlags;
     var streak = flags.neglectStreak || 0;
@@ -4049,9 +4078,10 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
             (_toolLower === "penis" || _toolLower === "cock") &&
             (_targetLower === "anus" || _targetLower === "ass") &&
             !analReadinessPassed(npc, act, intimacy) &&
-            // A bound captive cannot push back; the rebuff gate is for
-            // free NPCs who need coaxing.
-            !(npc.bound && npc.surrendered)) {
+            // A bound captive cannot push back; an unconscious/sleeping NPC
+            // cannot either. The rebuff gate is for free, conscious NPCs
+            // who need coaxing.
+            !(npc.bound && npc.surrendered) && !npcCannotSpeak(npc)) {
             if (!intimacy.encounterFlags) intimacy.encounterFlags = {};
             intimacy.encounterFlags.analRebuffCount = (intimacy.encounterFlags.analRebuffCount || 0) + 1;
             // The failed attempt is not continuable and not engaged.
@@ -4187,8 +4217,9 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     if (climaxResult) {
         response.climax = climaxResult;
         
-        // Integrate NPC climax reaction into response text
-        if (climaxResult.npcReaction && !response.responseText.includes(climaxResult.npcReaction)) {
+        // Integrate NPC climax reaction into response text (skipped when the
+        // NPC cannot speak — an unconscious climax is purely physical)
+        if (climaxResult.npcReaction && !npcCannotSpeak(npc) && !response.responseText.includes(climaxResult.npcReaction)) {
             // Append NPC reaction to the response
             const separator = response.responseText && !response.responseText.endsWith('.') ? '. ' : ' ';
             response.responseText = (response.responseText || '') + separator + climaxResult.npcReaction;
@@ -4253,10 +4284,14 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // advanced acts in the same category. See _grantIntimacyProgression.
     _grantIntimacyProgression(npc, player, act);
 
+    // An unconscious/sleeping NPC cannot speak: skip every verbal beat
+    // (submission lines, consent hints, moans, requests, demands).
+    var _cannotSpeak = npcCannotSpeak(npc);
+
     // SLAVE SUBMISSION FLAVOR: the player's acts on a collared slave
     // are commands; compliance is voiced per temperament. Fired at half
     // frequency so it seasons the scene rather than wallpapering it.
-    if (npc.enslaved && act.playerIsBottom !== true && Math.random() < 0.5) {
+    if (!_cannotSpeak && npc.enslaved && act.playerIsBottom !== true && Math.random() < 0.5) {
         var _submission = buildSlaveSubmissionLine(npc);
         if (_submission && response) {
             response.responseText = ((response.responseText || "") + " " + _submission).trim();
@@ -4279,12 +4314,12 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // ── CONSENT HINTS ─────────────────────────────────────────────────
     // Her visible reaction to intimate touching - hesitant, warming,
     // welcoming - paced to fire on first touches and band crossings.
-    var _consentHint = maybeConsentHint(npc, act, intimacy);
+    var _consentHint = _cannotSpeak ? null : maybeConsentHint(npc, act, intimacy);
     if (_consentHint && response) {
         response.responseText = ((response.responseText || "") + " " + _consentHint).trim();
     }
     // Bottomed-out thrusts/fucks/pounds draw moans out of her.
-    var _depthMoan = maybeFullDepthMoan(npc, act, intimacy);
+    var _depthMoan = _cannotSpeak ? null : maybeFullDepthMoan(npc, act, intimacy);
     if (_depthMoan && response) {
         response.responseText = ((response.responseText || "") + " " + _depthMoan).trim();
     }
@@ -4295,7 +4330,7 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // so the request plays even on suppressed beats — her asking is the
     // beat, and a suppressed reaction followed by "fuck me" reads as
     // her breaking the rhythm on purpose.
-    var _sexRequest = maybeNpcIntercourseRequest(npc, player, act, intimacy);
+    var _sexRequest = _cannotSpeak ? null : maybeNpcIntercourseRequest(npc, player, act, intimacy);
     if (_sexRequest && response) {
         // Voice the request in her established speech patterns (AI pass,
         // canned-register fallback), then append and record it so later
@@ -4313,7 +4348,7 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // attention. Appended after the response gate so the demand plays
     // even on suppressed beats.
     updateNeglectStreak(npc, act, intimacy, (adjustedArousal && adjustedArousal.n) || 0, !!(climaxResult && climaxResult.npcClimax));
-    var _neglectDemand = maybeNpcNeglectDemand(npc, player, intimacy);
+    var _neglectDemand = _cannotSpeak ? null : maybeNpcNeglectDemand(npc, player, intimacy);
     if (_neglectDemand && response) {
         response.responseText = ((response.responseText || "") + " " + _neglectDemand).trim();
         if (!Array.isArray(intimacy._recentScene)) intimacy._recentScene = [];
@@ -4910,6 +4945,21 @@ async function generateActionResponse(npc, player, act, intimacy, positionId, op
     // This gives consistent, anatomy-aware, context-aware responses
     const templateResponse = buildIntimacyResponse(npc, player, act, intimacy);
 
+    // Unconscious/sleeping NPCs never get an AI-voiced reaction: the
+    // template is already reflexive-only (buildUnconsciousReaction), and an
+    // AI pass could invent speech. Return it directly, with <...> markers
+    // unwrapped so the display layer does not quote them as dialogue.
+    if (npcCannotSpeak(npc)) {
+        return {
+            action: act.id,
+            type: act.type,
+            responseText: stripSpeechFromText(templateResponse),
+            context: context,
+            _source: "template",
+            _npcCannotSpeak: true
+        };
+    }
+
     // Gate-suppressed beat: the caller's NPC-response gate will discard this
     // text, so don't pay for a live AI call or even a cache lookup — return
     // the cheap template right away.
@@ -5211,7 +5261,10 @@ function buildActionContext(npc, player, act, intimacy, positionId) {
             appearance: npc.appearance || null,
             persona: npc.persona || null,
             hasTail: typeof hasNPCTail === "function" ? hasNPCTail(npc) : undefined,
-            cloaca: typeof npcHasCloacaFlag === "function" ? npcHasCloacaFlag(npc) : undefined
+            cloaca: typeof npcHasCloacaFlag === "function" ? npcHasCloacaFlag(npc) : undefined,
+            // Preserve the cannot-speak state on the prompt copy (the copy
+            // drops bodyState/unconscious, so buildIntimacyPrompt reads this)
+            cannotSpeak: npcCannotSpeak(npc)
         },
         player: {
             gender: playerGender,
@@ -5407,11 +5460,21 @@ function buildIntimacyPrompt(context) {
     var _baseLabel = _sampleMode
         ? "SAMPLE REACTION (a canned example of how this species might react - treat it as an IDEA for tone and content, not a script to preserve)"
         : "BASE RESPONSE (the FACTS of this beat — take the facts, not the phrasing)";
-    var _dialogueRule = _sampleMode
-        ? "- Rewrite the sample entirely in THIS NPC's own voice: apply the SPECIES NOTE, SPEECH STYLE, and temperament above. Keep the same underlying reaction (confused, uncertain, disgusted, or curious-but-consenting - whatever the sample conveys) and the same physical facts, but the wording and any dialogue must be freshly written for this character. You may replace the sample's dialogue with lines that fit better. Keep speech simple, direct, possibly broken - do not make an uncivilized NPC speak eloquently."
-        : (_isExtendedOral
-            ? "- You MAY write short in-character dialogue for the NPC (mark it with <angle brackets>). Keep it consistent with their temperament, speech style, and the moment - one line is plenty."
-            : "- Do NOT invent new dialogue or speech. Keep existing speech if present, do not add new lines of dialogue.");
+    // Unconscious/sleeping NPCs cannot speak or react consciously — the AI
+    // must not write any dialogue or vocalization for them, only involuntary
+    // physical reflexes. context.npc is a sanitized copy, so read the
+    // cannotSpeak flag it carries (set in buildActionContext).
+    var _cannotSpeak = (npc && npc.cannotSpeak === true) || npcCannotSpeak(npc);
+    var _unconsciousState = _cannotSpeak
+        ? "\nSTATE OVERRIDE: the NPC is UNCONSCIOUS (or fast asleep). They cannot speak, consent, resist, or act on their own initiative. Write NO dialogue and NO vocalized sounds — not even moans in <angle brackets>. Only involuntary physical reflexes: a twitch, a slack jaw, a reflexive clench, a breath hitching."
+        : "";
+    var _dialogueRule = _cannotSpeak
+        ? "- The NPC is UNCONSCIOUS: NO dialogue, NO speech, NO sounds in <angle brackets>. Physical reflexes only."
+        : (_sampleMode
+            ? "- Rewrite the sample entirely in THIS NPC's own voice: apply the SPECIES NOTE, SPEECH STYLE, and temperament above. Keep the same underlying reaction (confused, uncertain, disgusted, or curious-but-consenting - whatever the sample conveys) and the same physical facts, but the wording and any dialogue must be freshly written for this character. You may replace the sample's dialogue with lines that fit better. Keep speech simple, direct, possibly broken - do not make an uncivilized NPC speak eloquently."
+            : (_isExtendedOral
+                ? "- You MAY write short in-character dialogue for the NPC (mark it with <angle brackets>). Keep it consistent with their temperament, speech style, and the moment - one line is plenty."
+                : "- Do NOT invent new dialogue or speech. Keep existing speech if present, do not add new lines of dialogue."));
     var _sampleModeLines = _sampleMode
         ? "- Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them, so the engine can tell speech from narration.\n- Base the reaction on this NPC's actual temperament and arousal, not just the sample: a shy one hesitates, a bold one is direct, a lustful one may enjoy it.\n- Core fact: this act is UNNATURAL for their kind. They are surprised or confused by it, though still consenting. Derive every word of the reaction from their temperament, species note and speech style above - the sample is a tone hint only, never wording to keep."
         : "";
@@ -5591,7 +5654,7 @@ ${positionContext} | ${clothingContext} | ${arousalContext} | ${penetrationConte
 ${anatomyContext ? "\n" + anatomyContext + "\n" : ""}${factsContext ? "\n" + factsContext + "\n" : ""}
 ${getSizeContext(player, npc) ? "\n" + getSizeContext(player, npc) : ""}
 ${getColorSizeContext(player, npc, action) ? "\n" + getColorSizeContext(player, npc, action) : ""}
-${_recentSceneBlock ? "\n" + _recentSceneBlock + "\n" : ""}${_repeatBlock ? "\n" + _repeatBlock + "\n" : ""}${_nameBlock ? "\n" + _nameBlock + "\n" : ""}${_slaveBlock ? "\n" + _slaveBlock + "\n" : ""}
+${_recentSceneBlock ? "\n" + _recentSceneBlock + "\n" : ""}${_repeatBlock ? "\n" + _repeatBlock + "\n" : ""}${_cannotSpeak ? "" : (_nameBlock ? "\n" + _nameBlock + "\n" : "")}${_slaveBlock ? "\n" + _slaveBlock + "\n" : ""}${_unconsciousState ? "\n" + _unconsciousState + "\n" : ""}
 
 ${_baseLabel}:
 "${templateResponse || ""}"
@@ -5663,6 +5726,9 @@ async function generateContinuationNarrative(npc, player, actId, intimacy) {
     const act = typeof getAct === "function" ? getAct(actId) : null;
     if (!act) return null;
     const template = generateIntimacyNarrative(npc, actId, { player: player, intimacy: intimacy, isContinueAction: true });
+    // Unconscious/sleeping NPCs: template only (reflexive, non-verbal) —
+    // never ask the AI for a continuation beat, which could invent speech.
+    if (npcCannotSpeak(npc)) return stripSpeechFromText(template);
     var _ai = (typeof window !== 'undefined' && typeof window.ai === 'function') ? window.ai : (typeof ai === 'function' ? ai : null);
     if (!_ai || !isSexualAct(act)) return template;
     try {
@@ -5714,6 +5780,13 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
         (["mouth", "tongue"].indexOf(String(action.tool || "").toLowerCase()) !== -1 &&
             String(action.verb || "").toLowerCase() === "penetrate")));
     var _pos = (typeof getPossessivePronoun === "function" && npc) ? getPossessivePronoun(npc) : "their";
+
+    // Unconscious/sleeping NPCs cannot speak: no dialogue or vocalized
+    // sounds may be written for them — only involuntary physical reflexes.
+    var _cannotSpeak = npcCannotSpeak(npc);
+    var _unconsciousState = _cannotSpeak
+        ? "\nSTATE OVERRIDE: the NPC is UNCONSCIOUS (or fast asleep). They cannot speak, consent, resist, or act on their own initiative. Write NO dialogue and NO vocalized sounds — not even moans in <angle brackets>. Only involuntary physical reflexes: a twitch, a slack jaw, a reflexive clench, a breath hitching."
+        : "";
 
     var _species = String(npc.species || "Human");
     var _speciesLower = _species.toLowerCase();
@@ -5829,7 +5902,7 @@ INSTRUCTIONS:
 - Do NOT copy the sample's phrasing. Every sentence must be freshly written - if a phrase from the sample survives unchanged, rewrite it. The sample is a factual outline, not prose to preserve.
 - BANNED phrase: "steady and unhurried" (and close variants like "slow and unhurried"). Never write it - it is canned template filler. Pick concrete rhythm words instead ("in a slow, even rhythm").
 - The sample can stack overlapping canned fragments (an ongoing-motion line plus a body descriptor that repeats the same motion). MERGE overlapping content into one flowing passage - describe each motion and body part ONCE per beat, never twice.
-- Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them.
+${_cannotSpeak ? "- The NPC is UNCONSCIOUS: NO dialogue, NO speech, NO sounds in <angle brackets>. Physical reflexes only." : "- Mark any spoken dialogue with <angle brackets> and keep physical reactions outside them."}
 ${_lengthRule}${_detailBlock}
 - Literal, physical language: concrete anatomy ("sphincter", "pucker", "cheeks", "the root"), never abstractions like "clenching heat" or "her warmth".
 - NEVER write stat words in prose: no "medium", no size labels as adjectives, no color-word stacks ("deep brown cock"). Convey size or color naturally ("thick", "dark skin") or leave it out.
@@ -5853,9 +5926,10 @@ ${_playerSizeContext}
 ${_playerFitContext}
 ${_recentBlock}
 ${_repeatBlock}
-${_nameBlock}
+${_cannotSpeak ? "" : _nameBlock}
 ${_slaveBlock}
 ${_useStateLine}
+${_unconsciousState}
 
 ${_actLine}
 
@@ -6188,7 +6262,11 @@ function getWeightedReaction(reactions, arousalLevel, maxTier) {
  */
 function pickRandom(arr) {
     if (!Array.isArray(arr) || arr.length === 0) return "";
-    return arr[Math.floor(Math.random() * arr.length)];
+    // Template pools contain conditional entries that can evaluate to
+    // null/undefined — never return one.
+    const clean = arr.filter(function (x) { return x != null; });
+    if (!clean.length) return "";
+    return clean[Math.floor(Math.random() * clean.length)];
 }
 
 /**
@@ -6197,6 +6275,10 @@ function pickRandom(arr) {
  */
 function pickUnique(arr, intimacy, key) {
     if (!Array.isArray(arr) || arr.length === 0) return "";
+    // Template pools contain conditional entries that can evaluate to
+    // null/undefined — filter them out before picking.
+    arr = arr.filter(function (x) { return x != null; });
+    if (!arr.length) return "";
     if (!intimacy) return pickRandom(arr);
     if (!intimacy._recentNarratives) intimacy._recentNarratives = {};
     if (!intimacy._recentNarratives[key]) intimacy._recentNarratives[key] = [];
@@ -7147,9 +7229,11 @@ function buildIntimacyResponse(npc, player, act, intimacy) {
     }
     
     // ── UNCONSCIOUS ACTIONS ────────────────────────────────────
-    // Unconscious NPCs cannot give conscious reactions - only reflexive physical
-    // responses are possible. Use dedicated reflexive reaction pool.
-    if (act.unconsciousOnly === true || act.nonConsensual === true) {
+    // Unconscious/sleeping NPCs cannot give conscious reactions - only
+    // reflexive physical responses are possible. Use dedicated reflexive
+    // reaction pool for ANY act on a cannot-speak NPC (not just the
+    // unconsciousOnly acts, so bound-captive vocal lines can't leak through).
+    if (npcCannotSpeak(npc) || act.unconsciousOnly === true || act.nonConsensual === true) {
         return buildUnconsciousReaction(npc, player, act, intimacy);
     }
     
@@ -8305,7 +8389,20 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
  */
 function generateNPCClimaxReaction(npc, npcGender, intimacy) {
     if (!npc) return null;
-    
+
+    // Unconscious/sleeping NPCs climax without any conscious vocalization —
+    // only involuntary physical reflexes, never cries, words, or pleading.
+    if (npcCannotSpeak(npc)) {
+        const subj = getSubjectPronoun(npc) || "She";
+        const poss = getPossessivePronoun(npc) || "her";
+        return pickRandom([
+            `${subj} shudders through ${poss} limp body, muscles locking and releasing in involuntary spasms.`,
+            `${poss} breath hitches and ${subj.toLowerCase()} goes rigid, the climax passing through ${poss} unconscious frame as pure reflex.`,
+            `${subj} twitches and trembles, ${poss} body convulsing without a sound.`,
+            `${poss} limbs jerk once, twice, then fall still again, breathing slow and shallow.`
+        ]);
+    }
+
     const subjectPronoun = getSubjectPronoun(npc) || "She";
     const possessivePronoun = getPossessivePronoun(npc) || "her";
     const objectPronoun = getObjectPronoun(npc) || "them";
@@ -10251,7 +10348,16 @@ function hasLube(npc, bodyPart = "any") {
 function changePosition(npc, player, newPositionId, options = {}) {
     if (!npc || !npc.intimacy) return { success: false, error: "No intimacy state" };
     if (!hasPosition(newPositionId)) return { success: false, error: "Invalid position" };
-    
+
+    // A non-resisting NPC (unconscious/sleeping) can only be placed into
+    // positions the player can physically arrange a limp body into —
+    // lying/receiving "bottom" positions, never standing, kneeling, or
+    // NPC-on-top positions where the NPC would have to support itself.
+    if (npcCannotSpeak(npc) && typeof isPositionPlaceableForNonResisting === "function"
+        && !isPositionPlaceableForNonResisting(newPositionId)) {
+        return { success: false, error: "A non-resisting NPC cannot be placed in that position" };
+    }
+
     // Ensure position object exists
     if (!npc.intimacy.position) {
         npc.intimacy.position = {
@@ -10894,6 +11000,28 @@ function getPositionChoreography(newPosition, posPronoun, subjPronoun, objPronou
             `${subjPronoun} is restrained on the X-cross, arms and legs spread, ${posPronoun} mouth at hip level as you step before ${objPronoun}.`,
             `You approach ${objPronoun} on the cross, ${posPronoun} limbs splayed and bound, ${posPronoun} face turned toward your hips.`,
             `${subjPronoun} hangs from the X-cross, restrained and waiting, as you position yourself in front of ${posPronoun} mouth.`
+        ],
+        // Unconscious positions: the PLAYER arranges the limp, dead-weight
+        // body — the NPC never participates or holds the position itself.
+        "Unconscious On Back": [
+            `You roll ${objPronoun} onto ${posPronoun} back, their limp limbs falling open as their weight settles flat against the floor.`,
+            `You drag ${objPronoun} into a flat, face-up sprawl, arranging ${posPronoun} unresisting arms and legs where you need them.`,
+            `You lower ${objPronoun} down on ${posPronoun} back, ${subjLower} lying heavy and motionless as you settle over ${objPronoun}.`
+        ],
+        "Unconscious On Face": [
+            `You flip ${objPronoun} face-down, their chest and knees taking the weight while their legs splay open, limp and exposed.`,
+            `You press ${objPronoun} down flat on ${posPronoun} stomach, lifting ${posPronoun} hips so ${posPronoun} rear rests raised and unresisting.`,
+            `You arrange ${objPronoun} face-down with ${posPronoun} cheeks spread and ${posPronoun} head turned to the side, the whole body slack under you.`
+        ],
+        "Unconscious On Side": [
+            `You roll ${objPronoun} onto ${posPronoun} side, one arm flopping out beneath ${objPronoun}, the top leg falling forward with the weight of it.`,
+            `You settle ${objPronoun} down sideways, their limp body curling slightly as gravity pulls ${posPronoun} limbs into place.`,
+            `You lay ${objPronoun} on ${posPronoun} side and step in behind ${objPronoun}, ${posPronoun} back unresisting against your front.`
+        ],
+        "Unconscious Doggy": [
+            `You prop ${objPronoun} up on ${posPronoun} hands and knees, their arms barely holding the weight, and spread ${posPronoun} knees wide.`,
+            `You lift ${objPronoun} into a slumped all-fours pose, ${posPronoun} chest sagging low, ${posPronoun} rear raised and completely unresisting.`,
+            `You arrange ${objPronoun} on all fours and kneel in behind ${objPronoun}, their limp frame offering no resistance as you settle against ${posPronoun} raised rear.`
         ]
     };
     
@@ -10918,7 +11046,11 @@ function getPositionChoreography(newPosition, posPronoun, subjPronoun, objPronou
  */
 function buildPositionChangeNPCResponse(npc, positionChangeInfo) {
     if (!npc || !positionChangeInfo) return null;
-    
+
+    // Unconscious/sleeping NPCs do not react to being moved — no verbal or
+    // conscious response, only the physical repositioning narration.
+    if (npcCannotSpeak(npc)) return null;
+
     const { newPosition, newPositionLabel, penetrationEnded } = positionChangeInfo;
     const subjectPronoun = typeof getSubjectPronoun === 'function' ? getSubjectPronoun(npc) : "They";
     const possessivePronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
@@ -12273,6 +12405,8 @@ function getRoomMessNotes(room) {
     window.getSubjectPronoun = getSubjectPronoun;
     window.getObjectPronoun = getObjectPronoun;
     window.changePosition = changePosition;
+    window.npcCannotSpeak = npcCannotSpeak;
+    window.stripSpeechFromText = stripSpeechFromText;
     window.buildPositionChangeNarration = buildPositionChangeNarration;
     window.buildPositionChangeNPCResponse = buildPositionChangeNPCResponse;
     window.describeAnatomy = describeAnatomy;
@@ -12413,62 +12547,69 @@ function buildSubmissiveNarrative(npc, act, player) {
  */
 function buildUnconsciousNarrative(npc, act, player) {
     if (!npc || !act) return null;
-    
-    const npcName = npc.name || "them";
-    const playerName = player.name || "you";
+
+    const subj = (typeof getSubjectPronoun === "function" ? getSubjectPronoun(npc) : null) || "She";
+    const subjLower = subj.toLowerCase();
+    const poss = (typeof getPossessivePronoun === "function" ? getPossessivePronoun(npc) : null) || "her";
+    const obj = (typeof getObjectPronoun === "function" ? getObjectPronoun(npc) : null) || "her";
     const tool = act.tool || "hand";
     let target = act.target || "body";
     const verb = act.verb || "touch";
-    
+
     // Replace special targets with appropriate body parts for narrative
     if (target === "npc" || target === "player") {
         target = "body"; // Use generic "body" for clothing removal actions on self/other
     }
-    
+
     // Custom narratives for specific actions
     const actId = act.id || "";
-    
+
     // Oral penetration on unconscious NPC
     // Only match actual penetration acts (fuck, thrust, deepthroat, etc.) not tease/rub acts
     const isPenetrativeVerb = ["fuck", "thrust", "deepthroat", "penetrate", "enter"].includes(verb.toLowerCase());
     if (isPenetrativeVerb && (target === "mouth" || target === "lips")) {
         if (tool === "penis" || tool === "cock" || tool === "dick") {
-            return `You plug ${npcName}'s nose and they instinctively gasp for air, their mouth opening. You jam your cock into their mouth, pushing past their unresisting lips and deep into their throat.`;
+            return `You plug ${poss} nose and ${subjLower} instinctively gasps for air, ${poss} mouth falling open. You push your cock past ${poss} slack lips and deep into ${poss} unresisting throat.`;
         }
     }
-    
-    // Vaginal penetration on unconscious NPC  
+
+    // Vaginal penetration on unconscious NPC
     if (target === "vagina" || target === "pussy" || actId.toLowerCase().includes("vagina") || actId.toLowerCase().includes("pussy")) {
         if (tool === "penis" || tool === "cock" || tool === "dick") {
-            return `With ${npcName} completely limp and unresisting, you position yourself and force your cock into their ${target}. Their body offers no resistance as you push deep inside.`;
+            return `With ${subjLower} completely limp, you position yourself and press your cock into ${poss} ${target}. ${subj.charAt(0).toUpperCase() + subj.slice(1)} offers no resistance as you push deep inside.`;
         }
         if (tool === "fingers" || tool === "hand" || tool === "digit") {
-            return `You spread their legs and slide your fingers into their unresisting ${target}, their body completely limp.`;
+            return `You spread ${poss} legs and slide your fingers into ${poss} unresisting ${target}, ${poss} body completely limp.`;
         }
     }
-    
+
     // Anal penetration on unconscious NPC
     if (target === "anus" || target === "ass" || target === "butt" || actId.toLowerCase().includes("anal") || actId.toLowerCase().includes("anus")) {
         if (tool === "penis" || tool === "cock" || tool === "dick") {
-            return `You lift ${npcName}'s hips and press your cock against their tight entrance. With no resistance, you push forward, your cock sinking into their back passage.`;
+            return `You lift ${poss} hips and press your cock against ${poss} tight entrance. With no resistance, you push forward, your cock sinking into ${poss} back passage.`;
         }
         if (tool === "fingers" || tool === "hand") {
-            return `You probe at ${npcName}'s back entrance with your fingers, their limp body offering no resistance as you push inside.`;
+            return `You probe at ${poss} back entrance with your fingers, ${poss} limp body offering no resistance as you push inside.`;
         }
     }
-    
+
     // Breast/tits actions on unconscious NPC
     if (target === "breasts" || target === "tits" || target === "nipples" || actId.toLowerCase().includes("breast") || actId.toLowerCase().includes("nipple")) {
-        return `You handle ${npcName}'s bare, limp breasts at will, squeezing and kneading their unresisting flesh.`;
+        return `You handle ${poss} bare, limp breasts at will, squeezing and kneading ${poss} unresisting flesh.`;
     }
-    
+
+    // Repositioning a dead-weight body
+    if (verb === "reposition" || actId === "reposition_unconscious") {
+        return `You grip ${obj} under the arms and drag ${poss} limp body around until ${subjLower} lies where you want ${obj}, heavy and unresisting the whole way.`;
+    }
+
     // Generic penetration/insertion
     if (verb === "penetrate" || verb === "enter" || verb === "insert" || verb === "thrust" || verb === "pound") {
-        return `You take advantage of ${npcName}'s unconscious state and ${verb} them without resistance, their body completely at your mercy.`;
+        return `You take advantage of ${poss} unconscious state and ${verb} ${obj} without resistance, ${poss} body completely at your mercy.`;
     }
-    
-    // Generic action - describe forceful action on unresisting body
-    return `You ${verb} ${npcName}'s ${target} as they lie motionless, their body completely unresisting to your touch.`;
+
+    // Generic action - describe the act on an unresisting body
+    return `You ${verb} ${poss} ${target} as ${subjLower} lies motionless, ${poss} body completely unresisting to your touch.`;
 }
 
 /**

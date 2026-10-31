@@ -4058,7 +4058,7 @@ const TEXT_COMMANDS = [
     { id: "choose", args: ["number"], aliases: ["choose"], example: "choose 2", description: "Pick a numbered conversation option from the most recent options list." },
     { id: "leave", aliases: ["leave", "goodbye", "bye", "step away", "leave conversation"], example: "leave", description: "Step away from the current NPC. Use a direction to leave the room." },
     { id: "rest", aliases: ["rest"], example: "rest", room: true, interact: "rest", description: "Use the normal Rest action, including recovery, time, and danger checks." },
-    { id: "sleep", aliases: ["sleep"], example: "sleep; sleep in bed", room: true, interact: "sleep", description: "Sleep on a bed, cot or floor. A bed's Sleep action and sleep in <bed> open the same surface choices. Choose with options and choose <number>; sharing reduces recovery. Show sleep lists availability, and help sleep explains the choices." },
+    { id: "sleep", aliases: ["sleep", "sleep until rested", "go to sleep"], example: "sleep; sleep until rested; sleep in bed; show sleep; how sleep", room: true, interact: "sleep", description: "Sleep until rested on a bed, cot or floor. Time awake and missing stamina or mana determine duration; sharing slows recovery. A bed's Sleep action and sleep in <bed> open the same surface choices. Choose with options and choose <number>. Show sleep lists availability, and how sleep explains the choices." },
     { id: "status", info: true, aliases: ["status", "health", "stats"], example: "status", description: "Read your health, stamina, mana, and coins. Costs no turn." },
     { id: "stop", aliases: ["stop"], example: "stop", description: "Cancel pending commands. An action already in progress finishes normally." },
     { id: "continue", aliases: ["continue", "resume"], example: "continue", description: "Explicitly resume the remaining commands after a pause. A failed action is not retried." },
@@ -4124,6 +4124,7 @@ function parseTextCommand(input) {
     const original = String(input || "").trim();
     const raw = original.replace(/[.!?]+$/, "").trim();
     const key = textCommandNormalize(raw);
+    if (/^(?:sleep until rested|go to sleep)$/.test(key)) return { verb: "sleep", args: {} };
     const phrase = parseTextPhraseCommand(raw); if (phrase) return phrase;
     const rulings = parseTextRulingsCommand(raw); if (rulings) return rulings;
     let match = /^(?:how(?:\s+(?:do|can)\s+i)?|help)(?:\s+(?:to\s+)?(.+))?$/i.exec(raw);
@@ -8206,7 +8207,7 @@ function textExplorationBlock() {
 function textFixtureActions(fixture) {
     const room = G.activeRoom, actions = [];
     const add = function (id, reason, run, note) { actions.push({ id: id, label: id + " " + getEntityName(fixture), reason: reason || "", run: run, note: note || "" }); };
-    if (fixture.id === "bed" && typeof getBedSleepBlockReason === "function") add("sleep", getBedSleepBlockReason(fixture, room), function () { return sleepAtBed(fixture, room); }, "choose a bed, cot or floor; sleeping takes a night");
+    if (fixture.id === "bed" && typeof getBedSleepBlockReason === "function") add("sleep", getBedSleepBlockReason(fixture, room), function () { return sleepAtBed(fixture, room); }, "choose a bed, cot or floor and sleep until rested");
     if (typeof isFixtureSeatingTarget === "function" && isFixtureSeatingTarget(fixture)) add("sit", getFixtureSeatingBlockReason(fixture, room), function () { return sitAtFixture(fixture, room); }, isBarSeatingFixture(fixture) ? "free; requests bartender service" : "free; sit without resting");
     if (fixture.id === "burial-niches") add("mausoleum", mausoleumRoomBlock(room, G.player), openMausoleumMenu, "review niches, interment and engraved plaques");
     if (fixture.id === "grindstone") add("hone", workbenchBlock("hone", fixture), function () { return selfHoneAtGrindstone(fixture); }, FORGE_SELF_HONE_STAMINA + " stamina, 1 turn, no coins");
@@ -10953,7 +10954,7 @@ function noticeSceneBlock(fixture, room) {
     if (!player || !room || room !== G.activeRoom || !noticeIsBoard(fixture) || !Array.isArray(room.structural) || room.structural.indexOf(fixture) < 0 || getVisibleRoomFixtures(room).indexOf(fixture) < 0) return "That board is no longer visible here.";
     if (player.dead || player.hp <= 0 || player.unconscious || player._dying || player._collapsing) return "You cannot use notices while incapacitated.";
     if (isPlayerJailed()) return "You cannot use that board while jailed.";
-    if (G.activeNPCMode === "combat" || roomHasActiveHostile(room)) return "Too dangerous right now.";
+    if (G.activeNPCMode === "combat") return "Too dangerous right now.";
     if (isRoomCollapsed(room)) return "That board is buried under rubble.";
     if (hasPendingPartyLoot()) return "Resolve the party's loot decision first.";
     if (G.activeNPC || G.activeObject || G.activeItemModal && G.activeItemModal !== fixture) return "Finish the current interaction before using the board.";
@@ -11198,7 +11199,6 @@ function environmentSceneBlock(target, allowHostiles) {
     if (G.activeItemModal && G.activeItemModal !== target) return "Close the current item window first.";
     if (isPlayerJailed()) return "You cannot do that while jailed.";
     if (isRoomCollapsed(r)) return "Everything here is buried under rubble.";
-    if (!allowHostiles && roomHasActiveHostile(r)) return "Too dangerous right now.";
     if (hasPendingPartyLoot()) return "Resolve the party's loot decision first.";
     return "";
 }
@@ -11734,7 +11734,6 @@ function structuralSceneBlock(entry) {
     const p = G.player, room = G.activeRoom;
     if (!p || !room || p.dead || p.hp <= 0 || p.unconscious || p._dying || p._collapsing) return "You cannot act while incapacitated.";
     if (G.activeNPC || G.activeObject || G.activeItemModal || G.combatEncounter || G.activeNPCMode && G.activeNPCMode !== "door") return "Finish the current interaction first.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (isPlayerJailed()) return "These cells are built to hold.";
     if (hasPendingPartyLoot()) return "Resolve the party's loot decision first.";
     if (isRoomCollapsed(room) && (!entry || !/^rubble$|^rescue$/.test(entry.kind))) return "The room is collapsed. Work on an actual blocked exit to make a crawl.";
@@ -14285,8 +14284,10 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 
 
 // ── GAME STATE ───────────────────────────────────────────────────
-// Core Engine Version: 2026-10-26-009
-// Latest: Voice command fallback infers misheard words: person targets that match no one get a sounds-like best guess (textGuessNPCTarget: "female cancun" -> the female kenku), the AI is told voice input is speech-to-text and to always give a best guess (exits listed), AI plans wrapped in prose, using shorthand keys or verb synonyms are repaired, and in voice play the valid part of a partly bad plan still runs.
+// Core Engine Version: 2026-10-31-004
+// Latest: Masons: one per settlement with a workshop (Town, Lantern Quarter, Pilgrims' Camp) walks to broken or weakened doors, cracked walls and collapsed ways in their zone and repairs them a step per turn after a 12-turn delay; the work shows in room text and turn notes, and bystanders remember it. Breaking a door down now marks it brokenOpen.
+// Previous: Zone boss succession: a dead boss is replaced after a 20-40 turn vacuum by the strongest same-species NPC in the zone (1.3x stats and HP, no relic); the star now marks relic bearers only; NPCs pick up abandoned relics off-screen (a boss who does becomes a full magic boss); the boss's kin in its zone know who rules them.
+// Previous: Voice command fallback infers misheard words: person targets that match no one get a sounds-like best guess (textGuessNPCTarget: "female cancun" -> the female kenku), the AI is told voice input is speech-to-text and to always give a best guess (exits listed), AI plans wrapped in prose, using shorthand keys or verb synonyms are repaired, and in voice play the valid part of a partly bad plan still runs.
 // Previous: Harefolk, ratfolk and kenku NPC societies, speech and combat (engine side: TTS voices and pronunciations, natural attacks, fallback replies, feather surface label).
 // Previous: Trade and economy pass: Traders now carry a real purse (20-50 gold) instead of the 2-10 default; merchants pay at most 1.75x half value so deity tomes and similar cannot be bought and flipped for profit; bone dice wagers move coin to and from the NPC and have a cooldown; sealed goods pay slightly less coin. Previous -007: Hand-in tokens now pay out of the NPC's own coin pouch and are kept if they cannot cover them. Previous -006: Item purpose pass part 2: keepsakes (charms, rings, brooches, scarves) wear on the Neck for +1 Charisma; rivets, nails, pick-heads, sewing kits, twine and cloth mend worn gear; relics, tokens, candles and incense can be left as offerings at a shrine; sealed bales, crates and goods open; spice seasons a meal; pawn tickets, receipts, tally sticks, chits and house tokens are handed in to the right NPC; bone dice wager with friendly NPCs; ledgers, maps and receipts are readable; ink, chalk, parchment and wax tablets count as writing supplies; the ladle and net weight are improvised weapons; clean linen bandages. New "apply" text command.
 // Previous: Item purpose pass part 1: quest trophies take half a unit each and stack; plain shop goods (travel bread, dried meat, tavern meal, warm supper, bitter tonic...) were created with no item type and could not be eaten, now fixed in createNPCTradeGood and covered by name for existing saves; supplies by name (meal, stew, supper, broth, fungus, nectar glaze) are edible.
@@ -14359,7 +14360,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-30-009";
+window.__ENGINE_CORE_VERSION = "2026-10-31-004";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -16072,6 +16073,17 @@ const ROLE_TRADE_GOODS = {
         { id: "sample-crate", name: "Sample crate", value: 10 },
         { id: "sealed-goods", name: "Sealed goods", value: 12 }
     ],
+    // Night-only alley dealer: practical burglar's kit and quiet luxuries.
+    // (The original add_shady_merchant.py list was lost - the script was
+    // committed truncated before defining it - so this is a fresh set.)
+    "Shady Merchant": [
+        { id: "lockpick", name: "Lockpick", value: 8 },
+        { id: "torch", name: "Torch", value: 1 },
+        { id: "rope", name: "Rope", value: 5 },
+        { id: "hooded-cloak", name: "Hooded cloak", value: 14, type: ["clothes", "upper"], description: "A heavy cloak with the hood pulled low. Warm, and good for blending into shadows." },
+        { id: "sealed-goods", name: "Sealed goods", value: 12 },
+        { id: "forged-deed", name: "Forged deed", value: 25, type: ["misc", "document"], description: "Papers that look official enough at a glance. Best not to read them too closely." }
+    ],
     "Blacksmith": [
         { id: "whetstone", name: "Whetstone", value: 4 },
         { id: "iron-nails", name: "Iron nails", value: 3 },
@@ -17601,6 +17613,7 @@ function getNPCEquipmentSlots(npc, zoneTemplate) {
         "Villager": ["upper", "lower", "feet", "belt"],
         "Pilgrim": ["upper", "lower", "feet", "belt"],
         "Miner": ["head", "upper", "lower", "feet", "weapon", "belt"],
+        "Mason": ["upper", "lower", "feet", "belt"],
         "Scout": ["upper", "lower", "feet", "weapon", "belt"],
         "Stone Guard": ["head", "upper", "lower", "feet", "weapon", "belt"],
         "Cultist": ["upper", "lower", "feet", "weapon", "belt"],
@@ -17844,6 +17857,15 @@ function seedNPCStartingLoot(npc, room, zoneTemplate) {
         oreExtras.push(cloneLootTemplate(ORE_TEMPLATES[rand(Object.keys(ARMOUR_ORE_TEMPLATES))]));
     }
     npc.inventory = npc.role === "Clothier" ? seedNPCClothierStock(npc) : inventory.slice(0, 5).concat(seedNPCPotionStock(npc)).concat(seedNPCSpellStock(npc)).concat(seedNPCPrimerStock(npc)).concat(seedNPCClassGearStock(npc)).concat(seedNPCPoisonStock(npc)).concat(oreExtras);
+    // Shady Merchant: the NSFW half appends its own stock when present.
+    // typeof-guarded no-op when the NSFW files are absent (same link-point
+    // pattern as the intimacy hooks in chooseChatOption).
+    if (npc.role === "Shady Merchant" && typeof window.generateShadyMerchantNSFWInventory === "function") {
+        const nsfwGoods = window.generateShadyMerchantNSFWInventory(npc);
+        if (Array.isArray(nsfwGoods)) {
+            nsfwGoods.forEach(function (good) { if (good) npc.inventory.push(good); });
+        }
+    }
     // A key made for one real lock nearby (see WORLD KEYS).
     maybeGiveNPCKey(npc, room);
     npc.armor = calculateNPCArmorFromEquipment(npc);
@@ -18916,6 +18938,9 @@ function getStatusClock() {
 window.advanceStoryTurn = function(steps = 1) {
     G.story = ensureStoryStateShape(G.story);
     G.story.turnCounter = (G.story.turnCounter || 0) + steps;
+    // Night can fall while the player stands in an alley: let the Shady
+    // Merchant slip in then too (no-op unless the room is an alley at night).
+    if (G.activeRoom && typeof ensureNightAlleyShadyMerchant === "function") ensureNightAlleyShadyMerchant(G.activeRoom);
     syncPlayerPortraitPromptEditor();
     if (typeof decayNPCStatesInWorld === "function") {
         decayNPCStatesInWorld(G.roomMap, steps);
@@ -23340,6 +23365,8 @@ function spawnNPCsForRoom(room, zoneName) {
             if (boss) {
                 applyRareBossBoost(boss, zoneName);
                 npcs.push(boss);
+                bossState.bossId = boss.id;
+                bossState.species = boss.species || bossSpecies;
             }
         }
     }
@@ -23364,6 +23391,29 @@ function spawnNPCsForRoom(room, zoneName) {
     }
 
     return npcs;
+}
+
+// The Shady Merchant's spawn-table entry is gated on isNightTime(), but
+// planned rooms (every Alleyway in a pre-built Town) get their creatures
+// assigned once at game start, when the clock is always daytime - so the
+// condition could never pass for them. This lazy pass spawns one when the
+// player is in an alley at night and no Shady Merchant is present yet.
+// Idempotent: it never duplicates, and never fires during the day.
+function ensureNightAlleyShadyMerchant(room) {
+    if (!room || room.type !== "Alleyway" || room.role === "spine") return;
+    if (typeof isNightTime !== "function" || !isNightTime(getCurrentStoryTurn())) return;
+    const zone = getZoneTemplate(room.zone);
+    if (!zone) return;
+    room.creatures = Array.isArray(room.creatures) ? room.creatures : [];
+    if (room.creatures.some(function (npc) { return npc && npc.role === "Shady Merchant" && !npc.dead && !npc._prisoner; })) return;
+    const takenRoles = getTakenRoomRoles(room, []);
+    if (takenRoles.has("Shady Merchant")) return;
+    const basePool = (Array.isArray(room.npcSpecies) && room.npcSpecies.length) ? room.npcSpecies : zone.allowedSpecies;
+    const civilized = basePool.filter(function (s) { return typeof getSpeciesIsCivilized !== "function" || getSpeciesIsCivilized(s); });
+    const species = rand(civilized.length ? civilized : basePool);
+    const npc = createNPC(species, room, zone, { takenRoles, forceRole: "Shady Merchant" });
+    if (!npc) return;
+    room.creatures.push(npc);
 }
 
 // ── ZONE BOSSES ──────────────────────────────────────────────────
@@ -23516,7 +23566,7 @@ function getNPCDamageMultiplier(npc) {
 
 // One line, once, when a boss's power breaks.
 function noteBossRelicLoss(npc, lines) {
-    if (!npc || !npc.boss || npc.boss.relicLostNoted || bossHasRelic(npc)) return;
+    if (!npc || !npc.boss || !npc.boss.relicUid || npc.boss.relicLostNoted || bossHasRelic(npc)) return;
     npc.boss.relicLostNoted = true;
     revertBossBoosts(npc);
     if (Array.isArray(lines)) {
@@ -24098,6 +24148,424 @@ function upgradeRareBossEquipment(npc) {
     });
 
     npc.armor = calculateNPCArmorFromEquipment(npc);
+}
+
+// ── ZONE BOSS SUCCESSION ─────────────────────────────────────────
+// A dead zone boss does not leave the seat empty for good. After a short
+// power vacuum (BOSS_SUCCESSION_MIN/MAX_TURNS story turns) the strongest
+// living NPC of the old boss's species in that zone claims the boss room.
+// No new NPC is ever created: the heir is someone who already lives there,
+// so a species that has been wiped out leaves the seat empty until one of
+// its kind turns up (a wanderer, or a newly generated room).
+//   - A successor without a relic is a "non-magic" boss: gold name and
+//     "(Zone Boss)" like any boss, but no star. It gets BOSS_SUCCESSOR_MULT
+//     (1.3x) on its four stats and max HP: it now has the zone's supplies to
+//     itself. No fixed 3x HP and no relic boosts.
+//   - The star now means "carries a boss relic" (npcShowsBossStar). An
+//     original boss that loses its relic keeps the gold name but loses the
+//     star. A boss that picks up a relic (tickNPCRelicPickup) becomes a full
+//     magic boss: relic powers plus freshly rolled 2x-3x relic boosts.
+//   - NPCs of the boss's species in the same zone always know who rules them
+//     (getZoneBossLoreFacts, species-gated in getNPCKnownLoreFacts) and get a
+//     ruler line in their prompt (getZoneRulerNoteForNPC).
+// State lives on G.zoneBossState[zone] (saved): bossId, rulerName, species,
+// vacantSince, dueTurn, formerName, successions, usedEpithets.
+const BOSS_SUCCESSION_MIN_TURNS = 20;
+const BOSS_SUCCESSION_MAX_TURNS = 40;
+const BOSS_SUCCESSION_RETRY_TURNS = 25;   // no heir yet: look again this much later
+const BOSS_SUCCESSOR_MULT = 1.3;
+const NPC_RELIC_PICKUP_CHANCE = 0.25;     // per off-screen room per autonomy tick
+
+// The first boss relic an NPC carries: held in the hand first, then other
+// slots, then the pack. Null when none.
+function npcCarriedBossRelic(npc) {
+    if (!npc || typeof isBossRelicItem !== "function") return null;
+    const eq = npc.equipped && typeof npc.equipped === "object" ? npc.equipped : {};
+    if (isBossRelicItem(eq.hand)) return eq.hand;
+    const slots = Object.keys(eq);
+    for (let i = 0; i < slots.length; i++) {
+        if (isBossRelicItem(eq[slots[i]])) return eq[slots[i]];
+    }
+    const inv = Array.isArray(npc.inventory) ? npc.inventory : [];
+    for (let j = 0; j < inv.length; j++) {
+        if (isBossRelicItem(inv[j])) return inv[j];
+    }
+    return null;
+}
+
+// The star in front of a name: only for someone carrying a boss relic.
+function npcShowsBossStar(npc) {
+    return !!(npc && npc !== (typeof G !== "undefined" && G ? G.player : null) && npcCarriedBossRelic(npc));
+}
+
+function bossSpeciesKey(value) {
+    return String(value || "").toLowerCase();
+}
+
+function isLivingBossHolder(npc) {
+    return !!(npc && npc.boss && !npc.dead && npc.bodyState !== "corpse");
+}
+
+// The living holder of a zone's seat, wherever they are (standing, knocked
+// out, or travelling with the player). A dead boss frees the seat; a boss who
+// is only unconscious or has joined the player still holds it.
+function findZoneBossHolder(zoneName) {
+    const map = G.roomMap && typeof G.roomMap === "object" ? G.roomMap : {};
+    const st = G.zoneBossState ? G.zoneBossState[zoneName] : null;
+    let found = null;
+    const consider = function (npc, room) {
+        if (!npc || typeof npc !== "object" || !npc.boss || npc.boss.zone !== zoneName) return;
+        if (!isLivingBossHolder(npc)) return;
+        if (!found || (st && st.bossId && npc.id === st.bossId)) found = { npc: npc, room: room };
+    };
+    Object.keys(map).forEach(function (key) {
+        const room = map[key];
+        if (!room) return;
+        (Array.isArray(room.creatures) ? room.creatures : []).forEach(function (npc) { consider(npc, room); });
+        (Array.isArray(room.items) ? room.items : []).forEach(function (item) { if (item && item.objectType === "body") consider(item, room); });
+    });
+    (G.partyMembers || []).concat(G.sessionFollowers || []).forEach(function (npc) { consider(npc, null); });
+    return found;
+}
+
+function findZoneBossRoom(zoneName) {
+    const type = ZONE_BOSS_ROOMS[zoneName];
+    if (!type) return null;
+    const map = G.roomMap && typeof G.roomMap === "object" ? G.roomMap : {};
+    const keys = Object.keys(map);
+    for (let i = 0; i < keys.length; i++) {
+        const room = map[keys[i]];
+        if (room && room.type === type && room.zone === zoneName && !(typeof isRoomCollapsed === "function" && isRoomCollapsed(room))) return room;
+    }
+    return null;
+}
+
+function getZoneBossSeatName(zoneName) {
+    const room = findZoneBossRoom(zoneName);
+    const name = room ? (room.displayName || room.name || room.type) : (ZONE_BOSS_ROOMS[zoneName] || "the seat of power");
+    return /^the /i.test(name) ? "the " + name.slice(4) : "the " + name;
+}
+
+// How strong an NPC looks as a claimant. A relic bearer outranks everyone.
+function getNPCRulerStrength(npc) {
+    if (!npc) return 0;
+    const s = npc.stats || {};
+    let score = ((s.physicalProwess || 0) + (s.endurance || 0) + (s.willpower || 0) + (s.flexibility || 0)) * 2;
+    score += (npc.hpMax || npc.hp || 0) + (npc.armor || 0) * 2;
+    if (typeof getNPCClassRank === "function") {
+        let best = 0;
+        ["fighter", "rogue", "wizard", "cleric"].forEach(function (k) { best = Math.max(best, getNPCClassRank(npc, k) || 0); });
+        score += best * 4;
+    }
+    if (npcCarriedBossRelic(npc)) score += 1000;
+    return score;
+}
+
+function isEligibleBossHeir(npc) {
+    if (!npc || typeof npc !== "object" || npc.boss || npc === G.player) return false;
+    if (npc.dead || npc.unconscious || npc.isUnconsciousBody || npc.objectType === "body" || !(npc.hp > 0)) return false;
+    if (npc.bound || npc.surrendered || npc._prisoner || npc.isGuide || npc.isBountyHunter || npc._pressureWave) return false;
+    if (typeof isCompanionNPC === "function" && isCompanionNPC(npc)) return false;
+    if (npc._npcParty && npc._npcParty.leaderId !== npc.id) return false;
+    return true;
+}
+
+function pickZoneBossHeir(zoneName, st) {
+    const species = bossSpeciesKey(st && st.species);
+    if (!species) return null;
+    const map = G.roomMap && typeof G.roomMap === "object" ? G.roomMap : {};
+    let best = null;
+    Object.keys(map).forEach(function (key) {
+        const room = map[key];
+        if (!room || room.zone !== zoneName || !Array.isArray(room.creatures)) return;
+        room.creatures.forEach(function (npc) {
+            if (!isEligibleBossHeir(npc) || bossSpeciesKey(npc.species) !== species) return;
+            if (G.activeNPC === npc) return;
+            const score = getNPCRulerStrength(npc);
+            if (!best || score > best.score) best = { npc: npc, room: room, score: score };
+        });
+    });
+    return best;
+}
+
+function pickSuccessorEpithet(zoneName, st) {
+    const profile = BOSS_ZONE_PROFILES[zoneName] || BOSS_ZONE_PROFILES["Dungeon"];
+    const used = (st && Array.isArray(st.usedEpithets)) ? st.usedEpithets : [];
+    const fresh = profile.epithets.filter(function (e) { return used.indexOf(e) < 0; });
+    return rand(fresh.length ? fresh : profile.epithets);
+}
+
+// A boss holding a relic: relic powers plus freshly rolled 2x-3x boosts.
+function grantBossRelicPower(npc, relic) {
+    if (!npc || !npc.boss || !relic) return false;
+    if (!npc.equipped || typeof npc.equipped !== "object") npc.equipped = {};
+    if (!Array.isArray(npc.inventory)) npc.inventory = [];
+    if (npc.equipped.hand !== relic) {
+        const idx = npc.inventory.indexOf(relic);
+        if (idx >= 0) npc.inventory.splice(idx, 1);
+        Object.keys(npc.equipped).forEach(function (k) { if (npc.equipped[k] === relic) npc.equipped[k] = null; });
+        const old = npc.equipped.hand;
+        if (old && !Array.isArray(old)) npc.inventory.push(old);
+        npc.equipped.hand = relic;
+    }
+    if (!relic._uid && typeof assignLootUID === "function") assignLootUID(relic);
+    if (npc.boss.relicUid === relic._uid && !npc.boss.relicLostNoted) return true;
+    npc.boss.relicUid = relic._uid;
+    npc.boss.relicName = relic.name || "relic";
+    npc.boss.relicLostNoted = false;
+    npc.boss.boosts = rollBossBoosts(npc);
+    npc.boss.boostSummary = npc.boss.boosts.map(describeBossBoost).join(", ");
+    return true;
+}
+
+function applyBossSuccessorBoost(npc) {
+    if (npc.stats) {
+        ["physicalProwess", "endurance", "willpower", "flexibility"].forEach(function (key) {
+            if (typeof npc.stats[key] === "number") npc.stats[key] = Math.max(1, Math.round(npc.stats[key] * BOSS_SUCCESSOR_MULT));
+        });
+    }
+    if (typeof npc.hpMax === "number" && npc.hpMax > 0) {
+        const ratio = typeof npc.hp === "number" ? Math.max(0, Math.min(1, npc.hp / npc.hpMax)) : 1;
+        npc.boss.hpBase = npc.hpMax;
+        npc.hpMax = Math.max(1, Math.round(npc.hpMax * BOSS_SUCCESSOR_MULT));
+        npc.hp = Math.max(1, Math.round(npc.hpMax * ratio));
+    }
+}
+
+function moveBossHeirToSeat(npc, fromRoom, seat) {
+    if (!seat || !fromRoom || fromRoom === seat) return false;
+    fromRoom.creatures = (fromRoom.creatures || []).filter(function (c) { return c !== npc; });
+    seat.creatures = Array.isArray(seat.creatures) ? seat.creatures : [];
+    if (seat.creatures.indexOf(npc) < 0) seat.creatures.push(npc);
+    if (npc.coords !== undefined) npc.coords = seat.coords;
+    return true;
+}
+
+function promoteZoneBossHeir(npc, room, zoneName, st) {
+    const now = getCurrentStoryTurn();
+    const epithet = pickSuccessorEpithet(zoneName, st);
+    const zoneTemplate = getZoneTemplate(zoneName);
+    if (npc._npcParty && typeof dissolveNPCParty === "function") dissolveNPCParty(npc, "they have a seat to claim", undefined, true);
+    npc.boss = {
+        zone: zoneName,
+        epithet: epithet,
+        relicName: "",
+        relicUid: "",
+        look: "They carry themselves like someone who has taken what was there to take, and expect to keep it.",
+        presence: rand(BOSS_PRESENCE_LINES),
+        demeanor: "",
+        quirk: "",
+        profileFromAI: false,
+        boosts: [],
+        successor: true,
+        predecessor: st.formerName || "",
+        ascendedTurn: now
+    };
+    applyBossSuccessorBoost(npc);
+    const relic = npcCarriedBossRelic(npc);
+    if (relic) grantBossRelicPower(npc, relic);
+    if (zoneTemplate && zoneTemplate.hostileArea && (npc.hostility || 0) < BOSS_HOSTILE_ZONE_MIN_HOSTILITY) {
+        npc.hostility = BOSS_HOSTILE_ZONE_MIN_HOSTILITY;
+    }
+    const seat = findZoneBossRoom(zoneName);
+    const fromRoom = room;
+    if (seat) {
+        moveBossHeirToSeat(npc, room, seat);
+        npc._homeCoords = seat.coords;
+        npc._postCoords = seat.coords;
+    }
+    setBossDisplayName(npc);
+    st.bossId = npc.id;
+    st.rulerName = npc.name;
+    st.vacantSince = null;
+    st.dueTurn = null;
+    st.successions = (st.successions || 0) + 1;
+    st.usedEpithets = Array.isArray(st.usedEpithets) ? st.usedEpithets : [];
+    if (st.usedEpithets.indexOf(epithet) < 0) st.usedEpithets.push(epithet);
+
+    const seatName = getZoneBossSeatName(zoneName);
+    const species = String(npc.species || "stranger").toLowerCase();
+    const former = st.formerName ? " after " + st.formerName + " fell" : "";
+    const whoSpecies = typeof withIndefiniteArticle === "function" ? withIndefiniteArticle(species) : "a " + species;
+    const line = "Word spreads through the " + zoneName + ": " + whoSpecies + " now calling themselves " + epithet + " has claimed " + seatName + former + ".";
+    if (typeof rememberStoryEvent === "function") rememberStoryEvent("world", line, 6);
+    const playerRoom = G.activeRoom;
+    if (playerRoom && playerRoom.zone === zoneName && typeof queueTurnNote === "function") {
+        if (playerRoom === seat || playerRoom === fromRoom) {
+            queueTurnNote((playerRoom === seat ? capitalizeFirst(npc.name || epithet) + " walks in and takes the seat as if it had always been theirs." : capitalizeFirst(npc.name || epithet) + " straightens, looks around once, and leaves to claim " + seatName + "."));
+        } else {
+            queueTurnNote(line);
+        }
+    }
+    return npc;
+}
+
+// Runs from runNPCAutonomyTick. Watches every zone that has placed its boss.
+function tickZoneBossSuccession() {
+    const states = G.zoneBossState && typeof G.zoneBossState === "object" ? G.zoneBossState : {};
+    const now = getCurrentStoryTurn();
+    Object.keys(states).forEach(function (zoneName) {
+        const st = states[zoneName];
+        if (!st || !st.placed) return;
+        const holder = findZoneBossHolder(zoneName);
+        if (holder) {
+            st.bossId = holder.npc.id || st.bossId;
+            st.rulerName = holder.npc.originalName || holder.npc.name || st.rulerName;
+            if (holder.npc.species) st.species = holder.npc.species;
+            st.usedEpithets = Array.isArray(st.usedEpithets) ? st.usedEpithets : [];
+            if (holder.npc.boss.epithet && st.usedEpithets.indexOf(holder.npc.boss.epithet) < 0) st.usedEpithets.push(holder.npc.boss.epithet);
+            st.vacantSince = null;
+            st.dueTurn = null;
+            return;
+        }
+        if (typeof st.vacantSince !== "number") {
+            st.vacantSince = now;
+            st.dueTurn = now + randInt(BOSS_SUCCESSION_MIN_TURNS, BOSS_SUCCESSION_MAX_TURNS);
+            st.formerName = st.rulerName || st.formerName || "";
+            return;
+        }
+        if (now < (st.dueTurn || 0)) return;
+        if (G.activeNPCMode === "combat" || (typeof getActiveEncounter === "function" && getActiveEncounter())) return;
+        const heir = pickZoneBossHeir(zoneName, st);
+        if (!heir) { st.dueTurn = now + BOSS_SUCCESSION_RETRY_TURNS; return; }
+        promoteZoneBossHeir(heir.npc, heir.room, zoneName, st);
+    });
+}
+
+// Where a loose relic lies in a room: on the floor, or on a body.
+function findRoomRelicSources(room) {
+    const out = [];
+    (Array.isArray(room.items) ? room.items : []).forEach(function (item) {
+        if (!item || typeof item !== "object") return;
+        if (item.objectType === "body") {
+            if (!item.dead && item.bodyState !== "corpse" && !item.unconscious && !item.isUnconsciousBody) return;
+            const eq = item.equipped && typeof item.equipped === "object" ? item.equipped : {};
+            Object.keys(eq).forEach(function (k) { if (isBossRelicItem(eq[k])) out.push({ item: eq[k], body: item, slot: k }); });
+            (Array.isArray(item.inventory) ? item.inventory : []).forEach(function (it) { if (isBossRelicItem(it)) out.push({ item: it, body: item, pack: true }); });
+            return;
+        }
+        if (isBossRelicItem(item) && !item.hidden && !item.isHidden && !item.concealed && item.visible !== false) out.push({ item: item, floor: true });
+    });
+    return out;
+}
+
+function takeRelicFromSource(room, src) {
+    if (src.floor) {
+        const idx = room.items.indexOf(src.item);
+        if (idx < 0) return null;
+        room.items.splice(idx, 1);
+    } else if (src.body) {
+        if (src.pack) {
+            const idx = src.body.inventory.indexOf(src.item);
+            if (idx < 0) return null;
+            src.body.inventory.splice(idx, 1);
+        } else {
+            if (!src.body.equipped || src.body.equipped[src.slot] !== src.item) return null;
+            src.body.equipped[src.slot] = null;
+        }
+    }
+    delete src.item._playerDropped;
+    return src.item;
+}
+
+// Off-screen only (the player always has first claim on a relic in their
+// own room): an NPC finding a boss relic on the floor or on a body takes it
+// and holds it. The star follows the relic. A boss who takes one becomes a
+// full magic boss; anyone else just carries it (its stat and power work for
+// any holder) and becomes the obvious claimant if the seat falls vacant.
+function tickNPCRelicPickup() {
+    if (G.activeNPCMode === "combat" || (typeof getActiveEncounter === "function" && getActiveEncounter())) return null;
+    const map = G.roomMap && typeof G.roomMap === "object" ? G.roomMap : {};
+    let taken = null;
+    Object.keys(map).forEach(function (key) {
+        const room = map[key];
+        if (!room || room === G.activeRoom || room.skirmish || !Array.isArray(room.items) || !room.items.length || !Array.isArray(room.creatures)) return;
+        const sources = findRoomRelicSources(room);
+        if (!sources.length) return;
+        const pickers = room.creatures.filter(function (npc) {
+            return canNPCHandleGear(npc) && !(typeof isCompanionNPC === "function" && isCompanionNPC(npc)) && !npcCarriedBossRelic(npc);
+        });
+        if (!pickers.length || Math.random() >= NPC_RELIC_PICKUP_CHANCE) return;
+        // The zone's own boss first, then the strongest.
+        pickers.sort(function (a, b) {
+            const ab = a.boss && a.boss.zone === room.zone ? 1 : 0, bb = b.boss && b.boss.zone === room.zone ? 1 : 0;
+            if (ab !== bb) return bb - ab;
+            return getNPCRulerStrength(b) - getNPCRulerStrength(a);
+        });
+        const npc = pickers[0];
+        const relic = takeRelicFromSource(room, sources[0]);
+        if (!relic) return;
+        if (!npc.equipped || typeof npc.equipped !== "object") npc.equipped = {};
+        if (!Array.isArray(npc.inventory)) npc.inventory = [];
+        if (npc.boss) {
+            grantBossRelicPower(npc, relic);
+            if (npc.boss.relicUid === relic._uid) setBossDisplayName(npc);
+        } else {
+            const old = npc.equipped.hand;
+            if (old && !Array.isArray(old)) npc.inventory.push(old);
+            npc.equipped.hand = relic;
+        }
+        taken = { npc: npc, relic: relic, room: room };
+    });
+    return taken;
+}
+
+// Lore: the boss's own kind in its zone always know who rules them.
+function getZoneBossLoreFacts() {
+    const states = G && G.zoneBossState && typeof G.zoneBossState === "object" ? G.zoneBossState : {};
+    const out = [];
+    Object.keys(states).forEach(function (zoneName) {
+        const st = states[zoneName];
+        if (!st || !st.placed || !st.species) return;
+        const species = bossSpeciesKey(st.species);
+        const seatName = getZoneBossSeatName(zoneName);
+        const holder = findZoneBossHolder(zoneName);
+        if (holder) {
+            const npc = holder.npc;
+            const b = npc.boss;
+            const who = npc.givenName ? npc.givenName + " " + b.epithet : b.epithet;
+            let text = who + " rules the " + zoneName + " from " + seatName + ".";
+            if (bossHasRelic(npc)) text += " Their power comes from the " + (b.relicName || "relic") + " they hold.";
+            else if (b.successor) text += " They took the seat by strength" + (b.predecessor ? " after " + b.predecessor + " fell" : "") + ".";
+            else if (b.relicUid) text += " They lost the " + (b.relicName || "relic") + " that made them strong, but still hold the seat.";
+            out.push({
+                id: "zone-boss-" + zoneName + "-" + (st.successions || 0) + "-" + (bossHasRelic(npc) ? "r" : "n"),
+                aboutId: npc.id, species: [species], tiers: ["common"], zones: [zoneName], know: 100,
+                rumor: true, topic: "who rules the " + zoneName, text: text, distorted: text
+            });
+        } else if (typeof st.vacantSince === "number") {
+            const text = seatName.charAt(0).toUpperCase() + seatName.slice(1) + " stands empty" + (st.formerName ? " since " + st.formerName + " fell" : "") + ". Everyone is waiting to see who is strong enough to take it.";
+            out.push({
+                id: "zone-boss-" + zoneName + "-" + (st.successions || 0) + "-vacant",
+                species: [species], tiers: ["common"], zones: [zoneName], know: 100,
+                rumor: true, topic: "the empty seat in the " + zoneName, text: text, distorted: text
+            });
+        }
+    });
+    return out;
+}
+
+// Prompt line for an NPC of the ruler's species living in the ruler's zone.
+function getZoneRulerNoteForNPC(npc, zoneName) {
+    if (!npc || npc.boss || !zoneName || !G.zoneBossState) return "";
+    const st = G.zoneBossState[zoneName];
+    if (!st || !st.placed || bossSpeciesKey(st.species) !== bossSpeciesKey(npc.species)) return "";
+    const fact = getZoneBossLoreFacts().filter(function (f) { return f.zones[0] === zoneName; })[0];
+    return fact ? "- Your people's ruler (you know this well): " + fact.text : "";
+}
+
+// The boss's own rank line for the prompt.
+function getBossRankNote(npc) {
+    if (!npc || !npc.boss) return "";
+    const b = npc.boss;
+    let line = "- Rank: you are known as " + (b.epithet || "the ruler") + ", ruler of this area.";
+    if (bossHasRelic(npc)) line += " Your power comes from a magical relic (" + (b.relicName || "relic") + ") you carry; you are proud, dangerous and aware of it.";
+    else if (b.successor) line += " You took the seat by strength" + (b.predecessor ? " after " + b.predecessor + " fell" : "") + ", and you mean to keep it; you have no relic, only your own might and the spoils of the zone.";
+    else if (b.relicUid) line += " You have lost the relic (" + (b.relicName || "relic") + ") that made you strong; you hide the weakness behind pride.";
+    else line += " You are proud, dangerous and aware of it.";
+    if (b.demeanor) line += " Demeanor: " + b.demeanor + ".";
+    if (b.quirk) line += " Quirk: " + b.quirk + ".";
+    return line;
 }
 
 function createNPC(species, room, zoneTemplate, options = {}) {
@@ -26436,6 +26904,9 @@ function movePlayer(direction) {
     // Hauling a body: spend stamina, move a dragged body along, lay its trail.
     const bodyMoveLine = applyBodyMoveOnPlayerMove(room, newRoom, dir);
 
+    // Arriving in an alley after dark: the Shady Merchant may be waiting.
+    ensureNightAlleyShadyMerchant(newRoom);
+
     queuePersonasForRoom(newRoom);
 
     clearChatLog();
@@ -26940,6 +27411,9 @@ function runNPCAutonomyTick() {
     if (typeof tickUnconsciousBodyRecovery === "function") tickUnconsciousBodyRecovery();
     if (typeof tickCompanionCare === "function") { try { tickCompanionCare(); } catch (e) { console.warn("Companion care tick failed:", e); } }
     if (typeof tickNPCGearPickup === "function") { try { tickNPCGearPickup(); } catch (e) { console.warn("NPC gear pickup tick failed:", e); } }
+    if (typeof tickNPCRelicPickup === "function") { try { tickNPCRelicPickup(); } catch (e) { console.warn("NPC relic pickup tick failed:", e); } }
+    if (typeof tickZoneBossSuccession === "function") { try { tickZoneBossSuccession(); } catch (e) { console.warn("Zone boss succession tick failed:", e); } }
+    if (typeof tickMasonWork === "function") { try { tickMasonWork(); } catch (e) { console.warn("Mason work tick failed:", e); } }
     clotBleedingOverTime(G.player);
     const map = G.roomMap && typeof G.roomMap === "object" ? G.roomMap : {};
     pruneAllRoomTrails(map);
@@ -27117,7 +27591,7 @@ function canNPCSitForMeal(npc) {
 function canNPCDoAmbientActivity(npc, now) {
     if (!npc || npc === G.activeNPC) return false;
     if (!isAwakeHumanoidNPC(npc) || isCompanionNPC(npc)) return false;
-    if (npc._prisoner || npc.bound || npc._inSkirmish || npc._fleeRun) return false;
+    if (npc._prisoner || npc.bound || npc._inSkirmish || npc._fleeRun || npc._masonWorking) return false;
     if ((npc.hostility || 0) >= 30) return false;
     if (isUndeadNPC(npc) || getBodyKind(npc) || isEntityIncorporeal(npc)) return false;
     if (typeof npc._ambientTurn === "number" && now - npc._ambientTurn < AMBIENT_NPC_COOLDOWN_TURNS) return false;
@@ -27338,14 +27812,41 @@ function showPartyLootVote() {
     const el = document.getElementById("chatOptionsEl");
     if (!el) return;
     el.innerHTML = "";
+    const origin = { player: G.player, room: G.activeRoom, map: G.roomMap, npc: G.activeNPC,
+        mode: G.activeNPCMode, modal: G.activeItemModal, object: G.activeObject };
+    const vote = function (choice) {
+        castPartyLootVote(choice);
+        return finishPartyLootVote(origin);
+    };
     const sharedMenu = typeof beginSharedChoiceMenu === "function" ? beginSharedChoiceMenu("loot-vote", null, "How should the party split loot?", function () { showPartyLootVote(); }) : null;
+    if (sharedMenu) { const valid = sharedMenu.valid; sharedMenu.valid = function () { return G.roomMap === origin.map && valid(); }; }
     const sharedButton = function (label, run, opts) { return sharedMenu ? createSharedChoiceButton(sharedMenu, label, run, opts) : createCombatButton(label, run, opts); };
     const buttons = PARTY_LOOT_RULE_KEYS.map(function (key) {
-        return sharedButton(PARTY_LOOT_RULES[key].label, function () { castPartyLootVote(key); }, { title: PARTY_LOOT_RULES[key].blurb, textChoice: { action: key } });
+        return sharedButton(PARTY_LOOT_RULES[key].label, function () { return vote(key); }, { title: PARTY_LOOT_RULES[key].blurb, textChoice: { action: key } });
     });
-    buttons.push(sharedButton("Decide later", function () { castPartyLootVote(null); }, { title: "Settle it another time.", textChoice: { action: "later" } }));
+    buttons.push(sharedButton("Decide later", function () { return vote(null); }, { title: "Settle it another time.", textChoice: { action: "later" } }));
     appendCombatGroup(el, "How should the party split loot?", buttons);
     if (sharedMenu) publishSharedChoiceMenu(sharedMenu, el);
+}
+
+function finishPartyLootVote(origin) {
+    if (G.player !== origin.player || G.activeRoom !== origin.room || G.roomMap !== origin.map ||
+        G.activeNPC !== origin.npc || G.activeNPCMode !== origin.mode || G.activeItemModal !== origin.modal ||
+        G.activeObject !== origin.object || G.activeItemModal || G.activeObject || sharedChoiceState.menu ||
+        G.combatEncounter || roomHasActiveHostile(origin.room) || isRoomCollapsed(origin.room) ||
+        origin.player.dead || origin.player.hp <= 0 || origin.player.unconscious || origin.player._dying || origin.player._collapsing || hasPendingPartyLoot()) return { status: "interrupted", outputPublished: true };
+    const npc = origin.npc;
+    if (npc && (origin.room.creatures || []).includes(npc) && !npc.dead && npc.hp > 0 && isVisibleEntity(npc) && canConverseWithNPC(npc)) {
+        if (/^(talk|respond)$/.test(origin.mode)) {
+            renderChatOptions(npc);
+            if (textModeState.enabled) textModeListOptions();
+        } else if (origin.mode === "menu") {
+            renderNPCActionMenu(npc);
+        } else return { status: "interrupted", outputPublished: true };
+        return { status: "needs_input", outputPublished: true };
+    }
+    returnToRoomView();
+    return { status: "completed", outputPublished: true };
 }
 
 function castPartyLootVote(choice) {
@@ -30159,7 +30660,7 @@ function decorateDrunkPlayerText(choice) {
 // ({ active, done, seq, boards }). Wall rebuild progress lives on the room's
 // collapse record (room.collapse.exits[dir].rebuild).
 const JOB_WORKDAY_TURNS = 30;               // story turns in a job's day
-const JOB_NIGHT_TURNS = 24;                 // turns slept through
+const JOB_NIGHT_TURNS = 24;                 // recovery-rate reference, not a fixed sleep duration
 const JOB_SLEEP_HEAL_RATIO = 0.5;           // share of max HP recovered by a night's sleep
 const JOB_EVENT_CHANCE = 0.2;
 const JOB_STANDING_MAX = 100;
@@ -30494,6 +30995,380 @@ function rebuildCollapsedExit(room, dir) {
     return lines;
 }
 
+// ── MASONS (wall and door repair) ────────────────────────────────
+// One Mason per settlement zone (MASON_HOME_ROOMS) mends what breaks: doors
+// that were burnt, shattered or broken open, doors weakened by fire or blows,
+// cracked walls, and collapsed ways (sharing the wall-crew rebuild counter, so
+// a player on the crew and a mason work on the same total). A mason walks to
+// the nearest damage in their zone and works one step per story turn.
+//   - Visible: while working, npc.action names the job, so room text, the NPC
+//     panel and the AI all see it. The player gets a turn note when the work
+//     starts or ends in their room, or when the mason arrives or leaves.
+//     Everyone else awake in the room remembers watching it (addNPCMemory).
+//   - Damage waits MASON_REPAIR_DELAY_TURNS after a mason first notices it,
+//     so a door the player just broke stays broken for a while.
+//   - Off duty (their routine says home) they stop and go home; the job waits.
+//   - A dead mason is replaced by a newcomer after MASON_REPLACE_TURNS.
+// Groundwork for invasions: walls and doors that defenders can restore.
+const MASON_ROLE = "Mason";
+const MASON_HOME_ROOMS = {
+    "Town": ["Smithy"],
+    "Underground City": ["Deep Forge"],
+    "Ruins": ["Watch Post", "Camp Fire Ring"]
+};
+const MASON_REPAIR_DELAY_TURNS = 12;
+const MASON_DOOR_WORK_TURNS = 3;
+const MASON_WALL_REPAIR_RATIO = 0.34;    // of the wall's max durability per turn
+const MASON_REBUILD_PER_TURN = 8;        // collapsed way: about a crew shift per turn
+const MASON_SEARCH_STEPS = 20;
+const MASON_SKIP_TURNS = 30;             // an unreachable site is not retried before this
+const MASON_ENSURE_EVERY_TURNS = 20;
+const MASON_REPLACE_TURNS = 200;
+
+function isMasonNPC(npc) {
+    return !!(npc && npc.role === MASON_ROLE && npc.isHumanoid !== false);
+}
+
+function isDoorBrokenOpen(lock) {
+    return !!(lock && (lock.burnt || lock.shattered || lock.brokenOpen));
+}
+
+function masonDoorNeedsWork(room, dir) {
+    const lock = getExitLock(room, dir);
+    if (!lock || isExitCollapsed(room, dir)) return false;
+    const fx = lock.fx;
+    if (fx && fx.burn && fx.burn.turnsLeft > 0) return false;   // wait for the fire to die
+    if (isDoorBrokenOpen(lock)) return true;
+    return !!(fx && typeof fx.hp === "number" && typeof fx.hpMax === "number" && fx.hp < fx.hpMax);
+}
+
+function masonWallNeedsWork(room, dir) {
+    if (!isCollapseZone(room) || !room.walls || !room.walls[dir] || isExitCollapsed(room, dir)) return false;
+    const d = room.walls[dir].durability;
+    return !!(d && typeof d.hp === "number" && d.hp < d.max);
+}
+
+function masonPairKey(kind, room, dir) {
+    const other = room.exits && room.exits[dir] ? room.exits[dir] : "";
+    if (!other) return kind + "|" + room.coords + "|" + dir;
+    return kind + "|" + (room.coords <= other ? room.coords + "|" + dir : other + "|" + oppositeDirection(dir));
+}
+
+// What needs mending in a zone: [{ key, kind, room, dir, mark }]. "mark" is
+// the object that carries the first-noticed stamp.
+function collectMasonSites(zoneName) {
+    const out = [];
+    const seen = {};
+    const map = G.roomMap && typeof G.roomMap === "object" ? G.roomMap : {};
+    Object.keys(map).forEach(function (key) {
+        const room = map[key];
+        if (!room || room.zone !== zoneName || isRoomCollapsed(room) || guardRoomIsPost(room)) return;
+        Object.keys(room.exits || {}).forEach(function (dir) {
+            if (isVerticalDirection(dir)) return;
+            if (isCollapseZone(room) && isExitCollapsed(room, dir)) {
+                const k = masonPairKey("rubble", room, dir);
+                if (!seen[k]) { seen[k] = true; out.push({ key: k, kind: "rubble", room: room, dir: dir, mark: getExitCollapse(room, dir) }); }
+                return;
+            }
+            if (masonDoorNeedsWork(room, dir)) {
+                const k = masonPairKey("door", room, dir);
+                if (!seen[k]) { seen[k] = true; out.push({ key: k, kind: "door", room: room, dir: dir, mark: getExitLock(room, dir) }); }
+            }
+        });
+        Object.keys(room.walls || {}).forEach(function (dir) {
+            if (!masonWallNeedsWork(room, dir)) return;
+            out.push({ key: "wall|" + room.coords + "|" + dir, kind: "wall", room: room, dir: dir, mark: room.walls[dir] });
+        });
+    });
+    return out;
+}
+
+function masonSiteStillNeeded(job) {
+    const room = job && G.roomMap ? G.roomMap[job.coords] : null;
+    if (!room) return false;
+    if (job.kind === "door") return masonDoorNeedsWork(room, job.dir);
+    if (job.kind === "wall") return masonWallNeedsWork(room, job.dir);
+    if (job.kind === "rubble") return isExitCollapsed(room, job.dir);
+    return false;
+}
+
+// Rooms a mason can walk to inside the zone: { coords: steps }.
+function masonDistances(npc, startRoom) {
+    const dist = {};
+    dist[startRoom.coords] = 0;
+    let frontier = [startRoom];
+    for (let depth = 1; depth <= MASON_SEARCH_STEPS && frontier.length; depth++) {
+        const next = [];
+        frontier.forEach(function (room) {
+            getNPCExitCoords(room, npc).forEach(function (c) {
+                if (dist[c] !== undefined) return;
+                const r = G.roomMap[c];
+                if (!r || r.zone !== startRoom.zone || guardRoomIsPost(r) || isRoomCollapsed(r)) return;
+                dist[c] = depth;
+                next.push(r);
+            });
+        });
+        frontier = next;
+    }
+    return dist;
+}
+
+function masonClaimedKeys(except) {
+    const claimed = {};
+    Object.keys(G.roomMap || {}).forEach(function (key) {
+        (G.roomMap[key].creatures || []).forEach(function (npc) {
+            if (npc !== except && isMasonNPC(npc) && npc.masonJob) claimed[npc.masonJob.key] = true;
+        });
+    });
+    return claimed;
+}
+
+function pickMasonJob(npc, room, sites) {
+    const now = getCurrentStoryTurn();
+    const dist = masonDistances(npc, room);
+    const claimed = masonClaimedKeys(npc);
+    const skip = npc._masonSkip && typeof npc._masonSkip === "object" ? npc._masonSkip : {};
+    let best = null;
+    sites.forEach(function (site) {
+        if (site.mark && typeof site.mark._repairSeenTurn !== "number") site.mark._repairSeenTurn = now;
+        if (claimed[site.key]) return;
+        if (typeof skip[site.key] === "number" && now - skip[site.key] < MASON_SKIP_TURNS) return;
+        if (site.mark && now - site.mark._repairSeenTurn < MASON_REPAIR_DELAY_TURNS) return;
+        const d = dist[site.room.coords];
+        if (d === undefined) return;
+        if (!best || d < best.d) best = { site: site, d: d };
+    });
+    if (!best) return null;
+    return { key: best.site.key, kind: best.site.kind, coords: best.site.room.coords, dir: best.site.dir, started: false, work: 0, pickedTurn: now };
+}
+
+function describeMasonJob(job, room) {
+    const where = LOCK_DIRECTION_WORDS[job.dir] || job.dir;
+    if (job.kind === "door") return "the door to the " + where;
+    if (job.kind === "wall") return "the " + where + " wall";
+    return "the collapsed way " + where;
+}
+
+// "fitting a new door to the north" - used in room text and npc.action.
+function describeMasonWork(job) {
+    const where = LOCK_DIRECTION_WORDS[job.dir] || job.dir;
+    if (job.kind === "door") return "repairing the door to the " + where;
+    if (job.kind === "wall") return "patching the " + where + " wall";
+    return "clearing rubble and laying new stone in the collapsed way " + where;
+}
+
+// Clause for "You see X here, ..." while a mason is mid-job in that room.
+function getMasonWorkClause(npc) {
+    if (!isMasonNPC(npc) || !npc.masonJob || !npc.masonJob.started || !npc._masonWorking) return "";
+    return describeMasonWork(npc.masonJob);
+}
+
+function setMasonWorking(npc, job) {
+    if (!npc._masonWorking) {
+        npc._masonPrevAction = typeof npc.action === "string" ? npc.action : "";
+        npc._masonWorking = true;
+    }
+    npc.action = "is " + describeMasonWork(job);
+}
+
+function clearMasonWorking(npc) {
+    if (!npc || !npc._masonWorking) return;
+    npc.action = npc._masonPrevAction || "is standing nearby";
+    delete npc._masonPrevAction;
+    delete npc._masonWorking;
+}
+
+function masonVisible(npc, room) {
+    return room === G.activeRoom && (typeof isVisibleEntity !== "function" || isVisibleEntity(npc));
+}
+
+function masonName(npc) {
+    return capitalizeFirst(npc && (npc.name || npc.species) || "The mason");
+}
+
+// Everyone awake in the room sees the work begin and keeps it in mind.
+function masonTellWitnesses(npc, room, job) {
+    if (typeof addNPCMemory !== "function") return;
+    const what = describeMasonJob(job, room);
+    (room.creatures || []).forEach(function (other) {
+        if (!other || other === npc || !isAwakeHumanoidNPC(other) || !other.memory) return;
+        addNPCMemory(other, { id: "mason-work:" + job.key + ":" + job.pickedTurn, text: "I watched " + (npc.name || "the mason") + " repair " + what + ".", subject: npc, importance: 2, tags: ["fact"] });
+    });
+}
+
+function masonRepairDoor(room, dir) {
+    const lock = getExitLock(room, dir);
+    if (!lock) return;
+    const fx = getDoorFx(room, dir, true);
+    setExitLockState(room, dir, lock.state === "locked" ? "locked" : "unlocked", { forced: false, burnt: false, shattered: false, brokenOpen: false });
+    if (fx) { fx.hp = fx.hpMax; fx.burn = null; fx.brittleUntil = 0; }
+    delete lock._repairSeenTurn;
+    const other = room.exits && G.roomMap ? G.roomMap[room.exits[dir]] : null;
+    const otherLock = other ? getExitLock(other, oppositeDirection(dir)) : null;
+    if (otherLock) delete otherLock._repairSeenTurn;
+}
+
+// One turn of work. Returns { done, lines }.
+function masonWorkStep(npc, room, job) {
+    const lines = [];
+    job.work = (job.work || 0) + 1;
+    if (job.kind === "door") {
+        if (job.work < MASON_DOOR_WORK_TURNS) return { done: false, lines: lines };
+        masonRepairDoor(room, job.dir);
+        lines.push(masonName(npc) + " hangs the mended door to the " + (LOCK_DIRECTION_WORDS[job.dir] || job.dir) + " and tries the latch. It is whole again.");
+        return { done: true, lines: lines };
+    }
+    if (job.kind === "wall") {
+        const wall = getRoomWall(room, job.dir);
+        const d = wall && wall.durability;
+        if (!d) return { done: true, lines: lines };
+        repairDurability(wall, Math.max(1, Math.ceil(d.max * MASON_WALL_REPAIR_RATIO)));
+        if (d.hp < d.max) return { done: false, lines: lines };
+        delete wall._repairSeenTurn;
+        lines.push(masonName(npc) + " smooths the last of the mortar into the " + (LOCK_DIRECTION_WORDS[job.dir] || job.dir) + " wall and steps back to look at it.");
+        return { done: true, lines: lines };
+    }
+    if (job.kind === "rubble") {
+        addRebuildProgress(room, job.dir, MASON_REBUILD_PER_TURN);
+        if (getRebuildProgress(room, job.dir) < getRebuildNeeded(room, job.dir)) return { done: false, lines: lines };
+        lines.push(masonName(npc) + " sets the last stone. The way " + (LOCK_DIRECTION_WORDS[job.dir] || job.dir) + " is open again.");
+        return { done: true, lines: lines.concat(rebuildCollapsedExit(room, job.dir)) };
+    }
+    return { done: true, lines: lines };
+}
+
+function finishMasonJob(npc, room, job, lines, visible) {
+    clearMasonWorking(npc);
+    delete npc.masonJob;
+    if (typeof addNPCMemory === "function" && npc.memory) {
+        addNPCMemory(npc, { id: "mason-done:" + job.key + ":" + getCurrentStoryTurn(), text: "I repaired " + describeMasonJob(job, room) + (room.displayName || room.name ? " at " + (room.displayName || room.name) : "") + ".", importance: 2, tags: ["fact", "work"] });
+    }
+    if (visible && lines.length && typeof queueTurnNote === "function") queueTurnNote(lines.join(" "));
+}
+
+function masonOffDuty(npc) {
+    return typeof getNPCRoutineNow === "function" && getNPCRoutineNow(npc).where === "home";
+}
+
+// True while a mason's job owns their movement (stepNPCAutonomy yields).
+function masonHoldsNPC(npc) {
+    return isMasonNPC(npc) && !!npc.masonJob && !masonOffDuty(npc);
+}
+
+function canMasonWork(npc, room) {
+    if (!isMasonNPC(npc) || typeof canNPCHandleGear !== "function" || !canNPCHandleGear(npc)) return false;
+    if ((typeof isCompanionNPC === "function" && isCompanionNPC(npc)) || G.activeNPC === npc) return false;
+    if (npc._encId || npc._npcParty || npc._fleeRun || (npc.hostility || 0) >= 50) return false;
+    if (room.skirmish || (typeof roomHasActiveHostile === "function" && roomHasActiveHostile(room))) return false;
+    return true;
+}
+
+// Every settlement zone with a workshop gets a mason; a dead one is replaced
+// by a newcomer after MASON_REPLACE_TURNS.
+function ensureZoneMasons() {
+    const map = G.roomMap && typeof G.roomMap === "object" ? G.roomMap : {};
+    const now = getCurrentStoryTurn();
+    G.story = ensureStoryStateShape(G.story);
+    const flags = G.story.flags;
+    const spawned = [];
+    Object.keys(MASON_HOME_ROOMS).forEach(function (zoneName) {
+        let hasMason = false;
+        const homes = [];
+        Object.keys(map).forEach(function (key) {
+            const room = map[key];
+            if (!room || room.zone !== zoneName) return;
+            (room.creatures || []).forEach(function (npc) { if (isMasonNPC(npc) && !(npc.hp <= 0) && !npc.dead) hasMason = true; });
+            if (MASON_HOME_ROOMS[zoneName].indexOf(room.type) >= 0 && !isRoomCollapsed(room)) homes.push(room);
+        });
+        if (hasMason || !homes.length) return;
+        const flagKey = "mason-spawn:" + zoneName;
+        if (typeof flags[flagKey] === "number" && now - flags[flagKey] < MASON_REPLACE_TURNS) return;
+        const room = homes[0];
+        const zone = getZoneTemplate(zoneName);
+        if (!zone) return;
+        let pool = Array.isArray(room.npcSpecies) && room.npcSpecies.length ? room.npcSpecies : (zone.allowedSpecies || []);
+        pool = pool.filter(function (s) { return getSpeciesIsCivilized(s); });
+        if (!pool.length) return;
+        const dwarf = pool.filter(function (s) { return String(s).toLowerCase() === "dwarf"; })[0];
+        const species = dwarf && Math.random() < 0.5 ? dwarf : rand(pool);
+        const npc = createNPC(species, room, zone, { forceRole: MASON_ROLE });
+        if (!npc) return;
+        npc.hostility = Math.min(npc.hostility || 0, 15);
+        if (npc.temperament === "hostile" || npc.temperament === "aggressive") npc.temperament = "wary";
+        npc._postCoords = room.coords;
+        if (!Array.isArray(room.creatures)) room.creatures = [];
+        room.creatures.push(npc);
+        flags[flagKey] = now;
+        spawned.push(npc);
+    });
+    return spawned;
+}
+
+// Runs from runNPCAutonomyTick, in every room including the player's.
+function tickMasonWork() {
+    if (G.activeNPCMode === "combat" || (typeof getActiveEncounter === "function" && getActiveEncounter())) return null;
+    const now = getCurrentStoryTurn();
+    if (typeof G._masonEnsureTurn !== "number" || now - G._masonEnsureTurn >= MASON_ENSURE_EVERY_TURNS || now < G._masonEnsureTurn) {
+        G._masonEnsureTurn = now;
+        try { ensureZoneMasons(); } catch (e) { console.warn("Mason placement failed:", e); }
+    }
+    const map = G.roomMap && typeof G.roomMap === "object" ? G.roomMap : {};
+    const masons = [];
+    Object.keys(map).forEach(function (key) {
+        (map[key].creatures || []).forEach(function (npc) { if (isMasonNPC(npc)) masons.push({ npc: npc, room: map[key] }); });
+    });
+    const sitesByZone = {};
+    const report = [];
+    masons.forEach(function (entry) {
+        const npc = entry.npc;
+        let room = entry.room;
+        if (npc._masonTurn === now) return;
+        if (!canMasonWork(npc, room)) { clearMasonWorking(npc); return; }
+        if (npc.masonJob && !masonSiteStillNeeded(npc.masonJob)) { clearMasonWorking(npc); delete npc.masonJob; }
+        if (masonOffDuty(npc)) { clearMasonWorking(npc); return; }
+        if (!npc.masonJob) {
+            if (!sitesByZone[room.zone]) sitesByZone[room.zone] = collectMasonSites(room.zone);
+            const job = pickMasonJob(npc, room, sitesByZone[room.zone]);
+            if (!job) return;
+            npc.masonJob = job;
+        }
+        const job = npc.masonJob;
+        npc._masonTurn = now;
+        if (room.coords !== job.coords) {
+            clearMasonWorking(npc);
+            const step = findNPCRouteStep(npc, room, job.coords);
+            const wasVisible = masonVisible(npc, room);
+            if (!step || !relocateNPCBetweenRooms(npc, room, step, { ignoreDrunkStumble: true })) {
+                npc._masonSkip = npc._masonSkip && typeof npc._masonSkip === "object" ? npc._masonSkip : {};
+                npc._masonSkip[job.key] = now;
+                delete npc.masonJob;
+                return;
+            }
+            const nextRoom = G.roomMap[step];
+            if (wasVisible && typeof queueTurnNote === "function") queueTurnNote(masonName(npc) + " shoulders a bag of tools and heads off to a repair job.");
+            else if (masonVisible(npc, nextRoom) && typeof queueTurnNote === "function") queueTurnNote(masonName(npc) + " comes in carrying a bag of tools.");
+            report.push({ npc: npc, moved: step });
+            return;
+        }
+        const visible = masonVisible(npc, room);
+        if (!job.started) {
+            job.started = true;
+            setMasonWorking(npc, job);
+            masonTellWitnesses(npc, room, job);
+            if (visible && typeof queueTurnNote === "function") queueTurnNote(masonName(npc) + " sets down a bag of tools and starts " + describeMasonWork(job) + ".");
+            report.push({ npc: npc, started: job.key });
+            return;
+        }
+        setMasonWorking(npc, job);
+        const result = masonWorkStep(npc, room, job);
+        if (result.done) {
+            finishMasonJob(npc, room, job, result.lines, visible);
+            report.push({ npc: npc, finished: job.key });
+        }
+    });
+    return report;
+}
+
 function collectRubbleSites() {
     const sites = [];
     const seen = {};
@@ -30628,7 +31503,6 @@ function getJobWorkBlockReason(job) {
     if (job.tier !== getPortalTier()) return "Your work is in another town.";
     if (!isPlayerAtJobSite(job)) return "Your work is at " + getJobSiteName(job) + ".";
     if (job.type === "bathAttendant" || job.type === "bathMassage") { const reason = bathhouseWorkBlock(job); if (reason) return reason; }
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (isEntityExhausted(G.player) || (typeof G.player.stamina === "number" && G.player.stamina < def.stamina)) return "You're too worn out. Rest first.";
     if (job.type === "floodCleanup") {
         const site = getJobSiteRoom(job);
@@ -30687,7 +31561,7 @@ function renderJobMenu() {
         buttons.push(sharedButton(def.verb + " (" + def.stamina + " stamina)", () => performJobShift(), { disabled: !!block, title: block || describeJobPay(def), textChoice: { action: "work" } }));
         if (job.state === "dayDone") {
             const sleepBlock = getJobSleepBlockReason(job);
-            buttons.push(sharedButton("Sleep until morning", () => openSleepSpotMenu("job"), { disabled: !!sleepBlock, title: sleepBlock || "Sleep through the night. You wake rested, and can carry on or take your pay.", textChoice: { action: "sleep" } }));
+            buttons.push(sharedButton("Sleep until rested", () => openSleepSpotMenu("job"), { disabled: !!sleepBlock, title: sleepBlock || "Sleep until your weariness, stamina and mana recover, then carry on or take your pay.", textChoice: { action: "sleep" } }));
         }
         if (job.owed > 0 || def.mode === "real") {
             buttons.push(sharedButton("Collect your pay and stop (" + job.owed + "g)", () => collectJobPay(true), { disabled: job.owed <= 0 && def.mode !== "real", textChoice: { action: "collect" }, title: "Take the wages you have earned and finish for now." }));
@@ -30871,6 +31745,8 @@ function sleepThroughNight(spot) {
     const room = G.activeRoom;
     const transition = typeof beginSleepTransition === "function" ? beginSleepTransition("job-sleep") : null;
     const plan = assignSleepSpots(room, spot);
+    const sleepNeeds = new Map(plan.before.map(function (before) { return [before.entity, getSleepTurnsUntilRested(before.entity, plan)]; }));
+    const sleepTurns = sleepNeeds.get(player);
     const arrangement = describeSleepArrangement(plan);
     let slept = 0;
     let interrupted = false;
@@ -30878,7 +31754,7 @@ function sleepThroughNight(spot) {
     activeRecoveryPlans.set(room, { player: player, plan: plan });
     jobFatigue.sleeping = true;
     try {
-        for (let i = 0; i < JOB_NIGHT_TURNS; i++) {
+        for (let i = 0; i < sleepTurns; i++) {
             advanceStoryTurn(1);
             slept++;
             if (transition) recordSleepTransition(transition);
@@ -30905,7 +31781,9 @@ function sleepThroughNight(spot) {
     const staminaRecovered = restoreEntityStamina(player, Math.ceil(player.staminaMax * share * restFactor));
     const staminaNote = staminaRecovered > 0 ? " You recover " + staminaRecovered + " stamina." : "";
     if (playerUsesMana(player)) restorePlayerMana(player, Math.ceil(getPlayerManaCeiling(player) * share * restFactor));
-    restHealParty(room, 0, { sleep: true, share: share, turns: slept, quality: nightBed, completed: !interrupted, ratioFor: plan.ratioOf, qualityFor: plan.qualityOf, restFactorFor: plan.restFactorOf });
+    restHealParty(room, 0, { sleep: true, share: share, turns: slept, quality: nightBed, completed: !interrupted,
+        completedFor: function (member) { return !interrupted && slept >= (sleepNeeds.get(member) || SLEEP_TURNS); },
+        ratioFor: plan.ratioOf, qualityFor: plan.qualityOf, restFactorFor: plan.restFactorOf });
     publishRestPlan(interrupted ? "interrupted" : "result", "job-sleep", plan, slept);
     renderStats();
     if (interrupted) {
@@ -30920,7 +31798,7 @@ function sleepThroughNight(spot) {
     job.day++;
     const nightBuff = applyBedRestBonus(player, nightBed);
     renderJobMenu();
-    setNarration(arrangement + " You sleep" + (transition ? " from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : " through the night") + " and wake rested (+" + (player.hp - before) + " HP)." + staminaNote + (nightLift ? " " + nightLift : "") + (nightBuff ? " " + nightBuff : "") + " A new day begins. Carry on, or take your pay and go? " + describeJobStatus(job));
+    setNarration(arrangement + " You sleep for " + slept + " turns" + (transition ? ", from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : "") + " and wake rested (+" + (player.hp - before) + " HP)." + staminaNote + (nightLift ? " " + nightLift : "") + (nightBuff ? " " + nightBuff : "") + " You are ready for another workday. Carry on, or take your pay and go? " + describeJobStatus(job));
     saveGameState();
     return transition ? finishSleepTransition(transition, false) : undefined;
 }
@@ -30978,7 +31856,6 @@ function describeJobBoard(room) {
 
 function getJobBoardWindowBlockReason(room) {
     if (!room || room !== G.activeRoom || !G.player) return "That board is no longer here.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     return "";
 }
 
@@ -32293,7 +33170,6 @@ function getTrophyBlockReason(body, viaSpell) {
     if (body.bodyState !== "corpse") return "Only the dead are cut for trophies.";
     if (!isTrophyEligibleBody(body)) return "You would not do that to this body.";
     if (body._trophyTaken) return "You have already taken what you came for.";
-    if (roomHasActiveHostile(G.activeRoom)) return "Too dangerous right now.";
     const rule = getTrophyRule(body.species);
     if (rule.needsBlade && !viaSpell && !getTrophyBlade()) return "You need a blade, or a spell that cuts.";
     return "";
@@ -33455,6 +34331,7 @@ function tickNPCScheduleActiveRoom() {
     const list = room.creatures.slice();
     for (let i = 0; i < list.length; i++) {
         if (list[i]._npcParty && (list[i]._npcParty.leaderId !== list[i].id || npcPartyBusy(list[i], room))) continue;
+        if (typeof masonHoldsNPC === "function" && masonHoldsNPC(list[i])) continue;
         let result = stepNPCSchedule(list[i], room);
         if (result === null) result = stepNPCExpedition(list[i], room);
         if (result === null) result = stepNPCPastime(list[i], room);
@@ -33998,6 +34875,8 @@ function stepNPCAutonomy(npc, room) {
 
     // Fleeing a fresh aggressor takes priority over everything else.
     if (attemptNPCFlee(npc, room)) return;
+    // A mason on a repair job walks and works through tickMasonWork.
+    if (typeof masonHoldsNPC === "function" && masonHoldsNPC(npc)) { healNPCOverTime(npc); return; }
     if (typeof mortuaryOwnsNPC === "function" && mortuaryOwnsNPC(npc)) { healNPCOverTime(npc); return; }
 
     if (typeof stepNPCWorldCare === 'function' && stepNPCWorldCare(npc, room)) return;
@@ -40304,7 +41183,6 @@ function getItemOfferingBlockReason() {
     if (!player || !room) return "Nothing here.";
     const site = getItemOfferingSite();
     if (!site) return "Needs a shrine or altar.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (site.fixture && isRecentlyDefiled(site.fixture)) return "You fouled this place recently. It does not feel welcoming yet.";
     ensurePlayerFaithState(player);
     if (!player.deity && !site.deityId) return "You follow no deity yet.";
@@ -41057,7 +41935,6 @@ function isFlammableRoomItem(item) {
 }
 
 function getRoomItemSpellBlockReason(room, cost, spell) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (spell.element !== "fire") return "Only fire will take hold here.";
     if (G.player.mana < cost) return "Not enough mana (" + cost + " needed).";
     return "";
@@ -48269,6 +49146,13 @@ function tradeWithNPC(npc) {
         return;
     }
 
+    // Shady Merchant: let the NSFW half roll its weekly stock refresh before
+    // the trade menu reads the inventory. typeof-guarded no-op when the
+    // NSFW files are absent.
+    if (npc.role === "Shady Merchant" && typeof window.refreshShadyMerchantInventory === "function") {
+        npc.inventory = window.refreshShadyMerchantInventory(npc) || npc.inventory;
+    }
+
     G.activeNPCMode = "trade";
     renderTradeOptions(npc);
     setNarration(`You look over what ${npc.name} has to trade.`);
@@ -48869,7 +49753,6 @@ function isPortalFixture(fixture) {
 
 function getTownPortalBlockReason(room) {
     if (window.G.townPortalBusy) return "The waygate is already opening.";
-    if (room && roomHasActiveHostile(room)) return "Too dangerous right now.";
     const cost = getTownPortalCost();
     const have = getCoinValue(G.player);
     if (have < cost) return "The council's fee is " + cost + " gold. You have " + have + ".";
@@ -48969,7 +49852,6 @@ function syncPortalChamberWaygates(room) {
 
 function getTownReturnBlockReason(room, tier) {
     if (window.G.townPortalBusy) return "The waygate is already opening.";
-    if (room && roomHasActiveHostile(room)) return "Too dangerous right now.";
     const dest = G.portalTowns && G.portalTowns[tier];
     if (!dest || !dest.roomMap) return "The waygate is dark; that town cannot be reached.";
     return "";
@@ -55663,7 +56545,6 @@ function damageRoomWall(room, dir, amount, kindOfDamage, lines) {
 
 function getWallBlockReason(room, dir) {
     if (!room || !G.player) return "Nothing to hit.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (isPlayerJailed()) return "These cells are built to hold.";
     if (isRoomCollapsed(room)) return "The room is already in ruins.";
     if (isExitCollapsed(room, dir)) return "It has already fallen in.";
@@ -55751,7 +56632,6 @@ function describeDigProgress(room, dir) {
 
 function getDigBlockReason(room, dir) {
     if (!room || !G.player) return "Nothing to dig.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (!isExitCollapsed(room, dir)) return "The way is already clear.";
     return "";
 }
@@ -57333,7 +58213,6 @@ function renderForgeRepairPicker(npc) {
 // not already honed, so it cannot be stacked or farmed.
 function getSelfHoneBlockReason(room) {
     const weapon = G.player && G.player.equipped && G.player.equipped.weapon;
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (!weapon || !isBladedWeapon(weapon)) return "You need a bladed weapon equipped.";
     if (isBrokenWeapon(weapon)) return "It is broken, not dull. A smith could mend it.";
     if (weapon.edgeHits > 0) return "Your blade is already honed.";
@@ -57547,7 +58426,6 @@ function describeForgeCommission(c) {
 }
 
 function getCommissionTakeBlockReason(room) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (G.player.forgeCommission) return "You already have a commission. Deliver it to the smith, or drop it.";
     return "";
 }
@@ -59834,6 +60712,23 @@ function isNPCVisiblyInjured(npc) {
     return false;
 }
 
+// Ambience for a room holding someone hostile. Replaces the old "Too dangerous
+// right now." action blocks: nothing is refused any more, the room just feels
+// wrong, and a player who works with a threat nearby may get attacked.
+const ROOM_THREAT_AMBIENCE = [
+    "Your skin prickles; something here means you harm.",
+    "You feel watched, and not kindly.",
+    "The air is tense, as if the room is holding its breath.",
+    "Every nerve says this is not a safe place to linger.",
+    "A cold unease settles over you; trouble is close."
+];
+
+function getRoomThreatAmbience(room) {
+    if (typeof roomHasActiveHostile !== "function" || !roomHasActiveHostile(room)) return "";
+    const turn = typeof getCurrentStoryTurn === "function" ? getCurrentStoryTurn() : 0;
+    return ROOM_THREAT_AMBIENCE[Math.abs(Math.floor(turn || 0)) % ROOM_THREAT_AMBIENCE.length];
+}
+
 function buildObservationNarration(room) {
     if (!room) return "";
 
@@ -59855,7 +60750,7 @@ function buildObservationNarration(room) {
     shownNpcs.forEach(npc => {
         const name = getNPCRoomSightName(npc);
         if (name) {
-            const presence = isZoneBoss(npc) && npc.boss && npc.boss.presence ? npc.boss.presence : "";
+            const presence = isZoneBoss(npc) && npc.boss && npc.boss.presence ? npc.boss.presence : (typeof getMasonWorkClause === "function" ? getMasonWorkClause(npc) : "");
             const boundNote = getNPCBoundNote(npc);
             lines.push(`You see ${name} here${npc.currentState && npc.currentState.sleeping ? ", " + getNPCVisibleAction(npc).replace(/^is /, "") : ""}${presence ? ", " + presence : ""}${boundNote ? ", " + boundNote : ""}.`);
         }
@@ -59867,6 +60762,9 @@ function buildObservationNarration(room) {
         const name = withIndefiniteArticle(getEntityName(item));
         if (name) lines.push(`You see ${name} here.`);
     });
+
+    const threatLine = typeof getRoomThreatAmbience === "function" ? getRoomThreatAmbience(room) : "";
+    if (threatLine) lines.push(threatLine);
 
     return lines.join(" ");
 }
@@ -59980,12 +60878,12 @@ function renderRoomObservations(parent, room, layout) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "narration-entity-btn";
-        btn.textContent = isZoneBoss(npc) ? "\u2605 " + name : name;
+        btn.textContent = (typeof npcShowsBossStar === "function" ? npcShowsBossStar(npc) : isZoneBoss(npc)) ? "\u2605 " + name : name;
         if (isZoneBoss(npc)) { btn.style.fontWeight = "bold"; btn.style.color = "#e0b040"; }
         btn.onclick = () => selectNPC(npc);
         parent.appendChild(btn);
 
-        const detail = isZoneBoss(npc) && npc.boss && npc.boss.presence ? npc.boss.presence : "";
+        const detail = isZoneBoss(npc) && npc.boss && npc.boss.presence ? npc.boss.presence : (typeof getMasonWorkClause === "function" ? getMasonWorkClause(npc) : "");
         appendNarrationText(parent, ` here${npc.currentState && npc.currentState.sleeping ? ", " + getNPCVisibleAction(npc).replace(/^is /, "") : ""}${detail ? ", " + detail : ""}.`);
         hasObservations = true;
     });
@@ -60799,7 +61697,12 @@ async function aiRewriteIntimacyBeat(npc, actionSample, reactionSample, context)
     // Match the game's speech styling: angle-bracket dialogue becomes double
     // quotes (the same conversion formatIntimacyNPCResponse applies to
     // canned responses), and any stray unpaired brackets are stripped.
-    trimmed = trimmed.replace(/<([^>]*)>/g, '"$1"').replace(/<|>/g, "").trim();
+    // Exception: an unconscious/sleeping NPC cannot speak, so any brackets
+    // the AI produced are unwrapped to plain narration instead of quoted.
+    const _cannotSpeak = (typeof isNPCUnconsciousOrSleeping === "function") && isNPCUnconsciousOrSleeping(npc);
+    trimmed = _cannotSpeak
+        ? trimmed.replace(/<([^>]*)>/g, "$1").replace(/<|>/g, "").trim()
+        : trimmed.replace(/<([^>]*)>/g, '"$1"').replace(/<|>/g, "").trim();
     if (!trimmed) return null;
     if (npc.intimacy) {
         if (!Array.isArray(npc.intimacy._recentScene)) npc.intimacy._recentScene = [];
@@ -61369,7 +62272,7 @@ function applyBedRestBonus(player, quality) {
 // top (syncFatigueStamina). Old saves start freshly rested at load.
 const DAY_TURNS = typeof LODGING_DAY_TURNS === "number" ? LODGING_DAY_TURNS : 54;
 const DAY_DAYLIGHT_TURNS = 30;              // turns 0-29 of a day are daylight, 30-53 night
-const SLEEP_TURNS = 24;                     // one night's sleep
+const SLEEP_TURNS = 24;                     // recovery-rate reference for a full night's sleep
 const SLEEP_HP_RATIO_PROPER = 0.5;          // share of max HP a full night on a real bed heals
 const SLEEP_HP_RATIO_MAKESHIFT = 0.35;      // ... on a pallet, bunk or mat
 const FATIGUE_GRACE_DAYS = 1;               // days awake before stamina starts to drain
@@ -61638,7 +62541,7 @@ function tickFatigue() {
     syncFatigueStamina(player);
 }
 
-// A completed night's sleep on a bed: the clock restarts and the penalty lifts.
+// Completed restorative sleep: the clock restarts and the penalty lifts.
 function markProperSleep(player) {
     if (!player) return "";
     const f = ensureFatigueState(player);
@@ -61650,6 +62553,23 @@ function markProperSleep(player) {
 }
 
 function getSleepBedQuality(room) { return getRestBedQuality(room); }
+
+// Wake when the player's sleep debt and available resource pools are restored.
+// A day awake needs one reference night; accumulated debt tops out at two.
+// Wounds heal at their existing rate but do not force sleep until full health.
+function getSleepTurnsUntilRested(entity, plan) {
+    const fatigue = ensureFatigueState(entity);
+    const currentMax = entity.staminaMax || 0;
+    const base = fatigue.applied > 0 && typeof fatigue.base === "number" && currentMax === fatigue.base - fatigue.applied ? fatigue.base : currentMax;
+    const restedMax = Math.max(Math.min(base, FATIGUE_MIN_STAMINA_MAX), base - getInfectionStaminaPenalty(entity));
+    const restFactor = plan.restFactorOf(entity);
+    const debtTurns = Math.min(2 * SLEEP_TURNS, Math.ceil(getTurnsAwake(entity) * SLEEP_TURNS / DAY_TURNS));
+    const resourceTurns = function (current, maximum) {
+        return maximum > 0 ? Math.ceil(Math.max(0, maximum - (current || 0)) * SLEEP_TURNS / (maximum * restFactor)) : 0;
+    };
+    return Math.max(1, debtTurns, resourceTurns(entity.stamina, restedMax),
+        playerUsesMana(entity) ? resourceTurns(entity.mana, getPlayerManaCeiling(entity)) : 0);
+}
 
 // ── SLEEPING SPOTS ───────────────────────────────────────────────
 // Sleeping asks where: a real bed, a cot (pallet, bunk, mat, bedroll) or the
@@ -61847,14 +62767,15 @@ function renderSleepSpotMenu(mode) {
         if (plan.playerSpot !== type) return;
         const preview = describeSleepArrangement(plan);
         const ratio = Math.round(plan.ratioOf(G.player) * 100);
-        choices.push({ surface: type, healthPercent: ratio, arrangement: preview, spots: publicRestPlan(plan) });
+        const turns = getSleepTurnsUntilRested(G.player, plan);
+        choices.push({ surface: type, healthPercent: ratio, turns: turns, arrangement: preview, spots: publicRestPlan(plan) });
         buttons.push(makeButton(labels[type], function () {
             if (menu) clearSharedChoiceMenu(menu);
             let transition;
             if (mode === "job") transition = sleepThroughNight(type); else { closeInteractMenu(); transition = performSleep(type); }
             const result = { status: mode === "job" ? "needs_input" : "completed", outputPublished: true };
             return transition && typeof transition.then === "function" ? transition.then(function () { return result; }) : result;
-        }, { title: preview + " Restores up to " + ratio + " percent of your maximum health before wound penalties. Sharing reduces stamina and mana recovery too.", textChoice: { action: "sleep", surface: type } }));
+        }, { title: preview + " Sleep until rested, about " + turns + " turns. Health recovery is " + ratio + " percent of your maximum per 24 turns before wound penalties. Sharing slows recovery.", textChoice: { action: "sleep", surface: type } }));
     });
     appendCombatGroup(el, title, buttons);
     const cancel = function () { if (menu) clearSharedChoiceMenu(menu); if (mode === "job") renderJobMenu(); else closeInteractMenu(); return { status: "blocked", message: "Sleep cancelled." }; };
@@ -61975,6 +62896,8 @@ function performSleep(spot) {
 
     const transition = typeof beginSleepTransition === "function" ? beginSleepTransition("sleep") : null;
     const plan = assignSleepSpots(room, spot);
+    const sleepNeeds = new Map(plan.before.map(function (before) { return [before.entity, getSleepTurnsUntilRested(before.entity, plan)]; }));
+    const sleepTurns = sleepNeeds.get(player);
     const quality = plan.qualityOf(player);
     const arrangement = describeSleepArrangement(plan);
     const f = ensureFatigueState(player);
@@ -61984,7 +62907,7 @@ function performSleep(spot) {
     activeRecoveryPlans.set(room, { player: player, plan: plan });
     f.sleeping = true;
     try {
-        for (let i = 0; i < SLEEP_TURNS; i++) {
+        for (let i = 0; i < sleepTurns; i++) {
             advanceStoryTurn(1);
             slept++;
             if (transition) recordSleepTransition(transition);
@@ -62015,6 +62938,7 @@ function performSleep(spot) {
     if (playerUsesMana(player)) restorePlayerMana(player, Math.ceil(getPlayerManaCeiling(player) * share * restFactor));
     const partyWoke = restHealParty(room, 0, {
         sleep: true, share: share, turns: slept, quality: quality, completed: !interrupted,
+        completedFor: function (member) { return !interrupted && slept >= (sleepNeeds.get(member) || SLEEP_TURNS); },
         ratio: SLEEP_SPOT_HP_RATIO.floor, ratioFor: plan.ratioOf, restFactorFor: plan.restFactorOf, qualityFor: plan.qualityOf
     });
     publishRestPlan(interrupted ? "interrupted" : "result", "sleep", plan, slept);
@@ -62031,7 +62955,7 @@ function performSleep(spot) {
     const buff = applyBedRestBonus(player, quality);
     const gained = player.hp - hpBefore;
     const partyNote = getRestingPartyMembers(room).length ? " Your companions sleep and recover alongside you." : "";
-    const base = arrangement + " You sleep" + (transition ? " from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : " through the night") +
+    const base = arrangement + " You sleep for " + slept + (slept === 1 ? " turn" : " turns") + (transition ? ", from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : "") +
         (gained > 0 ? " and wake restored (+" + gained + " HP)." : " and wake rested.");
     renderNarrationWithRoomObservations(room, base + staminaNote + partyNote + (lifted ? " " + lifted : "") + (buff ? " " + buff : "") +
         (partyWoke.length ? " " + partyWoke.join(" ") : "") +
@@ -62632,10 +63556,11 @@ function recoverRestingCompanion(member, room, options) {
     const factor = getWoundHealFactor(member);
     let heal;
     if (options.sleep) {
+        const completed = typeof options.completedFor === "function" ? options.completedFor(member) : options.completed;
         const quality = typeof options.qualityFor === "function" ? options.qualityFor(member) : options.quality;
         const ratio = typeof options.ratioFor === "function" ? options.ratioFor(member) : options.ratio;
         const restFactor = typeof options.restFactorFor === "function" ? options.restFactorFor(member) : 1;
-        if (options.completed && quality) markProperSleep(member);
+        if (completed && quality) markProperSleep(member);
         let full;
         if (options.fractional) { member._npcSleepHpCarry = (member._npcSleepHpCarry || 0) + max * ratio * options.share; full = Math.floor(member._npcSleepHpCarry + 1e-9); member._npcSleepHpCarry -= full; }
         else full = Math.round(max * ratio * options.share);
@@ -62644,7 +63569,7 @@ function recoverRestingCompanion(member, room, options) {
         const recoveryAmount = function (key, amount) { if (!options.fractional) return Math.ceil(amount); member[key] = (member[key] || 0) + amount; const whole = Math.floor(member[key] + 1e-9); member[key] -= whole; return whole; };
         restoreEntityStamina(member, recoveryAmount("_npcSleepStaminaCarry", (member.staminaMax || 0) * options.share * restFactor));
         restorePlayerMana(member, recoveryAmount("_npcSleepManaCarry", getPlayerManaCeiling(member) * options.share * restFactor));
-        if (options.completed) { resetSpeciesRestState(member, null); applyBedRestBonus(member, quality); }
+        if (completed) { resetSpeciesRestState(member, null); applyBedRestBonus(member, quality); }
     } else {
         const rates = getCompanionRestRates(member, room, options.plan);
         const hp = factor < 1 ? Math.max(rates.hp * factor, Math.min(rates.hp, WOUND_HEAL_FLOOR_PER_TURN)) : rates.hp;
@@ -66557,7 +67482,7 @@ function tickWorldPoison() {
 const NPC_CLASS_ROLE_RANKS = {
     "Delver": { rogue: 3 }, "Scavenger": { rogue: 2 }, "Scout": { rogue: 2 }, "Wanderer": { rogue: 1 },
     "Raider": { rogue: 1, fighter: 2 }, "Adventurer": { fighter: 3, rogue: 1 },
-    "Guildmaster": { fighter: 4, rogue: 2 }, "Town Guard": { fighter: 3 }, "Stone Guard": { fighter: 3 }, "Blacksmith": { fighter: 2 }, "Miner": { fighter: 1 },
+    "Guildmaster": { fighter: 4, rogue: 2 }, "Town Guard": { fighter: 3 }, "Stone Guard": { fighter: 3 }, "Blacksmith": { fighter: 2 }, "Miner": { fighter: 1 }, "Mason": { fighter: 1 },
     "Mercenary": { fighter: 2 }, "Soldier": { fighter: 3 }, "Arcanist": { wizard: 3 }, "Enchanter": { wizard: 3 },
     "Scholar": { wizard: 1 }, "Archivist": { wizard: 1 }, "Shaman": { wizard: 2 }
 };
@@ -68545,7 +69470,7 @@ function attemptBreakDoor(room, dir) {
     const occupants = getLockOccupants(room, dir);
     const doorName = describeExitDoor(room, dir);
     if (check.success) {
-        setExitLockState(room, dir, "unlocked", { forced: true });
+        setExitLockState(room, dir, "unlocked", { forced: true, brokenOpen: true });
         lines.push(check.critSuccess
             ? `You hit the ${doorName} once and it flies off its hinges.`
             : `You put your shoulder into the ${doorName} until the lock tears out of the frame.`);
@@ -68653,7 +69578,6 @@ function describeDoorCondition(room, dir) {
 }
 
 function getDoorSpellBlockReason(room, dir, cost, spell) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (isPlayerJailed()) return "These cells are built to hold.";
     const effect = CHEST_SPELL_EFFECTS[spell.element] || "none";
     if (effect === "none") return spell.element === "shock" ? "Lightning would run off the lock and do nothing." : "Wind cannot force a door.";
@@ -68729,7 +69653,6 @@ function castSpellAtDoor(room, dir, spellId) {
 
 function watchDoorBurn(room, dir) {
     if (!isDoorBurning(room, dir)) return;
-    if (roomHasActiveHostile(room)) { setNarration("Too dangerous right now."); return; }
     structuralCheckpoint();
     advanceStoryTurn(1);
     if (!structuralCurrent()) return structuralInterrupted();
@@ -68745,7 +69668,6 @@ function watchDoorBurn(room, dir) {
 function smashBrittleDoor(room, dir) {
     const player = G.player;
     if (!isExitLocked(room, dir) || !isDoorBrittle(room, dir)) return;
-    if (roomHasActiveHostile(room)) { setNarration("Too dangerous right now."); return; }
     const lines = [];
     const structuralStaminaBefore = player.stamina;
     spendEntityStamina(player, DOOR_SMASH_STAMINA, lines, { isPlayer: true });
@@ -68898,7 +69820,6 @@ function settleRoomFires(room) {
 }
 
 function getFixtureSpellBlockReason(room, cost, spell, fixture) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     const effect = CHEST_SPELL_EFFECTS[spell.element] || "none";
     if (effect === "douse") return isFixtureBurning(fixture) ? (G.player.mana < cost ? "Not enough mana (" + cost + " needed)." : "") : "Nothing is burning.";
     if (effect !== "burn") return "Only fire will take hold here.";
@@ -68969,7 +69890,6 @@ function castSpellAtFixture(fixture, spellId) {
 function watchFixtureFire(fixture) {
     const room = G.activeRoom;
     if (!room || !isFixtureBurning(fixture)) return;
-    if (roomHasActiveHostile(room)) { setNarration("Too dangerous right now."); return; }
     environmentActionCheckpoint();
     advanceStoryTurn(1);
     if (!environmentActionCurrent()) return environmentActionInterrupted();
@@ -69370,7 +70290,6 @@ function applyRoomLiquidEntryEffects(room) {
 // -- spells on liquids --------------------------------------------------------
 // Used by the liquid fixture card (explore) and castSpellAtNPC (combat).
 function getLiquidSpellBlockReason(room, cost, spell, type) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     const def = LIQUID_TYPES[type];
     const el = spell.element;
     const liq = room.liquids ? room.liquids[type] : null;
@@ -69600,7 +70519,6 @@ function tipOverFixture(fixture) {
     const room = G.activeRoom;
     const liq = getFixtureLiquid(room, fixture);
     if (!room || !liq) return;
-    if (roomHasActiveHostile(room)) { setNarration("Too dangerous right now."); return; }
     const name = getEntityName(fixture);
     const volume = liq.volume;
     liq.volume = 0;
@@ -69621,7 +70539,6 @@ function getWhetBlockReason(room) {
     const player = G.player;
     const weapon = player && player.equipped && player.equipped.weapon;
     if (getFighterRank(player) < FIGHTER_WHET_MIN_RANK) return "You have no martial training.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (!weapon) return "You have no weapon equipped.";
     if (isBrokenWeapon(weapon)) return "It is broken, not dull. Try jury-rigging it.";
     if (!isBladedWeapon(weapon) && weapon.weaponType !== "mace") return "There is nothing here to whet.";
@@ -69653,7 +70570,6 @@ function getJuryRigBlockReason(room) {
     const player = G.player;
     const weapon = player && player.equipped && player.equipped.weapon;
     if (getFighterRank(player) < FIGHTER_JURY_MIN_RANK) return `Needs ${getClassRankName(FIGHTER_JURY_MIN_RANK)} martial arms.`;
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (!weapon || !isBrokenWeapon(weapon)) return "Your weapon is not broken.";
     if (isEntityExhausted(player) || (typeof player.stamina === "number" && player.stamina < FIGHTER_JURY_STAMINA)) return "You're too worn out.";
     return "";
@@ -70713,7 +71629,7 @@ const INTERACT_MENU_ACTIONS = [
         label: "Sleep",
         visible: function (room) { return !!room; },
         disabledReason: function (room) { return getSleepBlockReason(room); },
-        title: "Sleep through the night on a bed, a cot or the floor. Clears weariness from going without sleep; beds and not sharing recover the most.",
+        title: "Sleep until rested on a bed, a cot or the floor. Duration depends on time awake and missing stamina or mana; sharing slows recovery.",
         run: function () { return openSleepSpotMenu(); }
     },
     {
@@ -71493,7 +72409,6 @@ function isRecentlyDefiled(holder) {
 
 function getDefileBlockReason(holder, room) {
     if (!holder || !room || !G.player) return "Nothing to defile.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (isRecentlyDefiled(holder)) {
         const left = DEFILE_COOLDOWN_TURNS - (getCurrentStoryTurn() - holder.lastDefileTurn);
         return `It is already fouled (${left} more turn${left === 1 ? "" : "s"} before it can be defiled again).`;
@@ -73924,7 +74839,6 @@ function describeAlchemyBowl(fixture) {
 function getAlchemyBowlBlockReason(fixture, needsDose, allowHostiles) {
     if (G.combatEncounter || G.activeNPCMode === "combat") return "Finish the current fight first.";
     if (!G.player || !fixture) return "There is no bowl here.";
-    if (!allowHostiles && G.activeRoom && roomHasActiveHostile(G.activeRoom)) return "Too dangerous right now.";
     if (needsDose !== false && !getAlchemyBowl(fixture)) return "The extraction bowl is empty.";
     return "";
 }
@@ -74682,7 +75596,6 @@ function getForageBlockReason(fixture, room, spent) {
     if (typeof isRoomCollapsed === "function" && isRoomCollapsed(room)) return "The rubble prevents you from gathering.";
     if (typeof hasPendingPartyLoot === "function" && hasPendingPartyLoot()) return "Settle the party's loot decision first.";
     if (getForageCharges(fixture) <= 0) return "Stripped bare. It will take a long while to grow back.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (!spent && (isEntityExhausted(G.player) || (typeof G.player.stamina === "number" && G.player.stamina < FORAGE_STAMINA_COST))) {
         return "You're too worn out to go crawling through the undergrowth.";
     }
@@ -75048,7 +75961,7 @@ function performGlance(dir) {
             const name = getEntityName(npc);
             if (!name) return;
             hydrateNPCSpeciesFlags(npc);
-            let phrase = isZoneBoss(npc) ? "★ " + name : name;
+            let phrase = (typeof npcShowsBossStar === "function" ? npcShowsBossStar(npc) : isZoneBoss(npc)) ? "★ " + name : name;
             const detail = detailed && typeof getNPCObservationDetail === "function" ? getNPCObservationDetail(npc) : "";
             if (detail) phrase += ", " + detail;
             seen.push(phrase);
@@ -75756,7 +76669,6 @@ function describeChestCondition(fixture) {
 }
 
 function getChestBaseBlockReason(room) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     return "";
 }
 
@@ -76354,7 +77266,6 @@ function getScavengeBlockReason(fixture, room) {
     if (typeof fixture.prospectedTurn === "number" && getCurrentStoryTurn() - fixture.prospectedTurn < FIXTURE_ORE_RESPAWN_TURNS) {
         return "You have already picked over what is loose here. Give it time.";
     }
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (isEntityExhausted(G.player)) return "You're too worn out to dig.";
     return "";
 }
@@ -76416,7 +77327,6 @@ function getMiningBlockReason(fixture, room) {
     if (!room || !G.player) return "Nothing to mine.";
     if (!playerHasPickaxe()) return "You need a pickaxe to mine.";
     if (getMiningCharges(fixture) <= 0) return "This has been worked out. It will take a long while to yield more.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (isEntityExhausted(G.player) || (typeof G.player.stamina === "number" && G.player.stamina < MINING_STAMINA_COST)) {
         return "You're too worn out to swing a pick.";
     }
@@ -76526,7 +77436,6 @@ function playerKnowsDeity(deityId) {
 
 function getOfferingBlockReason(fixture, room) {
     if (!room || !G.player) return "Nothing to offer to.";
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (isRecentlyDefiled(fixture)) return "You fouled this place recently. It does not feel welcoming yet.";
     if (!hasEnoughCoins(G.player, OFFERING_COST_COINS)) return `You have no coin to spare (${OFFERING_COST_COINS} needed).`;
     const last = typeof fixture.lastOfferingTurn === "number" ? fixture.lastOfferingTurn : null;
@@ -76907,7 +77816,6 @@ function isReadableFixture(fixture) {
 
 function getReadBlockReason(fixture, room) {
     if (getSecretComprehensionRule(fixture)) return getSecretReadBlockReason(fixture, room, G.activeItemModal === fixture);
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     return "";
 }
 
@@ -77183,7 +78091,6 @@ function playerHasStatusEffect(key) {
 
 function getDrinkBlockReason(room) {
     const player = G.player;
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     const staminaMax = typeof player.staminaMax === "number" ? player.staminaMax : PLAYER_STAMINA_MAX;
     const stamina = typeof player.stamina === "number" ? player.stamina : staminaMax;
     if (stamina >= staminaMax) return "You are not thirsty.";
@@ -77538,7 +78445,6 @@ function renderFixtureDipCard(fixture, cardOpts) {
 }
 
 function getWarmBlockReason(room) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (playerHasStatusEffect("warmed")) return "You are already warm.";
     return "";
 }
@@ -77570,7 +78476,6 @@ function getBurnableEntries() {
 }
 
 function getBurnBlockReason(room) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     if (!getBurnableEntries().length) return "You have nothing worth burning.";
     return "";
 }
@@ -81887,7 +82792,6 @@ function trainingDummyCanTeachClass(key) {
 }
 
 function getTrainingDummyBaseBlockReason(room) {
-    if (roomHasActiveHostile(room)) return "Too dangerous right now.";
     return "";
 }
 
@@ -82290,7 +83194,7 @@ function openFixtureCard(fixture, cardOptions) {
             addAction("Open", () => openContainerFixture(fixture), {
                 primary: true,
                 keepOpen: true,
-                disabledReason: hostile ? "Too dangerous right now." : ""
+                disabledReason: ""
             });
         } else {
             const stash = ensureContainerContents(fixture);
@@ -82335,14 +83239,14 @@ function openFixtureCard(fixture, cardOptions) {
     }
     if (room && getFixtureLiquid(room, fixture)) {
         statBits.push("Sloshing");
-        addAction("Tip it over", environmentCardCallback("tip", fixture), { keepOpen: true, disabledReason: hostile ? "Too dangerous right now." : "" });
+        addAction("Tip it over", environmentCardCallback("tip", fixture), { keepOpen: true, disabledReason: "" });
     }
     if (isNoticeWritingSuppliesFixture(fixture)) statBits.push("Free to use; replenished each morning");
     if (fixture.burntOut) statBits.push("Charred");
     if (isFixtureBurning(fixture)) statBits.push("Burning (" + fixture.fire.turnsLeft + " turns left)");
     if (isFlammableFixture(fixture, room) || isFixtureBurning(fixture)) {
         if (isFixtureBurning(fixture)) {
-            addAction("Watch it burn (1 turn)", environmentCardCallback("watch", fixture), { keepOpen: true, disabledReason: hostile ? "Too dangerous right now." : "" });
+            addAction("Watch it burn (1 turn)", environmentCardCallback("watch", fixture), { keepOpen: true, disabledReason: "" });
         }
         // Torch / nearby flame / water by hand (shared with text mode).
         if (typeof fireCardActions === "function") fireCardActions(fixture).forEach(function (a) { addAction(a.label, function () { return a.run(); }, { disabledReason: a.reason }); });
@@ -82364,7 +83268,7 @@ function openFixtureCard(fixture, cardOptions) {
     if (isTrapFixture(fixture)) {
         statBits.push(getTrapStateLabel(fixture));
         if (fixture.trapState === "armed") {
-            const reason = hostile ? "Too dangerous right now." : "";
+            const reason = "";
             addAction("Disarm (Flexibility)", () => attemptTrapAction(fixture, "disarm"), { primary: true, disabledReason: reason });
             addAction("Break (Prowess)", () => attemptTrapAction(fixture, "break"), { disabledReason: reason });
         }
@@ -82386,7 +83290,7 @@ function openFixtureCard(fixture, cardOptions) {
     }
 
     if (isNoticeFixture(fixture)) {
-        addAction("Jobs", () => openJobBoard(room), { disabledReason: hostile ? "Too dangerous right now." : "" });
+        addAction("Jobs", () => openJobBoard(room), { disabledReason: "" });
         addAction("Notices", () => readFixture(fixture), { primary: true, disabledReason: getReadBlockReason(fixture, room) });
         addAction("Post", () => openNoticePostEditor(fixture), { keepOpen: true, disabledReason: getNoticeBoardAccessBlockReason(fixture, room) });
     } else if (isReadableFixture(fixture)) {
@@ -82470,7 +83374,7 @@ function openFixtureCard(fixture, cardOptions) {
         addAction("Drink", () => drinkFromFixture(fixture), { disabledReason: getDrinkBlockReason(room) });
         getFillableEmptyEntries().forEach(function (e) {
             addAction("Fill " + getItemName(e.item).toLowerCase().replace(/^empty /, "a "), () => fillContainerAtFixture(fixture, e.key),
-                { disabledReason: roomHasActiveHostile(room) ? "Too dangerous right now." : "" });
+                { disabledReason: "" });
         });
     } else if (isFoulWaterFixture(fixture)) {
         addAction("Drink", () => {}, { disabledReason: "The water is foul. You would not touch it." });
@@ -84940,7 +85844,7 @@ function setEngagedRoomHeader(npc) {
     const nameEl = document.getElementById("roomNameEl");
     if (!nameEl || !npc) return;
     const label = isNPCNameKnown(npc) ? String(npc.name) : getNPCDescriptor(npc);
-    nameEl.textContent = (isZoneBoss(npc) ? "\u2605 " : "") + capitalizeFirst(label);
+    nameEl.textContent = ((typeof npcShowsBossStar === "function" ? npcShowsBossStar(npc) : isZoneBoss(npc)) ? "\u2605 " : "") + capitalizeFirst(label);
 }
 
 function restoreRoomHeader() {
@@ -86361,7 +87265,7 @@ function refreshNPCDetailPanel(npc) {
         ? `Scent: ${smellNotes.map(note => note.text).join("; ")}`
         : "";
 
-    document.getElementById("npcDetailNameEl").textContent = (isZoneBoss(npc) ? "\u2605 " : "") + npc.name;
+    document.getElementById("npcDetailNameEl").textContent = ((typeof npcShowsBossStar === "function" ? npcShowsBossStar(npc) : isZoneBoss(npc)) ? "\u2605 " : "") + npc.name;
     renderNPCPortrait(npc);
     // Never show a cached description from a different outfit or taste result.
     const polishedPanelDescription = !npcPanelDescriptionStale(npc) ? npc._panelDescription.text : "";
@@ -87846,27 +88750,28 @@ function renderIntimacyActionMenu(npc) {
                 if (!pos) return false;
                 
                 // For non-resisting NPCs (unconscious/sleeping/bound):
-                // - Disallow positions where NPC is on top (they can't support themselves)
-                // - Disallow standing positions (they're not capable of standing)
+                // only positions the player can physically place a limp body
+                // into — lying/receiving "bottom" positions and the dedicated
+                // unconscious positions. Never NPC-on-top, standing, kneeling,
+                // or self-supporting positions.
                 if (isNonResisting) {
-                    // NPC on top positions to exclude
-                    const npcOnTopPositions = [
-                        "Cowgirl", "Reverse Cowgirl", "Riding Face", 
-                        "Astride Lap", "Perched", "Sitting in Lap"
-                    ];
-                    
-                    // Standing positions to exclude
-                    const standingPositions = [
-                        "Standing", "Standing From Behind", "Against Wall", 
-                        "Against Wall From Behind", "Bent Over"
-                    ];
-                    
-                    const posLabel = pos.label || posId;
-                    if (npcOnTopPositions.includes(posLabel) || standingPositions.includes(posLabel)) {
-                        return false;
+                    if (typeof isPositionPlaceableForNonResisting === "function") {
+                        if (!isPositionPlaceableForNonResisting(posId)) return false;
+                    } else {
+                        // Fallback ID list if the positions helper is unavailable
+                        const blockedPositions = [
+                            "Cowgirl", "Reverse Cowgirl", "Riding Face",
+                            "Astride Lap", "Perched",
+                            "Standing", "Standing From Behind", "Against Wall",
+                            "Against Wall From Behind",
+                            "Kneeling", "Kneeling Over", "Kneeling Before", "Squatting Before",
+                            "Sixty-Nine", "Oral Service", "Prone Oral Service",
+                            "Mounted On X-Cross Oral Service"
+                        ];
+                        if (blockedPositions.includes(posId)) return false;
                     }
                 }
-                
+
                 return true;
             });
             

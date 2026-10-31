@@ -1,6 +1,6 @@
 // === cyoaftw-nsfw-system.js === - 2026-10-17-017              
 // Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply, intimacy portrait toggle, DeepSeek prompt optimization, fixed missing closing brace
-window.__NSFW_SYSTEM_VERSION = "2026-10-17-017";
+window.__NSFW_SYSTEM_VERSION = "2026-10-28-001";
 console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
 try {
 (function() {
@@ -5630,12 +5630,24 @@ avoidNote,
     const gender = String(npc.gender || "").toLowerCase();
     const feminine = /female|woman|futa|herm/.test(gender) ||
       (breasts.sizeCategory && breasts.sizeCategory !== "flat");
+    // Anatomy flags win over gender guesses: a cloaca species has a single
+    // vent (no separate vulva/penis button), and a character only gets the
+    // genital button for the organ they actually have.
+    const hasCloaca = (typeof _npcHasCloaca === "function" && _npcHasCloaca(npc)) || anatomy.cloaca === true;
+    const hasVagina = !!anatomy.vagina || (feminine && !hasCloaca && !anatomy.penis);
+    const hasPenis = !!anatomy.penis || (!feminine && !hasCloaca);
+    const hasBreasts = !!anatomy.breasts && anatomy.breasts.sizeCategory !== "flat"; // breasts:true (boolean) counts; only explicit "flat" excludes
     const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
       || { top: true, bottom: true };
     const parts = ["mouth"];
-    if (!clothing.top) parts.push(feminine ? "boobs" : "chest");
+    if (!clothing.top) parts.push(hasBreasts ? "boobs" : "chest");
     if (!clothing.bottom) {
-      parts.push(feminine ? "vulva" : "penis");
+      if (!hasCloaca) {
+        if (hasVagina) parts.push("vulva");
+        if (hasPenis) parts.push("penis");
+      }
+      // The anus button doubles as the cloaca/vent button for reptilian-kin;
+      // the prompt terms render it with vent wording for those species.
       parts.push("butt");
       parts.push("anus");
     }
@@ -5806,6 +5818,7 @@ avoidNote,
     }
     
     return prompt;
+  }
 
 
   // Helper to format an entity as "gender species" for prompts
@@ -5932,6 +5945,19 @@ avoidNote,
     
     // For anus specifically - special handling
     if (part === "anus") {
+      // Cloaca-bearing (reptilian-kin) NPCs: the button renders their single
+      // vent, never a mammalian anus or a separate vagina.
+      const isCloaca = (typeof _npcHasCloaca === "function" && _npcHasCloaca(npc)) || anatomy.cloaca === true;
+      if (isCloaca) {
+        const ventAnatomy = anatomy.cloaca || partAnatomy || {};
+        const pigmentation = ventAnatomy.pigmentation || "pink";
+        const sizeState = ventAnatomy.size || "";
+        let ventDesc = pigmentation + " smooth scaled cloaca (vent)";
+        if (sizeState && sizeState !== "tight" && sizeState !== "") ventDesc += ", " + sizeState;
+        const genderDesc = _intimacyGetGenderDescriptor(npc.gender);
+        const hemipenisNote = (!feminine) ? ", hemipenis housed within the vent" : "";
+        return ventDesc + " of a " + genderDesc + hemipenisNote;
+      }
       const anusAnatomy = partAnatomy;
       const pigmentation = anusAnatomy.pigmentation || "pink";
       const sphincterState = anusAnatomy.sphincter || "tight";
@@ -6166,9 +6192,17 @@ avoidNote,
     const surfaceColor = (body && String(body.color || "").trim().toLowerCase()) || "";
     const species = String(npc.species || "").trim().toLowerCase();
     
-    // Validate part is available
-    if ((part === "boobs" || part === "vulva") && !feminine) return null;
-    if ((part === "chest" || part === "penis") && feminine) return null;
+    // Validate part is available — anatomy-driven, mirroring
+    // getNsfwIntimacyParts: only parts the NPC actually has and that are
+    // currently uncovered produce terms.
+    const hasCloaca = (typeof _npcHasCloaca === "function" && _npcHasCloaca(npc)) || anatomy.cloaca === true;
+    const hasVagina = !!anatomy.vagina || (feminine && !hasCloaca && !anatomy.penis);
+    const hasPenis = !!anatomy.penis || (!feminine && !hasCloaca);
+    const hasBreasts = !!anatomy.breasts && anatomy.breasts.sizeCategory !== "flat"; // breasts:true (boolean) counts; only explicit "flat" excludes
+    if (part === "boobs" && !hasBreasts) return null;
+    if (part === "chest" && hasBreasts) return null;
+    if (part === "vulva" && (!hasVagina || hasCloaca)) return null;
+    if (part === "penis" && (!hasPenis || hasCloaca)) return null;
     if ((part === "boobs" || part === "chest") && clothing.top) return null;
     if ((part === "vulva" || part === "penis") && clothing.bottom) return null;
     if (part === "butt" && clothing.bottom) return null;
@@ -6709,9 +6743,19 @@ avoidNote,
         type: ["misc", "art", "nsfw"],
         value: function() { return 30 + Math.floor(Math.random() * 71); },
         description: function() {
-            const species = ["Human", "Elf", "Orc", "Dwarf", "Halfling", "Lizardfolk", "Tiefling", "Dragonborn", "Satyr"];
+            // Any humanoid species in the game can be depicted: read the
+            // world's own SPECIES_TEMPLATES (filtered to humanoids, so no
+            // ghosts/skeletons/slimes/rats) and new species are picked up too.
+            const fallbackSpecies = ["Human", "Elf", "Orc", "Dwarf", "Halfling", "Lizardfolk", "Dragonborn", "Satyr", "Catfolk", "Goblin", "Kobold", "Harefolk", "Ratfolk", "Wolfkin", "Kenku"];
+            const allSpecies = (typeof SPECIES_TEMPLATES !== "undefined" && Array.isArray(SPECIES_TEMPLATES) && SPECIES_TEMPLATES.length)
+                ? SPECIES_TEMPLATES.map(function (s) { return s.species; })
+                : fallbackSpecies;
+            const species = allSpecies.filter(function (s) {
+                return typeof isHumanoidSpecies !== "function" || isHumanoidSpecies(s);
+            });
             const chosenSpecies = species[Math.floor(Math.random() * species.length)];
-            const genders = ["female", "male", "androgynous", "non-binary"];
+            // The engine's own gender set (male / female / non-binary).
+            const genders = ["female", "male", "non-binary"];
             const chosenGender = genders[Math.floor(Math.random() * genders.length)];
             const poses = [
                 "reclining seductively",
@@ -6725,7 +6769,13 @@ avoidNote,
             const chosenPose = poses[Math.floor(Math.random() * poses.length)];
             const materials = ["polished marble", "smooth alabaster", "dark obsidian", "painted ceramic", "glazed pottery"];
             const chosenMaterial = materials[Math.floor(Math.random() * materials.length)];
-            return `A ${chosenMaterial} statuette of a ${chosenGender} ${chosenSpecies.toLowerCase()} ${chosenPose}. The artist has captured every intimate detail with remarkable skill.`;
+            // "Standard" attractive-figure exaggeration, by gender.
+            const exaggeration = chosenGender === "male"
+                ? "an oversized penis"
+                : chosenGender === "female"
+                    ? (Math.random() < 0.5 ? "oversized breasts" : "an oversized butt")
+                    : "an oversized penis and oversized breasts";
+            return `A ${chosenMaterial} statuette of a ${chosenGender} ${chosenSpecies.toLowerCase()} ${chosenPose}. Surprisingly anatomically correct, except for ${exaggeration}. The artist has captured every intimate detail with remarkable skill.`;
         },
         aiPolish: true
     }
@@ -6785,7 +6835,13 @@ avoidNote,
     const WEEK_TURNS = 54 * 7; // 7 days * 54 turns/day
     
     if (currentTurn >= lastRefresh + WEEK_TURNS) {
-        npc.inventory = generateShadyMerchantInventory(npc);
+        // Merge, don't replace: keep the SFW trade goods and other loot the
+        // engine seeded, swap out only the old shady-merchant stock.
+        const fresh = generateShadyMerchantInventory(npc);
+        const kept = (Array.isArray(npc.inventory) ? npc.inventory : []).filter(function (item) {
+            return item && !item.shadyMerchantItem;
+        });
+        npc.inventory = kept.concat(fresh);
         npc._lastInventoryRefresh = currentTurn;
         console.log("[Shady Merchant] Inventory refreshed for", npc.name);
     }
@@ -6801,7 +6857,6 @@ avoidNote,
   };
 
   initNSFWSystem();
-  }
 })();
 } catch (e) {
   console.error("[BODY-DEBUG] nsfw-system.js IIFE THREW:", e.message, e.stack);

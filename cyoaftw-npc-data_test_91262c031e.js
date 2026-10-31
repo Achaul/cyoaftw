@@ -3,7 +3,7 @@
 // ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-30-001";
+    window.NPC_DATA_VERSION = "2026-10-30-002";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -1180,6 +1180,7 @@ const NPC_ROUTINES = {
     Merchant: { duties: "buying and selling goods, and keeping accounts", pay: "profit on what you trade", shifts: ["checking the books", "dealing with buyers and sellers", "settling the day's accounts", "home"], pastime: "counting coin and comparing prices" },
     Trader: { duties: "carrying goods between places and selling them at a profit", pay: "profit on what you carry", shifts: ["loading up", "on the road or at the counter", "making camp or settling accounts", "resting"], pastime: "swapping road news" },
     "Wandering Merchant": { duties: "travelling with goods from place to place", pay: "profit on what you carry", shifts: ["breaking camp", "on the road or selling", "making camp", "resting by a fire"], pastime: "road stories" },
+    "Shady Merchant": { duties: "moving goods that are easier to sell after dark than in daylight", pay: "a cut of every quiet sale", shifts: ["daylight hours spent out of sight", "slipping through back alleys at dusk", "hawking stock from the shadows at night", "gone by morning"], pastime: "counting coin where no one can see" },
     Healer: { duties: "tending the sick and the hurt, and preparing salves and herbs", pay: "coin or goods from patients, and charity where you must", shifts: ["gathering and preparing herbs", "seeing patients", "checking on the worst cases", "on call at the infirmary, dozing between patients"], pastime: "studying herbs" },
     Priest: { duties: "keeping the shrine, leading prayers and blessing those who ask", pay: "offerings and donations, and little else", shifts: ["morning prayers", "tending the shrine and counselling", "evening prayers", "keeping an all-night vigil at the shrine"], pastime: "quiet prayer and reading" },
     Archivist: { duties: "keeping records and books and helping those who come to read them", pay: "a stipend, and fees for searches", shifts: ["opening the stacks", "cataloguing and fetching", "closing the stacks", "home"], pastime: "reading what is not on the shelf" },
@@ -1189,6 +1190,7 @@ const NPC_ROUTINES = {
     Reliquarian: { duties: "keeping, appraising and trading sacred and odd relics", pay: "fees and sales", shifts: ["checking the cases", "appraising and selling", "locking up", "home"], pastime: "reading old inscriptions" },
     "Town Guard": { duties: "keeping the peace, watching the gates and answering complaints", pay: "a guard's wage from the town, paid in coin and grain", shifts: ["relieving the night watch", "patrolling and answering complaints", "walking the evening round", "off duty, or the night watch"], pastime: "dice and bad wine off duty" },
     "Stone Guard": { duties: "holding the gates and watching the ways in", pay: "keep and a wage from the city", shifts: ["relieving the night watch", "standing the gate", "the evening round", "off duty, or the night watch"], pastime: "polishing gear and grumbling" },
+    Mason: { duties: "mending doors, walls and broken passages around the settlement, in timber and in stone", pay: "a settlement stipend, plus coin from anyone who wants their own repair done first", shifts: ["walking the streets to see what has cracked or been broken", "repairing doors and walls", "putting the tools away and noting what still needs doing", "home"], pastime: "arguing about mortar and timber over a drink" },
     Miner: { duties: "digging ore and stone and shoring the tunnels", pay: "a share of what the crew brings up", shifts: ["heading down", "digging", "hauling up and weighing the day's take", "home"], pastime: "drinking with the crew" },
     Scout: { duties: "watching the roads and reporting what moves on them", pay: "keep, and coin when the reports are good", shifts: ["checking the trails", "ranging out", "returning with news", "a cold camp or home"], pastime: "reading tracks" },
     Scavenger: { duties: "picking over ruins and wrecks for anything that sells", pay: "whatever you find and can sell", shifts: ["setting out", "searching", "hauling finds to sell", "hiding somewhere safe to sleep"], pastime: "sorting the day's finds" },
@@ -2414,8 +2416,22 @@ function getNPCKnownLoreFacts(npc, ctx) {
     if (typeof getCrimeLoreFacts === "function") {
         allFacts = allFacts.concat(getCrimeLoreFacts().filter(function (f) { return !f.aboutId || f.aboutId !== npc.id; }));
     }
+    // Who rules the zone (see getZoneBossLoreFacts in the engine): known to
+    // the ruler's own species in that zone, and only to them.
+    if (typeof getZoneBossLoreFacts === "function") {
+        allFacts = allFacts.concat(getZoneBossLoreFacts().filter(function (f) { return !f.aboutId || f.aboutId !== npc.id; }));
+    }
+    const speciesKey = String((ctx && ctx.species) || (npc && npc.species) || "").toLowerCase();
     const here = ctx && ctx.room && ctx.room.buildingId ? ctx.room.buildingId : null;
     allFacts.forEach(function (fact) {
+        // Species-gated facts: known firsthand by that species in the fact's
+        // zones, unknown to everyone else.
+        if (Array.isArray(fact.species) && fact.species.length) {
+            if (fact.species.indexOf(speciesKey) < 0) return;
+            if ((fact.zones || []).length && fact.zones.map(function (z) { return String(z).toLowerCase(); }).indexOf(String(zone).toLowerCase()) < 0) return;
+            out.push({ fact: fact, firsthand: true, distorted: false });
+            return;
+        }
         // Someone working inside a building knows it firsthand.
         const ownBuilding = !!(here && fact.buildingId === here);
         const own = fact.tiers.filter(function (t) { return tiers[t] && t !== "common"; });
@@ -5547,6 +5563,7 @@ function conversationConditionMatches(conditions, ctx) {
     if (conditions.demeanorMode && !_npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.demeanorMode))) return false;
     if (conditions.excludeDemeanorMode && _npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.excludeDemeanorMode))) return false;
     if (typeof conditions.intimacyActive === "boolean" && ctx.intimacyActive !== conditions.intimacyActive) return false;
+    if (typeof conditions.surrenderedToPlayer === "boolean" && ctx.surrenderedToPlayer !== conditions.surrenderedToPlayer) return false;
 
     if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
 
@@ -6357,7 +6374,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
 // ============================================================================
 const SOCIAL_FACT_QUESTIONS = {
     standing: { label: "Ask about their place in {group}", ask: "Tell me about your place in {group}." },
-    need: { label: "Ask what they need", ask: "Is there anything you need?" },
+    need: { label: "Ask if they need help", ask: "Do you need any help?" },
     worry: { label: "Ask what is weighing on them", ask: "You look troubled. What is weighing on you?" },
     liking: { label: "Ask what they enjoy", ask: "What do you enjoy, when you have the time?" },
     secret: { label: "Ask what they are not saying", ask: "I think you are holding something back. Tell me." },
@@ -6520,7 +6537,7 @@ function _socialStandingPhrase(social) {
 function getSocialFactLabel(npc, key) {
     const social = ensureNPCSocial(npc);
     const q = SOCIAL_FACT_QUESTIONS[key];
-    if (key === "need" && typeof ensureNPCNeeds === "function") return "Requests and promises";
+    if (key === "need" && typeof ensureNPCNeeds === "function") return "Ask if they need help";
     if (key === "standing") return _socialStandingPhrase(social).label;
     return q ? q.label : "";
 }
@@ -6633,7 +6650,7 @@ const NPC_TIE_LOVER_CHANCE = 0.10;
 const NPC_TIE_RECIPROCAL = { spouse: "spouse", parent: "child", child: "parent", sibling: "sibling", friend: "friend", coworker: "coworker", employer: "employee", employee: "employer", lover: "lover" };
 const NPC_TIE_FAMILY = ["spouse", "parent", "child", "sibling"];
 // Roles that are staff of the building they stand in (a place of work).
-const NPC_TIE_WORK_ROLES = ["Keeper of the Quiet", "Vigil Tender", "Bier Bearer", "Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
+const NPC_TIE_WORK_ROLES = ["Mason", "Keeper of the Quiet", "Vigil Tender", "Bier Bearer", "Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
 // Employers in a building and who they plausibly employ there.
 const NPC_TIE_EMPLOYER_ROLES = ["Keeper of the Quiet", "Bathkeeper", "Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
 const NPC_TIE_EMPLOYEE_ROLES = ["Vigil Tender", "Bier Bearer", "Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk", "BathhouseAttendant", "BathhousePractitioner"];

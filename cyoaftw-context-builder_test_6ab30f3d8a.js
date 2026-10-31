@@ -3,7 +3,7 @@
 // cyoaftw-context-builder.js v2026-10-23-003 — Bounded NPC Life short-term/entity recollections, personality and sleeping context.
 // Version identifier for debugging cached files.
 if (typeof window !== "undefined") {
-    window.CONTEXT_BUILDER_VERSION = "2026-10-26-001";
+    window.CONTEXT_BUILDER_VERSION = "2026-10-30-001";
     console.log("[Context Builder] Loaded v" + window.CONTEXT_BUILDER_VERSION);
 }
 
@@ -827,7 +827,8 @@ function buildNPCPersonaBlock(npc, title = "SPEAKER CONTEXT", options = {}) {
         motive ? `- Current motive: ${motive}` : "",
         `- Mood: ${mood}`,
         typeof window.getSlimeTamingContext === "function" ? window.getSlimeTamingContext(npc) : "",
-        (npc && npc.boss) ? `- Rank: you are known as ${npc.boss.epithet || "the ruler"}, ruler of this area. Your power comes from a magical relic (${npc.boss.relicName || "relic"}) you carry; you are proud, dangerous and aware of it.${npc.boss.demeanor ? " Demeanor: " + npc.boss.demeanor + "." : ""}${npc.boss.quirk ? " Quirk: " + npc.boss.quirk + "." : ""}` : "",
+        (npc && npc.boss) ? (typeof getBossRankNote === "function" ? getBossRankNote(npc) : `- Rank: you are known as ${npc.boss.epithet || "the ruler"}, ruler of this area. Your power comes from a magical relic (${npc.boss.relicName || "relic"}) you carry; you are proud, dangerous and aware of it.${npc.boss.demeanor ? " Demeanor: " + npc.boss.demeanor + "." : ""}${npc.boss.quirk ? " Quirk: " + npc.boss.quirk + "." : ""}`) : "",
+        (npc && !npc.boss && typeof getZoneRulerNoteForNPC === "function") ? getZoneRulerNoteForNPC(npc, window.G && window.G.activeRoom ? window.G.activeRoom.zone : "") : "",
         buildNPCDeliveryNote(npc, window.G ? window.G.activeRoom : null, mood, favorability),
         `- Familiarity with player: ${metPlayer ? "already acquainted; do not treat this as a first introduction" : "first meeting or not yet properly introduced"}`,
         `- Relationship to player: ${relationship}`,
@@ -904,21 +905,17 @@ function buildPlayerStandingBlock(room, npc) {
         }
         lines.push(`- The player is a prisoner, locked up in a jail cell${left}. Their weapons and lockpicks were taken. Treat them as a prisoner, not a free traveller.`);
         if (isGuard) lines.push("- You are a guard on duty: stay professional, stern and unbribable, and make no promises you cannot keep.");
-    } else if (zone && typeof getBounty === "function") {
-        const bounty = getBounty(zone);
+    } else if (zone && isGuard && typeof getGuardBounty === "function") {
+        const bounty = getGuardBounty(npc, zone);
         const wantedAt = typeof BOUNTY_WANTED === "number" ? BOUNTY_WANTED : 40;
         const attackAt = typeof BOUNTY_ATTACK === "number" ? BOUNTY_ATTACK : 100;
         if (bounty >= attackAt) {
-            lines.push(`- The player is a known violent criminal in ${zone}, with a ${bounty} coin bounty. Word has spread.`);
+            lines.push(`- You personally know an unsettled report identifying the player as a violent criminal in ${zone}, with a ${bounty} coin bounty.`);
         } else if (bounty >= wantedAt) {
             lines.push(`- The player is wanted in ${zone} for crimes, with a ${bounty} coin bounty.`);
         }
         if (bounty >= wantedAt) {
-            if (isGuard) {
-                lines.push("- You are a guard and know the bounty. Be stern and suspicious, and expect the player to pay it or submit. You may mention the amount.");
-            } else {
-                lines.push("- You have heard the player is wanted. Let that make you wary, curt or nervous as suits your temperament. Mention it only if it fits, and do not quote the exact amount.");
-            }
+            lines.push("- You are a guard and personally know the bounty. Be stern and suspicious, and expect the player to pay it or submit. You may mention the amount.");
         }
     }
 

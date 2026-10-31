@@ -1,13 +1,13 @@
 /**
  * INTIMACY SYSTEM - POSITION DEFINITIONS
  * Position data for the NSFW intimacy action menu
- * Version: 2026-08-16-006
+ * Version: 2026-10-27-001
  */
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.INTIMACY_POSITIONS_VERSION = "2026-10-13-001";
-    console.log("[Intimacy Positions] Loaded v2026-10-13-001 - choreography: geometry promptNote, full validTools, new Kneeling Before position");
+    window.INTIMACY_POSITIONS_VERSION = "2026-10-27-001";
+    console.log("[Intimacy Positions] Loaded v2026-10-27-001 - choreography: geometry promptNote, full validTools, new Kneeling Before position");
 }
 
 var INTIMACY_POSITIONS = {
@@ -116,7 +116,9 @@ var INTIMACY_POSITIONS = {
         validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina", "anus", "breasts", "thighs", "groin", "body"],
         analFriendly: true,
         description: "Player on top, facing NPC",
-        promptNote: "The player lies over the NPC, face to face, both horizontal, the NPC on their back."
+        promptNote: "The player lies over the NPC, face to face, both horizontal, the NPC on their back.",
+        // A limp body can be arranged into this lying/bottom position by the player
+        placeableByPlayer: true
     },
     
     "Doggy": {
@@ -131,7 +133,9 @@ var INTIMACY_POSITIONS = {
         validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina", "anus", "breasts", "thighs", "groin", "body"],
         analFriendly: true,
         description: "NPC on hands and knees, player behind",
-        promptNote: "The NPC on hands and knees, the player kneeling behind; the NPC's face forward, rear raised."
+        promptNote: "The NPC on hands and knees, the player kneeling behind; the NPC's face forward, rear raised.",
+        // The player can prop a limp body into this receiving position
+        placeableByPlayer: true
     },
     
     "Bent Over": {
@@ -146,7 +150,9 @@ var INTIMACY_POSITIONS = {
         validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina", "anus", "breasts", "thighs", "groin", "body"],
         analFriendly: true,
         description: "NPC bent over a surface",
-        promptNote: "The NPC bent over a surface, the player standing behind; face down, rear presented."
+        promptNote: "The NPC bent over a surface, the player standing behind; face down, rear presented.",
+        // The player can hold a limp body bent over a surface
+        placeableByPlayer: true
     },
     
     "Spooning": {
@@ -161,7 +167,9 @@ var INTIMACY_POSITIONS = {
         validTools: ["hand", "fingers", "mouth", "tongue", "penis", "vagina", "anus", "breasts", "thighs", "groin", "body"],
         analFriendly: true,
         description: "Both lying on side, player behind NPC",
-        promptNote: "Both lying on their sides, the player nestled behind the NPC, fronts to backs."
+        promptNote: "Both lying on their sides, the player nestled behind the NPC, fronts to backs.",
+        // A limp body can be rolled into spooning by the player
+        placeableByPlayer: true
     },
 
     // ===== SPECIAL POSITIONS =====
@@ -450,6 +458,19 @@ function getAnalFriendlyPositions() {
     return positions;
 }
 
+// Can the player physically place a non-resisting (unconscious/sleeping)
+// NPC into this position? Only dedicated unconscious positions and lying
+// "bottom" positions the player can arrange a limp body into qualify —
+// never positions where the NPC must stand, kneel, sit up, hold itself
+// up, or be on top.
+function isPositionPlaceableForNonResisting(positionId) {
+    const pos = INTIMACY_POSITIONS[positionId];
+    if (!pos) return false;
+    if (pos.unconsciousOnly === true) return true;
+    if (pos.placeableByPlayer === true) return true;
+    return false;
+}
+
 // Export for Node.js or browser
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -459,6 +480,7 @@ if (typeof module !== 'undefined' && module.exports) {
         hasPosition,
         getAllPositionIds,
         getPositionsForFurniture,
-        getAnalFriendlyPositions
+        getAnalFriendlyPositions,
+        isPositionPlaceableForNonResisting
     };
 }
