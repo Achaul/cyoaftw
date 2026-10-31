@@ -4058,7 +4058,7 @@ const TEXT_COMMANDS = [
     { id: "choose", args: ["number"], aliases: ["choose"], example: "choose 2", description: "Pick a numbered conversation option from the most recent options list." },
     { id: "leave", aliases: ["leave", "goodbye", "bye", "step away", "leave conversation"], example: "leave", description: "Step away from the current NPC. Use a direction to leave the room." },
     { id: "rest", aliases: ["rest"], example: "rest", room: true, interact: "rest", description: "Use the normal Rest action, including recovery, time, and danger checks." },
-    { id: "sleep", aliases: ["sleep"], example: "sleep; sleep in bed", room: true, interact: "sleep", description: "Sleep on a bed, cot or floor. A bed's Sleep action and sleep in <bed> open the same surface choices. Choose with options and choose <number>; sharing reduces recovery. Show sleep lists availability, and help sleep explains the choices." },
+    { id: "sleep", aliases: ["sleep", "sleep until rested", "go to sleep"], example: "sleep; sleep until rested; sleep in bed; show sleep; how sleep", room: true, interact: "sleep", description: "Sleep until rested on a bed, cot or floor. Time awake and missing stamina or mana determine duration; sharing slows recovery. A bed's Sleep action and sleep in <bed> open the same surface choices. Choose with options and choose <number>. Show sleep lists availability, and how sleep explains the choices." },
     { id: "status", info: true, aliases: ["status", "health", "stats"], example: "status", description: "Read your health, stamina, mana, and coins. Costs no turn." },
     { id: "stop", aliases: ["stop"], example: "stop", description: "Cancel pending commands. An action already in progress finishes normally." },
     { id: "continue", aliases: ["continue", "resume"], example: "continue", description: "Explicitly resume the remaining commands after a pause. A failed action is not retried." },
@@ -4124,6 +4124,7 @@ function parseTextCommand(input) {
     const original = String(input || "").trim();
     const raw = original.replace(/[.!?]+$/, "").trim();
     const key = textCommandNormalize(raw);
+    if (/^(?:sleep until rested|go to sleep)$/.test(key)) return { verb: "sleep", args: {} };
     const phrase = parseTextPhraseCommand(raw); if (phrase) return phrase;
     const rulings = parseTextRulingsCommand(raw); if (rulings) return rulings;
     let match = /^(?:how(?:\s+(?:do|can)\s+i)?|help)(?:\s+(?:to\s+)?(.+))?$/i.exec(raw);
@@ -8206,7 +8207,7 @@ function textExplorationBlock() {
 function textFixtureActions(fixture) {
     const room = G.activeRoom, actions = [];
     const add = function (id, reason, run, note) { actions.push({ id: id, label: id + " " + getEntityName(fixture), reason: reason || "", run: run, note: note || "" }); };
-    if (fixture.id === "bed" && typeof getBedSleepBlockReason === "function") add("sleep", getBedSleepBlockReason(fixture, room), function () { return sleepAtBed(fixture, room); }, "choose a bed, cot or floor; sleeping takes a night");
+    if (fixture.id === "bed" && typeof getBedSleepBlockReason === "function") add("sleep", getBedSleepBlockReason(fixture, room), function () { return sleepAtBed(fixture, room); }, "choose a bed, cot or floor and sleep until rested");
     if (typeof isFixtureSeatingTarget === "function" && isFixtureSeatingTarget(fixture)) add("sit", getFixtureSeatingBlockReason(fixture, room), function () { return sitAtFixture(fixture, room); }, isBarSeatingFixture(fixture) ? "free; requests bartender service" : "free; sit without resting");
     if (fixture.id === "burial-niches") add("mausoleum", mausoleumRoomBlock(room, G.player), openMausoleumMenu, "review niches, interment and engraved plaques");
     if (fixture.id === "grindstone") add("hone", workbenchBlock("hone", fixture), function () { return selfHoneAtGrindstone(fixture); }, FORGE_SELF_HONE_STAMINA + " stamina, 1 turn, no coins");
@@ -8533,6 +8534,13 @@ async function runSharedChoice(menu, choice, how) {
     if (sharedChoiceState.menu !== menu || !menu.valid()) {
         const textMode = typeof textModeState !== "undefined" && textModeState.enabled;
         if (!textMode && how && how.fromButton) {
+            const scene = menu.scene;
+            if (sharedChoiceState.menu !== menu || !menu.ownsView() ||
+                scene.player !== G.player || scene.room !== G.activeRoom || scene.npc !== G.activeNPC ||
+                scene.mode !== G.activeNPCMode || scene.modal !== G.activeItemModal || scene.object !== G.activeObject) {
+                if (sharedChoiceState.menu === menu) clearSharedChoiceMenu(menu);
+                return { status: "blocked" };
+            }
             // Menu mode: a visible Back/Leave/Cancel button always works. It only
             // closes the view, so a stale snapshot is no reason to trap the player.
             const p = G.player, leaving = choice && /^(back|cancel|leave)$/.test(choice.meta && choice.meta.action || "");
@@ -8541,8 +8549,24 @@ async function runSharedChoice(menu, choice, how) {
                 await choice.run();
                 return { status: "completed" };
             }
-            if (typeof menu.refresh === "function" && menu.ownsView()) { try { menu.refresh(); } catch (err) { console.warn("[Choices] refresh failed", err); } }
-            return sharedChoiceResult("blocked", "That option is no longer available.");
+            // Refresh choices without replacing story narration with an internal
+            // stale-menu warning. The player must explicitly choose again.
+            clearSharedChoiceMenu(menu);
+            if (typeof menu.refresh === "function") {
+                try { menu.refresh(); } catch (err) { console.warn("[Choices] refresh failed", err); }
+            } else if (!G.activeItemModal && !G.activeObject && p && !p.dead && p.hp > 0 && !p.unconscious &&
+                !p._dying && !p._collapsing && G.activeNPCMode !== "combat" && !G.combatEncounter &&
+                !roomHasActiveHostile(G.activeRoom) && !isRoomCollapsed(G.activeRoom) && !hasPendingPartyLoot()) {
+                if (G.activeNPC && (G.activeRoom.creatures || []).includes(G.activeNPC) && isVisibleEntity(G.activeNPC)) {
+                    G.activeNPCMode = "menu";
+                    renderNPCActionMenu(G.activeNPC);
+                } else if (!G.activeNPC) {
+                    G.activeNPCMode = null;
+                    renderRoom();
+                    setExitGridVisible(true);
+                }
+            }
+            return { status: "blocked" };
         }
         return sharedChoiceResult("blocked", "That choice changed or is no longer available. Type options for the current choices.");
     }
@@ -14285,7 +14309,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Party standing: companions, followers and tamed slimes are never drawn into NPC-vs-NPC fights (cross-species, pile-ons, guard break-ups) unless wanted for their own crime; skirmish hostility is undone when a fight ends; companions never count as room threats (fixes dead companion/gift/loot menus and broken slime taming); old saves repaired once.
 // Previous: Text mode is opt-in again: Preferences > "Show text mode" (default off) shows the compass entry; TTS stays greyed out until it is on.
 // Previous: Game-master router: the judge sees the real commands for the object and hands matching actions to their system (fire, spells, burn/dip, lift/drag, tools, fixture actions), saved as reusable routes; new fire-by-hand system (light with a torch or nearby flame, douse with carried water or a well; text + fixture-card buttons; arson rules shared with fire spells); carts are flammable.
-// Previous: Locked-door menu no longer goes stale on open (loose keys are bound before the choice snapshot); in menu mode a visible Back/Leave/Cancel always works and stale choices say "That option is no longer available." without text-mode wording.
+// Previous: Locked-door menu no longer goes stale on open (loose keys are bound before the choice snapshot); visible Back/Leave/Cancel controls work after quote changes, and stale native choices refresh silently.
 // Previous: Text-mode game-master adjudicator: free-form actions on objects are judged once by AI from world rules (stat, d20 DC, costs, capped effects), rolled and applied by the engine, saved as reusable rulings (repeats only narrated); kick/open/touch/break on plain objects route there; street fixtures get physical templates; text-mode AI capped at 2 parallel requests.
 // Previous: Text mode shown by default ("Hide text mode" preference); TTS on turns the compass keyboard into a voice icon (text mode + speech).
 // Previous: Text-mode exits line says "a path" outdoors and in caves, "an opening" indoors.
@@ -14336,7 +14360,7 @@ async function executeAdjudicationRoute(entry, actionText, ruling, source) {
 // Previous: Backstory pressure paced in game days, longer arrival and escalation windows, and one-time deadline extensions for existing saves.
 // Previous: Live chat ("Say something..." stays open: Enter to send, Menu and Leave buttons, quick replies when asked a question); social answers (trade, need, worry, liking, secret, ties) voiced by the AI from the stored facts with a scripted fallback; reactive options only show in context (npcNoteReplyMeta records question, dodge and trouble); the guide walk uses central action narration, pauses between rooms and reopens conversation on arrival; same-conversation greetings (no "it has been a while" while walking together); duplicate and mislabelled player lines fixed (addPlayerChatLine).
 // Earlier fixes: Map button under Equipment: a scrollable popup showing the rooms you have visited on the current map plane (north up), the paths between them, locked/rubble links, unexplored "?" stubs, and marks for shrines, boss rooms, taverns/bars, inns/beds, smithies, guildhall, town hall, stairs/lifts and doors to other areas (renderRoom now sets room.mapSeen). Before that: The room interact options moved out of the exit grid's center button: they now render directly in two columns flanking the cardinal-direction grid (#interactLeftEl / #interactRightEl in the shell, wrapped with the grid in #interactBarEl), grouped as observe (Look around, Glance, Search, Case the place, Read the notices - group: "observe" on their INTERACT_MENU_ACTIONS entries) on the left and act (Rest, Sleep, Experiment, Work, ...) on the right. The center Interact button, updateRestButton and renderInteractMenu are gone; renderInteractSidePanels builds the columns and is called from setExitGridVisible (which now shows/hides the bar and both columns with the grid) and after rest/sleep. openInteractMenu keeps its guards but now just returns to the room view (resetNpcPanel), so every submenu's Back button still works; player-facing strings no longer say "Interact > ...". Before that: Forge services gained the MAGIC ANVIL and RECOLOR. Magic anvil: fuse two boss relics (pack or held) into one new relic for 25g on a rollD20 pour (luck counts): 1-5 the anvil refuses and both relics survive, 6-16 a clean fuse, 17-20 a perfect fuse (+2 charge cap). The new relic is always built inside the boss-relic framework (createBossRelicItem's shape): stat bonus = best parent +1, tier of the better parent, value 80% of the pair - while WHAT it becomes (name, description, which Rising power, which stat) is decided by the AI speaking as the deity the player follows (getDeityArchetype(player.deity): name, domain, judgment voice) or, with no patron, the old voice of the anvil itself; the AI reply is JSON-parsed (tryParseConversationJSON) and every field validated against RELIC_POWERS / BOSS_STAT_LABELS, so a bad or unavailable AI call falls back to a deterministic parent blend (first word of A + last word of B, a parent's power). Recolor: pigment pots (new misc loot + Blacksmith stock: madder red, woad blue, yellow ochre, soot black, chalk white; isPigmentItem/pigmentColor) can be worked into any worn or carried armour/clothes/belt/weapon (not relics, not pigments) for 4g each: the item's EXISTING colour is blended with the pigment on a fixed mix table (blue + red = purple, red + yellow = orange, black + white = gray, red + white = pink...; no recipe = pigment wins), the result is stored on item.color so a later recolor blends from it in turn (purple + white = lavender), and the description is permanently rewritten - by the AI when available (one short paragraph, colour woven in, meta-commentary guarded), else the colour words are swapped in / a colour note appended. Both services are wired into the forge services menu beside sharpen/repair/upgrade/refine/treat; the anvil narration and fee are charged up front and the relics are consumed only on a successful pour. Before that: Forge services gained REFINE ORE at the crucible: the smith melts ordinary ore of one grade into the NEXT grade up the ore tree (grade 1 -> silvered; grade 2 -> star-metal / emberstone / deepglass; grade 3 -> moonsilver) - never sideways, never into elemental ore (that stone is born, not made). Each 4-unit batch pours on a d20 via rollD20, so a Potion of Luck (pending lucky roll) or carried lucky charms (getCarriedLuckBonusChance, capped at 25%) can force the best pour: 1-4 slag (nothing), 5-16 one piece, 17-20 two pieces - an unmodified average of exactly one piece per four ore. Leftover 1-3 units get one pour worth their fraction (roll <= 5 x leftover, natural 20 always takes). When the grade above has more than one ore, which one each piece is rolls among that branch's weighted options (FORGE_REFINE_CHILDREN), so results stay related to what went in. One fee per melt (8g + 4g per input grade) whatever the size, stacks group by grade across types (bog + iron melt together), and the yield is upgrade material for the Upgrade armour service by design - refining is value-destroying, the payoff is permanent armour upgrades. Before that: Forge services expanded with UPGRADE ARMOUR: any armour piece now has a material grade (cloth 0 / leather 1 / iron 2 / steel 3 / gold 4, from guessDurabilityMaterial unless previously upgraded) and every ore has an upgrade grade (bog-iron 1 / silvered 2 / ember-deepglass-star 3 / moonsilver and elemental treatment ore 4). A Blacksmith can reforge any armour with an ore of a STRICTLY better grade for a fee: +1 armour (+2 when the gap is 3+ grades), an ore label in the name ("star-forged chain shirt"), a value bonus, and the piece is re-stamped at the ore's grade so each further upgrade needs an even better ore; elemental ore also works +1 of its resistance into the metal. Unlike sharpening it is a job, not an instant service: the smith keeps the piece for 2 + grade turns (3-6), the job lives on G.player.forgeUpgrade (persists with the save, one at a time), ticks down on advanceStoryTurn with a turn note when done, and any Blacksmith hands the finished piece back. Elemental ore detection fixed: "Treat armour" now opens whenever elemental ore is in the pack (the picker explains if no armour can take a treatment), and smithy commissions deliver ore of "any grade" including elemental ore, consuming cheapest first so a valuable elemental ore is never burned while ordinary ore is in the pack. Before that: Session followers can be asked to join the party for good: a new "Ask them to join you for good" conversation topic (follower-join-party in cyoaftw-npc-data.js, companion management so it shows even before the greeting) calls askFollowerToJoinParty - a roll from favorability (+attraction, -high hostility, 40-turn cooldown after a decline), a yes moving them from sessionFollowers into the persistent party (addToParty), held captives excluded (the rope collar is their path). Before that: Companion equipment management: party members get a "Manage equipment" action (their NPC menu) that opens a swap menu - take what they wear or carry, have them equip something from their own pack (the displaced piece goes into it), or hand them anything equippable from yours, auto-worn/held when the slot is free. That is how a companion comes to HOLD a boss relic: its power (and its rolled stat bonus, which needs no slot) then works for them exactly as for the player; unique items keep their identity through the exchange (stacked ones split off a copy). Free action, no story turn. The equipment panel also gained a fixed Hand slot box in the HTML shell. Before that: Boss relics are now HELD items: a new Hand equipment slot takes a boss relic (the only thing that fits it), bosses hold their relic from creation, and the relic POWER (Rising Power / Mirror / Shadow) only works while it is held in that slot - while the rolled stat bonus still applies from the pack, so relics can be farmed for stats but only one power is ever active. Boss relics scale with the portal tier of the town the boss was made in (harder zone, better relic): the stat bonus rolls 1d6 (+1 per tier) instead of a flat +2, and the relic charge cap is 8 +2 per tier - deliberately uncapped, since portal towns themselves are uncapped; both values are stored on the item (relicTier, relicMaxStacks) and shown in the power text. Boss relic stat bonuses bypass HIDDEN_ITEM_TRAIT_STAT_CAP so ordinary trinkets still cap among themselves while the relic sits on top (getCarriedStatBonus / getRevealedCarriedStatBonus); Rising Power now also banks +1 charge per round the holder is not hit, so it procs in fights where the holder lands most of their swings. A held boss relic can no longer be pickpocketed mid-fight (stealable items read the pack), but it drops with the body. Before that: Player anatomy gating for body/captive acts: non-binary players are no longer assumed to have (or lack) a cock — cock-worded acts are male-only and non-binary players get generic ride / grind / penetrate options (generic narration never names the member; generic climaxes record no load or smell marks); female players gain a "Grind pussies" f/f tribadism option (unconscious bodies and bound captives) and bound captives gain a "Their cock" group (stroke -> stiff -> mount/ride -> rider climax, coercion-framed) matching the unconscious-body one; face riding for every anatomy on both menus — penis players get their ass rimmed, female players choose pussy or ass serviced, non-binary players get generic genital service (body must lie on its back; hog-tied prone captives are excluded); free-use actors now explicitly exclude undead and incorporeal NPCs (typeof-guarded isUndeadNPC/isEntityIncorporeal) rather than relying only on the humanoid flag. Before that: Free use: a lusty NPC sharing a room with a hog-tied captive or an unconscious body may use them — off-screen via the autonomy tick (at most one per room per tick, evidence only: bodyUse semen load, smell marks, the actor's heat spent, and 'seed' pooling as a real room liquid: spatter -> pool -> flood fixtures, slow evaporation) or witnessed live when an NPC walks in on a victim in the player's room / the player walks in on it (AI-polished erotic beat), never during combat; chance scales with the actor's arousal+lust and temperament, 6-turn victim cooldown, clothed victims are used in the mouth only. Unconscious bodies get Bind options (rope moves into the victim's inventory): "hands & neck" wakes as a leashed session-follower captive that never fights and can slip the leash during combat, "hands & feet" wakes hog-tied and prone; leaving a body auto-raises a lowered bottom. Captor menu bind buttons are always visible (disabled with "Requires rope"); torn ("ruined") clothing can never be re-equipped. Before that: Divine favor "Regrowth" (any patron, asked at a shrine): restores one severed arm or leg per use, out of combat; every patron can grant it; the deity picks which when both are lost. Before that: Wounds need treating: an open wound (bleeding or a limb at 65% or less) slows rest/sleep healing (x0.4, floor 1 HP per 6 turns) unless bandaged (x0.7) AND cleaned with spirits or fire (x1); Interact > Tend wounds, a fixture-card "Use fire to cauterize" at any hearth/forge/brazier/cauldron/torch, torches, and a free Cauterize for anyone who casts a fire spell; potions, healing spells and herbs treat outright; untreated wounds can infect (-2 willpower, -2 max stamina) until cleaned; limbs now heal with HP. Before that: Day clock (54-turn day) with Sleep (Interact > Sleep on any bed) and fatigue: each full day awake past the first costs 1 max stamina (floor 1) until a night's sleep, with a system line each day; Rest HP is slow in Dungeon/Ruins/Underground City/Swamp (stamina recovery unchanged, a bed multiplies it). Before that: Likes & dislikes page gains Looks (feminine / masculine / androgynous), Chest / breasts and Butt size rows; cap raised from 5 to 8 per side. Before that: Skip button at the top of the likes & dislikes setup page (begins with none picked). Before that: Guide's opening greeting is spoken as three bubbles (opening, mission, advice) with a pause after each; reply options appear after the last. Before that: Zone bosses roll a fixed 3x HP (kept if the relic is lost; 1.5x per portal tier) and every boss relic carries a real power (Rising Power physical/magic, Rising Mirror, Rising Shadow; the relic text no longer promises the boss's own multipliers); Look around splits creatures, objects and structure into three paragraphs and lists the walls (8 in dungeon/ruin rooms, 4 in building rooms, with door/archway/solid), replacing Interact > Walls; room-size line now has its leading space. Before that: Start modes (Survive / Settle it / Fresh) set difficulty; backstory pressure (warning, emissary, pursuer waves, per-backstory terms); timed guide entrance after the prologue; guide is the player's species; species native-speech layer. Before that: Opening intro card at game start (wizard-staged scene, AI polish, shown once). Before that: Species shown on the left stats panel. Before that: Setup wizard: likes & dislikes moved to a last page (no randomize), Quick Start button on page 1. Before that: Married NPCs shrug off flirt/tease unless disinhibited (>=40). Before that: NPC ties (family, friends, workmates; same species only) wired at creation; 'ask about the people in their life'. Before that: NPC social sheet reveals (ask about standing, need, worry, liking, secret) via handleSocialFact. Before that: Keys are made for one real lock (door or chest) and carried by NPCs (staff/guards for their building); loose brass/rusted key loot removed. Before that: Rented room is built when you pay (beside the inn's upstairs hall) and persists; loose keys in the pack are bound to a real locked door and open it. Before that: Weekly inn room lease (innkeeper 'Rent a room', persistent Room key, expiry, kingdom landholders); guide lodging topic/hint. Before that: A completed rest on a bed grants a willpower buff (Well rested +2 proper bed, Rested +1 rough). Before that: Sleeping in a proper bed doubles rest recovery (rough bunks +25%), owned or not. Before that: Ghost vices (greed/pride/envy/wrath/cowardice): passive combat behaviour plus a "play on its vice" lure button (GHOST_VICES). Before that: Guide simplified: shared mission (get stronger, earn coin, follow your lead) and the death/blessing line in the opening, state-based "What should I do next?", an "Ask a question" menu and typed-question matching (scripted answers), and trained-once flag. Before that: Hubs deepened (shrine, vault/armory/library, locked boss lair per zone) with themed room names (per-room name override). Before that: Every non-Town zone now starts in a pre-built hub (Lantern Quarter, The Warrens, Stilt Village, Pilgrims' Camp; see ZONE_HUBS in world-data) and the start page rates each zone Easy/Normal/Hard/Brutal for your species (getStartDifficulty): hostility shift for the opening cast, coins + healing potions for Hard/Brutal. Before that: Species reaction also shifts NPC hostility and is applied on room entry (see npc-data). Before that: Frame (ectomorph/mesomorph/endomorph) now gives the player a small stat-XP multiplier (see FRAME_STAT_XP_MULT); setup shows it. Before that: Glance capped to one success per exit per room; five-page setup wizard (name/species/gender, body+class, past, traits, start location) with per-page Randomize; species-driven appearance options (hairless scaled species, scale colour, lore builds, distinguishing feature); Genitalia + Breasts selection; species change trims overspent stat points. Before that: sessionFollowers, affirmative extraction, intimacy error logging, duplicate button fix, penetration prefetch, intimacy debug mode, pull_out_generic, ai() exposed, possessive pronoun fix, AI player-action detection (gerunds), removed alert confirm on position change, exposed setup functions on window for onclick
-window.__ENGINE_CORE_VERSION = "2026-10-30-008";
+window.__ENGINE_CORE_VERSION = "2026-10-30-010";
 
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
@@ -30136,7 +30160,7 @@ function decorateDrunkPlayerText(choice) {
 // ({ active, done, seq, boards }). Wall rebuild progress lives on the room's
 // collapse record (room.collapse.exits[dir].rebuild).
 const JOB_WORKDAY_TURNS = 30;               // story turns in a job's day
-const JOB_NIGHT_TURNS = 24;                 // turns slept through
+const JOB_NIGHT_TURNS = 24;                 // recovery-rate reference, not a fixed sleep duration
 const JOB_SLEEP_HEAL_RATIO = 0.5;           // share of max HP recovered by a night's sleep
 const JOB_EVENT_CHANCE = 0.2;
 const JOB_STANDING_MAX = 100;
@@ -30664,7 +30688,7 @@ function renderJobMenu() {
         buttons.push(sharedButton(def.verb + " (" + def.stamina + " stamina)", () => performJobShift(), { disabled: !!block, title: block || describeJobPay(def), textChoice: { action: "work" } }));
         if (job.state === "dayDone") {
             const sleepBlock = getJobSleepBlockReason(job);
-            buttons.push(sharedButton("Sleep until morning", () => openSleepSpotMenu("job"), { disabled: !!sleepBlock, title: sleepBlock || "Sleep through the night. You wake rested, and can carry on or take your pay.", textChoice: { action: "sleep" } }));
+            buttons.push(sharedButton("Sleep until rested", () => openSleepSpotMenu("job"), { disabled: !!sleepBlock, title: sleepBlock || "Sleep until your weariness, stamina and mana recover, then carry on or take your pay.", textChoice: { action: "sleep" } }));
         }
         if (job.owed > 0 || def.mode === "real") {
             buttons.push(sharedButton("Collect your pay and stop (" + job.owed + "g)", () => collectJobPay(true), { disabled: job.owed <= 0 && def.mode !== "real", textChoice: { action: "collect" }, title: "Take the wages you have earned and finish for now." }));
@@ -30848,6 +30872,8 @@ function sleepThroughNight(spot) {
     const room = G.activeRoom;
     const transition = typeof beginSleepTransition === "function" ? beginSleepTransition("job-sleep") : null;
     const plan = assignSleepSpots(room, spot);
+    const sleepNeeds = new Map(plan.before.map(function (before) { return [before.entity, getSleepTurnsUntilRested(before.entity, plan)]; }));
+    const sleepTurns = sleepNeeds.get(player);
     const arrangement = describeSleepArrangement(plan);
     let slept = 0;
     let interrupted = false;
@@ -30855,7 +30881,7 @@ function sleepThroughNight(spot) {
     activeRecoveryPlans.set(room, { player: player, plan: plan });
     jobFatigue.sleeping = true;
     try {
-        for (let i = 0; i < JOB_NIGHT_TURNS; i++) {
+        for (let i = 0; i < sleepTurns; i++) {
             advanceStoryTurn(1);
             slept++;
             if (transition) recordSleepTransition(transition);
@@ -30882,7 +30908,9 @@ function sleepThroughNight(spot) {
     const staminaRecovered = restoreEntityStamina(player, Math.ceil(player.staminaMax * share * restFactor));
     const staminaNote = staminaRecovered > 0 ? " You recover " + staminaRecovered + " stamina." : "";
     if (playerUsesMana(player)) restorePlayerMana(player, Math.ceil(getPlayerManaCeiling(player) * share * restFactor));
-    restHealParty(room, 0, { sleep: true, share: share, turns: slept, quality: nightBed, completed: !interrupted, ratioFor: plan.ratioOf, qualityFor: plan.qualityOf, restFactorFor: plan.restFactorOf });
+    restHealParty(room, 0, { sleep: true, share: share, turns: slept, quality: nightBed, completed: !interrupted,
+        completedFor: function (member) { return !interrupted && slept >= (sleepNeeds.get(member) || SLEEP_TURNS); },
+        ratioFor: plan.ratioOf, qualityFor: plan.qualityOf, restFactorFor: plan.restFactorOf });
     publishRestPlan(interrupted ? "interrupted" : "result", "job-sleep", plan, slept);
     renderStats();
     if (interrupted) {
@@ -30897,7 +30925,7 @@ function sleepThroughNight(spot) {
     job.day++;
     const nightBuff = applyBedRestBonus(player, nightBed);
     renderJobMenu();
-    setNarration(arrangement + " You sleep" + (transition ? " from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : " through the night") + " and wake rested (+" + (player.hp - before) + " HP)." + staminaNote + (nightLift ? " " + nightLift : "") + (nightBuff ? " " + nightBuff : "") + " A new day begins. Carry on, or take your pay and go? " + describeJobStatus(job));
+    setNarration(arrangement + " You sleep for " + slept + " turns" + (transition ? ", from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : "") + " and wake rested (+" + (player.hp - before) + " HP)." + staminaNote + (nightLift ? " " + nightLift : "") + (nightBuff ? " " + nightBuff : "") + " You are ready for another workday. Carry on, or take your pay and go? " + describeJobStatus(job));
     saveGameState();
     return transition ? finishSleepTransition(transition, false) : undefined;
 }
@@ -61346,7 +61374,7 @@ function applyBedRestBonus(player, quality) {
 // top (syncFatigueStamina). Old saves start freshly rested at load.
 const DAY_TURNS = typeof LODGING_DAY_TURNS === "number" ? LODGING_DAY_TURNS : 54;
 const DAY_DAYLIGHT_TURNS = 30;              // turns 0-29 of a day are daylight, 30-53 night
-const SLEEP_TURNS = 24;                     // one night's sleep
+const SLEEP_TURNS = 24;                     // recovery-rate reference for a full night's sleep
 const SLEEP_HP_RATIO_PROPER = 0.5;          // share of max HP a full night on a real bed heals
 const SLEEP_HP_RATIO_MAKESHIFT = 0.35;      // ... on a pallet, bunk or mat
 const FATIGUE_GRACE_DAYS = 1;               // days awake before stamina starts to drain
@@ -61615,7 +61643,7 @@ function tickFatigue() {
     syncFatigueStamina(player);
 }
 
-// A completed night's sleep on a bed: the clock restarts and the penalty lifts.
+// Completed restorative sleep: the clock restarts and the penalty lifts.
 function markProperSleep(player) {
     if (!player) return "";
     const f = ensureFatigueState(player);
@@ -61627,6 +61655,23 @@ function markProperSleep(player) {
 }
 
 function getSleepBedQuality(room) { return getRestBedQuality(room); }
+
+// Wake when the player's sleep debt and available resource pools are restored.
+// A day awake needs one reference night; accumulated debt tops out at two.
+// Wounds heal at their existing rate but do not force sleep until full health.
+function getSleepTurnsUntilRested(entity, plan) {
+    const fatigue = ensureFatigueState(entity);
+    const currentMax = entity.staminaMax || 0;
+    const base = fatigue.applied > 0 && typeof fatigue.base === "number" && currentMax === fatigue.base - fatigue.applied ? fatigue.base : currentMax;
+    const restedMax = Math.max(Math.min(base, FATIGUE_MIN_STAMINA_MAX), base - getInfectionStaminaPenalty(entity));
+    const restFactor = plan.restFactorOf(entity);
+    const debtTurns = Math.min(2 * SLEEP_TURNS, Math.ceil(getTurnsAwake(entity) * SLEEP_TURNS / DAY_TURNS));
+    const resourceTurns = function (current, maximum) {
+        return maximum > 0 ? Math.ceil(Math.max(0, maximum - (current || 0)) * SLEEP_TURNS / (maximum * restFactor)) : 0;
+    };
+    return Math.max(1, debtTurns, resourceTurns(entity.stamina, restedMax),
+        playerUsesMana(entity) ? resourceTurns(entity.mana, getPlayerManaCeiling(entity)) : 0);
+}
 
 // ── SLEEPING SPOTS ───────────────────────────────────────────────
 // Sleeping asks where: a real bed, a cot (pallet, bunk, mat, bedroll) or the
@@ -61824,14 +61869,15 @@ function renderSleepSpotMenu(mode) {
         if (plan.playerSpot !== type) return;
         const preview = describeSleepArrangement(plan);
         const ratio = Math.round(plan.ratioOf(G.player) * 100);
-        choices.push({ surface: type, healthPercent: ratio, arrangement: preview, spots: publicRestPlan(plan) });
+        const turns = getSleepTurnsUntilRested(G.player, plan);
+        choices.push({ surface: type, healthPercent: ratio, turns: turns, arrangement: preview, spots: publicRestPlan(plan) });
         buttons.push(makeButton(labels[type], function () {
             if (menu) clearSharedChoiceMenu(menu);
             let transition;
             if (mode === "job") transition = sleepThroughNight(type); else { closeInteractMenu(); transition = performSleep(type); }
             const result = { status: mode === "job" ? "needs_input" : "completed", outputPublished: true };
             return transition && typeof transition.then === "function" ? transition.then(function () { return result; }) : result;
-        }, { title: preview + " Restores up to " + ratio + " percent of your maximum health before wound penalties. Sharing reduces stamina and mana recovery too.", textChoice: { action: "sleep", surface: type } }));
+        }, { title: preview + " Sleep until rested, about " + turns + " turns. Health recovery is " + ratio + " percent of your maximum per 24 turns before wound penalties. Sharing slows recovery.", textChoice: { action: "sleep", surface: type } }));
     });
     appendCombatGroup(el, title, buttons);
     const cancel = function () { if (menu) clearSharedChoiceMenu(menu); if (mode === "job") renderJobMenu(); else closeInteractMenu(); return { status: "blocked", message: "Sleep cancelled." }; };
@@ -61952,6 +61998,8 @@ function performSleep(spot) {
 
     const transition = typeof beginSleepTransition === "function" ? beginSleepTransition("sleep") : null;
     const plan = assignSleepSpots(room, spot);
+    const sleepNeeds = new Map(plan.before.map(function (before) { return [before.entity, getSleepTurnsUntilRested(before.entity, plan)]; }));
+    const sleepTurns = sleepNeeds.get(player);
     const quality = plan.qualityOf(player);
     const arrangement = describeSleepArrangement(plan);
     const f = ensureFatigueState(player);
@@ -61961,7 +62009,7 @@ function performSleep(spot) {
     activeRecoveryPlans.set(room, { player: player, plan: plan });
     f.sleeping = true;
     try {
-        for (let i = 0; i < SLEEP_TURNS; i++) {
+        for (let i = 0; i < sleepTurns; i++) {
             advanceStoryTurn(1);
             slept++;
             if (transition) recordSleepTransition(transition);
@@ -61992,6 +62040,7 @@ function performSleep(spot) {
     if (playerUsesMana(player)) restorePlayerMana(player, Math.ceil(getPlayerManaCeiling(player) * share * restFactor));
     const partyWoke = restHealParty(room, 0, {
         sleep: true, share: share, turns: slept, quality: quality, completed: !interrupted,
+        completedFor: function (member) { return !interrupted && slept >= (sleepNeeds.get(member) || SLEEP_TURNS); },
         ratio: SLEEP_SPOT_HP_RATIO.floor, ratioFor: plan.ratioOf, restFactorFor: plan.restFactorOf, qualityFor: plan.qualityOf
     });
     publishRestPlan(interrupted ? "interrupted" : "result", "sleep", plan, slept);
@@ -62008,7 +62057,7 @@ function performSleep(spot) {
     const buff = applyBedRestBonus(player, quality);
     const gained = player.hp - hpBefore;
     const partyNote = getRestingPartyMembers(room).length ? " Your companions sleep and recover alongside you." : "";
-    const base = arrangement + " You sleep" + (transition ? " from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : " through the night") +
+    const base = arrangement + " You sleep for " + slept + (slept === 1 ? " turn" : " turns") + (transition ? ", from " + transition.phases[0].label.toLowerCase() + " to " + getTimePhase().label.toLowerCase() : "") +
         (gained > 0 ? " and wake restored (+" + gained + " HP)." : " and wake rested.");
     renderNarrationWithRoomObservations(room, base + staminaNote + partyNote + (lifted ? " " + lifted : "") + (buff ? " " + buff : "") +
         (partyWoke.length ? " " + partyWoke.join(" ") : "") +
@@ -62609,10 +62658,11 @@ function recoverRestingCompanion(member, room, options) {
     const factor = getWoundHealFactor(member);
     let heal;
     if (options.sleep) {
+        const completed = typeof options.completedFor === "function" ? options.completedFor(member) : options.completed;
         const quality = typeof options.qualityFor === "function" ? options.qualityFor(member) : options.quality;
         const ratio = typeof options.ratioFor === "function" ? options.ratioFor(member) : options.ratio;
         const restFactor = typeof options.restFactorFor === "function" ? options.restFactorFor(member) : 1;
-        if (options.completed && quality) markProperSleep(member);
+        if (completed && quality) markProperSleep(member);
         let full;
         if (options.fractional) { member._npcSleepHpCarry = (member._npcSleepHpCarry || 0) + max * ratio * options.share; full = Math.floor(member._npcSleepHpCarry + 1e-9); member._npcSleepHpCarry -= full; }
         else full = Math.round(max * ratio * options.share);
@@ -62621,7 +62671,7 @@ function recoverRestingCompanion(member, room, options) {
         const recoveryAmount = function (key, amount) { if (!options.fractional) return Math.ceil(amount); member[key] = (member[key] || 0) + amount; const whole = Math.floor(member[key] + 1e-9); member[key] -= whole; return whole; };
         restoreEntityStamina(member, recoveryAmount("_npcSleepStaminaCarry", (member.staminaMax || 0) * options.share * restFactor));
         restorePlayerMana(member, recoveryAmount("_npcSleepManaCarry", getPlayerManaCeiling(member) * options.share * restFactor));
-        if (options.completed) { resetSpeciesRestState(member, null); applyBedRestBonus(member, quality); }
+        if (completed) { resetSpeciesRestState(member, null); applyBedRestBonus(member, quality); }
     } else {
         const rates = getCompanionRestRates(member, room, options.plan);
         const hp = factor < 1 ? Math.max(rates.hp * factor, Math.min(rates.hp, WOUND_HEAL_FLOOR_PER_TURN)) : rates.hp;
@@ -70690,7 +70740,7 @@ const INTERACT_MENU_ACTIONS = [
         label: "Sleep",
         visible: function (room) { return !!room; },
         disabledReason: function (room) { return getSleepBlockReason(room); },
-        title: "Sleep through the night on a bed, a cot or the floor. Clears weariness from going without sleep; beds and not sharing recover the most.",
+        title: "Sleep until rested on a bed, a cot or the floor. Duration depends on time awake and missing stamina or mana; sharing slows recovery.",
         run: function () { return openSleepSpotMenu(); }
     },
     {
@@ -85943,10 +85993,14 @@ function getIntimacyPartCache(npc) {
     return m;
 }
 
-function getNPCIntimacyPartHashKey(npc, part) {
-    const terms = getIntimacyPartTerms(npc, part);
+function getNPCIntimacyPartHashKey(npc, part, fluidFocus) {
+    // fluidFocus must be part of the key: the cum button redraws the shown
+    // part with fluids visible, and that variant needs its own cache entry
+    // (previously the focus flag was dropped here, so the redraw hit the
+    // plain cache and showed the unchanged image).
+    const terms = getIntimacyPartTerms(npc, part, undefined, !!fluidFocus);
     if (!terms) return null;
-    return String(npcPortraitHash(PORTRAIT_PROMPT_VERSION + "|intimacy-part-v2|" + part + "|" + (terms.cacheKey || terms.text)));
+    return String(npcPortraitHash(PORTRAIT_PROMPT_VERSION + "|intimacy-part-v2|" + part + "|" + (fluidFocus ? "fluid|" : "") + (terms.cacheKey || terms.text)));
 }
 
 // Returns gender and species for intimacy portrait prompts (e.g., "female elf" or "male human")
