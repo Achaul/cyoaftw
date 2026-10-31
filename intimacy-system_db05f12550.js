@@ -2,8 +2,21 @@
  * INTIMACY SYSTEM - MAIN IMPLEMENTATION
  * Core functionality for the NSFW intimacy action menu
  *
- * Version: 2026-10-17-017
+ * Version: 2026-10-28-004
+ * Gate-suppressed NPC-response beats skip the live AI call (template returned immediately; roll computed once, hoisted before generation)
+ * Phase C: NPC response is now LIVE AI-first (8s race) for sexual acts; caches are fallback-only, template is last resort. _source reports live-ai/cached-ai/template
+ * Continuation beats (same act repeated/continued) are always AI-written via generateContinuationNarrative + buildContinuationPrompt (quality prose, supplied-anatomy only)
+ * Prompts: SUPPLIED ANATOMY whitelist (buildAnatomyWhitelist) + KNOWN FACTS block (buildFactsBlock) — AI must never invent anatomy not supplied; buildActionContext now carries descriptors through
+ * Phase B: menu sections are now canonical — every act carries menuSection (intimacy-data-acts.js v2026-10-28-001)
+ * getMenuSection reduced to the canonical field + small fallbacks (240-line heuristic cascade removed)
+ * RESTORED: full action validation pipeline (generateValidActions gates + executeIntimacyAction validation)
+ * Fixed: sleeping-action check ran for AWAKE NPCs and rejected every non-sleepingSafe act (the "nothing is valid" deadlock)
+ * Fixed: mouth/lips kissing deadlocked on its own disinhibition category - now petting-tier (0)
+ * Fixed: hasNPCTail now honors the hydrated npc.hasTail flag (consistent with intimacy-data-acts)
+ * Dominant mode: bypass now covers disinhibition, arousal consent, requiresConsent and lube; bypassed acts carry act._dominantBypass (reset per evaluation) and render with a red border
+ * Menu: body sections with no entries are hidden instead of always shown
  * Adds: impact play tolerance system (size + temperament based), skin color progression (pink→red→welted), pain/protest past tolerance, NPC can slap back, clear spanking narration
+ * Fixed: getActionCategory now returns proper categories for oral on genitals (Cock/Pussy/Anus instead of all Anus)
  * This system provides:
  * - LOT (Tool-Verb-Target) based action generation
  * - Staged intimacy (Clothed -> Partial -> Nude)
@@ -12,7 +25,7 @@
  * - One-at-a-time AI response generation
  * - Gender filtering and pronoun system
  */
-window.__INTIMACY_SYSTEM_VERSION = "2026-10-17-017";
+window.__INTIMACY_SYSTEM_VERSION = "2026-10-28-004";
 
 
 // ============================================================================
@@ -1139,10 +1152,10 @@ function getObjectPronoun(npc) {
  * Maps equipment slots to intimacy clothing categories (top, bottom, undergarments)
  */
 function getClothingStateForCharacter(character) {
-    if (!character) return { top: true, bottom: true, undergarments: true };
+    if (!character) return { top: true, bottom: true };
     
     // Default to clothed - most characters wear clothes by default
-    const defaultState = { top: true, bottom: true, undergarments: true };
+    const defaultState = { top: true, bottom: true };
     
     // If character has equipped items, use them to determine clothing state
     if (character.equipped) {
@@ -1152,8 +1165,7 @@ function getClothingStateForCharacter(character) {
         
         return {
             top: hasTop,
-            bottom: hasBottom,
-            undergarments: true  // Assume underwear is worn by default
+            bottom: hasBottom
         };
     }
     
@@ -1162,7 +1174,7 @@ function getClothingStateForCharacter(character) {
 }
 
 function initializeIntimacyState(npc) {
-    if (!npc) return;
+    if (!npc) return null;
     
     // Determine gender for tracking
     const npcGender = (npc.gender || "female").toLowerCase();
@@ -1173,7 +1185,7 @@ function initializeIntimacyState(npc) {
     const playerClothing = getClothingStateForCharacter(player);
     const npcClothing = getClothingStateForCharacter(npc);
     
-    // If intimacy state already exists, only update clothing if it's missing or invalid
+    // If intimacy state already exists, ensure all required properties are present
     if (npc.intimacy) {
         // Check if clothing state exists and is valid
         if (!npc.intimacy.clothing || 
@@ -1185,9 +1197,65 @@ function initializeIntimacyState(npc) {
                 npc: npcClothing
             };
         } else {
-            // Clothing state exists, but log it for debugging
-            console.log(`[Intimacy] Clothing state already exists - NPC: ${JSON.stringify(npc.intimacy.clothing.npc)}, Player: ${JSON.stringify(npc.intimacy.clothing.player)}`);
+            // Clothing state exists - this is normal, no need to log
         }
+        
+        // Ensure position object exists
+        if (!npc.intimacy.position) {
+            npc.intimacy.position = {
+                player: DEFAULT_POSITION,
+                npc: DEFAULT_POSITION
+            };
+        }
+        
+        // Ensure encounter object exists
+        if (!npc.intimacy.encounter) {
+            npc.intimacy.encounter = {
+                active: false,
+                startedAt: null,
+                lastActivityAt: null
+            };
+        }
+        
+        // Ensure actionHistory array exists
+        if (!npc.intimacy.actionHistory) {
+            npc.intimacy.actionHistory = [];
+        }
+        
+        // Ensure engagedActs array exists
+        if (!npc.intimacy.engagedActs) {
+            npc.intimacy.engagedActs = [];
+        }
+        
+        // Ensure arousal object exists
+        if (!npc.intimacy.arousal) {
+            npc.intimacy.arousal = {
+                player: 0,
+                npc: 0
+            };
+        }
+        
+        // Ensure penetration object exists
+        if (!npc.intimacy.penetration) {
+            npc.intimacy.penetration = {
+                active: false,
+                tool: null,
+                target: null,
+                depth: 0,
+                playerIsBottom: false
+            };
+        }
+        
+        // Ensure lube object exists
+        if (!npc.intimacy.lube) {
+            npc.intimacy.lube = {
+                vagina: { hasLube: false, level: 0 },
+                anus: { hasLube: false, level: 0 },
+                mouth: { hasLube: false, level: 0 },
+                general: { hasLube: false, level: 0 }
+            };
+        }
+        
         return npc.intimacy;
     }
     
@@ -1420,6 +1488,31 @@ function startIntimacyEncounter(npc, player, positionId = null) {
         initializeIntimacyState(npc);
     }
     
+    // Ensure position object exists
+    if (!npc.intimacy.position) {
+        npc.intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
+    
+    // Ensure clothing object exists
+    if (!npc.intimacy.clothing) {
+        npc.intimacy.clothing = {
+            player: {},
+            npc: {}
+        };
+    }
+    
+    // Ensure encounter object exists
+    if (!npc.intimacy.encounter) {
+        npc.intimacy.encounter = {
+            active: false,
+            startedAt: null,
+            lastActivityAt: null
+        };
+    }
+    
     // Set position
     const pos = positionId || DEFAULT_POSITION;
     npc.intimacy.position.player = pos;
@@ -1460,6 +1553,15 @@ function startIntimacyEncounter(npc, player, positionId = null) {
 function endIntimacyEncounter(npc) {
     if (!npc || !npc.intimacy) return false;
     
+    // Ensure encounter object exists
+    if (!npc.intimacy.encounter) {
+        npc.intimacy.encounter = {
+            active: false,
+            startedAt: null,
+            lastActivityAt: null
+        };
+    }
+    
     npc.intimacy.encounter.active = false;
     npc.intimacy.encounter.startedAt = null;
     npc.intimacy.encounter.lastActivityAt = null;
@@ -1467,6 +1569,11 @@ function endIntimacyEncounter(npc) {
     // Hide the opt-in second portrait with the scene (SFW engine feature,
     // typeof-guarded no-op when the engine doesn't provide it).
     if (typeof window.hideIntimacyPortrait === "function") window.hideIntimacyPortrait();
+    
+    // Restore left panel to normal state
+    if (typeof window.restoreLeftPanelAfterIntimacy === "function") {
+        window.restoreLeftPanelAfterIntimacy();
+    }
     
     // Stop any NPC-led pleasure loop (engine-side oral/stroke loop)
     if (npc.intimacy.npcPleasureLoop) npc.intimacy.npcPleasureLoop = null;
@@ -1541,6 +1648,16 @@ function endIntimacyEncounter(npc) {
  */
 function updateLastActivity(npc) {
     if (!npc || !npc.intimacy) return;
+    
+    // Ensure encounter object exists
+    if (!npc.intimacy.encounter) {
+        npc.intimacy.encounter = {
+            active: false,
+            startedAt: null,
+            lastActivityAt: null
+        };
+    }
+    
     npc.intimacy.encounter.lastActivityAt = Date.now();
 }
 
@@ -1554,7 +1671,8 @@ function updateLastActivity(npc) {
 function generateValidActions(npc, player, positionId = null) {
     if (!npc || !player) return [];
     
-    const intimacy = npc.intimacy || initializeIntimacyState(npc);
+    // Always call initializeIntimacyState to ensure all properties exist
+    const intimacy = initializeIntimacyState(npc);
     const clothingState = intimacy.clothing;
     const currentPosition = positionId || intimacy.position.player;
     const stage = getIntimacyStage(clothingState);
@@ -1566,7 +1684,10 @@ function generateValidActions(npc, player, positionId = null) {
         const act = getAct(actId);
         if (!act) continue;
         
-        // Check if action is valid for current state
+        // Full gate pipeline: anatomy (cloaca/tail/hemipenis), gender,
+        // demeanor, position, clothing and the disinhibition ladder all
+        // live in checkActionValidity. Dominant-mode bypass is decided there
+        // (act._dominantBypass) so the menu can draw the red border.
         if (isActionValid(actId, npc, player, currentPosition, clothingState)) {
             // Determine if player is the actor (true) or NPC is the actor (false)
             // playerIsBottom means player is receiving, so NPC is actor
@@ -1639,8 +1760,9 @@ function isActionValid(actId, npc, player, positionId, clothingState) {
  *
  * Tease-type acts are not all equal — a kiss and oral sex share the TEASE
  * type — so tease thresholds escalate by target area and tool:
- *   0  — petting (hair/neck-face/body touching) and _clothed variants
- *   5  — kissing (mouth/lips), chest/butt contact
+ *   0  — petting (hair/neck-face/body touching), mouth/lips kissing,
+ *         and _clothed variants
+ *   5  — chest/butt contact
  *   10 — groping (hand on genitals)
  *   15 — fingering (fingers on genitals)
  *   20 — oral (mouth on genitals, or a genital tool on their face)
@@ -1675,8 +1797,12 @@ function _teaseDisinhibitionThreshold(act) {
         return 10;                                                              // groping
     }
     if (TEASE_CHEST_TARGETS.indexOf(target) !== -1) return 5;                    // chest/butt contact
-    if (target === "mouth" || target === "lips") return 5;                        // kissing
-    return 0;                                                                    // petting
+    // Mouth/lips kissing is petting-tier (0), not 5: lips are never
+    // clothed, so no exposure discount can ever apply, and the only acts
+    // that build the "Mouth & Lips" disinhibition category are the kissing
+    // acts themselves — gating them on their own category deadlocks the
+    // very first kiss on a fresh NPC.
+    return 0;                                                                    // petting/kissing
 }
 
 // Penetration ladder: deep oral < vaginal < anal.
@@ -1764,6 +1890,97 @@ function _actDisinhibitionGrantDelta(act) {
 }
 
 /**
+ * Generate wake-up reaction for a sleeping NPC who was disturbed
+ * Returns reaction object with narration, reaction type, and whether to end encounter
+ */
+function generateSleepingWakeUpReaction(npc, player, actId) {
+    if (!npc) {
+        return { 
+            narration: "They wake up!", 
+            reaction: "startled", 
+            shouldEndEncounter: true 
+        };
+    }
+    
+    const act = getAct(actId);
+    const actName = act ? act.label || actId : actId;
+    const npcName = npc.name || "the NPC";
+    const playerName = player.name || "you";
+    
+    // Determine reaction based on act intensity and NPC personality
+    let reactionType = "startled";
+    let shouldEnd = true;
+    let baseNarration = "";
+    
+    // Categorize act by intensity
+    const isGentleAct = act && (act.type === ACT_TYPES.TEASE || act.type === ACT_TYPES.CLOTHING);
+    const isIntimateAct = act && (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE);
+    const isImpactAct = act && act.type === ACT_TYPES.IMPACT;
+    
+    // Determine NPC disposition
+    const favor = npc.memory && typeof npc.memory.favorability === "number" ? npc.memory.favorability : 0;
+    const hostility = typeof npc.hostility === "number" ? npc.hostility : 0;
+    const disinhibition = npc.intimacy && npc.intimacy.disinhibition ? npc.intimacy.disinhibition : 0;
+    
+    // Roll for reaction
+    const reactionRoll = Math.random();
+    
+    // Intoxicated NPCs are more disinhibited
+    const isIntoxicated = (npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter._isIntoxicated) || 
+                         (typeof getDrunkTier === "function" ? getDrunkTier(npc) >= 2 : false);
+    
+    // Determine if NPC goes with it or resists
+    const goWithItChance = Math.min(0.9, 0.1 + (favor / 200) + (disinhibition / 200) + (isIntoxicated ? 0.3 : 0));
+    const goesWithIt = reactionRoll < goWithItChance;
+    
+    if (isGentleAct) {
+        if (goesWithIt) {
+            reactionType = "accepting";
+            shouldEnd = false;
+            baseNarration = `${npcName} stirs and mumbles sleepily, but doesn't fully wake. Their eyes flutter as ${playerName} ${actName.toLowerCase()}, a small smile playing on their lips.`;
+        } else {
+            reactionType = favor > 30 ? "surprised" : "annoyed";
+            shouldEnd = true;
+            baseNarration = `${npcName} wakes with a start, blinking in confusion. "W-what are you...?" They ${favor > 30 ? "rub their eyes" : "pull away"}, ${favor > 50 ? "smiling" : favor > 0 ? "frowning" : "glancing around angrily"}.`;
+        }
+    } else if (isIntimateAct) {
+        if (goesWithIt) {
+            reactionType = "aroused";
+            shouldEnd = false;
+            baseNarration = `${npcName} gasps as they wake, their body responding before their mind catches up. "Mmm..." they murmur, arching into ${playerName}'s touch, their sleep-addled mind slow to protest.`;
+        } else {
+            reactionType = hostility > 50 ? "angry" : favor > 20 ? "shocked" : "furious";
+            shouldEnd = true;
+            baseNarration = `${npcName} wakes with a shout, pushing ${playerName} away! "Get off!" They scramble back, ${hostility > 50 ? "drawing a weapon" : favor > 20 ? "looking startled" : "eyes wide with outrage"}.`;
+        }
+    } else if (isImpactAct) {
+        reactionType = Math.random() < 0.8 ? "angry" : "shocked";
+        shouldEnd = true;
+        baseNarration = `${npcName} jolts awake with a cry! "Ow! What the-?" They ${reactionType === "angry" ? "leap to their feet, ready to fight" : "stare in disbelief"} at ${playerName}.`;
+    } else {
+        reactionType = goesWithIt ? "accepting" : "startled";
+        shouldEnd = !goesWithIt;
+        baseNarration = `${npcName} wakes up, ${goesWithIt ? "yawning and stretching" : "bolting upright"} as ${playerName} ${actName.toLowerCase()}.`;
+    }
+    
+    // Add flavor based on intoxication
+    if (isIntoxicated) {
+        baseNarration = baseNarration.replace("wakes", "groggily stirs").replace("wake", "stir");
+        if (goesWithIt) {
+            baseNarration += " Their drunk haze makes them slow to realize what's happening.";
+        } else {
+            baseNarration += " Even through their drunk fog, they sense something is wrong.";
+        }
+    }
+    
+    return {
+        narration: baseNarration,
+        reaction: reactionType,
+        shouldEndEncounter: shouldEnd
+    };
+}
+
+/**
  * Check if action is valid and return reason if not
  * Returns { valid: boolean, reason?: string } for an action
  */
@@ -1793,9 +2010,97 @@ function _playerPussyOralActive(npc) {
     return !!(la && ["lick_player_pussy", "suck_player_clit"].indexOf(String(la.actId || "")) !== -1);
 }
 
+/**
+ * Whether the dominant-mode bypass is active for this NPC: gates
+ * (disinhibition, arousal consent, requiresConsent, lube) do not hide the
+ * act; it is offered with a red border instead (act._dominantBypass).
+ * Unconscious / sleeping / surrendered / bound NPCs default to dominant.
+ */
+function _dominantBypassActive(npc) {
+    if (!npc) return false;
+    var isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+        (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true);
+    var isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+        (npc.currentState && npc.currentState.sleeping);
+    var demeanor = (npc.intimacy && npc.intimacy._demeanorMode)
+        ? String(npc.intimacy._demeanorMode).toLowerCase()
+        : ((isUnconscious || isSleeping || npc.surrendered || npc.bound) ? "dominant" : "consentual");
+    return demeanor === "dominant";
+}
+
 function checkActionValidity(actId, npc, player, positionId, clothingState) {
     const act = getAct(actId);
     if (!act) return { valid: false, reason: "unknown action" };
+    // Reset the dominant-bypass marker each evaluation: it is set below by
+    // whichever gate (disinhibition/arousal/consent/lube) the dominant-mode
+    // bypass actually skipped, and read by the menu for the red border.
+    // Resetting keeps it fresh instead of leaking across turns or modes.
+    act._dominantBypass = false;
+
+    // UNCONSCIOUS ACTION CHECK
+    // Check if NPC is unconscious
+    const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                       (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+    
+    // Check if NPC is sleeping
+    const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+                     (npc && npc.currentState && npc.currentState.sleeping);
+    
+    // If this is an unconscious-only action, verify the NPC is unconscious
+    if (act.unconsciousOnly === true) {
+        if (!isUnconscious) {
+            return { valid: false, reason: "not unconscious", hidden: true };
+        }
+    }
+    
+    // If NPC is unconscious or sleeping, hide all NPC-actor actions (playerIsBottom: true)
+    // since the unconscious/sleeping NPC cannot participate or respond
+    if ((isUnconscious || isSleeping) && act.playerIsBottom === true) {
+        return { valid: false, reason: isUnconscious ? "NPC is unconscious" : "NPC is sleeping", hidden: true };
+    }
+    
+    // For unconscious NPCs: allow ALL player-actor actions (they can't resist)
+    // For sleeping NPCs: allow all player-actor actions too (they can't resist while asleep)
+    // Only filter by position and clothing requirements below
+    if (isUnconscious || isSleeping) {
+        // No additional filtering for unconscious/sleeping - all player actions are allowed
+        // Position and clothing checks still apply below
+    } else if ((npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.isSleepingEncounter === true)) {
+        // SLEEPING ACTION CHECK (legacy - for a sleeping-encounter NPC that
+        // is asleep but not flagged unconscious). This must NOT run for
+        // ordinary awake NPCs: it previously sat in the plain else branch
+        // and rejected every non-sleepingSafe act ("act not safe for
+        // sleeping NPC") for fully awake partners, deadlocking the ladder.
+        const intimacyState = npc.intimacy || {};
+        const encounter = intimacyState.encounter || {};
+        const isIntoxicated = encounter._isIntoxicated === true;
+        const isExhausted = encounter._isExhausted === true;
+        
+        // For player-actor actions on sleeping NPCs:
+        // - If act is marked as safe for sleeping (sleepingSafe: true), allow it
+        // - If NPC is intoxicated, allow all player-actor actions (lower inhibition)
+        // - If NPC is exhausted, allow all player-actor actions (treats like unconscious initially)
+        // - Otherwise, only allow sleeping-safe acts
+        if (act.sleepingSafe !== true && !isIntoxicated && !isExhausted) {
+            return { valid: false, reason: "act not safe for sleeping NPC", hidden: true };
+        }
+    }
+
+    // Demeanor mode check - actions with requiresDemeanorMode only appear in that demeanor
+    if (act.requiresDemeanorMode) {
+        // Default to dominant for unconscious/sleeping/surrendered/bound NPCs
+        const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                           (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+        const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+                         (npc && npc.currentState && npc.currentState.sleeping);
+        const isSurrenderedOrBound = npc && (npc.surrendered || npc.bound);
+        const defaultDemeanor = (isUnconscious || isSleeping || isSurrenderedOrBound) ? "dominant" : "consentual";
+        const demeanorMode = (npc.intimacy && npc.intimacy._demeanorMode) ? String(npc.intimacy._demeanorMode).toLowerCase() : defaultDemeanor;
+        const allowedModes = Array.isArray(act.requiresDemeanorMode) ? act.requiresDemeanorMode.map(m => String(m).toLowerCase()) : [String(act.requiresDemeanorMode).toLowerCase()];
+        if (!allowedModes.includes(demeanorMode)) {
+            return { valid: false, reason: "wrong demeanor mode", hidden: true };
+        }
+    }
 
     // Cloaca-bearing NPC checks — these must run before clothing/position
     // checks so hidden actions never surface as disabled entries (which
@@ -1814,6 +2119,11 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         return { valid: false, reason: "no tail", hidden: true };
     }
 
+    // Cloaca-specific acts require NPC to have cloaca
+    if (act.requiresNpcCloaca && !npcHasCloacaFlag(npc)) {
+        return { valid: false, reason: "no cloaca", hidden: true };
+    }
+
     // Cloaca-bearing NPCs have a single cloacal vent instead of separate
     // vaginal and anal openings. Vaginal/clitoral actions are hidden — the
     // Cloaca (formerly Anus) category with cloaca relabelling handles it.
@@ -1822,6 +2132,24 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     if (npcHasCloacaFlag(npc) && !act.playerIsBottom && act.id !== "female_ejaculate" &&
         (act.target === "vagina" || act.target === "pussy" || act.target === "clitoris")) {
         return { valid: false, reason: "cloaca replaces vagina", hidden: true };
+    }
+
+    // Player-anatomy gate (hard, hidden): when the player is the actor the
+    // act's TOOL is the player's body part; when receiving (playerIsBottom)
+    // the TARGET is the player's body part. Either way the player must
+    // actually have that anatomy — the guarantee behind "tools reflect the
+    // player's anatomy" (no "impale your cloaca" for a player with none).
+    // Runs before position/clothing so an anatomy mismatch always hides.
+    if (player) {
+        if (typeof ensurePlayerIntimacyAnatomy === "function") ensurePlayerIntimacyAnatomy(player);
+        const pAnat = player.anatomy || {};
+        const playerPart = String(act.playerIsBottom === true ? act.target : act.tool || "").toLowerCase();
+        if (["penis", "cock", "dick"].indexOf(playerPart) !== -1 && !pAnat.penis) {
+            return { valid: false, reason: "player has no penis", hidden: true };
+        }
+        if (["vagina", "pussy"].indexOf(playerPart) !== -1 && !pAnat.vagina) {
+            return { valid: false, reason: "player has no vagina", hidden: true };
+        }
     }
 
     // Check position requirement
@@ -1958,14 +2286,25 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     // willingness. Intercourse needs BOTH: a freshly stripped NPC cannot
     // be penetrated seconds later no matter how much skin is showing.
     // Her arousal is built by the consent-hint beats and foreplay acts.
+    // Consent gate: vaginal penetration requires NPC arousal
+    // Anal penetration only requires lube (not arousal)
     if (!act.playerIsBottom && act.type === ACT_TYPES.PENETRATE) {
         var _cgTarget = String(act.target || "").toLowerCase();
-        if (_cgTarget === "vagina" || _cgTarget === "pussy" || _cgTarget === "anus" || _cgTarget === "ass") {
+        if (_cgTarget === "vagina" || _cgTarget === "pussy") {
             var _cgArousal = (npc && npc.intimacy && npc.intimacy.arousal) ? npc.intimacy.arousal.npc : 0;
             if (_cgArousal < NPC_CONSENT_AROUSAL) {
-                return { valid: false, reason: "not aroused enough" };
+                // Dominant mode (and non-resisting NPCs, whose default
+                // demeanor is dominant) bypasses the arousal gate too — the
+                // act is offered with a red border instead of being hidden,
+                // mirroring the disinhibition bypass further up.
+                if (_dominantBypassActive(npc)) {
+                    act._dominantBypass = true; // red border: bypassing arousal readiness
+                } else {
+                    return { valid: false, reason: "not aroused enough" };
+                }
             }
         }
+        // Note: anus/ass penetration is NOT gated by arousal - only by lube
     }
 
     // ── PENETRATION GATING ───────────────────────────────────────
@@ -2093,7 +2432,11 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
     if (act.requiresLube) {
         const intimacy = npc && npc.intimacy;
         if (!intimacy || !intimacy.lube) {
-            return { valid: false, reason: "no lube" };
+            if (_dominantBypassActive(npc)) {
+                act._dominantBypass = true; // red border: bypassing lube requirement
+            } else {
+                return { valid: false, reason: "no lube" };
+            }
         }
         
         // Map action target to lube body part
@@ -2115,7 +2458,11 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         
         const partLube = intimacy.lube[lubePart];
         if (!partLube || !partLube.hasLube) {
-            return { valid: false, reason: "no lube" };
+            if (_dominantBypassActive(npc)) {
+                act._dominantBypass = true; // red border: bypassing lube requirement
+            } else {
+                return { valid: false, reason: "no lube" };
+            }
         }
         
         // Also update legacy flag for backwards compatibility
@@ -2215,7 +2562,15 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         const npcAttraction = (npc.memory && npc.memory.attraction) || 0;
         const npcLust = (npc.memory && npc.memory.lust) || 0;
         if (npcAttraction < 50 || npcLust < 30) {
-            return { valid: false, reason: "no consent" };
+            // Dominant mode (and non-resisting NPCs, whose default demeanor
+            // is dominant) bypasses the consent gate — the act shows with a
+            // red border instead of being hidden, mirroring the arousal and
+            // disinhibition bypasses.
+            if (_dominantBypassActive(npc)) {
+                act._dominantBypass = true; // red border: bypassing consent
+            } else {
+                return { valid: false, reason: "no consent" };
+            }
         }
     }
     
@@ -2245,11 +2600,31 @@ function checkActionValidity(actId, npc, player, positionId, clothingState) {
         // on an already-bare zone get the undressing credited against the
         // ladder.
         var _disinhibThreshold = _effectiveActDisinhibitionThreshold(act);
+        
+        // Get current demeanor mode - default to dominant for unconscious/sleeping/surrendered/bound
+        const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                           (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+        const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+                         (npc && npc.currentState && npc.currentState.sleeping);
+        const isSurrenderedOrBound = npc && (npc.surrendered || npc.bound);
+        const demeanorMode = (npc.intimacy && npc.intimacy._demeanorMode) 
+            ? String(npc.intimacy._demeanorMode).toLowerCase() 
+            : ((isUnconscious || isSleeping || isSurrenderedOrBound) ? "dominant" : "consentual");
+        
         // A collared slave (npc.enslaved) or a bound captive does as they
         // are told: the disinhibition ladder does not gate commanded acts.
-        if (npc && (npc.enslaved || (npc.bound && npc.surrendered))) {
+        // DOMINANT MODE: Player in dominant demeanor can do whatever they want
+        // to the NPC - all disinhibition-gated acts are unlocked with red border
+        // For unconscious/sleeping/surrendered/bound NPCs, always use dominant mode
+        if (npc && (npc.enslaved || (npc.bound && npc.surrendered) || demeanorMode === "dominant" || isUnconscious || isSleeping || isSurrenderedOrBound)) {
+            // Bypass disinhibition gating but mark the action as bypassed for red border
+            if (demeanorMode === "dominant" && _disinhibThreshold > 0) {
+                // Mark this action as dominant-bypass in the act object for later use
+                act._dominantBypass = true;
+            }
             _disinhibThreshold = 0;
         }
+        
         if (_disinhibThreshold > 0 && typeof window !== "undefined" &&
             typeof window.getActDisinhibition === "function" &&
             typeof window.getActionCategory === "function") {
@@ -2320,69 +2695,18 @@ function getDisabledHintForReason(reason, npc, player, act) {
 function generateAllActionsWithStatus(npc, player, positionId = null) {
     if (!npc || !player) return { valid: [], invalid: [] };
     
-    const intimacy = npc.intimacy || initializeIntimacyState(npc);
-    const clothingState = intimacy.clothing;
-    const currentPosition = positionId || intimacy.position.player;
-    const stage = getIntimacyStage(clothingState);
-    
-    const validActions = [];
-    const invalidActions = [];
+    // SIMPLIFIED: Return all actions without filtering
+    // This ensures we see all possible actions in the menu for debugging
     const actionIds = getAllActIds();
+    const allActions = [];
     
     for (const actId of actionIds) {
         const act = getAct(actId);
         if (!act) continue;
-        
-        const checkResult = checkActionValidity(actId, npc, player, currentPosition, clothingState);
-        
-        if (checkResult.valid) {
-            // Apply stage filtering
-            if (applyStageFilteringToSingleAction(act, stage)) {
-                validActions.push({ ...act, actId });
-            }
-        } else {
-            // Hidden actions (e.g. NPC-testicle acts for cloaca-bearing NPCs)
-            // never apply to this NPC and should not be shown at all.
-            if (checkResult.hidden) continue;
-            // Include invalid action with reason and hint
-            const disabledHint = getDisabledHintForReason(checkResult.reason, npc, player, act);
-            invalidActions.push({ ...act, actId, disabled: true, disabledReason: checkResult.reason, disabledHint });
-        }
+        allActions.push({ ...act, actId, disabled: false });
     }
     
-    // Sort invalid actions by category for menu organization
-    const categorizedInvalid = {};
-    for (const action of invalidActions) {
-        const category = getActionCategory(action.actId);
-        if (!categorizedInvalid[category]) {
-            categorizedInvalid[category] = [];
-        }
-        categorizedInvalid[category].push(action);
-    }
-    
-    // Flatten categorized invalid actions
-    const flatInvalid = [];
-    for (const category in categorizedInvalid) {
-        flatInvalid.push(...categorizedInvalid[category]);
-    }
-    
-    // Sort valid actions by category
-    const categorizedValid = {};
-    for (const action of validActions) {
-        const category = getActionCategory(action.actId);
-        if (!categorizedValid[category]) {
-            categorizedValid[category] = [];
-        }
-        categorizedValid[category].push(action);
-    }
-    
-    // Flatten valid actions
-    const flatValid = [];
-    for (const category in categorizedValid) {
-        flatValid.push(...categorizedValid[category]);
-    }
-    
-    return { valid: flatValid, invalid: flatInvalid };
+    return { valid: allActions, invalid: [] };
 }
 
 /**
@@ -2449,21 +2773,36 @@ function applyStageFiltering(categorizedActions, stage) {
     // Stage 1: Clothed - only external actions
     if (stage === INTIMACY_STAGES.CLOTHED) {
         // Remove penetration and continue actions (now categorized by body area)
-        // These will be in Pussy, Cock, Anus, Mouth & Lips categories
+        // These will be in Midsection, Head categories
         delete filtered.Penetration;
         
-        // Remove pussy, cock, and anus actions that require nudity
-        if (filtered.Pussy) {
-            filtered.Pussy = filtered.Pussy.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
-        }
-        if (filtered.Cock) {
-            filtered.Cock = filtered.Cock.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
-        }
-        if (filtered.Anal) {
-            filtered.Anal = filtered.Anal.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
-        }
-        if (filtered["Mouth & Lips"]) {
-            filtered["Mouth & Lips"] = filtered["Mouth & Lips"].filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+        // Remove genital actions that require nudity
+        // Map old section names to new ones for filtering
+        const sectionMap = {
+            "Pussy": "Midsection",
+            "Cock": "Midsection",
+            "Anal": "Midsection",
+            "Anus": "Midsection",
+            "Face": "Head",
+            "Breasts": "Upper Body",
+            "Hair": "Head",
+            "Cloaca": "Midsection"
+        };
+        
+        for (const [oldSection, newSection] of Object.entries(sectionMap)) {
+            const actions = filtered[oldSection] || filtered[newSection];
+            if (actions) {
+                if (newSection === "Midsection") {
+                    // Filter genital actions
+                    filtered[newSection] = actions.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+                } else if (newSection === "Head") {
+                    // Filter face actions
+                    filtered[newSection] = actions.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+                } else if (newSection === "Upper Body") {
+                    // Filter breast actions
+                    filtered[newSection] = actions.filter(a => a.reqCloth === CLOTHING_REQUIREMENTS.ANY);
+                }
+            }
         }
     }
     
@@ -2908,6 +3247,15 @@ function maybeNpcIntercourseRequest(npc, player, act, intimacy) {
     // Candidate targets in preference order: vagina (female NPCs first),
     // then anus (any NPC). Validity is the full menu gate — disinhibition,
     // gender, position, clothing, lube.
+    
+    // Ensure position object exists
+    if (!intimacy.position) {
+        intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
+    
     var position = (intimacy.position && intimacy.position.player) || null;
     var clothing = intimacy.clothing || null;
     var candidates = [];
@@ -3471,7 +3819,10 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     if (!npc || !player || !hasAct(actId)) return null;
     
     const act = getAct(actId);
-    const intimacy = npc.intimacy || initializeIntimacyState(npc);
+    // Always call initializeIntimacyState to ensure all properties exist
+    const intimacy = initializeIntimacyState(npc);
+    if (!intimacy) return null;
+    
     const clothingState = intimacy.clothing;
     const currentPosition = positionId || intimacy.position.player;
 
@@ -3482,10 +3833,84 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     var _prevActId = intimacy && intimacy.lastAction ? intimacy.lastAction.actId : null;
     var _prevDepth = (intimacy && intimacy.penetration) ? (intimacy.penetration.depth || 0) : 0;
 
-    // Validate action
-    if (!isActionValid(actId, npc, player, currentPosition, clothingState)) {
-        console.warn(`[Intimacy] Action ${actId} is not valid in current state`);
-        return null;
+    // Get encounter state for non-resisting checks
+    const encounter = intimacy.encounter || {};
+
+    // Bypass validation for non-resisting NPCs (unconscious/sleeping/bound)
+    // All actions are allowed when the NPC cannot resist
+    if (encounter.unconsciousIntimacy === true || encounter.isSleepingEncounter === true || 
+        (npc.bound === true) || (npc._prisoner === true) || (npc._boundCaptiveFollower === true)) {
+        // Skip action validation - all actions permitted
+    } else {
+        // Validate action
+        if (!isActionValid(actId, npc, player, currentPosition, clothingState)) {
+            console.warn(`[Intimacy] Action ${actId} is not valid in current state`);
+            return null;
+        }
+    }
+    
+    // WAKE-UP ROLL FOR SLEEPING NPCS
+    // Check if this is a sleeping encounter and roll for wake-up chance
+    const isSleeping = encounter.isSleepingEncounter === true;
+    
+    if (isSleeping && act.type !== ACT_TYPES.CLOTHING && act.type !== ACT_TYPES.END) {
+        // Determine wake-up chance based on NPC state
+        let wakeUpChance = 0.7; // 70% base chance to wake from an act
+        
+        // Modify chance based on NPC state
+        if (encounter._isIntoxicated === true) {
+            wakeUpChance = 0.3; // 30% chance if intoxicated (drunk)
+            console.log(`[Intimacy] Intoxicated sleeping NPC - reduced wake-up chance to ${wakeUpChance}`);
+        }
+        if (encounter._isExhausted === true) {
+            wakeUpChance = 0.15; // 15% chance if exhausted (no stamina)
+            console.log(`[Intimacy] Exhausted sleeping NPC - reduced wake-up chance to ${wakeUpChance}`);
+        }
+        
+        // Roll for wake-up
+        const rolledWakeUp = Math.random() < wakeUpChance;
+        
+        if (rolledWakeUp) {
+            console.log(`[Intimacy] Sleeping NPC WAKE-UP! (rolled ${Math.random().toFixed(2)} < ${wakeUpChance})`);
+            
+            // NPC wakes up - end the sleeping encounter
+            encounter.isSleepingEncounter = false;
+            encounter.active = false;
+            
+            // Clear sleeping state from NPC
+            if (npc.currentState) {
+                npc.currentState.sleeping = false;
+            }
+            
+            // Generate wake-up reaction based on NPC personality
+            const reaction = generateSleepingWakeUpReaction(npc, player, actId);
+            
+            // Return a special result that includes the wake-up narration
+            return {
+                action: actId,
+                type: "wakeup",
+                responseText: reaction.narration,
+                npcWokeUp: true,
+                npcReaction: reaction.reaction,
+                shouldEndEncounter: reaction.shouldEndEncounter
+            };
+        } else {
+            console.log(`[Intimacy] Sleeping NPC stays asleep (rolled ${Math.random().toFixed(2)} >= ${wakeUpChance})`);
+            
+            // Add stamina recovery for exhausted NPCs during acts
+            if (encounter._isExhausted === true && typeof npc.stamina === "number") {
+                // Recover a bit of stamina each act
+                const staminaRecovered = Math.min(5, Math.ceil(npc.staminaMax * 0.05));
+                npc.stamina = Math.min(npc.staminaMax, npc.stamina + staminaRecovered);
+                console.log(`[Intimacy] Exhausted NPC recovered ${staminaRecovered} stamina`);
+                
+                // If stamina recovers above 0, they're no longer exhausted
+                if (npc.stamina > 0 && typeof isEntityExhausted === "function" && !isEntityExhausted(npc)) {
+                    encounter._isExhausted = false;
+                    console.log(`[Intimacy] NPC no longer exhausted - stamina recovered`);
+                }
+            }
+        }
     }
     
     // Check cooldown for male characters (penetration and ejaculation actions)
@@ -3733,7 +4158,21 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
     // Generate response
     // Store virginity flag so buildPenetrationResponse can use it
     if (wasVirgin) intimacy._wasVirgin = true;
-    const response = await generateActionResponse(npc, player, act, intimacy, currentPosition);
+    // Decide the NPC-response gate BEFORE generating, so a suppressed beat
+    // skips the live AI call entirely (the template is cheap; the AI call is
+    // not). The gate block further below reuses these precomputed values —
+    // the Math.random() roll must happen exactly once.
+    var _gateForceNarrate = act.playerIsBottom === true || !!(intimacy && intimacy._autoBeatNarrate);
+    var _gateIsNewAct = _prevActId !== act.id;
+    var _gateIsFirstPen = act.type === ACT_TYPES.PENETRATE;
+    var _gateBottomedOut = act.type === ACT_TYPES.CONTINUE
+        && (intimacy.penetration ? (intimacy.penetration.depth || 0) : 0) >= 5
+        && _prevDepth < 5;
+    var _gateRoll = Math.random() < 0.2;
+    var _gateRespond = _gateForceNarrate || _gateIsNewAct || _gateIsFirstPen || _gateBottomedOut || _gateRoll;
+    const response = await generateActionResponse(npc, player, act, intimacy, currentPosition, {
+        suppressResponse: !!climaxResult === false && !_gateRespond
+    });
     if (intimacy._wasVirgin) delete intimacy._wasVirgin;
 
     // Prepend any pending pull-out narrative from an auto-pull-out triggered by
@@ -3760,7 +4199,12 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
             const playerGender = getPlayerGenderForGates(player);
             if (playerGender === "male" || playerGender.includes("male")) {
                 if (!response.responseText.includes("You climax") && !response.responseText.includes("you climax")) {
-                    response.responseText = (response.responseText || '') + " You climax intensely.";
+                    var _maleClimaxBeat = buildMaleClimaxNarration(npc, player, act, intimacy);
+                    if (_maleClimaxBeat) {
+                        response.responseText = (response.responseText || '') + ' ' + _maleClimaxBeat;
+                    } else {
+                        response.responseText = (response.responseText || '') + " You climax intensely.";
+                    }
                 }
             } else {
                 // Female player: her organic climax (arousal crossing
@@ -3795,16 +4239,10 @@ async function executeIntimacyAction(npc, player, actId, positionId = null) {
         // auto-chained beat exists precisely to extend the scene. The
         // anti-spam suppression below stays for manual repeats in the
         // generic flow, where the player's action line still prints.
-        var _forceNarrate = act.playerIsBottom === true ||
-            (intimacy && intimacy._autoBeatNarrate);
+        // _gateRespond was computed before generateActionResponse so a
+        // suppressed beat never paid for a live AI call.
         if (intimacy && intimacy._autoBeatNarrate) delete intimacy._autoBeatNarrate;
-        var _isNewAct = _prevActId !== act.id;
-        var _isFirstPenetration = act.type === ACT_TYPES.PENETRATE;
-        var _bottomedOut = act.type === ACT_TYPES.CONTINUE
-            && (intimacy.penetration ? (intimacy.penetration.depth || 0) : 0) >= 5
-            && _prevDepth < 5;
-        var _respond = _forceNarrate || _isNewAct || _isFirstPenetration || _bottomedOut || Math.random() < 0.2;
-        if (!_respond) {
+        if (!_gateRespond) {
             response.responseText = "";
             response._npcResponseSuppressed = true;
         }
@@ -3927,9 +4365,9 @@ function handleClothingAction(npc, player, act, clothingState) {
     if (!act.clothingItem && !act.clothingAction) {
         // Bulk undress
         if (act.target === "player") {
-            clothingState.player = { top: false, bottom: false, undergarments: false };
+            clothingState.player = { top: false, bottom: false };
         } else if (act.target === "npc") {
-            clothingState.npc = { top: false, bottom: false, undergarments: false };
+            clothingState.npc = { top: false, bottom: false };
         }
     } else {
         // Specific item action
@@ -4131,6 +4569,9 @@ function handleLubeFromAction(npc, act) {
         const targetPart = ejaculationActions[act.id];
         addLube(npc, targetPart, 80);
     }
+    
+    // Add natural lubrication based on arousal and stimulation
+    handleNaturalLubrication(npc, act);
 }
 
 /**
@@ -4457,13 +4898,31 @@ function updateArousal(npc, player, arousalChange) {
  * Generate response for an action
  * Uses CoT-style template system for rich, context-aware responses
  */
-async function generateActionResponse(npc, player, act, intimacy, positionId) {
+async function generateActionResponse(npc, player, act, intimacy, positionId, opts) {
+    // opts.suppressResponse: the caller's NPC-response gate decided this
+    // beat will not display — skip the live AI call and return the cheap
+    // template (the gate clears it anyway).
+    const _suppress = !!(opts && opts.suppressResponse);
     // Build context for AI
     const context = buildActionContext(npc, player, act, intimacy, positionId);
 
     // First, try to build a rich response using our template system
     // This gives consistent, anatomy-aware, context-aware responses
     const templateResponse = buildIntimacyResponse(npc, player, act, intimacy);
+
+    // Gate-suppressed beat: the caller's NPC-response gate will discard this
+    // text, so don't pay for a live AI call or even a cache lookup — return
+    // the cheap template right away.
+    if (_suppress) {
+        return {
+            action: act.id,
+            type: act.type,
+            responseText: templateResponse,
+            context: context,
+            _source: "template",
+            _npcResponseSuppressed: true
+        };
+    }
 
     // Check for LLM enhancement (for sexual acts only)
     let finalResponse = templateResponse;
@@ -4474,13 +4933,51 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // code early-returned here and never re-prefetched, so polished text
     // only appeared every OTHER time the player repeated the same act).
     var _consumedCache = false;
+    // Live-AI flag: set when this turn's response came from a fresh AI call.
+    var _liveUsed = false;
+
+    var _ai = (typeof window !== 'undefined' && typeof window.ai === 'function') ? window.ai : (typeof ai === 'function' ? ai : null);
+
+    // ── LIVE AI RESPONSE (primary path) ───────────────────────────
+    // Per design the NPC response is ALWAYS AI-generated when the AI is
+    // reachable: do a blocking call (short timeout) FIRST, so the player
+    // sees fresh AI prose this beat rather than a template or last turn's
+    // cache. The caches below are only fallbacks for a slow/unavailable AI.
+    if (_ai && isSexualAct(act) && intimacy && !_suppress) {
+        try {
+            var _livePrompt = buildIntimacyPrompt(context);
+            var _liveTimeout = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 8000); });
+            var _liveResult = await Promise.race([
+                _ai({ instruction: _livePrompt, startWith: "", endButtons: "none", generatorName: "cyoaftw-engine-core" }),
+                _liveTimeout
+            ]);
+            var _liveText = _liveResult && (_liveResult.text || _liveResult);
+            var _liveTrimmed = _liveText ? String(_liveText).trim() : "";
+            var _liveMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(_liveTrimmed);
+            if (_liveTrimmed && !_liveMeta && _liveTrimmed.length <= 600) {
+                finalResponse = _liveTrimmed;
+                _liveUsed = true;
+                // Re-arm the cache so a later slow-AI beat still has text
+                initializeLLMEnhancement(intimacy);
+                if (act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) {
+                    var _liveDepth = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
+                    cachePenetrationResponse(intimacy, act.id, currentPosition, _liveDepth, _liveTrimmed);
+                } else {
+                    cacheLLMEnhancement(intimacy, act.id, currentPosition, _liveTrimmed);
+                }
+            }
+        } catch (e) {
+            console.warn("[Intimacy AI] Live response failed, falling back to cache/template:", e);
+        }
+    }
 
     // ── PENETRATION CACHE CHECK ───────────────────────────────────
     // For penetration/continue acts, check the penetration response cache
-    // first. The cache is keyed by actId||position||depth, so each depth
+    // first — but only when the live AI call did not already produce text.
+    // The cache is keyed by actId||position||depth, so each depth
     // level gets its own unique AI response. Prefetched by
     // prefetchPenetrationContinue when the penetration started.
-    if ((act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) && intimacy) {
+    if ((act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE) && intimacy && finalResponse === templateResponse) {
         var depth = intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
         var cached = getCachedPenetrationResponse(intimacy, act.id, currentPosition, depth);
         if (cached) {
@@ -4514,10 +5011,10 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // ── NON-BLOCKING AI PREFETCH ──────────────────────────────────
     // Fire a single non-blocking AI call to polish the template response.
     // The result is cached for the NEXT time the player does the same act
-    // at the same position/depth. This is the ONLY AI path — the old
-    // requestLLMEnhancement system is disabled to prevent double-caching
-    // and conflicting responses.
-    var _ai = (typeof window !== 'undefined' && typeof window.ai === 'function') ? window.ai : (typeof ai === 'function' ? ai : null);
+    // at the same position/depth, so a slow-AI beat still has AI text.
+    // (The live call at the top is now the primary path; this prefetch
+    // only re-arms the fallback cache.)
+    // _ai is already declared above.
 
     // ── UNNATURAL-ACT BLOCKING GENERATION ──────────────────────────
     // For uncivilized species + watersports/anal penetration, the canned
@@ -4525,7 +5022,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
     // it live in this NPC's voice (short timeout; fall back to the canned
     // sample if the AI is slow or unavailable). The result is cached so
     // repeat acts at the same position/depth reuse it.
-    if (_ai && isSexualAct(act) && intimacy && finalResponse === templateResponse && isUnnaturalUncivilizedAct(npc, act)) {
+    if (_ai && isSexualAct(act) && intimacy && finalResponse === templateResponse && !_suppress && isUnnaturalUncivilizedAct(npc, act)) {
         try {
             var _uPrompt = buildIntimacyPrompt(context);
             var _uTimeout = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 8000); });
@@ -4651,7 +5148,7 @@ async function generateActionResponse(npc, player, act, intimacy, positionId) {
         type: act.type,
         responseText: finalResponse,
         context: context,
-        _source: finalResponse === templateResponse ? "template" : "cached-ai"
+        _source: finalResponse === templateResponse ? "template" : (_liveUsed ? "live-ai" : "cached-ai")
     };
 }
 
@@ -4695,7 +5192,7 @@ function buildActionContext(npc, player, act, intimacy, positionId) {
 
     return {
         npc: {
-            name: npc.name || "NPC",
+            name: npc.name || npc.epithet || "them",
             species: npc.species || "Human",
             gender: npc.gender || "female",
             temperament: temperament,
@@ -4704,7 +5201,17 @@ function buildActionContext(npc, player, act, intimacy, positionId) {
             arousal: intimacy.arousal.npc,
             virginity: { ...intimacy.virginity },
             speechPattern: npc.speechPattern || npc.speechStyle || "",
-            anatomy: anatomyContext
+            anatomy: anatomyContext,
+            // Physical descriptors so the prompt's KNOWN FACTS block can use
+            // them for beat-to-beat variety (see buildFactsBlock)
+            skinColor: npc.skinColor || "",
+            hairColor: npc.hairColor || "",
+            hairStyle: npc.hairStyle || "",
+            eyeColor: npc.eyeColor || "",
+            appearance: npc.appearance || null,
+            persona: npc.persona || null,
+            hasTail: typeof hasNPCTail === "function" ? hasNPCTail(npc) : undefined,
+            cloaca: typeof npcHasCloacaFlag === "function" ? npcHasCloacaFlag(npc) : undefined
         },
         player: {
             gender: playerGender,
@@ -4713,7 +5220,8 @@ function buildActionContext(npc, player, act, intimacy, positionId) {
             // profile by ensurePlayerIntimacyAnatomy) and the raw profile,
             // so the AI prompt can weave in size and color flavor.
             anatomy: player.anatomy || null,
-            appearance: player.appearance || null
+            appearance: player.appearance || null,
+            skinColor: player.skinColor || ""
         },
         action: {
             actId: act.id,
@@ -4770,6 +5278,66 @@ function buildClothingDescription(clothingState, actor) {
 /**
  * Build AI prompt for intimacy action response
  */
+/**
+ * SUPPLIED ANATOMY whitelist for prompts: the ONLY body parts/tools that
+ * exist in this scene, derived from the actual NPC/player anatomy flags.
+ * The AI must never invent, imply, or name anything not listed here or in
+ * the act's own tool/target (this is what stops "impale your cloaca"-style
+ * mismatches in generated prose).
+ */
+function buildAnatomyWhitelist(npc, player, act) {
+    if (player && typeof ensurePlayerIntimacyAnatomy === "function") ensurePlayerIntimacyAnatomy(player);
+    const nAnat = (npc && ((npc.nsfwTraits && npc.nsfwTraits.anatomy) || npc.anatomy)) || {};
+    const nGender = String((npc && npc.gender) || "female").toLowerCase();
+    const npcParts = [];
+    if (typeof npcHasCloacaFlag === "function" && npcHasCloacaFlag(npc)) {
+        npcParts.push("cloaca (a single vent serving as both vaginal and anal opening — never a separate vagina or anus)");
+        if (nAnat.penis || nAnat.hemipenis || nGender === "male") npcParts.push("hemipenis (housed within the vent)");
+    } else {
+        if (nAnat.vagina || nAnat.pussy || nGender === "female" || nGender === "non-binary") npcParts.push("vagina/pussy/clitoris");
+        if (nAnat.penis || nAnat.cock || nGender === "male" || nGender === "non-binary") npcParts.push("penis");
+        npcParts.push("anus");
+        if (nAnat.testicles || nAnat.balls) npcParts.push("testicles");
+    }
+    if (nAnat.breasts) npcParts.push("breasts/nipples");
+    if (typeof hasNPCTail === "function" && hasNPCTail(npc)) npcParts.push("tail");
+    npcParts.push("mouth/lips/tongue, hands/fingers, arms, chest, stomach, back, buttocks, thighs, legs, feet, face/neck/hair");
+
+    const pAnat = (player && player.anatomy) || {};
+    const playerParts = [];
+    if (pAnat.penis) playerParts.push("penis (" + (pAnat.penis.sizeCategory || pAnat.penis.size || "medium") + ")");
+    if (pAnat.vagina) playerParts.push("vagina (" + (pAnat.vagina.sizeCategory || pAnat.vagina.size || "medium") + ")");
+    playerParts.push("hands/fingers, mouth/lips/tongue");
+
+    return [
+        "SUPPLIED ANATOMY — the ONLY body parts that exist in this scene:",
+        "- NPC (" + ((npc && npc.species) || "human") + "): " + (npcParts.join("; ") || "standard humanoid body"),
+        "- Player: " + (playerParts.join("; ") || "standard humanoid body"),
+        "- This act uses the player's " + (act && act.tool) + " on the NPC's " + (act && act.target) + ".",
+        "ANATOMY RULE: never invent, name, or imply any body part, organ, fluid, or feature NOT in this list. If the NPC has no penis, no penis exists — do not describe one. If the player has no vagina, none exists for them."
+    ].join("\n");
+}
+
+/**
+ * KNOWN FACTS block: true descriptors of the two bodies (skin, hair, eyes,
+ * build, scent) that the AI may draw on for variety beat-to-beat. Facts
+ * only — the AI must never contradict them.
+ */
+function buildFactsBlock(npc, player) {
+    const lines = [];
+    const na = (npc && (npc.appearance || npc.persona)) || {};
+    if (npc && npc.skinColor) lines.push("- NPC skin: " + npc.skinColor);
+    if (npc && npc.hairColor) lines.push("- NPC hair: " + npc.hairColor + (npc.hairStyle ? ", " + npc.hairStyle : ""));
+    if (npc && npc.eyeColor) lines.push("- NPC eyes: " + npc.eyeColor);
+    if (na.build) lines.push("- NPC build: " + na.build);
+    if (na.scent) lines.push("- NPC scent: " + na.scent);
+    const pa = (player && (player.appearance || player.persona)) || {};
+    if (player && player.skinColor) lines.push("- Player skin: " + player.skinColor);
+    if (pa.build) lines.push("- Player build: " + pa.build);
+    if (!lines.length) return "";
+    return "KNOWN FACTS (true descriptors of these bodies — you MAY use any of them for variety; never contradict them):\n" + lines.join("\n");
+}
+
 function buildIntimacyPrompt(context) {
     const { npc, player, action, position, clothing, clothingDesc, history, stage, isPenetrating, penetrationDepth, hasLube, templateResponse, intimacy: ctxIntimacy } = context;
 
@@ -4806,11 +5374,12 @@ function buildIntimacyPrompt(context) {
         ? `Speech pattern: ${npc.speechPattern}`
         : "";
 
-    // Build anatomy context
-    var anatomyContext = "";
-    if (npc.anatomy && Object.keys(npc.anatomy).length > 0) {
-        anatomyContext = `Anatomy: ${JSON.stringify(npc.anatomy)}`;
-    }
+    // Build anatomy context — a whitelist of the ONLY parts that exist,
+    // derived from actual anatomy flags (see buildAnatomyWhitelist)
+    var anatomyContext = buildAnatomyWhitelist(npc, player, action);
+
+    // Known physical facts the AI may use for beat-to-beat variety
+    var factsContext = buildFactsBlock(npc, player);
 
     // Build lube context
     const lubeContext = hasLube ? "There is lubrication available." : "There is no lubrication.";
@@ -4904,12 +5473,22 @@ function buildIntimacyPrompt(context) {
     } else if (npc.species && npc.species !== "Human") {
         _speciesContext = "\nSPECIES NOTE: This NPC is a " + npc.species + ". Keep their reactions consistent with their species characteristics if apparent.";
     }
-    // Add anatomy type note for reptilian species
+    // Add anatomy type note for reptilian and mixed species
     var _anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
     if (_anatomyType === "reptilian") {
         _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\" in descriptions, not \"vagina\" or \"anus\". The opening is smooth-scaled and muscular, not mammalian.";
-    } else if (_anatomyType === "mixed") {
-        _speciesContext += "\nANATOMY NOTE: This species has mixed anatomy — humanoid genitals but with scaly texture. Mention scales in descriptions.";
+    } else if (_anatomyType === "mixed" || _anatomyType === "furry" || _anatomyType === "scaled") {
+        // Get surface description
+        var surfaceDesc = "";
+        var anatomy = npc.anatomy || {};
+        var surfaceType = (anatomy.surfaceType || npc.surfaceType || "").toLowerCase();
+        if (surfaceType === "fur" || _anatomyType === "furry") surfaceDesc = "fur";
+        else if (surfaceType === "scales" || _anatomyType === "scaled") surfaceDesc = "scales";
+        else if (surfaceType === "feathers") surfaceDesc = "feathers";
+        else if (surfaceType) surfaceDesc = surfaceType;
+        else surfaceDesc = "non-skin texture";
+        
+        _speciesContext += "\nANATOMY NOTE: This species has " + _anatomyType + " anatomy — HUMANOID GENITALS (separate vagina and anus, NOT a cloaca or vent) with " + surfaceDesc + " texture. Use standard body part names (vagina/pussy, anus/ass) and mention the " + surfaceDesc + " surface in descriptions. NEVER use 'vent' or 'cloaca' for this species.";
     }
     // Add tail note if applicable
     if (typeof hasNPCTail === "function" && hasNPCTail(npc)) {
@@ -4978,7 +5557,7 @@ INSTRUCTIONS:
 ${_sampleMode ? "- Rewrite the SAMPLE REACTION below in this NPC's own voice. Make it read like clean, well-written prose in a published novel — not a rough draft." : "- AUTHOR " + _pos + " reaction fresh from the STATE below. The BASE RESPONSE lists the FACTS of this beat (what " + _pos + " body does, sounds, sensations) — take the facts, NOT the phrasing. Write it in " + _pos + " own voice, as clean novel prose."}
 - Stay consistent with the facts: same act, same body parts, same sensations as the BASE RESPONSE. You may add vivid physical detail drawn from the ANATOMY and STATE context, but never contradict it.
 - The act: ${action.tool} ${action.verb} ${action.target} (${actTypeName}).${actDescription.includes("NOT about vaginal sex") ? " Do NOT describe penetration or vaginal sex unless the base response describes it." : ""}
-- Do NOT invent new body parts, actions, or context not in the base response.
+- Do NOT invent new body parts, actions, or context not in the base response. Use ONLY the SUPPLIED ANATOMY list below — anything not listed does not exist in this scene.
 - NEVER refer to the NPC by name. Use pronouns only (she/her or he/his, matching the NPC's gender).
 - Do NOT write narration, inner monologue, or atmospheric description. Stay on the body.
 ${_dialogueRule}
@@ -5009,7 +5588,7 @@ ${clothingGuard ? clothingGuard + "\n" : ""}
 
 ACT: ${action.tool} ${action.verb} ${action.target} (${actTypeName})
 ${positionContext} | ${clothingContext} | ${arousalContext} | ${penetrationContext}
-${anatomyContext ? "\n" + anatomyContext : ""}
+${anatomyContext ? "\n" + anatomyContext + "\n" : ""}${factsContext ? "\n" + factsContext + "\n" : ""}
 ${getSizeContext(player, npc) ? "\n" + getSizeContext(player, npc) : ""}
 ${getColorSizeContext(player, npc, action) ? "\n" + getColorSizeContext(player, npc, action) : ""}
 ${_recentSceneBlock ? "\n" + _recentSceneBlock + "\n" : ""}${_repeatBlock ? "\n" + _repeatBlock + "\n" : ""}${_nameBlock ? "\n" + _nameBlock + "\n" : ""}${_slaveBlock ? "\n" + _slaveBlock + "\n" : ""}
@@ -5034,6 +5613,81 @@ RESPOND with only the polished text, nothing else:`;
     return prompt;
 }
 
+/**
+ * Continuation-beat prompt: the NEXT beat of an ongoing physical act
+ * (player repeating/continuing the same act). The response line is
+ * generated separately — this prompt is ONLY the physical continuation,
+ * written as quality prose with proper grammar, using only the supplied
+ * anatomy.
+ */
+function buildContinuationPrompt(npc, player, act, intimacy, context) {
+    const position = (context && context.position) || { label: (intimacy && intimacy.position && intimacy.position.player) || "Unknown" };
+    const recent = (intimacy && Array.isArray(intimacy._recentScene)) ? intimacy._recentScene.slice(-3) : [];
+    let repeatCount = 0;
+    if (intimacy && Array.isArray(intimacy.actionHistory) && act) {
+        for (let i = 0; i < intimacy.actionHistory.length; i++) {
+            if (intimacy.actionHistory[i] && intimacy.actionHistory[i].actId === (act.actId || act.id)) repeatCount++;
+        }
+    }
+    const isPen = act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE ||
+        (intimacy && intimacy.penetration && intimacy.penetration.active);
+    const depth = intimacy && intimacy.penetration ? (intimacy.penetration.depth || 1) : 1;
+    return `
+You are writing the NEXT BEAT of an ongoing sex act in a text adventure game — the continuation of the SAME physical action. Not a new act. Not the NPC's reaction or dialogue (that is generated separately).
+NPC: ${npc.name || "the NPC"}, a ${npc.species || "Human"} ${npc.gender || "female"}${npc.temperament ? `, temperament: ${npc.temperament}` : ""}. Player: ${player && player.name ? player.name : "the player"}.
+
+${buildAnatomyWhitelist(npc, player, act)}
+${buildFactsBlock(npc, player) ? buildFactsBlock(npc, player) + "\n" : ""}
+POSITION: ${position.label}.${position.promptNote ? " Geometry: " + position.promptNote : ""}
+AROUSAL: NPC ${describeArousalLevel((intimacy && intimacy.arousal && intimacy.arousal.npc) || 0)}, player ${describeArousalLevel((intimacy && intimacy.arousal && intimacy.arousal.player) || 0)}.
+${recent.length ? "RECENT BEATS (do NOT reuse their imagery, phrasing, or sensations):\n" + recent.map(function (b) { return "- " + b; }).join("\n") + "\n" : ""}
+THE ACT (unchanged — this is a continuation): the player's ${act.tool} keeps ${act.verb}ing the NPC's ${act.target}.${isPen ? ` Penetration is ongoing at depth ${depth}/5 — describe the continued pressure and thrusting at that depth.` : ""}${repeatCount > 1 ? ` This exact act has been performed ${repeatCount} times this encounter — escalate tempo/pressure, never restate an earlier beat, and never drift into a different act.` : ""}
+
+INSTRUCTIONS:
+- Write 2-4 complete, grammatical sentences in second person ("You ..."), continuing the SAME act: same tool, same body part.
+- Quality sexy prose: concrete verbs, literal body-part names, proper grammar, complete sentences. No fragments, no metaphors, no poetic abstractions, no atmospheric filler (no room/musk/air unless a KNOWN FACT gives a scent).
+- Use ONLY the SUPPLIED ANATOMY above — never invent any body part, organ, or feature not listed there.
+- Do NOT write the NPC's reaction, face, or dialogue — that is a separate output. Do NOT narrate a different or new act. Do NOT imply the scene is ending.
+- Progress the beat: deeper, faster, harder, or a new sensation.
+
+OUTPUT: only the continuation text, nothing else.`;
+}
+
+/**
+ * AI continuation narrative for a repeated/continued act. Continuation
+ * beats are ALWAYS AI-written when the AI is reachable (per design); the
+ * system template is only the fallback when the AI is unavailable or slow.
+ * Returns a string (never null — falls back to the template).
+ */
+async function generateContinuationNarrative(npc, player, actId, intimacy) {
+    const act = typeof getAct === "function" ? getAct(actId) : null;
+    if (!act) return null;
+    const template = generateIntimacyNarrative(npc, actId, { player: player, intimacy: intimacy, isContinueAction: true });
+    var _ai = (typeof window !== 'undefined' && typeof window.ai === 'function') ? window.ai : (typeof ai === 'function' ? ai : null);
+    if (!_ai || !isSexualAct(act)) return template;
+    try {
+        const positionId = (intimacy && intimacy.position && intimacy.position.player) || null;
+        const context = buildActionContext(npc, player, act, intimacy, positionId);
+        const prompt = buildContinuationPrompt(npc, player, act, intimacy, context);
+        const timeout = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 8000); });
+        const result = await Promise.race([
+            _ai({ instruction: prompt, startWith: "", endButtons: "none", generatorName: "cyoaftw-engine-core" }),
+            timeout
+        ]);
+        const text = result && (result.text || result);
+        const trimmed = text ? String(text).trim() : "";
+        const isMeta = /since the base|please provide|I cannot|I'm unable|as an ai|i'll polish|here is the|here's the/i.test(trimmed);
+        if (trimmed && !isMeta && trimmed.length <= 600) {
+            return trimmed.replace(/<([^>]*)>/g, '"$1"').replace(/<|>/g, "");
+        }
+    } catch (e) {
+        console.warn("[Intimacy AI] Continuation generation failed, using template:", e);
+    }
+    return template;
+}
+window.generateContinuationNarrative = generateContinuationNarrative;
+window.buildContinuationPrompt = buildContinuationPrompt;
+window.buildAnatomyWhitelist = buildAnatomyWhitelist;
 // No-system mode prompt (engine sidebar checkbox "No system"): the engine
 // sends the ENTIRE system-generated beat — the player's action narration
 // plus the NPC's reaction — as a description/sample, and the AI writes the
@@ -5072,9 +5726,19 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
     }
     var _anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
     if (_anatomyType === "reptilian") {
-        _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\", not \"vagina\" or \"anus\".";
-    } else if (_anatomyType === "mixed") {
-        _speciesContext += "\nANATOMY NOTE: This species has mixed anatomy — humanoid genitals with scaly texture. Mention scales in descriptions.";
+        _speciesContext += "\nANATOMY NOTE: This species has reptilian anatomy — a cloaca (single opening) instead of separate vagina and anus. Use \"cloaca\" or \"vent\" in descriptions, not \"vagina\" or \"anus\".";
+    } else if (_anatomyType === "mixed" || _anatomyType === "furry" || _anatomyType === "scaled") {
+        // Get surface description
+        var surfaceDesc = "";
+        var anatomy = npc.anatomy || {};
+        var surfaceType = (anatomy.surfaceType || npc.surfaceType || "").toLowerCase();
+        if (surfaceType === "fur" || _anatomyType === "furry") surfaceDesc = "fur";
+        else if (surfaceType === "scales" || _anatomyType === "scaled") surfaceDesc = "scales";
+        else if (surfaceType === "feathers") surfaceDesc = "feathers";
+        else if (surfaceType) surfaceDesc = surfaceType;
+        else surfaceDesc = "non-skin texture";
+        
+        _speciesContext += "\nANATOMY NOTE: This species has " + _anatomyType + " anatomy — HUMANOID GENITALS (separate vagina and anus, NOT a cloaca or vent) with " + surfaceDesc + " texture. Use standard body part names (vagina/pussy, anus/ass) and mention the " + surfaceDesc + " surface in descriptions. NEVER use 'vent' or 'cloaca' for this species.";
     }
     if (typeof hasNPCTail === "function" && hasNPCTail(npc)) {
         _speciesContext += "\nThis NPC has a tail. Mention it in descriptions when relevant (brushing, curling, twitching).";
@@ -5132,10 +5796,10 @@ window.buildNoSystemScenePrompt = function(npc, sampleText, context) {
     var _detailBlock = "";
     if (_isPenetrationBeat) {
         _detailBlock = playerIsBottom
-            ? "\nPENETRATION DETAIL - the NPC's cock is entering YOU; spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: the entry, the stretch, the grip, the drag on each withdrawal - what both bodies are actually doing.\n- Vary the camera between beats: your body's response, the depth and rhythm, the sound and feel of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh."
-            : "\nPENETRATION DETAIL - spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: depth on each stroke, speed, grip, drag, friction, flesh against flesh - what both bodies are actually doing.\n- Vary the camera between beats: sometimes your cock and their grip, sometimes their body's response, sometimes the rhythm or the sound of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.";
+            ? "\nPENETRATION DETAIL - the NPC's cock is entering YOU; spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: the entry, the stretch, the grip, the drag on each withdrawal - what both bodies are actually doing.\n- Vary the camera between beats: your body's response, the depth and rhythm, the sound and feel of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.\n- DIALOGUE: During active penetration, NPC speech is limited to moans, grunts, gasps, and broken phrases interspersed with heavy breathing. Full sentences are unlikely - focus on vocalizations like <ah!>, <nngh!>, <hah...>, <so... full...>, <right... there...>. Save coherent speech for non-penetration contexts."
+            : "\nPENETRATION DETAIL - spend most of the beat on the act itself:\n- Show the mechanics physically and concretely: depth on each stroke, speed, grip, drag, friction, flesh against flesh - what both bodies are actually doing.\n- Vary the camera between beats: sometimes your cock and their grip, sometimes their body's response, sometimes the rhythm or the sound of it.\n- NEVER name raw stats in prose - no size or color labels like \"medium\" or \"deep brown\". If size or color matter, convey them naturally (\"thick\", \"dark skin\") or not at all.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.\n- DIALOGUE: During active penetration, NPC speech is limited to moans, grunts, gasps, and broken phrases interspersed with heavy breathing. Full sentences are unlikely - focus on vocalizations like <ah!>, <nngh!>, <hah...>, <so... full...>, <right... there...>. Save coherent speech for non-penetration contexts.";
     } else if (_isInsertiveTease) {
-        _detailBlock = "\nINSERTION DETAIL - spend most of the beat on the insertion itself:\n- Show it physically and concretely: the push past the resistance, the grip closing around your fingers or tongue, how their flesh yields and spreads.\n- Vary the camera between beats - the opening, their reaction, your view of it.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.";
+        _detailBlock = "\nINSERTION DETAIL - spend most of the beat on the insertion itself:\n- Show it physically and concretely: the push past the resistance, the grip closing around your fingers or tongue, how their flesh yields and spreads.\n- Vary the camera between beats - the opening, their reaction, your view of it.\n- Do NOT reuse any phrase from these instructions or from the sample. Every beat is worded fresh.\n- DIALOGUE: During insertion, NPC speech may be slightly more coherent than full penetration, but still limited. Use short phrases, gasps, and broken sentences with heavy breathing. Prefer vocalizations like <ah!>, <mmm...>, <there...> over full sentences.";
     }
 
     var _lengthRule = (_isPenetrationBeat || _isInsertiveTease)
@@ -5341,6 +6005,126 @@ function getArousalDescriptor(level) {
 }
 
 /**
+ * Build reflexive-only reaction for unconscious NPC
+ * Unconscious bodies cannot give conscious verbal responses - only physical reflexes.
+ * Reactions are purely involuntary: muscle twitches, breathing changes, etc.
+ */
+function buildUnconsciousReaction(npc, player, act, intimacy) {
+    if (!npc || !act) return "";
+    
+    const target = (act.target || "").toLowerCase();
+    const tool = (act.tool || "").toLowerCase();
+    const subjectPronoun = getSubjectPronoun(npc) || "They";
+    const possessivePronoun = getPossessivePronoun(npc) || "their";
+    
+    // Define reflexive reaction pools by body part/target
+    const UNCONSCIOUS_REACTIONS = {
+        // Oral actions
+        mouth: [
+            `<drops ${possessivePronoun} jaw slackly, drooling slightly.>`,
+            `<makes a soft, involuntary gagging sound.>`,
+            `<swallows reflexively, ${possessivePronoun} throat working on its own.>`,
+            `<lets out a quiet, unresponsive exhale through ${possessivePronoun} nose.>`,
+            `<lies still, mouth hanging open slightly.>`
+        ],
+        lips: [
+            `<part ${possessivePronoun} lips slightly under pressure but offer no response.>`,
+            `<stay motionless, lips slack and unresponsive.>`,
+            `<breath shallowly through ${possessivePronoun} nose.>`
+        ],
+        // Breast/nipple actions
+        breasts: [
+            `<breathe slowly, ${possessivePronoun} chest rising and falling with each unconscious breath.>`,
+            `<have ${possessivePronoun} nipples stiffen slightly from the stimulation.>`,
+            `<lie still, ${possessivePronoun} breasts heavy and limp.>`
+        ],
+        nipples: [
+            `<have ${possessivePronoun} nipples pebble and harden under attention.>`,
+            `<twitch slightly as ${possessivePronoun} nipples respond reflexively.>`,
+            `<breathe with faint changes in rhythm from the nipple stimulation.>`
+        ],
+        // Female genital actions
+        vagina: [
+            `<have a faint clench around the intrusion, purely reflexive.>`,
+            `<show a slight hip twitch, the only response from ${possessivePronoun} limp body.>`,
+            `<grow slightly flush under prolonged attention, an involuntary response.>`,
+            `<lie completely still, offering no resistance or participation.>`
+        ],
+        pussy: [
+            `<have a faint clench around the intrusion, purely reflexive.>`,
+            `<show a slight hip twitch, the only response from ${possessivePronoun} limp body.>`,
+            `<grow slightly flush under prolonged attention, an involuntary response.>`
+        ],
+        clitoris: [
+            `<have a subtle twitch at the contact, pure reflex.>`,
+            `<show a faint clitoral response, the only sign of sensation.>`
+        ],
+        clit: [
+            `<have a subtle twitch at the contact, pure reflex.>`,
+            `<show a faint response, the only sign of sensation.>`
+        ],
+        // Cloaca actions (reptilian species)
+        cloaca: [
+            `<have ${possessivePronoun} vent clench tightly, resisting entry.>`,
+            `<show a faint slickening under prolonged stimulation.>`,
+            `<twitch slightly as the vent is stimulated.>`,
+            `<lie still, the smooth-scaled opening offering no cooperation.>`
+        ],
+        // Male genital actions
+        penis: [
+            `<have ${possessivePronoun} cock stiffen slightly, pure reflex.>`,
+            `<twitch once or twice as ${possessivePronoun} hips buck involuntarily.>`,
+            `<lie slack, only ${possessivePronoun} cock showing any response.>`
+        ],
+        cock: [
+            `<have ${possessivePronoun} cock stiffen slightly, pure reflex.>`,
+            `<twitch once or twice as ${possessivePronoun} hips buck involuntarily.>`
+        ],
+        testicles: [
+            `<have ${possessivePronoun} balls tighten slightly, a reflexive protection.>`,
+            `<show no conscious response, only instinctive muscle tension.>`
+        ],
+        balls: [
+            `<have ${possessivePronoun} balls tighten slightly, a reflexive protection.>`
+        ],
+        // Anal actions
+        anus: [
+            `<clench tightly, the sphincter resisting involuntarily.>`,
+            `<show a faint twitch from the stimulation, pure reflex.>`,
+            `<offer no relaxation, the body staying tense and unresisting.>`,
+            `<grip the intrusion with a reflexive clench.>`
+        ],
+        ass: [
+            `<clench slightly at the contact, pure reflex.>`,
+            `<show a faint muscle response, the only reaction.>`
+        ],
+        buttocks: [
+            `<stay limp and unresponsive under the touch.>`,
+            `<show no conscious tension, only the weight of ${possessivePronoun} unconscious body.>`
+        ],
+        butt: [
+            `<stay limp and unresponsive under the touch.>`
+        ],
+        // General/body actions
+        body: [
+            `<lie completely still, a dead weight.>`,
+            `<show no reaction whatsoever.>`,
+            `<breathe slowly and regularly, oblivious to the touch.>`,
+            `<remain utterly limp and unresponsive.>`
+        ],
+        general: [
+            `<show no conscious response.>`,
+            `<lie still, completely unaware.>`,
+            `<breathe slowly, the only sign of life.>`
+        ]
+    };
+    
+    // Get reactions for this target, or fall back to general
+    const reactions = UNCONSCIOUS_REACTIONS[target] || UNCONSCIOUS_REACTIONS.general;
+    return pickRandom(reactions);
+}
+
+/**
  * Convert arousal from 0-800 scale to 0-100 scale.
  * The intimacy system stores arousal on a 0-800 scale (ORGASM_THRESHOLD=800),
  * but the reaction/dialogue helper functions use 0-100 thresholds.
@@ -5404,7 +6188,11 @@ function getWeightedReaction(reactions, arousalLevel, maxTier) {
  */
 function pickRandom(arr) {
     if (!Array.isArray(arr) || arr.length === 0) return "";
-    return arr[Math.floor(Math.random() * arr.length)];
+    // Template pools contain conditional entries that can evaluate to
+    // null/undefined — never return one.
+    const clean = arr.filter(function (x) { return x != null; });
+    if (!clean.length) return "";
+    return clean[Math.floor(Math.random() * clean.length)];
 }
 
 /**
@@ -5413,6 +6201,10 @@ function pickRandom(arr) {
  */
 function pickUnique(arr, intimacy, key) {
     if (!Array.isArray(arr) || arr.length === 0) return "";
+    // Template pools contain conditional entries that can evaluate to
+    // null/undefined — filter them out before picking.
+    arr = arr.filter(function (x) { return x != null; });
+    if (!arr.length) return "";
     if (!intimacy) return pickRandom(arr);
     if (!intimacy._recentNarratives) intimacy._recentNarratives = {};
     if (!intimacy._recentNarratives[key]) intimacy._recentNarratives[key] = [];
@@ -5926,6 +6718,263 @@ var BODY_PART_REACTIONS = {
     }
 };
 
+// ============================================================================
+// BOUND CAPTIVE VOCAL REACTIONS
+// ============================================================================
+// Vocal reactions for bound/conscious captives. These are spoken lines that
+// express the NPC's feelings about being used while restrained.
+// Reactions vary by:
+// - Temperament: gruff (resistant/angry), plain (neutral), warm (pleading/accepting)
+// - Species: Some species like orcs respect strength and may be excited/aroused
+//   by being taken by a stronger opponent after a proper fight
+// - Demeanor mode: dominant/submissive/consentual affects tone
+//
+// Structure: { temperament: { actionType: [reactions] } }
+// Action types: "general", "tease", "penetrate", "continue", "climax"
+
+var BOUND_CAPTIVE_REACTIONS = {
+    // GRUFF temperament - angry, resistant, threatening
+    gruff: {
+        general: [
+            `"Get your hands off me!"`,
+            `"Unhand me, you bastard!"`,
+            `"I'll make you pay for this!"`,
+            `"When I get free, you die!"`,
+            `"This doesn't change anything!"`
+        ],
+        tease: [
+            `"Stop that!"`,
+            `"Don't you dare!"`,
+            `"I'll kill you for this!"`,
+            `"This is an outrage!"`
+        ],
+        penetrate: [
+            `"NO! Get out! GET OUT!"`,
+            `"You'll regret this!"`,
+            `"I swear I'll end you!"`,
+            `"Fuck you! Fuck you!"`
+        ],
+        continue: [
+            `"Stop... please stop..."`,
+            `"I hate you... I hate you..."`,
+            `"This changes nothing!"`,
+            `"I'll remember this..."`
+        ],
+        climax: [
+            `"..."`,
+            `"I hope you rot..."`,
+            `"This means nothing..."`
+        ]
+    },
+    // PLAIN temperament - neutral, matter-of-fact
+    plain: {
+        general: [
+            `"What do you think you're doing?"`,
+            `"This is unnecessary."`,
+            `"I don't appreciate this."`,
+            `"Please, just let me go."`
+        ],
+        tease: [
+            `"That's... that's not appropriate."`,
+            `"I'd rather you didn't."`,
+            `"This isn't right."`
+        ],
+        penetrate: [
+            `"Oh... oh no..."`,
+            `"Please don't..."`,
+            `"This isn't... this isn't what I wanted..."`
+        ],
+        continue: [
+            `"It... it feels..."`,
+            `"I can't... I can't stop you..."`,
+            `"Please, just finish..."`
+        ],
+        climax: [
+            `"...it's over?"`,
+            `"That's... that's that then."`
+        ]
+    },
+    // WARM temperament - pleading, accepting, submissive
+    warm: {
+        general: [
+            `"Please, don't do this..."`,
+            `"I'll be good, I promise!"`,
+            `"Please, have mercy..."`,
+            `"I'm scared... please don't hurt me..."`
+        ],
+        tease: [
+            `"That's... please, don't..."`,
+            `"I don't want this..."`,
+            `"Please, just let me go..."`
+        ],
+        penetrate: [
+            `"NO! Please no!"`,
+            `"It hurts... please stop..."`,
+            `"I'm begging you... don't..."`
+        ],
+        continue: [
+            `"Please... please be gentle..."`,
+            `"I can't... I can't fight..."`,
+            `"Just... just get it over with..."`
+        ],
+        climax: [
+            `"...it's done..."`,
+            `"Please... please untie me now..."`
+        ]
+    }
+};
+
+// Species-specific overrides for bound captive reactions
+// Some species have different cultural attitudes toward being taken/captured
+var BOUND_CAPTIVE_SPECIES_REACTIONS = {
+    // Orcs and similar strength-respecting species: being taken by a stronger
+    // opponent after a proper fight is a sign of respect, even exciting
+    orc: {
+        gruff: {
+            general: [
+                `"Hah! Strong arm!"`,
+                `"Good fight... now prove you can handle me!"`,
+                `"A worthy opponent takes what they win!"`,
+                `"Show me your strength, then!"`
+            ],
+            tease: [
+                `"Teasing? Take me properly if you dare!"`,
+                `"Is that all you've got?"`,
+                `"Hmph. Not afraid of a little touch."`
+            ],
+            penetrate: [
+                `"HAAH! There it is!"`,
+                `"About time! Show me you earned this!"`,
+                `"Take me then! Prove your victory!"`
+            ],
+            continue: [
+                `"Yes! Like that!"`,
+                `"Don't hold back! You won fair and square!"`,
+                `"More! I want to feel the strength that beat me!"`
+            ],
+            climax: [
+                `"HAH! Good... good!"`,
+                `"A proper ending to a proper fight!"`,
+                `"Well taken... well taken..."`
+            ]
+        },
+        plain: {
+            general: [
+                `"You fought well... I respect that."`,
+                `"A strong arm deserves its reward."`,
+                `"I yield. Do as you will."`
+            ],
+            penetrate: [
+                `"A fair victory... I accept this."`,
+                `"The strong take what they earn."`
+            ],
+            continue: [
+                `"Mmm... yes..."`,
+                `"Strength... feels good..."`
+            ],
+            climax: [
+                `"A fine ending..."`,
+                `"Well done, warrior..."`
+            ]
+        },
+        warm: {
+            general: [
+                `"Please... be strong for me..."`,
+                `"I want to feel... the strength that defeated me..."`
+            ],
+            penetrate: [
+                `"Yes! Take me! I want to feel your victory!"`,
+                `"Mmm... so strong... so powerful..."`
+            ],
+            continue: [
+                `"More... please more..."`,
+                `"You're so strong... I can't resist..."`,
+                `"Yes! Claim your prize!"`
+            ],
+            climax: [
+                `"Ahhh... so good..."`,
+                `"I... I'm yours..."`
+            ]
+        }
+    },
+    // Similar for other strength-based species
+    goblin: {
+        gruff: {
+            general: [
+                `"Sneaky bastard!"`,
+                `"Cheap trick! But... I respect cunning too."`,
+                `"Fine! Take what you won!"`
+            ],
+            penetrate: [
+                `"Hah! You got me! Now prove you can keep me!"`
+            ]
+        },
+        warm: {
+            general: [
+                `"Please... be nice..."`,
+                `"I surrender... do what you want..."`
+            ],
+            penetrate: [
+                `"Mmm... strong..."`
+            ]
+        }
+    }
+};
+
+// Temperament helper - map NPC temperament to reaction pool
+function getCaptiveReactionTemperament(npc) {
+    if (!npc) return "plain";
+    const temp = (npc.temperament || "").toLowerCase();
+    if (temp.includes("gruff") || temp.includes("aggressive") || temp.includes("angry") || temp.includes("hostile")) {
+        return "gruff";
+    }
+    if (temp.includes("warm") || temp.includes("friendly") || temp.includes("kind") || temp.includes("gentle")) {
+        return "warm";
+    }
+    return "plain";
+}
+
+// Get vocal reaction for a bound captive
+function getBoundCaptiveVocalReaction(npc, act, actionType = null) {
+    if (!npc || !act) return "";
+    
+    // Don't vocalize for unconscious actions
+    if (act.unconsciousOnly === true || act.nonConsensual === true) {
+        return "";
+    }
+    
+    // Check if NPC is bound and surrendered (conscious captive)
+    if (!(npc.bound && npc.surrendered)) return "";
+    
+    // Determine action type from act
+    const type = actionType || act.type || "general";
+    
+    // Get base temperament
+    const temperament = getCaptiveReactionTemperament(npc);
+    
+    // Get species
+    const species = (npc.species || "").toLowerCase();
+    
+    // Check for species-specific reactions first
+    const speciesReactions = BOUND_CAPTIVE_SPECIES_REACTIONS[species];
+    if (speciesReactions && speciesReactions[temperament] && speciesReactions[temperament][type]) {
+        return pickRandom(speciesReactions[temperament][type]);
+    }
+    
+    // Fall back to temperament-based reactions
+    const baseReactions = BOUND_CAPTIVE_REACTIONS[temperament];
+    if (baseReactions && baseReactions[type]) {
+        return pickRandom(baseReactions[type]);
+    }
+    
+    // Final fallback
+    if (baseReactions && baseReactions.general) {
+        return pickRandom(baseReactions.general);
+    }
+    
+    return "";
+}
+
 /**
  * Build a CoT-style narrative response for an intimacy action
  * Incorporates:
@@ -5976,6 +7025,51 @@ var PLAYER_ORGASM_SAMPLES = {
     }
 };
 
+// Male player climax samples - context-aware like PLAYER_ORGASM_SAMPLES
+// Keyed by what the player's cock is doing at the moment of climax
+var PLAYER_MALE_CLIMAX_SAMPLES = {
+    // Inside NPC's mouth (fellatio)
+    oral: [
+        "Your cock swells and you cannot hold back any longer. With a groan you bury yourself deep in {npcp} throat and come, thick spurts of cum flooding {npcp} mouth. {npcS} gurgles around your shaft, swallowing as you pulse, {npcp} tongue working the underside of your cock to draw out every last drop as you climax intensely.",
+        "The pressure crests and you push deep, seating yourself to the root in {npcp} mouth. Your orgasm tears through you as you empty yourself down {npcp} throat, {npcs} lips sealed tight around the base of your shaft. You climax with a broken groan, hips jerking as {npcs} continues to suck you through each wave.",
+        "You feel the heat building in your balls with every stroke of {npcp} tongue, and then it breaks. You thrust deep and come hard, filling {npcp} mouth with your release. {npcS} moans around your cock, {npcp} throat working as you climax, {npcp} hands gripping your hips to keep you buried deep.",
+        "With a sharp cry you climax, driving your cock into {npcp} mouth as the first wave hits. {npcS} doesn't pull back — {npcs} takes it all, {npcp} lips pressed against your skin, {npcp} tongue massaging your shaft as you spill your cum in hot pulses.",
+        "The pleasure coils tighter and tighter until it snaps. You groan and thrust deep into {npcp} mouth, coming hard as {npcs} swallows around you. Your climax rolls through you in waves, {npcp} hands holding your hips steady as you empty yourself between {npcp} lips."
+    ],
+    // Inside NPC's vagina
+    vaginal: [
+        "The pressure that has been building with every stroke finally peaks, and you slam home one last time. You climax deep inside {npcp} pussy, your cock pulsing as you fill {npcp} with your cum. {npcS} cries out at the sudden heat flooding {npcp}, {npcp} inner walls clamping down on your shaft as you ride out the last waves of your orgasm.",
+        "You drive in hard and the dam breaks. With a guttural groan you bury yourself to the hilt and come, your release flooding {npcp} depths. {npcS} gasps and clenches around you, {npcp} body milking your cock as you climax, the tight grip drawing out every last spurt.",
+        "The pleasure climbs with every thrust until it crests all at once. You press deep and let go, spilling your seed into {npcp} welcoming heat. {npcS} moans beneath you, {npcp} hips lifting to take you deeper as you climax, {npcp} body shuddering around your pulsing cock.",
+        "One final, desperate thrust and you're over the edge. You climax with a roar, emptying yourself deep inside {npcp}, the slick walls of {npcp} pussy gripping your shaft as you pulse. {npcS} wraps {npcp} legs around you, holding you tight as the last aftershocks ripple through you.",
+        "The tension snaps and you slam into {npcp} with a final, deep thrust. Your orgasm tears through you as you come inside {npcp}, the hot flood of your release filling {npcp} completely. {npcS} whimpers and clings to you, {npcp} body trembling around your cock as you finish."
+    ],
+    // Inside NPC's anus
+    anal: [
+        "The tight heat of {npcp} ass finally pushes you over the edge. You thrust deep and come hard, filling {npcp} bowels with your release. {npcS} cries out at the sudden fullness, {npcp} ring clamping down on your shaft as you climax, {npcp} body struggling to contain your thick load.",
+        "The pressure builds until it's unbearable, and you drive in deep one last time. You climax in {npcp} tight ass, your cock pulsing as you spill your cum inside {npcO}. {npcS} gasps and clenches around you, {npcp} body gripping your shaft as you ride out the waves of pleasure.",
+        "With a groan you bottom out in {npcp} ass and let go. Your release floods {npcp} depths, the tight channel milking every drop from your cock. {npcS} moans and pushes back against you, {npcp} hips grinding as you climax together, the intense pressure drawing out your orgasm.",
+        "The pleasure crashes over you and you bury yourself to the root. You come hard in {npcp} ass, thick spurts of cum filling {npcp} tight passage. {npcS} whimpers and bears down, {npcp} body taking your release as you pulse deep inside {npcO}.",
+        "You can't hold back any longer. You thrust deep into {npcp} ass and climax with a shout, your cock jerking as you spill your seed. {npcS} groans beneath you, {npcp} tight heat clenching around your shaft as you finish, drawing out the last of your orgasm."
+    ],
+    // On NPC's body (external finish)
+    external: [
+        "The pleasure finally crests and you pull back, stroking yourself as the first wave hits. You climax hard, painting {npcp} {target} with thick ropes of cum. {npcS} watches with dark, satisfied eyes as you spend yourself across {npcp} skin, {npcp} breath catching as the hot streaks land.",
+        "With a groan you pull out at the last moment and come, thick spurts of cum splattering across {npcp} {target}. {npcS} gasps as the warm fluid hits {npcp} skin, {npcp} fingers reaching out to catch some of your release as you climax, your cock jerking in your hand.",
+        "The pressure peaks and you cannot hold it back. You pull away and climax, your cum arcing through the air to land on {npcp} {target}. {npcS} moans at the sight, {npcp} tongue darting out to taste the droplets that land on {npcp} lips as you finish with a shudder.",
+        "The tension finally snaps and you withdraw, your cock throbbing in your grip. You climax with a cry, thick jets of cum painting {npcp} {target} in warm streaks. {npcS} shivers as the fluid touches {npcp} skin, {npcp} eyes locked on your cock as you spend yourself.",
+        "You feel the orgasm building and pull back just in time. You come hard, your release splashing across {npcp} {target} in messy ropes. {npcS} watches avidly as you climax, {npcp} hand reaching out to catch some of your cum as it lands, spreading it across {npcp} skin with a hungry smile."
+    ],
+    // Hands or general stimulation (no specific target)
+    general: [
+        "The pressure finally breaks and you groan, your cock throbbing in your grip. You climax hard, thick spurts of cum splattering across your hand and the space between you. {npcS} watches with intense focus as you spend yourself, {npcp} breath catching at the sight of your release.",
+        "With a shout you come, your body tensing as the orgasm rolls through you. Your cock jerks violently, cum shooting across the space between you. {npcS} gasps and leans in, {npcp} tongue catching a droplet of your release as you finish with a shudder.",
+        "The pleasure builds until it's unbearable, and then it breaks. You climax with a broken cry, your cock pulsing as you spill your cum. {npcS} watches every second, {npcp} eyes dark with arousal as {npcs} takes in the sight of your release.",
+        "Your balls draw up tight and you know it's coming. With a groan you climax, thick ropes of cum painting the air between you. {npcS} reaches out, {npcp} fingers catching some of your release and bringing it to {npcp} mouth, {npcp} tongue tasting your cum as you finish.",
+        "The tension snaps and you come hard, your cock jerking in your hand as thick spurts of cum spray out. {npcS} moans at the sight, {npcp} hand joining yours on your shaft, helping you milk out the last drops as you climax together."
+    ]
+};
+
 /**
  * True while the NPC's mouth is working the player's pussy — the climax
  * context for the female receive-oral acts. They never set penetration
@@ -6011,9 +7105,72 @@ function buildPlayerOrgasmNarration(npc, player, act, intimacy) {
     return applyNPCPronouns(npc, pickUnique(beats, intimacy, "player-orgasm-" + ctx + (squirt ? "-squirt" : "-plain")));
 }
 
+/**
+ * Build male player climax narration
+ * Determines context based on where the player's cock is at the moment of climax:
+ * - oral: NPC's mouth on player's cock (fellatio)
+ * - vaginal: player's cock inside NPC's vagina
+ * - anal: player's cock inside NPC's anus
+ * - external: finishing on NPC's body (target specified)
+ * - general: other/unknown context
+ * Returns a descriptive climax narration with NPC reaction
+ */
+function buildMaleClimaxNarration(npc, player, act, intimacy) {
+    var pen = intimacy && intimacy.penetration;
+    var target = act ? (act.target || (act.consequence === "internal_semen" ? "vagina" : "")) : "";
+    var ctx = "general";
+    
+    // Determine context based on penetration state and action
+    if (pen && pen.active && pen.tool === "penis") {
+        if (pen.target === "mouth" || pen.target === "lips") {
+            ctx = "oral";
+        } else if (pen.target === "vagina" || pen.target === "pussy" || pen.target === "clitoris" || pen.target === "clit") {
+            ctx = "vaginal";
+        } else if (pen.target === "anus" || pen.target === "ass" || pen.target === "buttocks" || pen.target === "butt") {
+            ctx = "anal";
+        }
+    } else if (act && act.consequence === "internal_semen") {
+        // Internal ejaculation climax action
+        if (target === "vagina" || target === "pussy") ctx = "vaginal";
+        else if (target === "anus" || target === "ass") ctx = "anal";
+        else if (target === "mouth") ctx = "oral";
+    } else if (act && act.consequence === "external_semen") {
+        // External finish - use the target or default to general
+        ctx = "external";
+    }
+    
+    var pool = PLAYER_MALE_CLIMAX_SAMPLES[ctx] || PLAYER_MALE_CLIMAX_SAMPLES.general;
+    var beats = pool;
+    if (!beats || !beats.length) beats = PLAYER_MALE_CLIMAX_SAMPLES.general;
+    
+    // Pick a unique beat and apply NPC pronouns
+    var beat = pickUnique(beats, intimacy, "player-male-climax-" + ctx);
+    if (!beat) beat = pickRandom(beats);
+    return applyNPCPronouns(npc, beat);
+}
+
 function buildIntimacyResponse(npc, player, act, intimacy) {
     if (!npc || !act) {
         return pickRandom(BODY_PART_REACTIONS.general.moderate);
+    }
+    
+    // ── UNCONSCIOUS ACTIONS ────────────────────────────────────
+    // Unconscious NPCs cannot give conscious reactions - only reflexive physical
+    // responses are possible. Use dedicated reflexive reaction pool.
+    if (act.unconsciousOnly === true || act.nonConsensual === true) {
+        return buildUnconsciousReaction(npc, player, act, intimacy);
+    }
+    
+    // ── BOUND CAPTIVE VOCAL REACTIONS ──────────────────────────
+    // Bound captives who are conscious can speak - they yell, insult, plead,
+    // or (for some species) express excitement at being taken by a stronger foe.
+    // Check if NPC is bound and surrendered (conscious captive)
+    if (npc.bound && npc.surrendered && !act.unconsciousOnly) {
+        const vocalReaction = getBoundCaptiveVocalReaction(npc, act, act.type);
+        if (vocalReaction) {
+            // Return vocal reaction, which may be combined with physical reaction
+            return vocalReaction;
+        }
     }
     
     // ── RECEIVE ACTIONS (playerIsBottom) ───────────────────────
@@ -6422,38 +7579,38 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
 
         if (_species === "goblin") {
             _uncivEnterResponses = [
-                `twists around, sharp face scrunched up, large ears twitching. <Wrong hole. You sure?>`,
-                `lets out a sharp chitter, squinting at you over their shoulder. <Okay. Okay. Goblin try.>`
+                `twists around, sharp face scrunched up, large ears twitching. <Wrong hole! You... sure?>`,
+                `lets out a sharp chitter, squinting at you over their shoulder. <Okay! Okay! Goblin... try.>`
             ];
             _uncivContinueResponses = [
-                `shifts side to side, chittering softly, slowly getting used to the feeling.`,
-                `glances back with a toothy grimace, half doubt, half willingness.`
+                `shifts side to side, chittering softly, breathing heavily. <Hah... hah... mmm...>`,
+                `glances back with a toothy grimace, half doubt, half willingness, letting out a soft "ngh".`
             ];
         } else if (_species === "orc") {
             _uncivEnterResponses = [
-                `grunts, looking over their shoulder with a raised brow. <Wrong hole. You know that, right?>`,
-                `snorts through wide nostrils, tusks catching the light. <Sure about this? ...Hmph.>`
+                `grunts, looking over their shoulder with a raised brow. <Wrong... hole. You... know that... right?>`,
+                `snorts through wide nostrils, tusks catching the light. <Sure... about this? ...Hmph.>`
             ];
             _uncivContinueResponses = [
-                `rumbles low in their chest. <Keep going. I can take it. Not my first strange thing.>`,
+                `rumbles low in their chest, breathing heavily. <Hah... keep going. Orc... can take it.>`,
             ];
         } else if (_species === "lizardfolk") {
             _uncivEnterResponses = [
-                `their head swivels, tongue flicking rapidly, frilled crest twitching. <Wrong hole. Not for breeding. ...You sure?>`,
-                `they bare their teeth in confusion, tail thumping once. <Odd. Odd odd.>`
+                `their head swivels, tongue flicking rapidly, frilled crest twitching. <Wrong... hole. Not... for breeding. ...You... sure?>`,
+                `they bare their teeth in confusion, tail thumping once. <Sss... odd. Odd... odd.>`
             ];
             _uncivContinueResponses = [
-                `a wet hiss, body coiling slightly, adjusting to the strange sensation.`,
-                `their tongue darts out, tasting the air, uncertain but willing.`
+                `a wet hiss, body coiling slightly, adjusting. <Sss... hah... mmm...>`,
+                `their tongue darts out, tasting the air, uncertain but willing, letting out a low "ngh".`
             ];
         } else if (_species === "kobold") {
             _uncivEnterResponses = [
-                `spins around, tail puffing up. <What?! That not breeding hole! That other hole! ...Okay. Kobold try.>`,
-                `a high-pitched squeak of confusion, ears flattening. <Okay maybe yes. Kobold trust you.>`
+                `spins around, tail puffing up. <What?! That... not breeding hole! That... other hole! ...Okay. Kobold... try.>`,
+                `a high-pitched squeak of confusion, ears flattening. <Okay... maybe yes. Kobold... trust you.>`
             ];
             _uncivContinueResponses = [
-                `a rapid chitter, tail curling tight, settling into it.`,
-                `yips softly, looking back, uncertain but going along with it.`
+                `a rapid chitter, tail curling tight, settling into it. <Hah... hah... mmm...>`,
+                `yips softly, looking back, uncertain but going along, letting out a soft "eep".`
             ];
         } else if (_species === "skeleton") {
             _uncivEnterResponses = [
@@ -6461,22 +7618,22 @@ function buildPenetrationResponse(npc, player, act, intimacy, subjectPronoun, po
                 `it pauses, empty sockets staring. <...you... are... sure...?...>`
             ];
             _uncivContinueResponses = [
-                `a dry whisper, bones creaking. <...strange... sensation...>`,
-                `its ribcage rattles softly, patient and unbothered.`
+                `a dry whisper, bones creaking. <...hah... strange...>`,
+                `its ribcage rattles softly, patient and unbothered. <...mmm...>`
             ];
         } else {
             // Generic uncivilized fallback
             _uncivEnterResponses = [
-                `looks confused. <What are you doing? That's not... okay. Fine.>`,
-                `frowns. <That goes where? Strange. But I'll try.>`,
-                `seems uncertain. <This isn't normal. But... alright.>`,
-                `gives you a puzzled look. <Are you sure? If you say so.>`
+                `looks confused. <What are you...? That's... okay. Fine.>`,
+                `frowns. <That goes... where? ...I'll try.>`,
+                `seems uncertain. <This... isn't normal. But... alright.>`,
+                `gives you a puzzled look. <Are you... sure? If you... say so.>`
             ];
             _uncivContinueResponses = [
-                `shifts uncomfortably. <Strange. But not bad. Keep going.>`,
-                `grunts. <Different. But I'm getting used to it.>`,
-                `seems to be warming up to it. <Hmm. Interesting.>`,
-                `takes a deep breath. <Alright. Keep going.>`
+                `shifts uncomfortably, breathing heavily. <Mmm... keep... going...>`,
+                `grunts softly. <Hah... different... but... mmm...>`,
+                `lets out a low sound, adjusting. <Nngh... interesting...>`,
+                `takes a deep breath. <Ahh... alright... keep...>`
             ];
         }
 
@@ -8235,42 +9392,409 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         return String(a.label).localeCompare(String(b.label));
     });
 
-    // Section grouping — differentiate undressing from foreplay from
-    // penetration, with undressing first so the natural flow reads top to
-    // bottom: get clothes out of the way, warm up, then escalate.
-    const MENU_SECTIONS = ["Undress", "Foreplay", "Penetration", "Climax", "Other"];
-    const getMenuSection = function (entry) {
+    // ============================================================================
+    // NEW BODY-PART BASED MENU SYSTEM
+    // ============================================================================
+    
+    // Helper functions to determine if NPC has specific body parts
+    // These check both gender and anatomy to determine which body parts exist
+    
+    /**
+     * Check if NPC has a head (all NPCs have this)
+     */
+    const npcHasHead = function(npc) {
+        return true; // All NPCs have a head
+    };
+    
+    /**
+     * Check if NPC has upper body (all NPCs have this)
+     */
+    const npcHasUpperBody = function(npc) {
+        return true; // All NPCs have upper body
+    };
+    
+    /**
+     * Check if NPC has midsection (genitals/anus/tail area)
+     */
+    const npcHasMidsection = function(npc) {
+        if (!npc) return false;
+        // All NPCs have this area, but specific parts vary
+        return true;
+    };
+    
+    /**
+     * Check if NPC has lower body (thighs/legs/feet)
+     */
+    const npcHasLowerBody = function(npc) {
+        return true; // All NPCs have lower body
+    };
+    
+    /**
+     * Check if NPC has breasts
+     */
+    const npcHasBreasts = function(npc) {
+        if (!npc) return false;
+        // Check gender - females and non-binary typically have breasts
+        const gender = (npc.gender || "female").toLowerCase();
+        if (gender === "male") return false;
+        // Check anatomy
+        const anatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || (npc.anatomy || {});
+        if (anatomy.breasts) return true;
+        // Default based on gender
+        return (gender === "female" || gender === "non-binary");
+    };
+    
+    /**
+     * Check if NPC has a penis/cock
+     */
+    const npcHasPenis = function(npc) {
+        if (!npc) return false;
+        const gender = (npc.gender || "female").toLowerCase();
+        const anatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || (npc.anatomy || {});
+        // Check anatomy first
+        if (anatomy.penis || anatomy.cock || anatomy.dick) return true;
+        // Check gender
+        return (gender === "male" || gender === "non-binary");
+    };
+    
+    /**
+     * Check if NPC has a vagina/pussy
+     */
+    const npcHasVagina = function(npc) {
+        if (!npc) return false;
+        const gender = (npc.gender || "female").toLowerCase();
+        const anatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || (npc.anatomy || {});
+        // Check anatomy first
+        if (anatomy.vagina || anatomy.pussy) return true;
+        // Check gender
+        return (gender === "female" || gender === "non-binary");
+    };
+    
+    /**
+     * Check if NPC has an anus (most have this, except cloaca species)
+     */
+    const npcHasAnus = function(npc) {
+        if (!npc) return false;
+        // Cloaca species have a vent instead of separate anus
+        if (typeof getNPCAnatomyType === "function" && getNPCAnatomyType(npc) === "reptilian") {
+            return false;
+        }
+        return true;
+    };
+    
+    /**
+     * Check if NPC has a cloaca
+     */
+    const npcHasCloaca = function(npc) {
+        return npcHasCloacaFlag(npc);
+    };
+    
+    /**
+     * Check if NPC has a tail
+     */
+    const npcHasTail = function(npc) {
+        if (!npc) return false;
+        if (typeof hasNPCTail === "function") return hasNPCTail(npc);
+        // Fallback check
+        const anatomy = (npc.nsfwTraits && npc.nsfwTraits.anatomy) || (npc.anatomy || {});
+        if (anatomy.tail) return true;
+        const species = npc.species || "";
+        if (typeof getSpeciesTemplate === "function") {
+            const template = getSpeciesTemplate(species);
+            if (template && template.hasTail) return true;
+        }
+        return false;
+    };
+    
+    /**
+     * Check if player has binding materials (rope or rope belts)
+     * Returns true if player has: one full rope, OR two or more rope belts
+     */
+    const playerHasBindingMaterials = function(player) {
+        if (!player || !Array.isArray(player.inventory)) return false;
+        
+        let fullRopeCount = 0;
+        let ropeBeltCount = 0;
+        
+        for (const item of player.inventory) {
+            if (!item || item.hidden || item.isHidden || item.broken || item.ruined) continue;
+            if (Array.isArray(item.packed) && item.packed.length) continue;
+            
+            const id = String(item.id || "").trim().toLowerCase();
+            const name = String(item.name || "").trim().toLowerCase();
+            
+            // Full rope (capacity 2)
+            if (id === "rope" || id.indexOf("rope-") === 0 || name === "rope") {
+                fullRopeCount++;
+            }
+            // Rope belt (capacity 1)
+            else if (/\brope[\s-]+belt\b/.test(name) || /^rope-belt(?:-|$)/.test(id)) {
+                ropeBeltCount++;
+            }
+        }
+        
+        // Has at least one full rope, OR at least two rope belts
+        return (fullRopeCount >= 1) || (ropeBeltCount >= 2);
+    };
+    
+    // ============================================================================
+    // ACTION BORDER COLOR CODING
+    // ============================================================================
+    
+    /**
+     * Get border color for an action based on its type/purpose
+     * @param {Object} act - The action object
+     * @param {Object} entry - The menu entry
+     * @param {Object} npc - The NPC for mode checking
+     * @returns {string} - CSS color string or null
+     */
+    const getActionBorderColor = function(act, entry, npc) {
+        if (!act) act = getAct(entry.id) || {};
+        if (!act) return null;
+        
+        const actIdLower = (act.id || "").toLowerCase();
+        const labelLower = (act.label || "").toLowerCase();
+        const target = act.target || "";
+        const type = act.type || "";
+        
+        // Check if this action is available due to Dominant mode bypass
+        // In Dominant mode, actions gated by disinhibition are unlocked with red border
+        const demeanorMode = (npc && npc.intimacy && npc.intimacy._demeanorMode) 
+            ? String(npc.intimacy._demeanorMode).toLowerCase() 
+            : "consentual";
+        
+        if (demeanorMode === "dominant") {
+            // Authoritative marker: set by checkActionValidity for whichever
+            // gate the dominant bypass actually skipped (disinhibition,
+            // arousal, consent, or lube). Red border = "bypassing a normal
+            // condition".
+            if (act._dominantBypass === true) {
+                return "#ff0000"; // Red border for dominant-bypass actions
+            }
+            // Check if this action would normally be gated by disinhibition
+            const _disinhibThreshold = _effectiveActDisinhibitionThreshold(act);
+            
+            if (_disinhibThreshold > 0 && typeof window !== "undefined" &&
+                typeof window.getActDisinhibition === "function" &&
+                typeof window.getActionCategory === "function") {
+                
+                const _catKey = window.getActionCategory(entry.id || act.id, npc);
+                let isGated = false;
+                
+                if (type === ACT_TYPES.WATERSPORT || type === ACT_TYPES.IMPACT) {
+                    const _kinkCatKey = _catKey;
+                    const _ownScore = (_kinkCatKey && _kinkCatKey !== "Other")
+                        ? window.getActDisinhibition(npc, _kinkCatKey)
+                        : 0;
+                    const maxScore = typeof _getMaxCategoryDisinhibition === "function" 
+                        ? _getMaxCategoryDisinhibition(npc) 
+                        : 0;
+                    if (Math.max(_ownScore, maxScore) < _disinhibThreshold) {
+                        isGated = true;
+                    }
+                } else if (_catKey && _catKey !== "Other") {
+                    if (window.getActDisinhibition(npc, _catKey) < _disinhibThreshold) {
+                        isGated = true;
+                    }
+                }
+                
+                // If this action would be gated but is available due to Dominant mode, use red border
+                if (isGated) {
+                    return "#ff0000"; // Red border for dominant-bypass actions
+                }
+            }
+        }
+        
+        // Pussy/Vagina targeted actions (pink)
+        if (target === "vagina" || target === "pussy" || target === "clitoris" ||
+            actIdLower.includes("pussy") || actIdLower.includes("vagina") ||
+            actIdLower.includes("clit") || labelLower.includes("pussy") ||
+            labelLower.includes("vagina") || labelLower.includes("clitoris")) {
+            return "#ff99cc"; // Pink
+        }
+        
+        // Anal targeted actions (brown)
+        if (target === "anus" || target === "butt" || target === "buttocks" || target === "ass" ||
+            actIdLower.includes("anal") || actIdLower.includes("anus") ||
+            actIdLower.includes("butt") || actIdLower.includes("ass") ||
+            labelLower.includes("anal") || labelLower.includes("anus") ||
+            labelLower.includes("butt") || labelLower.includes("ass")) {
+            return "#8B4513"; // Brown
+        }
+        
+        // Penis/Cock targeted actions (purple)
+        if (target === "penis" || target === "cock" ||
+            actIdLower.includes("cock") || actIdLower.includes("penis") ||
+            actIdLower.includes("dick") || labelLower.includes("cock") ||
+            labelLower.includes("penis") || labelLower.includes("dick")) {
+            return "#9933ff"; // Purple
+        }
+        
+        // Climax actions (white)
+        if (act.triggersClimax || actIdLower.includes("climax") || actIdLower.includes("orgasm") ||
+            actIdLower.includes("cum") || actIdLower.includes("ejaculate") ||
+            labelLower.includes("climax") || labelLower.includes("orgasm")) {
+            return "#ffffff"; // White
+        }
+        
+        // Impact actions (red)
+        if (type === ACT_TYPES.IMPACT || actIdLower.includes("slap") || actIdLower.includes("spank") ||
+            actIdLower.includes("hit") || actIdLower.includes("smack") ||
+            labelLower.includes("slap") || labelLower.includes("spank")) {
+            return "#ff0000"; // Red
+        }
+        
+        // Watersports actions (yellow)
+        if (type === ACT_TYPES.WATERSPORT || actIdLower.includes("pee") || actIdLower.includes("piss") ||
+            actIdLower.includes("urinate") || actIdLower.includes("water") ||
+            labelLower.includes("pee") || labelLower.includes("piss")) {
+            return "#ffff00"; // Yellow
+        }
+        
+        // Fingering/Tease actions with fingers (green)
+        if (type === ACT_TYPES.TEASE &&
+            (target === "vagina" || target === "pussy" || target === "anus" ||
+             actIdLower.includes("finger") || actIdLower.includes("hand") ||
+             labelLower.includes("finger"))) {
+            return "#00ff00"; // Green
+        }
+        
+        // Oral/Mouth actions (orange)
+        if (target === "mouth" || target === "lips" || actIdLower.includes("mouth") ||
+            actIdLower.includes("oral") || actIdLower.includes("kiss") ||
+            actIdLower.includes("suck") || actIdLower.includes("blow") ||
+            labelLower.includes("mouth") || labelLower.includes("oral") ||
+            labelLower.includes("kiss")) {
+            return "#ffa500"; // Orange
+        }
+        
+        // General/Other actions (gray or null)
+        return null;
+    };
+    
+    // ============================================================================
+    // BODY PART SECTION DEFINITION
+    // ============================================================================
+    
+    // Define the new body-part-only sections in order
+    const BODY_PART_SECTIONS = [
+        { id: "Clothing", label: "Clothing", isSpecial: true, bgColor: "#3a2a1a" },
+        { id: "Head", label: "Head", isSpecial: false, bgColor: null },
+        { id: "Upper Body", label: "Upper Body", isSpecial: false, bgColor: null },
+        { id: "Midsection", label: "Midsection", isSpecial: false, bgColor: null },
+        { id: "Lower Body", label: "Lower Body", isSpecial: false, bgColor: null },
+        { id: "Requests", label: "Requests", isSpecial: true, bgColor: null }
+    ];
+    
+    // Get menu section: the canonical per-act menuSection field (see
+    // intimacy-data-acts.js) is the single source of truth. The fallback
+    // below only covers acts that predate the field.
+    const getMenuSection = function (entry, npc) {
         const act = getAct(entry.id) || {};
         const actType = act.type || entry.type;
+        
         if (act.menuSection) return act.menuSection;
-        if (actType === ACT_TYPES.CLOTHING) return "Undress";
-        if (act.triggersClimax) return "Climax";
-        if (actType === ACT_TYPES.PENETRATE || actType === ACT_TYPES.CONTINUE) return "Penetration";
-        if (actType === ACT_TYPES.END || actType === ACT_TYPES.WATERSPORT) return "Other";
-        return "Foreplay";
+        
+        // Fallbacks for acts without a menuSection field
+        if (actType === ACT_TYPES.CLOTHING) return "Clothing";
+        if (act.playerIsBottom === true || actType === ACT_TYPES.END) return "Requests";
+        if (String(act.tool || "").toLowerCase() === "voice") return "Requests";
+        
+        // Body-zone fallback from the act target
+        const TARGET_SECTION = {
+            face: "Head", mouth: "Head", lips: "Head", cheek: "Head", neck: "Head", hair: "Head", nose: "Head", ear: "Head", eyes: "Head", head: "Head",
+            breasts: "Upper Body", breast: "Upper Body", nipples: "Upper Body", chest: "Upper Body", shoulders: "Upper Body", shoulder: "Upper Body",
+            stomach: "Upper Body", belly: "Upper Body", bellybutton: "Upper Body", back: "Upper Body", arms: "Upper Body", arm: "Upper Body", hands: "Upper Body", hand: "Upper Body",
+            groin: "Midsection", hips: "Midsection", waist: "Midsection", penis: "Midsection", vagina: "Midsection", pussy: "Midsection", clitoris: "Midsection", clit: "Midsection",
+            anus: "Midsection", butt: "Midsection", buttocks: "Midsection", ass: "Midsection", cloaca: "Midsection", tail: "Midsection", testicles: "Midsection", balls: "Midsection", hemipenis: "Midsection",
+            thighs: "Lower Body", thigh: "Lower Body", legs: "Lower Body", leg: "Lower Body", feet: "Lower Body", foot: "Lower Body", toes: "Lower Body", toe: "Lower Body"
+        };
+        const byTarget = TARGET_SECTION[String(act.target || "").toLowerCase()];
+        if (byTarget) return byTarget;
+        if (actType === ACT_TYPES.PENETRATE) return "Midsection";
+        return "Upper Body";
     };
+
 
     const sectionedActions = {};
     for (const entry of flatActions) {
-        const section = getMenuSection(entry);
+        const section = getMenuSection(entry, npc);
         if (!sectionedActions[section]) sectionedActions[section] = [];
         sectionedActions[section].push(entry);
     }
 
-    for (const section of MENU_SECTIONS) {
-        const actions = sectionedActions[section];
+    // Add sections in order, filtering by NPC anatomy and enabled actions
+    for (const sectionDef of BODY_PART_SECTIONS) {
+        const sectionId = sectionDef.id;
+        const sectionLabel = sectionDef.label;
+        const isSpecial = sectionDef.isSpecial;
+        const bgColor = sectionDef.bgColor;
+        
+        const actions = sectionedActions[sectionId] || [];
+        
+        // Always include body part sections (Clothing, Head, Upper Body, Midsection, Lower Body, Requests)
+        // even if they have no actions or all actions are disabled
+        const isBodyPartSection = ["Clothing", "Head", "Upper Body", "Midsection", "Lower Body", "Requests"].includes(sectionId);
+        
+        // Hide sections that have no entries at all (neither valid actions
+        // nor disabled-with-hint ones): empty tabs are clutter, not
+        // information. Sections that only hold disabled entries stay
+        // visible so their unlock hints remain reachable through the
+        // "Show all" toggle.
         if (!actions || !actions.length) continue;
-        menu.push({
-            type: "section",
-            label: section,
-            actions: actions.map(entry => ({
+        
+        // For body part sections, check NPC anatomy relevance
+        if (isBodyPartSection) {
+            // For Midsection, check if NPC has any relevant anatomy
+            if (sectionId === "Midsection") {
+                const hasRelevantAnatomy = npcHasMidsection(npc) && 
+                    (npcHasPenis(npc) || npcHasVagina(npc) || npcHasAnus(npc) || npcHasCloaca(npc) || npcHasTail(npc));
+                if (!hasRelevantAnatomy) continue;
+            }
+        }
+        
+        // Build the actions with color coding
+        const menuActions = actions.map(entry => {
+            const act = getAct(entry.id) || {};
+            const borderColor = getActionBorderColor(act, entry, npc);
+            
+            return {
                 id: entry.id,
                 label: entry.label,
                 description: entry.description,
                 disabled: entry.disabled,
-                disabledHint: entry.disabledHint
-            }))
+                disabledHint: entry.disabledHint,
+                borderColor: borderColor
+            };
         });
+        
+        // Add rope bondage action to Clothing section if player has binding materials
+        if (sectionId === "Clothing" && playerHasBindingMaterials(player)) {
+            // Check if NPC is already bound
+            const isAlreadyBound = npc.bound && npc.surrendered;
+            
+            menuActions.push({
+                id: "bind_npc_intimacy",
+                label: isAlreadyBound ? "NPC is bound" : "Bind NPC with rope",
+                description: isAlreadyBound 
+                    ? "The NPC is already bound and surrendered to you"
+                    : "Use rope or rope belts to bind the NPC, allowing you to do as you please",
+                disabled: isAlreadyBound,
+                disabledHint: isAlreadyBound ? "NPC is already bound" : null,
+                borderColor: "#ff0000" // Red border for bondage action
+            });
+        }
+        
+        // Build section object with color info
+        const sectionObj = {
+            type: "section",
+            label: sectionLabel,
+            actions: menuActions,
+            isSpecial: isSpecial,
+            bgColor: bgColor
+        };
+        
+        menu.push(sectionObj);
     }
     
     // Multi-act Continue: with acts engaged in several slots (kissing +
@@ -8601,6 +10125,96 @@ function useLube(npc, bodyPart = "general", amount = 10) {
 }
 
 /**
+ * Handle natural lubrication accumulation
+ * Adds lube based on arousal levels and direct stimulation:
+ * - Vaginal: Self-lubrication from arousal (precum mechanics) and direct stimulation
+ * - Anal: Does NOT self-lubricate (per user requirement)
+ * - Mouth: Always considered lubricated (saliva)
+ * 
+ * Natural lube thresholds:
+ * - Vagina: Starts at 30% arousal, increases with arousal level
+ * - Direct vaginal stimulation: Adds extra lube faster
+ */
+function handleNaturalLubrication(npc, act) {
+    if (!npc || !npc.intimacy || !npc.intimacy.arousal) return;
+    
+    const intimacy = npc.intimacy;
+    const npcArousal = intimacy.arousal.npc || 0;
+    
+    // Ensure lube object and all its properties exist
+    if (!intimacy.lube) {
+        intimacy.lube = {};
+    }
+    
+    // Initialize each lube part if missing
+    const lubeParts = ["vagina", "anus", "mouth", "general"];
+    for (const part of lubeParts) {
+        if (!intimacy.lube[part]) {
+            intimacy.lube[part] = { hasLube: false, level: 0 };
+        }
+    }
+    
+    // Mouth is always lubricated (saliva) - no need to track
+    // Mark it as having lube if not already set
+    if (!intimacy.lube.mouth.hasLube) {
+        addLube(npc, "mouth", 100);
+    }
+    
+    // VAGINAL NATURAL LUBRICATION
+    // Self-lube from arousal (precum mechanics)
+    // Starts at 30% of orgasm threshold (240/800)
+    const VAGINAL_LUBE_THRESHOLD = 240;  // 30% of 800
+    const MAX_NATURAL_VAGINAL_LUBE = 80; // Can accumulate up to 80 from arousal alone
+    
+    // Check if vaginal lube needs updating based on arousal
+    if (!intimacy.lube.vagina.hasLube || intimacy.lube.vagina.level < MAX_NATURAL_VAGINAL_LUBE) {
+        if (npcArousal >= VAGINAL_LUBE_THRESHOLD) {
+            // Calculate lube amount based on arousal level
+            // 240-400: 20-40 lube
+            // 400-600: 40-60 lube  
+            // 600-800: 60-80 lube
+            let naturalLube = 0;
+            if (npcArousal >= 600) {
+                naturalLube = 80;
+            } else if (npcArousal >= 400) {
+                naturalLube = 40 + Math.floor((npcArousal - 400) / 200 * 40);
+            } else if (npcArousal >= 240) {
+                naturalLube = Math.floor((npcArousal - 240) / 160 * 40);
+            }
+            
+            // Only update if we have more lube to add
+            if (naturalLube > intimacy.lube.vagina.level) {
+                addLube(npc, "vagina", naturalLube - intimacy.lube.vagina.level);
+            }
+        }
+    }
+    
+    // DIRECT VAGINAL STIMULATION - adds extra lube faster
+    // Teasing/fingering/rubbing the vagina/pussy/clitoris adds lube
+    if (act && !act.playerIsBottom) { // Player is the actor
+        const target = (act.target || "").toLowerCase();
+        const isVaginalStimulation = target === "vagina" || target === "pussy" || 
+                                     target === "clitoris" || target === "clit";
+        
+        // Don't add for penetration acts (they consume lube, don't add it)
+        const isPenetration = act.type === ACT_TYPES.PENETRATE || act.type === ACT_TYPES.CONTINUE;
+        
+        if (isVaginalStimulation && !isPenetration) {
+            // Add lube based on action intensity
+            const arousalGain = (act.arousal && act.arousal.n) || 0;
+            // More intimate actions add more lube
+            let lubeToAdd = Math.floor(arousalGain / 5); // 5 arousal = 1 lube
+            if (lubeToAdd > 0) {
+                addLube(npc, "vagina", lubeToAdd);
+            }
+        }
+    }
+    
+    // ANAL DOES NOT SELF-LUBRICATE per user requirement
+    // Anal lube must come from explicit actions (licking, spitting, etc.)
+}
+
+/**
  * Check if lube is available for a specific body part
  * @param {Object} npc - The NPC
  * @param {string} bodyPart - The body part (vagina, anus, mouth, general, or any)
@@ -8645,6 +10259,14 @@ function hasLube(npc, bodyPart = "any") {
 function changePosition(npc, player, newPositionId, options = {}) {
     if (!npc || !npc.intimacy) return { success: false, error: "No intimacy state" };
     if (!hasPosition(newPositionId)) return { success: false, error: "Invalid position" };
+    
+    // Ensure position object exists
+    if (!npc.intimacy.position) {
+        npc.intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
     
     const oldPosition = npc.intimacy.position.player;
     const oldPositionObj = getPosition(oldPosition);
@@ -9430,10 +11052,19 @@ function describeAnatomy(npc, target, options = {}) {
     
     // Get arousal descriptors
     const arousalDescriptors = getArousalDescriptors(arousalLevel, isAroused, isWet, isErect, isOnCooldown);
-
-    // Check anatomy type — reptilian species have cloaca instead of
-    // separate vagina and anus. Map those targets to "cloaca".
+    
+    // Get anatomy type and surface descriptors to prevent AI from hallucinating wrong features
     var anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    var surfaceDesc = "";
+    if (anatomyType === "reptilian" || anatomyType === "scaled") {
+        surfaceDesc = "scaled ";
+    } else if (anatomyType === "furry" || anatomyType === "furred") {
+        surfaceDesc = "fur-covered ";
+    } else if (anatomyType === "feathered" || anatomyType === "avian") {
+        surfaceDesc = "feathered ";
+    } else {
+        surfaceDesc = "smooth "; // mammalian/skin default
+    }
     var effectiveTarget = target;
     if (anatomyType === "reptilian") {
         var targetLower = target.toLowerCase();
@@ -9546,14 +11177,26 @@ function describeVagina(npc, anatomy, posPronoun, arousalDescriptors) {
     const body = anatomy.body || {};
     const surfaceType = body.surfaceType || "skin";
     const anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
-    if (anatomyType === "reptilian" || anatomyType === "mixed" || surfaceType !== "skin") {
+    if (surfaceType !== "skin") {
         const surfaceColor = body.color || "";
         const surface = surfaceColor ? surfaceColor + " " + surfaceType : surfaceType;
-        if (surfaceType === "scales" || anatomyType === "reptilian" || anatomyType === "mixed") {
+        if (surfaceType === "scales") {
             descriptions.push(pickRandom([
                 "smooth " + surface + " mound, the plates finer and lighter here",
                 "bare scaled mound, no hair",
                 "hairless " + surface + " mound"
+            ]));
+        } else if (surfaceType === "fur") {
+            descriptions.push(pickRandom([
+                "soft " + surface + " mound",
+                "fur-covered " + surface + " mound",
+                "" + surface + " mound"
+            ]));
+        } else if (surfaceType === "feathers") {
+            descriptions.push(pickRandom([
+                "feathered " + surface + " mound",
+                "soft " + surface + " mound covered in down",
+                "" + surface + " mound"
             ]));
         } else {
             descriptions.push(surface + " mound");
@@ -9884,7 +11527,7 @@ function describeCloaca(npc, anatomy, posPronoun, arousalDescriptors) {
  * Describe anus with rich detail
  * Uses anatomical terms: star, rosebud, pucker, ring, etc.
  */
-function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
+function describeAnus(npc, anatomy, posPronoun, arousalDescriptors, anatomyType, surfaceDesc) {
     const anus = anatomy.anus || {};
     const size = anus.size || "snug";
     const sphincter = anus.sphincter || "tight";
@@ -9925,12 +11568,14 @@ function describeAnus(npc, anatomy, posPronoun, arousalDescriptors) {
 
     // Hair descriptors — the anal area often has hair, add raw detail
     // For scaled species, use scale texture instead of hair
-    var _anatomyType2 = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
+    // Use actual surface type from anatomy.body to prevent hallucinating wrong features
+    const body = anatomy.body || {};
+    const actualSurfaceType = (body && String(body.surfaceType || "").trim().toLowerCase()) || "skin";
     var hairDesc = "";
-    if (_anatomyType2 === "reptilian" || _anatomyType2 === "mixed") {
+    if (actualSurfaceType === "scales") {
         if (Math.random() < 0.3) {
             hairDesc = pickRandom([
-                "ringed with fine smooth scales", "smooth-scaled", "surrounded by smaller plates"
+                "ringed with fine smooth scales", "smooth-scaled"
             ]);
         }
     } else {
@@ -10139,6 +11784,14 @@ function enhanceActionLabel(npc, label, context = {}) {
  */
 function getSuggestedPositions(npc) {
     if (!npc || !npc.intimacy) return [];
+    
+    // Ensure position object exists
+    if (!npc.intimacy.position) {
+        npc.intimacy.position = {
+            player: DEFAULT_POSITION,
+            npc: DEFAULT_POSITION
+        };
+    }
     
     const currentPosition = npc.intimacy.position.player;
     const allPositions = getAllPositionIds();
@@ -10679,6 +12332,154 @@ function getRoomMessNotes(room) {
 // ============================================================================
 
 /**
+ * Build custom narrative for actions on bound/captive NPCs
+ * Describes forceful actions on a physically restrained NPC
+ */
+function buildCaptiveNarrative(npc, act, player) {
+    if (!npc || !act) return null;
+    
+    const npcName = npc.name || "them";
+    const tool = act.tool || "hand";
+    let target = act.target || "body";
+    const verb = act.verb || "touch";
+    
+    // Replace special targets with appropriate body parts for narrative
+    if (target === "npc" || target === "player") {
+        target = "body";
+    }
+    
+    // Oral penetration on bound captive
+    if (target === "mouth" || target === "lips" || act.id.toLowerCase().includes("mouth") || act.id.toLowerCase().includes("oral")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `With ${npcName} securely bound and unable to resist, you force your cock into their mouth, thrusting past their helpless lips.`;
+        }
+    }
+    
+    // Vaginal penetration on bound captive
+    if (target === "vagina" || target === "pussy" || act.id.toLowerCase().includes("vagina") || act.id.toLowerCase().includes("pussy")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `You position yourself over ${npcName}, their bound body unable to resist as you push your cock into their ${target}.`;
+        }
+    }
+    
+    // Anal penetration on bound captive
+    if (target === "anus" || target === "ass" || act.id.toLowerCase().includes("anal") || act.id.toLowerCase().includes("anus")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `With ${npcName} bound and helpless, you spread their cheeks and force your cock into their tight entrance.`;
+        }
+    }
+    
+    // Generic for bound NPC
+    return `You take advantage of ${npcName}'s bound state, ${verb}ing their ${target} as they struggle vainly against their restraints.`;
+}
+
+/**
+ * Build custom narrative for actions on submissive/meek NPCs
+ * Describes consensual but dominant actions on a willing subordinate
+ */
+function buildSubmissiveNarrative(npc, act, player) {
+    if (!npc || !act) return null;
+    
+    const npcName = npc.name || "them";
+    const tool = act.tool || "hand";
+    let target = act.target || "body";
+    
+    // Replace special targets with appropriate body parts for narrative
+    if (target === "npc" || target === "player") {
+        target = "body";
+    }
+    const verb = act.verb || "touch";
+    
+    // Oral on submissive
+    if (target === "mouth" || target === "lips" || act.id.toLowerCase().includes("mouth") || act.id.toLowerCase().includes("oral")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `${npcName} opens their mouth obediently, willingly taking your cock between their lips as you guide yourself in.`;
+        }
+    }
+    
+    // Vaginal on submissive
+    if (target === "vagina" || target === "pussy" || act.id.toLowerCase().includes("vagina") || act.id.toLowerCase().includes("pussy")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `${npcName} spreads their legs for you, eagerly accepting your cock into their ${target} with a submissive moan.`;
+        }
+    }
+    
+    // Anal on submissive
+    if (target === "anus" || target === "ass" || act.id.toLowerCase().includes("anal") || act.id.toLowerCase().includes("anus")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `${npcName} presents themselves for you, willingly taking your cock into their back passage.`;
+        }
+    }
+    
+    // Generic for submissive
+    return `You ${verb} ${npcName}'s ${target}, their submissive nature evident as they willingly accept your attention.`;
+}
+
+/**
+ * Build custom narrative for actions on unconscious NPCs
+ * Since they can't resist or react, the narrative describes forceful/non-consensual actions
+ */
+function buildUnconsciousNarrative(npc, act, player) {
+    if (!npc || !act) return null;
+    
+    const npcName = npc.name || "them";
+    const playerName = player.name || "you";
+    const tool = act.tool || "hand";
+    let target = act.target || "body";
+    const verb = act.verb || "touch";
+    
+    // Replace special targets with appropriate body parts for narrative
+    if (target === "npc" || target === "player") {
+        target = "body"; // Use generic "body" for clothing removal actions on self/other
+    }
+    
+    // Custom narratives for specific actions
+    const actId = act.id || "";
+    
+    // Oral penetration on unconscious NPC
+    // Only match actual penetration acts (fuck, thrust, deepthroat, etc.) not tease/rub acts
+    const isPenetrativeVerb = ["fuck", "thrust", "deepthroat", "penetrate", "enter"].includes(verb.toLowerCase());
+    if (isPenetrativeVerb && (target === "mouth" || target === "lips")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `You plug ${npcName}'s nose and they instinctively gasp for air, their mouth opening. You jam your cock into their mouth, pushing past their unresisting lips and deep into their throat.`;
+        }
+    }
+    
+    // Vaginal penetration on unconscious NPC  
+    if (target === "vagina" || target === "pussy" || actId.toLowerCase().includes("vagina") || actId.toLowerCase().includes("pussy")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `With ${npcName} completely limp and unresisting, you position yourself and force your cock into their ${target}. Their body offers no resistance as you push deep inside.`;
+        }
+        if (tool === "fingers" || tool === "hand" || tool === "digit") {
+            return `You spread their legs and slide your fingers into their unresisting ${target}, their body completely limp.`;
+        }
+    }
+    
+    // Anal penetration on unconscious NPC
+    if (target === "anus" || target === "ass" || target === "butt" || actId.toLowerCase().includes("anal") || actId.toLowerCase().includes("anus")) {
+        if (tool === "penis" || tool === "cock" || tool === "dick") {
+            return `You lift ${npcName}'s hips and press your cock against their tight entrance. With no resistance, you push forward, your cock sinking into their back passage.`;
+        }
+        if (tool === "fingers" || tool === "hand") {
+            return `You probe at ${npcName}'s back entrance with your fingers, their limp body offering no resistance as you push inside.`;
+        }
+    }
+    
+    // Breast/tits actions on unconscious NPC
+    if (target === "breasts" || target === "tits" || target === "nipples" || actId.toLowerCase().includes("breast") || actId.toLowerCase().includes("nipple")) {
+        return `You handle ${npcName}'s bare, limp breasts at will, squeezing and kneading their unresisting flesh.`;
+    }
+    
+    // Generic penetration/insertion
+    if (verb === "penetrate" || verb === "enter" || verb === "insert" || verb === "thrust" || verb === "pound") {
+        return `You take advantage of ${npcName}'s unconscious state and ${verb} them without resistance, their body completely at your mercy.`;
+    }
+    
+    // Generic action - describe forceful action on unresisting body
+    return `You ${verb} ${npcName}'s ${target} as they lie motionless, their body completely unresisting to your touch.`;
+}
+
+/**
  * Generate a rich narrative for an intimacy action
  * Creates flowing sentences like: "You part her brown pubs and expose her meaty vagina, sliding your tongue between her engorged labia..."
  * @param {Object} npc - The NPC
@@ -10692,6 +12493,29 @@ function generateIntimacyNarrative(npc, actionId, context = {}) {
     const { player, arousalLevel = 0, isAroused = false, isWet = false, isErect = false, isOnCooldown = false, isContinueAction = false, intimacy = null } = context;
     const act = typeof getAct === 'function' ? getAct(actionId) : null;
     if (!act) return null;
+    
+    // Check if NPC is unconscious/sleeping - use custom unconscious narratives
+    const isUnconscious = (typeof window.isNPCUnconscious === "function" && window.isNPCUnconscious(npc)) ||
+                       (npc && (npc.bodyState === "unconscious" || npc.isUnconsciousBody === true || npc.unconscious === true));
+    const isSleeping = (typeof window.isNPCSleeping === "function" && window.isNPCSleeping(npc)) ||
+                     (npc && npc.currentState && npc.currentState.sleeping);
+    
+    if (isUnconscious || isSleeping) {
+        const unconsciousNarrative = buildUnconsciousNarrative(npc, act, player);
+        if (unconsciousNarrative) return unconsciousNarrative;
+    }
+    
+    // Check if NPC is bound/captive - use custom captive narratives
+    if (npc && (npc.bound || (npc._surrenderData && !npc._surrenderData.voluntary))) {
+        const captiveNarrative = buildCaptiveNarrative(npc, act, player);
+        if (captiveNarrative) return captiveNarrative;
+    }
+    
+    // Check if NPC is submissive/meek (voluntarily surrendered) - use custom submissive narratives
+    if (npc && npc._surrenderData && npc._surrenderData.voluntary) {
+        const submissiveNarrative = buildSubmissiveNarrative(npc, act, player);
+        if (submissiveNarrative) return submissiveNarrative;
+    }
     
     const { verb, target, tool, label } = act;
     const posPronoun = typeof getPossessivePronoun === 'function' ? getPossessivePronoun(npc) : "their";
@@ -13216,11 +15040,12 @@ function buildAnusNarratives(npc, verbBase, verbPresent, verbIng, anatomyDesc, p
             ]);
         } else if (Math.random() < 0.35) {
             // Scaled species have no coarse hair back there — deterrence
-            // reads on the unwashed state, not hair.
-            var _scaledBack = (typeof getNPCAnatomyType === "function" &&
-                    (getNPCAnatomyType(npc) === "reptilian" || getNPCAnatomyType(npc) === "mixed")) ||
-                (npc.anatomy && npc.anatomy.body && String(npc.anatomy.body.surfaceType || "") === "scales");
-            deterrenceDesc = _scaledBack ? pickRandom([
+            // reads on the unwashed state, not hair. Check actual surface type.
+            var body = npc.anatomy && npc.anatomy.body;
+            var surfaceType = body && String(body.surfaceType || "");
+            var isScaled = surfaceType === "scales" || 
+                (typeof getNPCAnatomyType === "function" && getNPCAnatomyType(npc) === "reptilian");
+            deterrenceDesc = isScaled ? pickRandom([
                 "The rough, unwashed scales back there give you a moment of doubt",
                 "The unwashed state of the area makes you think twice"
             ]) : pickRandom([
@@ -14074,12 +15899,29 @@ function isCivilizedSpecies(species) {
 }
 
 /**
- * Get the anatomy type for an NPC based on species template.
- * Returns "humanoid" (standard genitals), "reptilian" (cloaca), or "mixed"
- * (humanoid genitals with scaly texture).
+ * Get the anatomy type for an NPC based on species template or override.
+ * Returns "humanoid" (standard genitals), "reptilian" (cloaca), "mixed"
+ * (humanoid genitals with scaly texture), "furry", or "scaled".
+ * 
+ * Priority:
+ * 1. Explicit override on npc.nsfwTraits.anatomyType
+ * 2. Explicit override on npc.anatomyType
+ * 3. Template anatomyType
+ * 4. Surface type mapping (fur -> furry, scales -> scaled)
+ * 5. Default: humanoid
  */
 function getNPCAnatomyType(npc) {
     if (!npc || !npc.species) return "humanoid";
+    
+    // Check for explicit overrides first (NSFW overrides SFW)
+    if (npc.nsfwTraits && npc.nsfwTraits.anatomyType) {
+        return npc.nsfwTraits.anatomyType;
+    }
+    if (npc.anatomyType) {
+        return npc.anatomyType;
+    }
+    
+    // Get template anatomyType
     var template = null;
     if (typeof getSpeciesTemplate === "function") {
         template = getSpeciesTemplate(npc.species);
@@ -14087,6 +15929,19 @@ function getNPCAnatomyType(npc) {
         template = window.getSpeciesTemplate(npc.species);
     }
     if (template && template.anatomyType) return template.anatomyType;
+    
+    // Map surfaceType to anatomy descriptor
+    const anatomy = npc.anatomy || {};
+    const surfaceType = anatomy.surfaceType || (npc.surfaceType) || "";
+    const surfaceToAnatomy = {
+        "fur": "furry",
+        "scales": "scaled",
+        "feathers": "furry"
+    };
+    if (surfaceToAnatomy[surfaceType.toLowerCase()]) {
+        return surfaceToAnatomy[surfaceType.toLowerCase()];
+    }
+    
     return "humanoid";
 }
 
@@ -14095,6 +15950,11 @@ function getNPCAnatomyType(npc) {
  */
 function hasNPCTail(npc) {
     if (!npc) return false;
+    // Hydrated flag wins — kept consistent with _actNpcHasTail in
+    // intimacy-data-acts.js (npc.hasTail is the authoritative runtime flag
+    // when a hydration pass has set it).
+    if (npc.hasTail === true) return true;
+    if (npc.hasTail === false) return false;
     // Check species template
     var template = null;
     if (typeof getSpeciesTemplate === "function") {
@@ -14213,16 +16073,49 @@ function getAnalInteriorColor(npc) {
  * Get pubic hair description
  */
 function getPubicDescription(npc) {
-    // Scaled species (lizardfolk, kobold, dragonborn) have no pubic hair —
-    // instead they have smooth, differently-colored smaller scales.
+    // Reptilian species have a cloaca (vent) with smooth scales.
+    // Other species (including mixed, furry, scaled) have humanoid genitals.
     var anatomyType = (typeof getNPCAnatomyType === "function") ? getNPCAnatomyType(npc) : "humanoid";
-    if (anatomyType === "reptilian" || anatomyType === "mixed") {
+    
+    // Get actual surface type from anatomy
+    var body = (npc.anatomy && npc.anatomy.body) || (npc.nsfwTraits && npc.nsfwTraits.anatomy && npc.nsfwTraits.anatomy.body) || {};
+    var surfaceType = String(body.surfaceType || npc.surfaceType || "skin").toLowerCase();
+    
+    if (anatomyType === "reptilian") {
         var skinDesc = (typeof getSkinDescription === "function") ? getSkinDescription(npc) : "";
         return pickRandom([
             "smooth " + (skinDesc || "scaled") + " vent, the scales smaller and lighter here",
-            "bare scaled mound, the plates thin and smooth",
-            "smooth vent, no hair but fine smaller scales"
+            "bare scaled vent, no hair but fine smaller scales",
+            "smooth vent with fine scales"
         ]);
+    }
+    
+    // For non-reptilian species, check actual surface type
+    if (surfaceType !== "skin") {
+        var skinDesc = (typeof getSkinDescription === "function") ? getSkinDescription(npc) : "";
+        var surface = skinDesc ? skinDesc + " " + surfaceType : surfaceType;
+        
+        if (surfaceType === "scales") {
+            return pickRandom([
+                "smooth " + surface + " mound, the scales finer and lighter here",
+                "bare scaled mound, no hair",
+                "hairless " + surface + " mound"
+            ]);
+        } else if (surfaceType === "fur") {
+            return pickRandom([
+                "soft " + surface + " mound covered in " + (skinDesc || "") + "fur",
+                surface + " mound with fine fur",
+                surface + " mound"
+            ]);
+        } else if (surfaceType === "feathers") {
+            return pickRandom([
+                "feathered " + surface + " mound",
+                "soft " + surface + " mound covered in down",
+                surface + " mound"
+            ]);
+        } else {
+            return surface + " mound";
+        }
     }
 
     // Check nsfwTraits first (sexual anatomy), then fallback to regular anatomy

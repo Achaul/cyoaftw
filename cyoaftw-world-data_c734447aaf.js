@@ -1,10 +1,10 @@
-// Bathhouses use generated, persistent business names suited to the town.
+// Settlement mausoleums: named service cluster, fifty-niche vaults and upward expansion plans.
 // Shared species appearance: explicit morphology, regional surfaces and saved NPC fullness.
-// ── cyoaftw-world-data.js v2026-10-24-002 ── Generated bathhouse names and stable saved-building names. Previous: Street fixtures get physical templates; player-led guide check-ins and bounded intro delivery; zone/trade shop names.
+// ── cyoaftw-world-data.js v2026-10-26-001 ── Hidden warding marks support reading and comprehension. Previous: Washable puddles/troughs and authored moonbloom/root harvesting; generated bathhouse names and stable saved-building names; street fixture physical templates; guide check-ins and zone/trade shop names.
 // Previous: Commoner debt dialogue identifies the creditor.
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.WORLD_DATA_VERSION = "2026-10-24-002";
+    window.WORLD_DATA_VERSION = "2026-10-26-001";
     console.log("[World Data] Loaded v" + window.WORLD_DATA_VERSION);
 }
 
@@ -876,9 +876,78 @@ const SPECIES_TEMPLATES = [
 // ── ROOM TEMPLATES ───────────────────────────────────────────────
 const ROOM_TEMPLATES = [
     {
+        type: "Mausoleum", zone: "Town", role: "landmark", displayName: "Mausoleum", imageKey: "Shrine",
+        baseDescription: "A quiet stone house of remembrance keeps the settlement's dead under watch. A receiving counter holds the register of names; beyond it lie the memorial gallery, laying-out room and stairs to the burial vaults. The Long War taught the living to make room for every name, known or unknown.",
+        allowedZones: ["town", "underground city"], parentCluster: ["square", "cavern"], isConnector: false,
+        structural: [
+            { id: "mortuary-register", name: "register of the departed", tags: ["information"], anchored: true, alwaysShow: true,
+              examineText: "The Keeper of the Quiet records the names of the dead and the numbered niches assigned to them. Unidentified people receive a record too. Each burial vault has fifty individual niches. When the last available niche is filled, another vault floor opens above the stair tower." },
+            { id: "receiving-counter", name: "receiving counter", tags: ["surface", "work"], anchored: true },
+            { id: "mourners-bench", name: "mourners' bench", tags: ["social", "rest"], anchored: true }
+        ]
+    },
+    {
+        type: "Memorial Gallery", zone: "Town", role: "interior", displayName: "Memorial Gallery", imageKey: "Shrine",
+        baseDescription: "Name tablets line a peaceful gallery. A Vigil Tender keeps the lamps trimmed and gives visitors room to remember. The stair tower and laying-out room lead away from this public hall.",
+        allowedZones: ["town", "underground city"], parentCluster: ["mausoleum"], isConnector: false,
+        structural: [
+            { id: "memorial-tablets", name: "memorial name tablets", tags: ["information"], anchored: true,
+              examineText: "Simple stone tablets commemorate the departed without claiming that every name has yet been learned." },
+            { id: "vigil-lamps", name: "vigil lamp stand", tags: ["work"], anchored: true },
+            { id: "remembrance-bench", name: "remembrance bench", tags: ["rest", "social"], anchored: true }
+        ]
+    },
+    {
+        type: "Laying-out Room", zone: "Town", role: "interior", displayName: "Laying-out Room", imageKey: "Chamber",
+        baseDescription: "A clean stone table stands beside a wash basin. Folded shrouds, name tags and mild herbs are set out for the respectful preparation of the dead. A wide door leads to the bearers' lodge.",
+        allowedZones: ["town", "underground city"], parentCluster: ["mausoleum"], isConnector: false, noNpcs: true,
+        structural: [
+            { id: "laying-out-table", name: "stone laying-out table", tags: ["surface", "work"], anchored: true,
+              physicalDefinition: { name: "stone laying-out table", template: "table", material: "stone", scale: 1.5 } },
+            { id: "mortuary-basin", name: "stone wash basin", tags: ["work"], anchored: true,
+              examineText: "A basin for washing hands and cleaning the preparation table. Preparation work routines are not yet available." },
+            { id: "shroud-shelves", name: "shroud and name-tag shelves", tags: ["work"], anchored: true }
+        ]
+    },
+    {
+        type: "Bearers' Lodge", zone: "Town", role: "interior", displayName: "Bearers' Lodge", imageKey: "Armory",
+        baseDescription: "Two places are kept ready for a pair of Bier Bearers. A long carrying bier rests beside a covered handcart; straps, clean coverings and a route board await the next round. Their charge is to bring the confirmed dead to the mausoleum together.",
+        allowedZones: ["town", "underground city"], parentCluster: ["mausoleum"], isConnector: false,
+        structural: [
+            { id: "carrying-bier", name: "wooden carrying bier", tags: ["work"], takeable: false,
+              physicalDefinition: { name: "wooden carrying bier", template: "bench", material: "wood", scale: 1.4 },
+              examineText: "A long two-person carrying frame with handles and straps. The bearers use it together to collect the dead from reachable rooms and carry them to a burial vault." },
+            { id: "mortuary-handcart", name: "covered mortuary handcart", tags: ["work"], takeable: false,
+              physicalDefinition: { name: "covered mortuary handcart", template: "cart", material: "wood", scale: 1 } },
+            { id: "bearer-route-board", name: "bearers' route board", tags: ["information"], anchored: true,
+              examineText: "One pair of Bier Bearers serves this settlement. During working hours they collect the confirmed dead along safe, open routes. Unconscious people are left for medical care. A journey already carrying a body is completed before the pair goes off duty." }
+        ]
+    },
+    {
+        type: "Mausoleum Stair", zone: "Town", role: "interior", displayName: "Mausoleum Stair", imageKey: "Stairs",
+        baseDescription: "A broad stone stair has space for two bearers and their burden. Landings serve the burial vaults above; the tower can be extended upward as the settlement needs more room.",
+        allowedZones: ["town", "underground city"], parentCluster: ["mausoleum"], isConnector: true, noNpcs: true,
+        structural: [{ id: "vault-floor-marker", name: "vault floor marker", tags: ["information"], anchored: true,
+            examineText: "Each vault floor provides fifty individual burial niches. The stairs lead back down to the memorial gallery." }]
+    },
+    {
+        type: "Burial Vault", zone: "Town", role: "interior", displayName: "Burial Vault", imageKey: "Vault",
+        baseDescription: "Fifty full-length burial niches are set into the stone walls, each with its own numbered cover and place for a name tablet. The cool, quiet chamber opens onto the stair landing. Each niche is intended for one deceased person.",
+        allowedZones: ["town", "underground city"], parentCluster: ["mausoleum"], isConnector: false, noNpcs: true,
+        burialCapacity: 50,
+        structural: [{ id: "burial-niches", name: "fifty numbered burial niches", tags: ["burial"], anchored: true, takeable: false, alwaysShow: true,
+            examineText: "Fifty separate stone cubbies, numbered one through fifty, each sized for one body. Occupied niches preserve their bodies indefinitely. Memorial plaques are mounted outside the niche covers." }]
+    },
+    {
         type: "Bathhouse", zone: "Town", role: "landmark", displayName: "Bathhouse", imageKey: "Inn Common",
         baseDescription: "A modest stone bathhouse smells of warm linen and rosemary. A keeper's counter faces the street; beyond a door lie the bathing room and massage room. A painted board offers hot baths, assisted washing, shoulder and back massage, and honest work. Laborers, travelers and old soldiers come here to ease the aches the Long War left behind.",
-        allowedZones: ["town"], parentCluster: ["square"], isConnector: false, minNpcs: 1,
+        allowedZones: ["town"], parentCluster: ["square"], isConnector: false, minNpcs: 7,
+        requiredRole: "Bathkeeper",
+        roleTable: [
+            { role: "BathhouseAttendant", weight: 4 },
+            { role: "BathhousePractitioner", weight: 3 },
+            { role: "BathhouseAttendant", weight: 2 }
+        ],
         structural: [
             { id: "bathhouse-price-board", name: "bathhouse price board", tags: ["information", "commerce"], alwaysShow: true,
               examineText: "The keeper offers hot baths, assisted washes and shoulder and back massage. Ask about bathhouse services for current prices and work. General attendants carry water, tend fires and wash linen; massage practitioners must pass a supervised practical trial." },
@@ -889,7 +958,12 @@ const ROOM_TEMPLATES = [
     {
         type: "Bathing Room", zone: "Town", role: "interior", displayName: "Bathing Room", imageKey: "Guest Room",
         baseDescription: "Copper tubs stand behind linen screens. A banked furnace warms the water, and shelves hold soap, buckets and folded towels. The keeper arranges baths and attendant work at the front counter.",
-        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 3,
+        roleTable: [
+            { role: "BathhouseAttendant", weight: 5 },
+            { role: "BathhousePractitioner", weight: 2 },
+            { role: "BathhouseAttendant", weight: 3 }
+        ],
         structural: [
             { id: "bathing-tubs", name: "screened bathing tubs", tags: ["work", "commerce"], anchored: true, takeable: false },
             { id: "linen-shelves", name: "clean linen shelves", tags: ["work"], anchored: true }
@@ -898,10 +972,45 @@ const ROOM_TEMPLATES = [
     {
         type: "Massage Room", zone: "Town", role: "interior", displayName: "Massage Room", imageKey: "Guest Room",
         baseDescription: "A quiet room holds a padded treatment bench, a stool and a shelf of mild herbal oils. Fresh linen covers the bench. Here the bathkeeper supervises practical trials and trained hands ease tired shoulders and backs.",
-        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 2,
+        roleTable: [
+            { role: "BathhousePractitioner", weight: 4 },
+            { role: "BathhouseAttendant", weight: 2 },
+            { role: "BathhousePractitioner", weight: 3 }
+        ],
         structural: [
             { id: "massage-bench", name: "padded treatment bench", tags: ["work", "commerce"], anchored: true, takeable: false },
             { id: "oil-shelf", name: "shelf of herbal oils", tags: ["work"], anchored: true }
+        ]
+    },
+    {
+        type: "Bathhouse Changeroom", zone: "Town", role: "interior", displayName: "Changeroom", imageKey: "Guest Room",
+        baseDescription: "A small private room with wooden lockers for staff and workers. Clean bathhouse uniforms hang ready for use, and a full-length mirror allows final adjustments before stepping onto the floor.",
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        structural: [
+            { id: "lockers", name: "wooden staff lockers", tags: ["storage"], anchored: true, takeable: false },
+            { id: "uniform-rack", name: "uniform rack", tags: ["work"], anchored: true, takeable: false },
+            { id: "changeroom-mirror", name: "full-length mirror", tags: ["social"], anchored: true, takeable: false }
+        ]
+    },
+    {
+        type: "Private Bath Chamber", zone: "Town", role: "interior", displayName: "Private Bath Chamber", imageKey: "Guest Room",
+        baseDescription: "A secluded private bath chamber with warm lighting and soft padding. A treatment bench draped in fresh linen occupies the center, with small tables holding oils and towels. The air carries the scent of herbs and warm stone. A sturdy door with a lock ensures privacy.",
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        structural: [
+            { id: "private-bench", name: "padded treatment bench", tags: ["work", "rest", "commerce"], anchored: true, takeable: false },
+            { id: "private-oil-shelf", name: "shelf of premium oils", tags: ["work"], anchored: true },
+            { id: "linen-stand", name: "linen towel stand", tags: ["work"], anchored: true }
+        ]
+    },
+    {
+        type: "Private Chamber", zone: "Town", role: "interior", displayName: "Private Chamber", imageKey: "Guest Room",
+        baseDescription: "A secluded private chamber with warm lighting and soft padding. A treatment bench draped in fresh linen occupies the center, with small tables holding oils and towels. The air carries the scent of herbs and warm stone.",
+        allowedZones: ["town"], parentCluster: ["bathhouse"], isConnector: false, minNpcs: 0,
+        structural: [
+            { id: "private-bench", name: "padded treatment bench", tags: ["work", "rest", "commerce"], anchored: true, takeable: false },
+            { id: "private-oil-shelf", name: "shelf of premium oils", tags: ["work"], anchored: true },
+            { id: "linen-stand", name: "linen towel stand", tags: ["work"], anchored: true }
         ]
     },
     {
@@ -981,7 +1090,7 @@ const ROOM_TEMPLATES = [
             { id: "forge-fire",    name: "forge fire",    tags: ["heat", "light", "forge"] },
             { id: "anvil",         name: "anvil",         tags: ["work", "forge"] },
             { id: "grindstone",    name: "grindstone",    tags: ["work", "forge"] },
-            { id: "quench-trough", name: "quench trough", tags: ["work", "forge"] },
+            { id: "quench-trough", name: "quench trough", tags: ["work", "forge", "hygiene"] },
             { id: "ore-bin",       name: "ore bin",       tags: ["storage", "loot"] },
             { id: "commission-board", name: "commission board", tags: ["information", "commerce"], alwaysShow: true }
         ],
@@ -1149,7 +1258,7 @@ const ROOM_TEMPLATES = [
         isConnector: true,
         structural: [
             { id: "support-beam", name: "support beam",     tags: ["structural"] },
-            { id: "puddle",       name: "puddle",           tags: ["hazard"] }
+            { id: "puddle",       name: "puddle",           tags: ["hazard", "hygiene"] }
         ],
         imageKey: "Tunnel"
     },
@@ -1390,7 +1499,7 @@ const ROOM_TEMPLATES = [
             { id: "stalagmites",  name: "stalagmites",  tags: ["cover", "hazard"] },
             { id: "glowing-fungi",name: "glowing fungi",tags: ["light", "landmark"] },
             { id: "underground-pool", name: "underground pool", tags: ["water"] },
-            { id: "moonbloom-grove", name: "grove of moonbloom flowers", tags: ["flora", "gather", "light"] }
+            { id: "moonbloom-grove", name: "grove of moonbloom flowers", tags: ["flora", "gather", "light"], forageIngredient: "moonbloom", forageMax: 2 }
         ],
         imageKey: "Cavern"
     },
@@ -1423,7 +1532,7 @@ const ROOM_TEMPLATES = [
             { id: "forge-fire",    name: "deep-fed forge", tags: ["heat", "light", "forge"] },
             { id: "anvil",         name: "anvil",          tags: ["work", "forge"] },
             { id: "grindstone",    name: "grindstone",     tags: ["work", "forge"] },
-            { id: "quench-trough", name: "quench trough",  tags: ["work", "forge"] },
+            { id: "quench-trough", name: "quench trough",  tags: ["work", "forge", "hygiene"] },
             { id: "ore-bin",       name: "ore bin",        tags: ["storage", "loot"] },
             { id: "commission-board", name: "commission board", tags: ["information", "commerce"], alwaysShow: true }
         ],
@@ -1508,9 +1617,9 @@ const ROOM_TEMPLATES = [
         parentCluster: ["marsh"],
         isConnector: true,
         structural: [
-            { id: "twisted-roots", name: "twisted roots", tags: ["hazard", "cover"] },
+            { id: "twisted-roots", name: "twisted roots", tags: ["hazard", "cover", "forage"], forageIngredient: "twisted-root", forageMax: 2 },
             { id: "reed-bed",      name: "reed bed",      tags: ["cover"] },
-            { id: "moonbloom-patch", name: "pale moonbloom flowers", tags: ["flora", "gather"] }
+            { id: "moonbloom-patch", name: "pale moonbloom flowers", tags: ["flora", "gather"], forageIngredient: "moonbloom", forageMax: 2 }
         ],
         imageKey: "Marsh"
     },
@@ -1526,7 +1635,7 @@ const ROOM_TEMPLATES = [
         structural: [
             { id: "heaved-slabs",  name: "heaved slabs of peat", tags: ["hazard", "cover"] },
             { id: "stagnant-pool", name: "stagnant pool",        tags: ["water", "hazard"] },
-            { id: "moonbloom-cluster", name: "cluster of glowing moonblooms", tags: ["flora", "gather", "light"] }
+            { id: "moonbloom-cluster", name: "cluster of glowing moonblooms", tags: ["flora", "gather", "light"], forageIngredient: "moonbloom", forageMax: 2 }
         ],
         imageKey: "Broken Ground"
     },
@@ -2327,7 +2436,7 @@ const ROOM_TEMPLATES = [
         isConnector: false,
         structural: [
             { id: "sealed-altar",  name: "sealed altar",        tags: ["landmark", "formal"] },
-            { id: "old-wards",     name: "faded warding marks", tags: ["danger", "landmark"] }
+            { id: "old-wards",     name: "faded warding marks", tags: ["danger", "landmark", "information"] }
         ],
         imageKey: "Inner Sanctum"
     },
@@ -2774,6 +2883,7 @@ const SHOP_NAME_ZONE_WORDS = {
     "ruins": { adjectives: ["Ashen", "Weathered", "Lost", "Broken", "Faded", "Old", "Dusty", "Fallen"], nouns: ["Crown", "Arch", "Tower", "Relic", "Raven", "Bell", "Laurel", "Keystone"] }
 };
 const SHOP_NAME_TRADES = {
+    mausoleum: { words: ["Cypress", "Vigil", "Remembrance", "Repose", "Last Light", "Resting Bell"], endings: ["Mausoleum", "House of Rest", "House of Remembrance"] },
     bathhouse: { words: ["Willow", "Rosemary", "Linen", "Spring", "Lavender", "Basin"], endings: ["Baths", "Bathhouse"] },
     smithy: { words: ["Hammer", "Anvil", "Tongs", "Steel", "Spark", "Horseshoe"], endings: ["Forge", "Smithy", "Ironworks"] },
     clothier: { words: ["Needle", "Spindle", "Thread", "Thimble", "Shuttle", "Bobbin"], endings: ["Clothiers", "Tailors", "Outfitters"] },
@@ -2785,8 +2895,14 @@ const SHOP_NAME_TRADES = {
     inn: { words: ["Hearth", "Lantern", "Pillow", "Stag", "Willow", "Wayfarer"], endings: ["Inn", "Lodge", "Rest"] }
 };
 
+const MAUSOLEUM_NAME_ZONE_WORDS = {
+    "town": { adjectives: ["Quiet", "Silver", "Silent", "Pale", "Hallowed", "Still", "Ashen", "Gentle"], nouns: ["Cypress", "Bell", "Lantern", "Willow", "Rosemary", "Candle"] },
+    "underground city": { adjectives: ["Deep", "Runed", "Stone", "Obsidian", "Silent", "Basalt", "Hallowed", "Still"], nouns: ["Rune", "Lantern", "Granite", "Bell", "Garnet", "Vigil"] }
+};
+
 function getShopNameTrade(shopType) {
     const type = String(shopType || "").trim().toLowerCase();
+    if (/mausoleum|\btomb\b/.test(type)) return "mausoleum";
     if (/bathhouse|bathkeeper|\bspa\b/.test(type)) return "bathhouse";
     if (/smith|forge|blacksmith/.test(type)) return "smithy";
     if (/clothier|tailor|outfitter|clothing/.test(type)) return "clothier";
@@ -2802,7 +2918,8 @@ function getShopNameTrade(shopType) {
 function generateShopName(zoneName, shopType, rngIn, usedNames) {
     const trade = SHOP_NAME_TRADES[getShopNameTrade(shopType)];
     if (!trade) return null;
-    const zone = SHOP_NAME_ZONE_WORDS[String(zoneName || "").trim().toLowerCase()] || SHOP_NAME_ZONE_WORDS.town;
+    const zoneKey = String(zoneName || "").trim().toLowerCase();
+    const zone = trade === SHOP_NAME_TRADES.mausoleum ? (MAUSOLEUM_NAME_ZONE_WORDS[zoneKey] || MAUSOLEUM_NAME_ZONE_WORDS.town) : (SHOP_NAME_ZONE_WORDS[zoneKey] || SHOP_NAME_ZONE_WORDS.town);
     const rng = typeof rngIn === "function" ? rngIn : Math.random;
     const pick = function (words) { return words[Math.min(words.length - 1, Math.max(0, Math.floor(rng() * words.length)))]; };
     const used = usedNames && typeof usedNames.has === "function" && typeof usedNames.add === "function" ? usedNames : new Set(usedNames || []);
@@ -2883,6 +3000,8 @@ function buildRoomInstance(roomType, zoneName) {
         parentCluster: template.parentCluster || [],
         isConnector: template.isConnector || false,
         structural: (template.structural || []).map(s => ({ ...s })),
+        ...(template.burialCapacity ? { burialStorage: { capacity: template.burialCapacity,
+            niches: Array.from({ length: template.burialCapacity }, (_, index) => ({ number: index + 1, body: null })) } } : {}),
         creatures: [],
         items: [],
         image: getRoomImage(template.imageKey || template.type),
@@ -2921,6 +3040,20 @@ const BUILDING_PLANE_X_STRIDE = 30;
 const BUILDING_FLOOR_Y_STRIDE = 60;
 
 const BUILDING_BLUEPRINTS = {
+    "Mausoleum": {
+        zone: "Town", entrance: "Mausoleum", front: "gallery", frontDoor: "door", back: null, hostilityCap: 25,
+        names: [],
+        rooms: [
+            { key: "gallery", type: "Memorial Gallery", floor: 0, at: [0, 0] },
+            { key: "preparation", type: "Laying-out Room", floor: 0, at: [1, 0] },
+            { key: "lodge", type: "Bearers' Lodge", floor: 0, at: [1, 1] },
+            { key: "stairs0", type: "Mausoleum Stair", floor: 0, at: [0, 1] },
+            { key: "stairs1", type: "Mausoleum Stair", floor: 1, at: [0, 1] },
+            { key: "vault1", type: "Burial Vault", floor: 1, at: [0, 0] }
+        ],
+        links: [["gallery", "preparation", "door"], ["preparation", "lodge", "door"], ["gallery", "stairs0", "arch"],
+            ["stairs0", "stairs1"], ["stairs1", "vault1", "door"]]
+    },
     "Tavern": {
         zone: "Town",
         entrance: "Tavern",
@@ -2951,11 +3084,23 @@ const BUILDING_BLUEPRINTS = {
     "Bathhouse": {
         zone: "Town", entrance: "Bathhouse", front: "baths", frontDoor: "door", back: null, hostilityCap: 25,
         names: [],
+        // Core rooms - bathing and massage areas
         rooms: [
             { key: "baths", type: "Bathing Room", floor: 0, at: [0, 0], minNpcs: 0 },
-            { key: "massage", type: "Massage Room", floor: 0, at: [1, 0], minNpcs: 0 }
+            { key: "massage", type: "Massage Room", floor: 0, at: [1, 0], minNpcs: 0 },
+            // Placeholder for dynamic private rooms - these will be expanded based on zone species
+            // The actual private rooms are created dynamically in ensureZoneBathhouse()
+            { key: "private1", type: "Private Bath Chamber", floor: 0, at: [0, 1], minNpcs: 0 },
+            { key: "private2", type: "Private Bath Chamber", floor: 0, at: [1, 1], minNpcs: 0 }
         ],
-        links: [["baths", "massage", "door"]]
+        links: [
+            ["baths", "massage", "door"],
+            ["baths", "private1", "door", { chance: 1, level: 1, keyId: "bathhouse-master-key" }],
+            ["massage", "private2", "door", { chance: 1, level: 1, keyId: "bathhouse-master-key" }]
+        ],
+        // Dynamic expansion: private rooms will be added based on zone species count
+        // Each species in the zone gets its own private room and attendant
+        dynamicPrivateRooms: true
     },
     "Inn": {
         zone: "Town",
@@ -3197,7 +3342,7 @@ function _planBuildingInterior(plan, bpKey, index, entranceDesc, side, rng, alle
     (bp.rooms || []).forEach(def => {
         if (typeof def.chance === "number" && rng() >= def.chance) return;
         const coords = (x0 + def.at[0]) + "," + (def.floor * BUILDING_FLOOR_Y_STRIDE + def.at[1] * side);
-        const desc = _planAddRoom(plan, coords, def.type, bp.zone, {
+        const desc = _planAddRoom(plan, coords, def.type, entranceDesc.zone || bp.zone, {
             buildingId: buildingId, buildingType: bpKey, buildingName: name,
             isBuildingRoom: true, floor: def.floor
         });
@@ -3335,7 +3480,7 @@ function planTownLayout(rngIn) {
     const assignment = [{ type: "Town Hall", slot: hallSlot }];
     // Every town has these. The Guildhall and the Chapel are the guide's
     // lead destinations (see PLAYER_ARCHETYPES), so they are always placed.
-    const MUST_HAVE = ["Tavern", "Inn", "Smithy", "Guildhall", "Chapel", "Bathhouse"];
+    const MUST_HAVE = ["Tavern", "Inn", "Smithy", "Guildhall", "Chapel", "Bathhouse", "Mausoleum"];
     MUST_HAVE.forEach((type, i) => { assignment.push({ type: type, slot: rest[i] }); });
     // Every other plot is a house or stays empty. Bigger towns get a second
     // inn now and then. The Tavern (cellar shrine, way down to the dungeon),
@@ -3551,7 +3696,38 @@ function _planHubLayout(zoneName) {
         room.exits[f[1]] = (base[0] + delta[0]) + "," + (base[1] + delta[1]);
     });
     Object.keys(spec.starts).forEach(function (type) { plan.startByType[type] = keyCoords[spec.starts[type]]; });
+    if (zoneName === "Underground City") {
+        const entrance = _planAddRoom(plan, "1,2", "Mausoleum", zoneName, {});
+        _planLink(plan, keyCoords.hall, entrance.coords, "N", "door", false);
+        plan.buildings.push(_planBuildingInterior(plan, "Mausoleum", 0, entrance, 1, Math.random, null));
+    }
     plan.defaultStart = plan.startByType[Object.keys(spec.starts)[0]];
+    return plan;
+}
+
+// Pure expansion plan: a new landing and a fifty-niche vault above the tower.
+// The engine installs this plan automatically when the last free niche fills.
+function planMausoleumExpansion(roomMap, buildingId) {
+    const rooms = Object.values(roomMap || {}).filter(r => r && r.buildingType === "Mausoleum" && r.buildingId === buildingId);
+    const top = rooms.filter(r => r.type === "Mausoleum Stair").sort((a, b) => b.floor - a.floor)[0];
+    if (!top || !Number.isInteger(top.floor) || top.exits.U) return null;
+    const floor = top.floor + 1, at = top.coords.split(",").map(Number);
+    const side = Math.sign(at[1] - top.floor * BUILDING_FLOOR_Y_STRIDE);
+    if (!side || !at.every(Number.isFinite)) return null;
+    const stairCoords = at[0] + "," + (floor * BUILDING_FLOOR_Y_STRIDE + side);
+    const vaultCoords = at[0] + "," + (floor * BUILDING_FLOOR_Y_STRIDE);
+    const reserved = new Set(Object.values(roomMap).filter(Boolean).flatMap(r => Object.values(r.exits || {})));
+    if ([stairCoords, vaultCoords].some(key => roomMap[key] || reserved.has(key))) return null;
+    const plan = { zone: top.zone, rooms: {}, buildings: [] };
+    const extra = { buildingId, buildingType: "Mausoleum", buildingName: top.buildingName, isBuildingRoom: true, floor, hostilityCap: 25 };
+    const stair = _planAddRoom(plan, stairCoords, "Mausoleum Stair", top.zone, extra);
+    const vault = _planAddRoom(plan, vaultCoords, "Burial Vault", top.zone, extra);
+    [stair, vault].forEach(r => applyShopDisplayName(r, top.buildingName));
+    const previous = _planAddRoom(plan, top.coords, top.type, top.zone, {});
+    _planLink(plan, previous.coords, stairCoords, "U", null, false);
+    _planLink(plan, stairCoords, vaultCoords, side > 0 ? "S" : "N", "door", false);
+    delete plan.rooms[top.coords];
+    plan.connection = { from: top.coords, direction: "U", to: stairCoords };
     return plan;
 }
 

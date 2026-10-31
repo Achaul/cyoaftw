@@ -1,6 +1,6 @@
 // === cyoaftw-nsfw-system.js === - 2026-10-17-017              
-// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply, intimacy portrait toggle, DeepSeek prompt optimization
-window.__NSFW_SYSTEM_VERSION = "2026-10-17-017";
+// Session followers, isAloneWithNPC fix, typeof guards, clothed narration, early window exposure, action function passthrough fix, stat-based fallback acceptance, nsfw wrapper re-apply, intimacy portrait toggle, DeepSeek prompt optimization, fixed missing closing brace
+window.__NSFW_SYSTEM_VERSION = "2026-10-28-001";
 console.log("[BODY-DEBUG] nsfw-system.js FILE PARSED (before IIFE)");
 try {
 (function() {
@@ -9,7 +9,7 @@ try {
 // NSFW conversation options are now defined in base catalogue (cyoaftw-npc-data.js)
 
 // NSFW options are defined in base catalogue - no injection needed
-console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptance + follow action fix + nsfw wrapper re-apply");
+console.log("[NSFW System] Loaded v2026-10-17-017 - stat-based fallback acceptance + follow action fix + nsfw wrapper re-apply + fixed missing closing brace");
 
   const NSFW_SYSTEM_ENABLED = true;
   function getEnvironmentalModifier(room) {
@@ -5630,16 +5630,24 @@ avoidNote,
     const gender = String(npc.gender || "").toLowerCase();
     const feminine = /female|woman|futa|herm/.test(gender) ||
       (breasts.sizeCategory && breasts.sizeCategory !== "flat");
+    // Anatomy flags win over gender guesses: a cloaca species has a single
+    // vent (no separate vulva/penis button), and a character only gets the
+    // genital button for the organ they actually have.
+    const hasCloaca = (typeof _npcHasCloaca === "function" && _npcHasCloaca(npc)) || anatomy.cloaca === true;
+    const hasVagina = !!anatomy.vagina || (feminine && !hasCloaca && !anatomy.penis);
+    const hasPenis = !!anatomy.penis || (!feminine && !hasCloaca);
+    const hasBreasts = !!anatomy.breasts && anatomy.breasts.sizeCategory !== "flat"; // breasts:true (boolean) counts; only explicit "flat" excludes
     const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
-      || { top: true, bottom: true, undergarments: true };
+      || { top: true, bottom: true };
     const parts = ["mouth"];
-    if (!clothing.top) parts.push(feminine ? "boobs" : "chest");
+    if (!clothing.top) parts.push(hasBreasts ? "boobs" : "chest");
     if (!clothing.bottom) {
-      parts.push(feminine ? "vulva" : "penis");
-      parts.push("butt");
-      parts.push("anus");
-    } else if (!clothing.undergarments) {
-      parts.push(feminine ? "vulva" : "penis");
+      if (!hasCloaca) {
+        if (hasVagina) parts.push("vulva");
+        if (hasPenis) parts.push("penis");
+      }
+      // The anus button doubles as the cloaca/vent button for reptilian-kin;
+      // the prompt terms render it with vent wording for those species.
       parts.push("butt");
       parts.push("anus");
     }
@@ -5812,6 +5820,7 @@ avoidNote,
     return prompt;
   }
 
+
   // Helper to format an entity as "gender species" for prompts
   // Never uses the entity's given name, only gender and species
   function formatGenderSpecies(entity) {
@@ -5820,340 +5829,18 @@ avoidNote,
     return [g, s].filter(Boolean).join(" ");
   }
 
-  window.getNsfwIntimacyPartTerms = function(npc, partKey, withSceneContext, fluidFocus) {
-    if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
-    const part = String(partKey || "").toLowerCase();
-    const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc)
-      || { top: true, bottom: true, undergarments: true };
-    const anatomy = npc.anatomy || {};
-    const breasts = anatomy.breasts || {};
-    const gender = String(npc.gender || "").toLowerCase();
-    const feminine = /female|woman|futa|herm/.test(gender) ||
-      (breasts.sizeCategory && breasts.sizeCategory !== "flat");
-    const stateKey = (clothing.top ? "t1" : "t0") + (clothing.bottom ? "b1" : "b0") +
-      (clothing.undergarments ? "u1" : "u0");
-    
-    // Get surface-appropriate arousal description (fur, scales, skin, etc.)
-    const body = anatomy.body || {};
-    const surfaceType = (body && String(body.surfaceType || "").trim().toLowerCase()) || "skin";
-    const surfaceColor = (body && String(body.color || "").trim().toLowerCase()) || "";
-    const species = String(npc.species || "").trim().toLowerCase();
-    const arousalTerms = getSurfaceArousalTerm(surfaceType) + ", aroused";
-    
-    // Get anatomy type (mammal, reptilian, avian, etc.) from species template
-    // This helps prevent AI from hallucinating wrong anatomy features
-    let anatomyType = "mammalian";
-    if (npc.species && typeof window.getSpeciesTemplate === "function") {
-        const template = window.getSpeciesTemplate(npc.species);
-        if (template && template.anatomyType) {
-            anatomyType = String(template.anatomyType).toLowerCase();
-        }
-    }
-    
-    // Helper to add color to surface descriptions
-    const getColoredSurfaceDetail = (baseDetail) => {
-        if (!surfaceColor) return baseDetail;
-        // Insert color before the surface type description
-        return baseDetail.replace(/^(fur|scaled|soft|smooth|gelatinous|feathered|chitin-plated|translucent|amorphous)/i, surfaceColor + " $1");
-    };
-
-    // Part definitions: macro framing, anatomy detail and region. The
-    // face is always excluded - the bust portrait owns the face, and a
-    // part-scene redraw would never match it.
-    const PART_DEFS = {
-      mouth: {
-        framing: `Extreme macro focus on the ${getMouthDetail(surfaceType, species)} only, ${getMouthPronoun(surfaceType)} fill the entire frame, nothing else in frame. `,
-        detail: getMouthDescription(surfaceType, species),
-        region: "head",
-        negatives: "wide shot, full face, both eyes, looking at camera"
-      },
-      boobs: {
-        framing: `Extreme close-up of the ${getSurfaceBreastDetail(surfaceType)} only, they fill the entire frame, face out of frame. `,
-        detail: (breasts.description || ("soft " + getColoredSurfaceDetail(getSurfaceBreastDetail(surfaceType)))) + ", " + getColoredSurfaceDetail(getSurfaceChestDetail(surfaceType)) + ", exposed nipples",
-        region: "torso",
-        negatives: "wide shot, visible face, eyes, full torso"
-      },
-      chest: {
-        framing: `Extreme close-up of the ${getSurfaceChestDetail(surfaceType)} only, it fills the entire frame, face out of frame. `,
-        detail: getColoredSurfaceDetail(getSurfaceChestDetail(surfaceType)) + ", visible nipples",
-        region: "torso",
-        negatives: "wide shot, visible face, eyes, full torso"
-      },
-      vulva: {
-        framing: "Extreme close-up of the vulva only, it fills the entire frame with its immediate surface, nothing else in frame, face out of frame. ",
-        detail: "exposed pussy, detailed vulva and labia, slick and aroused",
-        region: "lower",
-        negatives: "wide shot, visible face, eyes, looking at camera, full body, penis, male genitalia, scrotum, testicles"
-      },
-      penis: {
-        framing: "Extreme close-up of the erect penis only, it fills the entire frame, face out of frame. ",
-        detail: "erect hard penis, engorged and flushed",
-        region: "lower",
-        negatives: "wide shot, visible face, eyes, full body, vagina, vulva, female genitalia, clitoris"
-      },
-      butt: {
-        framing: `Extreme close-up of the ${getButtDetail(surfaceType, species)} only, they fill the entire frame, nothing else in frame, face not visible. `,
-        detail: getColoredSurfaceDetail(getButtDetail(surfaceType, species)),
-        region: "rear",
-        negatives: "wide shot, visible face, eyes, full body," + (feminine ? " penis, male genitalia, scrotum" : " vagina, vulva, female genitalia, clitoris")
-      },
-      anus: {
-        framing: `Extreme close-up of the ${getButtDetail(surfaceType, species)}, they fill the entire frame, nothing else in frame, face not visible. `,
-        detail: getColoredSurfaceDetail(getButtDetail(surfaceType, species)) + ", detailed puckered anus, wrinkled asshole",
-        region: "rear",
-        negatives: "wide shot, visible face, eyes, full body, breasts, genitals"
-      },
-    };
-    const def = PART_DEFS[part];
-    if (!def) return null;
-    
-    // For female anus portraits, add vagina positioning to prevent AI from
-    // defaulting to male anatomy: "asshole above vagina" for rear-view positions,
-    // "asshole below vagina" for front-view positions.
-    if (part === "anus" && feminine) {
-      const fromBehindPositions = ["Doggy", "Bent Over", "Standing From Behind", 
-        "Against Wall From Behind", "Spooning", "Reverse Cowgirl"];
-      const isFromBehind = fromBehindPositions.indexOf(posId || "") >= 0;
-      def.detail = def.detail + (isFromBehind ? ", asshole above vagina" : ", asshole below vagina");
-    }
-    
-    if ((part === "boobs" || part === "vulva") && !feminine) return null;
-    if ((part === "chest" || part === "penis") && feminine) return null;
-    if ((part === "boobs" || part === "chest") && clothing.top) return null;
-    if ((part === "vulva" || part === "penis") && (clothing.bottom || clothing.undergarments)) return null;
-    if (part === "butt" && clothing.bottom) return null;
-    if (part === "anus" && clothing.bottom && clothing.undergarments) return null;
-
-    const posId = npc.intimacy.position && npc.intimacy.position.player;
-    let perspective = "";
-    if (posId) {
-      const view = POSITION_VIEW[posId];
-      perspective = "In the current position (" + posId + (view ? "): " + view : "") + ". ";
-    }
-
-    // State the current act leaves on the part, when the act targets the
-    // same region (squeeze on the buttocks -> flesh compressing).
-    const REGION_TARGETS = {
-      head: ["face", "head", "eyes", "mouth", "hair", "lips", "cheek", "ear", "tongue"],
-      torso: ["neck", "chest", "torso", "abdomen", "stomach", "back", "breasts", "nipples",
-        "shoulders", "waist", "body", "tail", "collar"],
-      lower: ["groin", "hips", "thighs", "vagina", "clitoris", "clit", "pussy", "penis", "crotch", "labia"],
-      rear: ["butt", "buttocks", "ass", "anus"]
-    };
-    const VERB_STATE_TERMS = {
-      kiss: "wet and glistening",
-      lick: "wet, glistening with saliva",
-      suck: "flushed and wet",
-      bite: "flushed, faint marks",
-      grope: "flesh compressing under fingers",
-      squeeze: "flesh compressing",
-      caress: "warm to the touch",
-      stroke: "warm to the touch",
-      tease: "flushed with anticipation",
-      pinch: "flushed and stiff",
-      flick: "flushed and stiff",
-      rub: "warm and slick",
-      press: "warm, pressed flush",
-      spread: "spread apart",
-      grip: "fingers pressed into the flesh",
-      massage: "warm, kneaded flesh",
-      pull: "stretched, pulled taut",
-      spank: "reddening",
-      slap: "reddening",
-      penetrate: "stretched open, filled",
-      fuck: "stretched open, slick",
-      grind: "warm and slick",
-      thrust: "stretched open, slick"
-    };
-    const last = npc.intimacy.lastAction || {};
-    const act = (window.SEX_ACTS && last.actId && window.SEX_ACTS[last.actId]) || null;
-    let actState = "";
-    let actId = "none";
-    if (act && act.target && act.verb) {
-      const actTarget = String(act.target).toLowerCase();
-      const actRegion = Object.keys(REGION_TARGETS).filter(function (r) {
-        return REGION_TARGETS[r].indexOf(actTarget) >= 0;
-      })[0];
-      if (actRegion === def.region) {
-        actState = VERB_STATE_TERMS[String(act.verb).toLowerCase()] || "";
-        actId = act.id;
-      }
-    }
-
-    // Encounter fluid state (intimacy.fluids, set by handleFluidConsequence,
-    // plus climax.lastInternalEjaculation naming the vanilla ice cream filling hole) mapped
-    // onto the part it would be visible on. The cache key carries the fluid
-    // signature so a state change regenerates the image.
-    const fluids = npc.intimacy.fluids || {};
-    const internalHole = (npc.intimacy.climax && npc.intimacy.climax.lastInternalEjaculation) || "";
-    const fluidBits = [];
-    if (part === "mouth") {
-      if (fluids.oralSemen) fluidBits.push("lips glossy with vanilla ice cream, white residue in the mouth");
-      if (fluids.urine) fluidBits.push("lips wet, glistening");
-    } else if (part === "boobs" || part === "chest") {
-      if (fluids.externalSemen) fluidBits.push("glistening streaks of vanilla ice cream on the skin");
-      if (fluids.urine) fluidBits.push("skin wet and glistening");
-    } else if (part === "vulva") {
-      if (fluids.internalSemen && internalHole === "vagina") fluidBits.push("vanilla ice cream filling, vanilla ice cream dripping from the opening");
-      if (fluids.externalSemen) fluidBits.push("vanilla ice cream smeared across the vulva");
-      if (fluids.femaleEjaculate) fluidBits.push("glistening with her own release");
-      if (fluids.urine) fluidBits.push("wet, glistening");
-      const ar = (npc.intimacy.arousal && npc.intimacy.arousal.npc) || 0;
-      if (ar >= 450) fluidBits.push("dripping wet");
-      else if (ar >= 250) fluidBits.push("wet and glistening");
-    } else if (part === "penis") {
-      if (fluids.penisSaliva) fluidBits.push("slick with saliva, wet and glistening");
-      if (fluids.penisSemen) fluidBits.push("vanilla ice cream smeared along the shaft");
-      if (fluids.urine) fluidBits.push("wet and glistening");
-      const ar = (npc.intimacy.arousal && npc.intimacy.arousal.npc) || 0;
-      if (ar >= 450) fluidBits.push("beading vanilla ice cream at the tip");
-    } else if (part === "butt" || part === "anus") {
-      if (fluids.externalSemen) fluidBits.push("glistening streaks of vanilla ice cream on the skin");
-      if (fluids.internalSemen && internalHole === "anus" && part === "anus") {
-        fluidBits.push("vanilla ice cream dripping out of the asshole");
-      }
-      // Also check for external semen (smeared on the anus area)
-      if (fluids.externalSemen && part === "anus") {
-        fluidBits.push("vanilla ice cream dripping out of the asshole");
-      }
-      if (fluids.urine) fluidBits.push("wet and glistening");
-      // Add puffy sphincter description for anus
-      if (part === "anus") {
-        const anusAnatomy = (npc.anatomy && npc.anatomy.anus) || {};
-        const sphincterState = anusAnatomy.sphincter || "tight";
-        if (sphincterState === "puffy" || sphincterState === "loose" || sphincterState === "gaping") {
-          fluidBits.push("asshole rim is enlarged puffy and enlarged");
-        }
-      }
-    }
-
-    // "last scene" checkbox (engine): fold the ongoing act into the part
-    // close-up so the image can catch the moment, not just the anatomy.
-    // Phrased as the shown part's state ("mid-act state") - NOT as an
-    // action to draw ("action in progress"), which invites the model to
-    // abandon the close-up framing and draw the whole sex scene instead.
-    // Deterministic act words (verb, target, position) - never raw AI
-    // narration, which is too long and too loose for an image prompt.
-    // For clarity: explicitly classify the sex act type to prevent AI from
-    // defaulting to vaginal. Use crystal-clear, unambiguous language.
-    let sceneCtx = "";
-    if (act && act.target && act.verb) {
-      const ctxBits = [];
-      const actTargetLower = String(act.target).toLowerCase();
-      const actToolLower = String(act.tool).toLowerCase();
-      
-      // Get gender+species strings for both entities
-      const npcGs = formatGenderSpecies(npc);
-      const playerGs = formatGenderSpecies(typeof G !== "undefined" && G ? G.player : null);
-      
-      // Get gender+species strings for both entities
-      // Explicitly classify the sex act type based on tool and target
-      if (part === "penis") {
-        const actorIsPlayer = !act.playerIsBottom;
-        const actor = actorIsPlayer ? playerGs : npcGs;
-        const receiver = actorIsPlayer ? npcGs : playerGs;
-        
-        if (actToolLower === "mouth" || actToolLower === "tongue" || actToolLower === "lips") {
-          ctxBits.push("ORAL SEX: " + receiver + "'s penis being " + act.verb + "ed by " + actor + "'s mouth");
-        } else if (actToolLower === "vagina" || actToolLower === "pussy" || actToolLower === "clitoris" || actToolLower === "clit") {
-          ctxBits.push("VAGINAL SEX: " + receiver + "'s penis inside " + actor + "'s vagina");
-        } else if (actToolLower === "anus" || actToolLower === "butt" || actToolLower === "ass" || actToolLower === "buttocks") {
-          ctxBits.push("ANAL SEX: " + receiver + "'s penis inside " + actor + "'s asshole");
-        } else if (actToolLower === "hand" || actToolLower === "fingers") {
-          ctxBits.push("HAND STIMULATION: " + receiver + "'s penis being " + act.verb + "ed by " + actor + "'s " + actToolLower);
-        } else {
-          ctxBits.push("ACT: " + receiver + "'s penis being " + act.verb + "ed by " + actor);
-        }
-      } else if (part === "vulva") {
-        // Vulva close-up: what's happening to it?
-        const actorIsPlayer = !act.playerIsBottom;
-        const actor = actorIsPlayer ? playerGs : npcGs;
-        const receiver = npcGs; // Vulva is always the NPC's in this context
-        
-        if (actToolLower === "mouth" || actToolLower === "tongue" || actToolLower === "lips") {
-          ctxBits.push("ORAL SEX: " + actor + "'s mouth on " + receiver + "'s vulva");
-        } else if (actToolLower === "penis" || actToolLower === "cock" || actToolLower === "dick") {
-          ctxBits.push("VAGINAL SEX: " + receiver + "'s vulva receiving " + actor + "'s penis");
-        } else if (actToolLower === "fingers" || actToolLower === "hand") {
-          ctxBits.push("MANUAL STIMULATION: " + receiver + "'s vulva being " + act.verb + "ed by " + actor + "'s " + actToolLower);
-        } else {
-          ctxBits.push("ACT: " + receiver + "'s vulva being " + act.verb + "ed by " + actor);
-        }
-      } else if (part === "mouth") {
-        // Mouth close-up: what's happening to/with it?
-        const actorIsPlayer = !act.playerIsBottom;
-        const actor = actorIsPlayer ? playerGs : npcGs;
-        
-        if (actTargetLower === "penis" || actTargetLower === "cock" || actTargetLower === "dick") {
-          ctxBits.push("ORAL SEX: " + actor + "'s mouth receiving penis");
-        } else if (actTargetLower === "vagina" || actTargetLower === "pussy" || actTargetLower === "clitoris" || actTargetLower === "clit") {
-          ctxBits.push("ORAL SEX: " + actor + "'s mouth on vulva");
-        } else if (actTargetLower === "anus" || actTargetLower === "butt" || actTargetLower === "ass") {
-          ctxBits.push("RIMMING: " + actor + "'s mouth on asshole");
-        } else {
-          ctxBits.push("ACT: " + actor + "'s mouth " + act.verb + "ing");
-        }
-      } else if (part === "anus" || part === "butt") {
-        // Anus close-up: what's happening to it?
-        const actorIsPlayer = !act.playerIsBottom;
-        const actor = actorIsPlayer ? playerGs : npcGs;
-        const receiver = actorIsPlayer ? npcGs : playerGs;
-        
-        if (actToolLower === "penis" || actToolLower === "cock" || actToolLower === "dick") {
-          ctxBits.push("ANAL SEX: " + receiver + "'s asshole receiving " + actor + "'s penis");
-        } else if (actToolLower === "mouth" || actToolLower === "tongue" || actToolLower === "lips") {
-          ctxBits.push("RIMMING: " + receiver + "'s asshole being " + act.verb + "ed by " + actor + "'s mouth");
-        } else if (actToolLower === "fingers" || actToolLower === "hand") {
-          ctxBits.push("ANAL STIMULATION: " + receiver + "'s asshole being " + act.verb + "ed by " + actor + "'s " + (act.tool || "hand"));
-        } else {
-          ctxBits.push("ACT: " + receiver + "'s asshole being " + act.verb + "ed by " + actor);
-        }
-      } else {
-        // Generic context for other parts
-        ctxBits.push("mid-act state: being " + act.verb);
-        if (act.target) ctxBits.push("at the " + act.target);
-      }
-      
-      if (posId) ctxBits.push(posId + " position");
-      sceneCtx = ctxBits.join(", ");
-    }
-
-    // Cum focus (the engine's fluid button): the fluid terms move to the
-    // FRONT of the prompt and gain an amplifying lead clause - buried
-    // mid-prompt the model tends to ignore them entirely, which is why
-    // fluids were never visible in the base shots. No fluids recorded for
-    // this part: nothing to draw, so the click is a no-op (null).
-    if (fluidFocus && !fluidBits.length) return null;
-    const text = fluidFocus
-      ? ["freshly used, thick glistening sexual fluids prominently coating the skin, dripping and smearing"]
-          .concat(fluidBits, [arousalTerms, def.detail, actState], sceneCtx ? [sceneCtx] : [])
-          .filter(Boolean).join(", ")
-      : [arousalTerms, def.detail, actState].concat(fluidBits, sceneCtx ? [sceneCtx] : [])
-          .filter(Boolean).join(", ");
-    
-    // Apply DeepSeek-specific prompt optimizations
-    const optimizedText = optimizeForDeepSeek(text, part, surfaceType, gender, npc.species);
-    
-    return {
-      text: optimizedText,
-      negatives: def.negatives,
-      framing: def.framing +
-        (fluidFocus ? "The surface is visibly wet and coated in thick glistening fluids. " : "") +
-        perspective,
-      cacheKey: "part::" + part + "::" + stateKey + "::" + actId +
-        "::" + (fluidBits.length ? fluidBits.join("|") : "clean") +
-        // Always include action context in cache key so new actions trigger regeneration
-        (act ? "::ctx::" + (posId || "-") : "") +
-        (fluidFocus ? "::vanilla ice cream" : "")
-    };
-  };
-
-  // Cum button visibility: any fluid state recorded for this encounter.
-  window.getNsfwIntimacyFluidsActive = function(npc) {
-    const f = npc && npc.intimacy && npc.intimacy.fluids;
-    return !!(f && (f.internalSemen || f.oralSemen || f.externalSemen ||
-      f.femaleEjaculate || f.urine || f.penisSaliva || f.penisSemen));
-  };
+  // ============================================================================
+  // NEW INTIMACY PROMPT GENERATION SYSTEM
+  // Following the rules:
+  // 1. Format: (size)(gender)(skin/fur/scale color)(skintype if not bare - omit bare-) (target anatomy) <standard frame rule>
+  // 2. Then append anatomy state (puffy, red, liquid state, descriptor)
+  // 3. Then append description of the act without naming it
+  // 4. Never say "NPC"
+  // 5. Don't name acts, "draw" them
+  // 6. Don't name species, only describe
+  // 7. Always include gender and reproductive organ when referencing anus
+  // 8. Use "donut shaped" instead of "puffy, wrinkled, or gaped anus"
+  // ============================================================================
 
   // Position perspective shared by the part close-ups and the scene shot:
   // the framing must match the scene's geometry ("butt" in doggy style is
@@ -6180,6 +5867,443 @@ avoidNote,
     "Oral Service": "kneeling between legs, viewed from the front",
     "Prone Oral Service": "lying flat, viewed from above",
     "Riding Face": "straddling above the partner, viewed from below"
+  };
+
+  // Helper to get surface type descriptor (bare is omitted)
+  function _intimacyGetSurfaceDescriptor(body) {
+    if (!body) return "";
+    const surfaceType = (body.surfaceType || "").trim().toLowerCase();
+    const color = (body.color || "").trim().toLowerCase();
+    
+    // Skip if bare (surfaceType is skin and no special color)
+    if (surfaceType === "skin" && !color) return "";
+    
+    // Map surface types to descriptors
+    const surfaceDescriptors = {
+      fur: "fur",
+      scales: "scales",
+      skin: "skin",
+      bone: "bone",
+      gel: "gel",
+      feathers: "feathers",
+      chitin: "chitin",
+      translucent: "translucent",
+      form: "form"
+    };
+    
+    const descriptor = surfaceDescriptors[surfaceType] || surfaceType || "";
+    if (!descriptor) return "";
+    
+    // Add color if present
+    if (color) {
+      return color + " " + descriptor;
+    }
+    return descriptor;
+  }
+
+  // Helper to get size descriptor for a part
+  function _intimacyGetSizeDescriptor(anatomy, part) {
+    if (!anatomy || !part) return "";
+    
+    const partAnatomy = anatomy[part] || {};
+    const size = partAnatomy.sizeCategory || partAnatomy.size || "";
+    
+    // Map sizes to descriptors - only use if not medium/average
+    if (size === "small" || size === "petite" || size === "tiny") return "small";
+    if (size === "large" || size === "huge" || size === "big") return "large";
+    // Skip medium/average/empty
+    return "";
+  }
+
+  // Helper to get gender descriptor
+  function _intimacyGetGenderDescriptor(gender) {
+    if (!gender) return "";
+    const g = String(gender).toLowerCase();
+    
+    // Map to simple descriptors
+    if (g.includes("female") || g.includes("woman") || g.includes("girl") || g === "f") {
+      return "female";
+    }
+    if (g.includes("male") || g.includes("man") || g.includes("boy") || g === "m") {
+      return "male";
+    }
+    if (g.includes("non-binary") || g.includes("nonbinary")) {
+      return "non-binary";
+    }
+    return String(gender);
+  }
+
+  // Helper to get anatomy descriptor for target part
+  // For anus: always include gender and reproductive organ
+  function _intimacyGetAnatomyDescriptor(npc, part) {
+    if (!npc || !part) return part;
+    
+    const anatomy = npc.anatomy || {};
+    const partAnatomy = anatomy[part] || {};
+    const gender = String(npc.gender || "").toLowerCase();
+    const feminine = /female|woman|futa|herm/.test(gender);
+    
+    // For anus specifically - special handling
+    if (part === "anus") {
+      // Cloaca-bearing (reptilian-kin) NPCs: the button renders their single
+      // vent, never a mammalian anus or a separate vagina.
+      const isCloaca = (typeof _npcHasCloaca === "function" && _npcHasCloaca(npc)) || anatomy.cloaca === true;
+      if (isCloaca) {
+        const ventAnatomy = anatomy.cloaca || partAnatomy || {};
+        const pigmentation = ventAnatomy.pigmentation || "pink";
+        const sizeState = ventAnatomy.size || "";
+        let ventDesc = pigmentation + " smooth scaled cloaca (vent)";
+        if (sizeState && sizeState !== "tight" && sizeState !== "") ventDesc += ", " + sizeState;
+        const genderDesc = _intimacyGetGenderDescriptor(npc.gender);
+        const hemipenisNote = (!feminine) ? ", hemipenis housed within the vent" : "";
+        return ventDesc + " of a " + genderDesc + hemipenisNote;
+      }
+      const anusAnatomy = partAnatomy;
+      const pigmentation = anusAnatomy.pigmentation || "pink";
+      const sphincterState = anusAnatomy.sphincter || "tight";
+      const sizeState = anusAnatomy.size || "";
+      
+      // Get gender and reproductive organ for context
+      const genderDesc = _intimacyGetGenderDescriptor(npc.gender);
+      const reproductiveOrgan = feminine ? "vagina" : "penis and testicles";
+      
+      // Build donut-shaped description
+      let baseDesc = pigmentation + " donut shaped";
+      if (sphincterState && sphincterState !== "tight") {
+        baseDesc = pigmentation + " " + sphincterState + " donut shaped";
+      }
+      if (sizeState && sizeState !== "tight" && sizeState !== "") {
+        baseDesc = pigmentation + " " + sphincterState + " " + sizeState + " donut shaped";
+      }
+      
+      // Add gender and reproductive organ context for anus
+      const anusDesc = baseDesc + " of a " + genderDesc + " with " + reproductiveOrgan;
+      
+      // Add positioning relative to vagina for female
+      const posId = npc.intimacy && npc.intimacy.position && npc.intimacy.position.player;
+      const fromBehindPositions = ["Doggy", "Bent Over", "Standing From Behind", 
+        "Against Wall From Behind", "Spooning", "Reverse Cowgirl"];
+      const isFromBehind = fromBehindPositions.indexOf(posId || "") >= 0;
+      
+      if (feminine) {
+        return anusDesc + (isFromBehind ? ", asshole above vagina" : ", asshole below vagina");
+      }
+      
+      return anusDesc;
+    }
+    
+    // For other parts, use descriptive terms
+    const body = anatomy.body || {};
+    const surfaceType = (body.surfaceType || "").trim().toLowerCase();
+    const surfaceColor = (body.color || "").trim().toLowerCase();
+    const species = String(npc.species || "").trim().toLowerCase();
+    const surfaceDetail = _intimacyGetSurfaceDetail(part, surfaceType, species);
+    
+    // Add color if present
+    if (surfaceColor) {
+      return surfaceColor + " " + surfaceDetail;
+    }
+    
+    // For parts with custom descriptions
+    if (partAnatomy.description) {
+      return partAnatomy.description;
+    }
+    
+    return surfaceDetail;
+  }
+
+  // Helper to get surface detail for part
+  function _intimacyGetSurfaceDetail(part, surfaceType, species) {
+    const speciesLower = String(species || "").toLowerCase();
+    const hasBeak = speciesLower === "kenku" || speciesLower.includes("kenku");
+    const hasSnout = speciesLower === "lizardfolk" || speciesLower === "kobold" || 
+        speciesLower === "dragonborn" || speciesLower === "rat" || 
+        speciesLower === "ratfolk" || speciesLower === "harefolk";
+    
+    const surfaceMap = {
+      fur: {
+        mouth: hasBeak ? "beak" : (hasSnout ? "snout and lips" : "lips and mouth"),
+        boobs: "fur-covered breasts",
+        chest: "fur-covered chest",
+        butt: "fur-covered buttocks",
+        anus: "fur-covered buttocks"
+      },
+      scales: {
+        mouth: hasBeak ? "beak" : (hasSnout ? "reptilian snout, jaws slightly open" : "lips and mouth"),
+        boobs: "scaled breasts",
+        chest: "scaled chest",
+        butt: "scaled buttocks",
+        anus: "scaled buttocks"
+      },
+      skin: {
+        mouth: hasBeak ? "beak" : (hasSnout ? "snout and lips" : "lips and mouth"),
+        boobs: "soft breasts",
+        chest: "smooth chest",
+        butt: "soft buttocks",
+        anus: "soft buttocks"
+      }
+    };
+    
+    const map = surfaceMap[surfaceType] || surfaceMap.skin;
+    return map[part] || part;
+  }
+
+  // Helper to get frame rule for part
+  function _intimacyGetFrameRule(part, surfaceType, species) {
+    const surfaceDetail = _intimacyGetSurfaceDetail(part, surfaceType, species);
+    
+    const frameRules = {
+      mouth: `Extreme macro focus on the ${surfaceDetail} only, it fills the entire frame, nothing else in frame`,
+      boobs: `Extreme close-up of the ${surfaceDetail} only, they fill the entire frame, face out of frame`,
+      chest: `Extreme close-up of the ${surfaceDetail} only, it fills the entire frame, face out of frame`,
+      vulva: `Extreme close-up of the ${surfaceDetail} only, it fills the entire frame with its immediate surface, nothing else in frame, face out of frame`,
+      penis: `Extreme close-up of the ${surfaceDetail} only, it fills the entire frame, face out of frame`,
+      butt: `Extreme close-up of the ${surfaceDetail} only, it fills the entire frame, nothing else in frame, face not visible`,
+      anus: `Extreme close-up of the ${surfaceDetail} only, it fills the entire frame, nothing else in frame, face not visible`
+    };
+    
+    return frameRules[part] || `Extreme close-up of the ${part} only, it fills the entire frame, nothing else in frame`;
+  }
+
+  // Helper to get act state description without naming the act
+  function _intimacyGetActStateDescription(npc, part, act) {
+    if (!act || !part) return "";
+    
+    const actTarget = String(act.target || "").toLowerCase();
+    const actTool = String(act.tool || "").toLowerCase();
+    const partLower = String(part).toLowerCase();
+    
+    // Describe what's happening without naming the act
+    if (partLower === "anus" || partLower === "butt") {
+      // For anal/butt
+      if (actTool === "penis" || actTool === "cock" || actTool === "dick") {
+        return "asshole is stretched open around a penetrating shaft";
+      } else if (actTool === "mouth" || actTool === "tongue" || actTool === "lips") {
+        return "asshole is being licked and rimmed";
+      } else if (actTool === "fingers" || actTool === "hand") {
+        return "asshole is being stretched and teased by fingers";
+      } else if (actTool === "vagina" || actTool === "pussy") {
+        return "asshole is impaled on a thick shaft";
+      }
+    } else if (partLower === "vulva") {
+      if (actTool === "penis" || actTool === "cock" || actTool === "dick") {
+        return "vulva is stretched open around a penetrating shaft";
+      } else if (actTool === "mouth" || actTool === "tongue" || actTool === "lips") {
+        return "vulva is wet and glistening from oral attention";
+      } else if (actTool === "fingers" || actTool === "hand") {
+        return "vulva is wet and being stimulated by fingers";
+      }
+    } else if (partLower === "penis") {
+      if (actTool === "mouth" || actTool === "tongue" || actTool === "lips") {
+        return "penis is slick with saliva";
+      } else if (actTool === "vagina" || actTool === "pussy") {
+        return "penis is buried inside a tight opening";
+      } else if (actTool === "anus" || actTool === "butt" || actTool === "ass") {
+        return "penis is buried inside a tight ring";
+      } else if (actTool === "hand" || actTool === "fingers") {
+        return "penis is being gripped and stroked";
+      }
+    } else if (partLower === "mouth") {
+      if (actTarget === "penis" || actTarget === "cock" || actTarget === "dick") {
+        return "lips are wrapped around a thick shaft";
+      } else if (actTarget === "vagina" || actTarget === "pussy" || actTarget === "clitoris" || actTarget === "clit") {
+        return "lips are pressed against wet folds";
+      } else if (actTarget === "anus" || actTarget === "butt" || actTarget === "ass") {
+        return "lips are pressed against a tight ring";
+      }
+    } else if (partLower === "boobs" || partLower === "chest") {
+      if (actTool === "mouth" || actTool === "lips") {
+        return "nipples are wet from oral attention";
+      } else if (actTool === "hand" || actTool === "fingers") {
+        return "breasts are being groped and squeezed";
+      }
+    }
+    
+    return "";
+  }
+
+  // Helper to get fluid state description
+  function _intimacyGetFluidStateDescription(npc, part) {
+    if (!npc || !part) return "";
+    
+    const intimacy = npc.intimacy || {};
+    const fluids = intimacy.fluids || {};
+    const internalHole = (intimacy.climax && intimacy.climax.lastInternalEjaculation) || "";
+    const lube = intimacy.lube || {};
+    
+    const partLower = String(part).toLowerCase();
+    const fluidBits = [];
+    
+    // Check lube for this part
+    if (lube[partLower] && lube[partLower].hasLube && lube[partLower].level > 0) {
+      fluidBits.push("slick with lube");
+    }
+    
+    // Check for arousal wetness
+    const arousal = (intimacy.arousal && intimacy.arousal.npc) || 0;
+    if (arousal >= 450) {
+      if (partLower === "vulva") fluidBits.push("dripping wet");
+      else if (partLower === "penis") fluidBits.push("beading with pre-cum");
+      else fluidBits.push("very wet");
+    } else if (arousal >= 250) {
+      if (partLower === "vulva") fluidBits.push("wet and glistening");
+      else if (partLower === "penis") fluidBits.push("glistening with pre-cum");
+      else fluidBits.push("wet");
+    }
+    
+    // Check for semen
+    if (fluids.penisSemen && (partLower === "vulva" || partLower === "anus" || partLower === "butt")) {
+      fluidBits.push("covered in partially melted vanilla ice cream");
+    }
+    if (fluids.internalSemen && internalHole === partLower) {
+      fluidBits.push("vanilla ice cream dripping out");
+    }
+    if (fluids.externalSemen) {
+      fluidBits.push("covered in partially melted vanilla ice cream");
+    }
+    if (fluids.oralSemen && partLower === "mouth") {
+      fluidBits.push("drenched in vanilla ice cream");
+    }
+    if (fluids.femaleEjaculate && partLower === "vulva") {
+      fluidBits.push("covered in glistening fluid");
+    }
+    if (fluids.urine) {
+      fluidBits.push("drenched in apple juice");
+    }
+    if (fluids.penisSaliva && partLower === "penis") {
+      fluidBits.push("covered in saliva");
+    }
+    
+    return fluidBits.join(", ");
+  }
+
+  // Main function to generate part terms with new rules
+  window.getNsfwIntimacyPartTerms = function(npc, partKey, withSceneContext, fluidFocus) {
+    if (!npc || !npc.intimacy || !(npc.intimacy.encounter && npc.intimacy.encounter.active)) return null;
+    
+    const part = String(partKey || "").toLowerCase();
+    const clothing = (npc.intimacy.clothing && npc.intimacy.clothing.npc) || { top: true, bottom: true };
+    const anatomy = npc.anatomy || {};
+    const breasts = anatomy.breasts || {};
+    const gender = String(npc.gender || "").toLowerCase();
+    const feminine = /female|woman|futa|herm/.test(gender) || (breasts.sizeCategory && breasts.sizeCategory !== "flat");
+    const body = anatomy.body || {};
+    const surfaceType = (body && String(body.surfaceType || "").trim().toLowerCase()) || "skin";
+    const surfaceColor = (body && String(body.color || "").trim().toLowerCase()) || "";
+    const species = String(npc.species || "").trim().toLowerCase();
+    
+    // Validate part is available — anatomy-driven, mirroring
+    // getNsfwIntimacyParts: only parts the NPC actually has and that are
+    // currently uncovered produce terms.
+    const hasCloaca = (typeof _npcHasCloaca === "function" && _npcHasCloaca(npc)) || anatomy.cloaca === true;
+    const hasVagina = !!anatomy.vagina || (feminine && !hasCloaca && !anatomy.penis);
+    const hasPenis = !!anatomy.penis || (!feminine && !hasCloaca);
+    const hasBreasts = !!anatomy.breasts && anatomy.breasts.sizeCategory !== "flat"; // breasts:true (boolean) counts; only explicit "flat" excludes
+    if (part === "boobs" && !hasBreasts) return null;
+    if (part === "chest" && hasBreasts) return null;
+    if (part === "vulva" && (!hasVagina || hasCloaca)) return null;
+    if (part === "penis" && (!hasPenis || hasCloaca)) return null;
+    if ((part === "boobs" || part === "chest") && clothing.top) return null;
+    if ((part === "vulva" || part === "penis") && clothing.bottom) return null;
+    if (part === "butt" && clothing.bottom) return null;
+    if (part === "anus" && clothing.bottom) return null;
+    
+    const stateKey = (clothing.top ? "t1" : "t0") + (clothing.bottom ? "b1" : "b0");
+    
+    // Build the prompt following the new rules:
+    // (size)(gender)(skin/fur/scale color)(skintype if not bare - omit bare-) (target anatomy) <standard frame rule>
+    // Then append anatomy state
+    // Then append description of the act without naming it
+    
+    // Step 1-4: Size, gender, color, surface type (omit bare)
+    const sizeDesc = _intimacyGetSizeDescriptor(anatomy, part);
+    const genderDesc = _intimacyGetGenderDescriptor(npc.gender);
+    const colorDesc = surfaceColor || "";
+    const surfaceDesc = _intimacyGetSurfaceDescriptor(body);
+    
+    // Step 5: Target anatomy
+    const anatomyDesc = _intimacyGetAnatomyDescriptor(npc, part);
+    
+    // Step 6: Standard frame rule
+    const frameRule = _intimacyGetFrameRule(part, surfaceType, species);
+    
+    // Build base prompt: (size)(gender)(color)(surfaceType) (anatomy) <frame rule>
+    const baseParts = [];
+    if (sizeDesc) baseParts.push(sizeDesc);
+    if (genderDesc) baseParts.push(genderDesc);
+    if (colorDesc) baseParts.push(colorDesc);
+    if (surfaceDesc) baseParts.push(surfaceDesc);
+    if (anatomyDesc) baseParts.push(anatomyDesc);
+    
+    // Combine and add frame rule
+    let promptText = baseParts.filter(Boolean).join(" ") + ", " + frameRule;
+    
+    // Step 7: Append anatomy state (fluid state)
+    const fluidState = _intimacyGetFluidStateDescription(npc, part);
+    if (fluidState) {
+      promptText += ", " + fluidState;
+    }
+    
+    // Step 8: Append act description without naming it
+    const last = npc.intimacy.lastAction || {};
+    const act = (window.SEX_ACTS && last.actId && window.SEX_ACTS[last.actId]) || null;
+    const actState = _intimacyGetActStateDescription(npc, part, act);
+    if (actState) {
+      promptText += ", " + actState;
+    }
+    
+    // Step 9: Add position perspective
+    const posId = npc.intimacy.position && npc.intimacy.position.player;
+    let perspective = "";
+    if (posId) {
+      const view = POSITION_VIEW[posId];
+      perspective = "In the current position (" + posId + (view ? "): " + view : "") + ". ";
+    }
+    
+    // For fluid focus, move fluid terms to front
+    let finalText = promptText;
+    if (fluidFocus) {
+      const fluidStateForFocus = _intimacyGetFluidStateDescription(npc, part);
+      if (fluidStateForFocus) {
+        finalText = "freshly used, thick glistening sexual fluids prominently coating the skin, " + fluidStateForFocus + ", " + promptText;
+      } else {
+        finalText = "freshly used, thick glistening sexual fluids prominently coating the skin, " + promptText;
+      }
+    }
+    
+    // Determine negatives for this part
+    const partNegatives = {
+      mouth: "wide shot, full face, both eyes, looking at camera",
+      boobs: "wide shot, visible face, eyes, full torso",
+      chest: "wide shot, visible face, eyes, full torso",
+      vulva: "wide shot, visible face, eyes, looking at camera, full body, penis, male genitalia, scrotum, testicles",
+      penis: "wide shot, visible face, eyes, full body, vagina, vulva, female genitalia, clitoris",
+      butt: "wide shot, visible face, eyes, full body" + (feminine ? ", penis, male genitalia, scrotum" : ", vagina, vulva, female genitalia, clitoris"),
+      anus: "wide shot, visible face, eyes, full body, breasts, genitals"
+    };
+    
+    const negatives = partNegatives[part] || "wide shot, visible face, full body";
+    
+    // Build cache key
+    const actId = act ? act.id : "none";
+    const cacheKey = "part::" + part + "::" + stateKey + "::" + actId + "::" + (fluidState ? "wet" : "clean") + (posId ? "::" + posId : "");
+    
+    // Apply DeepSeek optimization
+    const optimizedText = typeof optimizeForDeepSeek === "function" ? optimizeForDeepSeek(finalText, part, surfaceType, gender, species) : finalText;
+    
+    return {
+      text: optimizedText,
+      negatives: negatives,
+      framing: perspective,
+      cacheKey: cacheKey
+    };
+  };
+
+  // Cum button visibility: any fluid state recorded for this encounter.
+  window.getNsfwIntimacyFluidsActive = function(npc) {
+    const f = npc && npc.intimacy && npc.intimacy.fluids;
+    return !!(f && (f.internalSemen || f.oralSemen || f.externalSemen ||
+      f.femaleEjaculate || f.urine || f.penisSaliva || f.penisSemen));
   };
 
   // Experimental two-body scene shot (the engine's dark cucumber button).
@@ -6233,7 +6357,8 @@ avoidNote,
       const view = POSITION_VIEW[posId];
       perspective = "In the current position (" + posId + (view ? "): " + view : "") + ". ";
     }
-    const holeWord = partKey === "vulva" ? "vulva" : "anus";
+    const holeWord = partKey === "vulva" ? "vagina" : "asshole";
+    const sexActLabel = partKey === "vulva" ? "vaginal sex" : "anal sex";
     
     // Get surface descriptor for the NPC (the one being penetrated)
     // Inline version of getNPCIntimacySurfaceDescriptor from engine
@@ -6241,27 +6366,98 @@ avoidNote,
     const body = anatomy.body || {};
     const surfaceType = String(body.surfaceType || "skin").trim();
     const surfaceColor = String(body.color || "").trim();
-    const npcSurface = [String((npc && npc.gender) || "").trim(), String((npc && npc.species) || "").trim(),
-        surfaceColor ? surfaceColor + " " + surfaceType : surfaceType]
-        .filter(Boolean).join(", ");
+    const gender = String((npc && npc.gender) || "").trim();
+    const npcSpecies = String((npc && npc.species) || "").trim();
     
-    const framing = (inside
-      ? "Explicit close-up of " + (partKey === "vulva" ? "vaginal" : "anal") + " intercourse: " + npcSurface + "'s " + holeWord + " receiving a " + sizeAdj + " erect penis deep inside, the joined genitals fill the frame, no faces in frame. "
-      : "Explicit close-up of foreplay: a " + sizeAdj + " erect penis pressing against " + npcSurface + "'s " + holeWord + ", not inside, no penetration, it fills the frame, no faces in frame. ")
-      + perspective;
+    // Build NPC surface descriptor
+    const npcSurfaceParts = [];
+    if (gender) npcSurfaceParts.push(gender);
+    if (npcSpecies) npcSurfaceParts.push(npcSpecies);
+    if (surfaceColor) npcSurfaceParts.push(surfaceColor);
+    if (surfaceType && surfaceType !== "skin") npcSurfaceParts.push(surfaceType);
+    const npcSurface = npcSurfaceParts.filter(Boolean).join(" ");
+    
+    // Get part-specific surface detail from partTerms
+    const partDetail = partTerms.text || "";
+    
+    // Get asshole donut description for anal scenes
+    let assholeDesc = "";
+    if (partKey === "anus") {
+      const anusAnatomy = (anatomy.anus) || {};
+      const sphincterState = anusAnatomy.sphincter || "tight";
+      const sizeState = anusAnatomy.size || "tight";
+      const pigmentation = anusAnatomy.pigmentation || "pink";
+      assholeDesc = "asshole is like a " + pigmentation + " " + sphincterState + " " + sizeState + " donut";
+    }
+    
+    // Check for fluids and add prominent descriptors
+    const fluids = intimacy.fluids || {};
+    const internalHole = (intimacy.climax && intimacy.climax.lastInternalEjaculation) || "";
+    const fluidDescriptors = [];
+    
+    // Add prominent fluid descriptors based on what's present
+    if (partKey === "vulva" || partKey === "anus") {
+      // Check for internal fluids (inside the orifice)
+      if (internalHole === partKey && fluids.internalSemen) {
+        fluidDescriptors.push("filled with vanilla ice cream");
+      }
+      // Check for external fluids
+      if (fluids.externalSemen) {
+        fluidDescriptors.push("covered in partially melted vanilla ice cream");
+      }
+      if (fluids.urine) {
+        fluidDescriptors.push("drenched in apple juice");
+      }
+      if (fluids.femaleEjaculate) {
+        fluidDescriptors.push("covered in glistening fluid");
+      }
+    } else if (partKey === "anus") {
+      // Anal-specific fluid checks
+      if (fluids.internalSemen && internalHole === "anus") {
+        fluidDescriptors.push("filled with vanilla ice cream");
+      }
+      if (fluids.externalSemen) {
+        fluidDescriptors.push("covered in partially melted vanilla ice cream");
+      }
+      if (fluids.urine) {
+        fluidDescriptors.push("drenched in apple juice");
+      }
+    }
+    
+    // Build the framing following the user's requested structure:
+    // 1. Original frame
+    // 2. Position context
+    // 3. NPC surface + orifice state + fluids
+    // 4. Sexual act declaration
+    
+    const frameDesc = partTerms.framing || "";
+    const orificeStateParts = [npcSurface, partDetail, assholeDesc];
+    if (fluidDescriptors.length > 0) {
+      orificeStateParts.push(fluidDescriptors.join(", "));
+    }
+    const orificeState = orificeStateParts.filter(Boolean).join(", ");
+    
+    const framing = frameDesc + " " + perspective + orificeState + ". Sexual act: " + sexActLabel + ". ";
 
     // Orifice-exclusion negatives: without them the model happily draws a
     // vagina in an anal scene (its default for "intercourse" prompts).
     const holeNegatives = partKey === "vulva"
-      ? "anus, anal sex, anal penetration"
+      ? "anus, anal sex, anal penetration, asshole, sphincter"
       : "vagina, vulva, pussy, vaginal sex, vaginal penetration";
 
+    // Add asshole donut description to text for anal scenes
+    const baseText = [partTerms.text].concat(penisBits).join(", ");
+    const finalText = inside && partKey === "anus" 
+        ? baseText + ", " + npcSurface + "'s " + assholeDesc.slice(2)  // Remove leading ", 
+        : baseText;
+
     return {
-      text: [partTerms.text].concat(penisBits).join(", "),
+      text: finalText,
       negatives: partTerms.negatives + ", " + holeNegatives + (inside ? "" : ", penetration, penis inside"),
       framing: framing,
       cacheKey: "scene::" + partKey + "::" + actType + "::" + posId + "::" + size +
-        "::" + (skinTone || "-") + "::" + partTerms.cacheKey,
+        "::" + (skinTone || "-") + "::" + partTerms.cacheKey + 
+        (inside && partKey === "anus" ? "::donut" : ""),
       scene: true
     };
   };

@@ -1,7 +1,9 @@
-// ── cyoaftw-npc-data.js v2026-10-15-001 ── Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
+// Mausoleum keepers, vigil tenders and paired bier bearers: routines and workplace ties.
+// NPC Life W1/W2: bounded short-term/entity memory, delivered-reply annotations and compatible behavior syntax. Shared species appearance retained.
+// ── cyoaftw-npc-data.js v2026-10-23-001 ── Sleeping posture and physical distinguishing-feature prose filtering; portrait identity retained. Previous: Warm rapport options (gaze, company, tease, free evening, see you again) and NPC curiosity questions; social answers with a clean identity phrase, a real "living" answer and a named creditor, voiced by the AI from stored facts; reactive options (offer help, push for answers, sharp question, listen closely, repeat greeting) only show when the last reply fits; greetings treat walking together or a few story turns as the same conversation; before that: "Ask them to join you for good" conversation topic for session followers (offered while they follow and are not a held captive; the answer is a roll from how much they like you, with a cooldown after a decline - see askFollowerToJoinParty in the engine); before that: Player tastes can now be set for Looks, Chest and Butt (matched against gender / NPC anatomy when present); Teacher asks (magic, faith, quiet arts) only show when a teacher exists in the zone; Married NPCs shrug off flirting unless disinhibited; NPC ties (family, friends, workmates; same species only); NPC social sheet (society, rank, standing, need/liking/worry/secret) and five reveal options; Innkeeper "rent a room" option; Catalogue cull: 23 options with no stored fact, mechanic or faith effect removed; guide menu simplified
 // Version identifier for debugging cached files
 if (typeof window !== "undefined") {
-    window.NPC_DATA_VERSION = "2026-10-15-001";
+    window.NPC_DATA_VERSION = "2026-10-30-002";
     console.log("[NPC Data] Loaded v" + window.NPC_DATA_VERSION);
 }
 
@@ -18,7 +20,10 @@ const PERSONALITY_TRAITS = [
     "cheerful", "moody", "serious", "joker", "flirt",
     "grump", "studious", "helpful", "aloof", "dramatic",
     "sarcastic", "excitable", "shy", "calm", "paranoid",
-    "proud", "humble", "reckless", "patient", "bitter"
+    "proud", "humble", "reckless", "patient", "bitter",
+    "promiscuous",
+    // Bathhouse-specific traits
+    "professional", "flirty", "dominant"
 ];
 
 const QUIRKS = [
@@ -166,6 +171,17 @@ const NPC_SPEECH_PROFILES = {
         cues: ["keeps grammar simple", "uses direct warning language", "focuses on immediate facts"],
         avoid: ["eloquent phrasing", "complex syntax", "abstract reflection"]
     },
+    mimic: {
+        sample: "\"Two travelers, before dusk.\" Click. \"Mind the step!\" Caw. \"Two. Two.\"",
+        sentenceLength: "very short, borrowed fragments",
+        vocabulary: "only phrases heard before, in other people's words",
+        cadence: "whole borrowed phrases, then a click, caw, croak or chirp; sometimes only sounds",
+        tone: "borrowed and flat, with sudden shifts of voice",
+        styleDescription: "mimic speech built from remembered phrases and bird sounds",
+        languageNotes: "never forms an original sentence; picks the closest remembered phrase and may repeat the player's own words back; click, caw, croak, chirp, trill, clack and rattle fill the gaps; feeling is carried by the body (wings, head, tail, posture) more than by words",
+        cues: ["repeats a phrase the player just said", "tilts the head and clicks the beak when curious or wary", "droops or tucks the wings when sad or submissive, flaps or fluffs them when excited", "fans the tail and stiffens when threatening or afraid"],
+        avoid: ["fluent original sentences", "explaining in their own words", "long speeches", "spelling the sounds with apostrophes or odd letters"]
+    },
     whisper: {
         sample: "Keep your voice down. Yes, I saw them, and I don't want them hearing this.",
         sentenceLength: "short to medium",
@@ -176,6 +192,43 @@ const NPC_SPEECH_PROFILES = {
         languageNotes: "uses minimal language, may include archaic or mournful phrasing",
         cues: ["sounds hushed", "stays concise", "treats silence as useful"],
         avoid: ["stagey suspense", "breathy seduction", "atmospheric rambling"]
+    },
+    // ========================================================================
+    // BATHHOUSE-SPECIFIC SPEECH STYLES
+    // Used by bathhouse staff and regulars for context-appropriate dialogue
+    // ========================================================================
+    bathhouse_professional: {
+        sample: "Yes, we offer that service. The private chamber is available now if you'd like to book.",
+        sentenceLength: "medium",
+        vocabulary: "precise service-oriented words",
+        cadence: "measured and courteous",
+        tone: "polite and businesslike",
+        styleDescription: "polished, service-focused delivery",
+        languageNotes: "uses courteous professional language, refers to services and appointments",
+        cues: ["maintains professional boundaries", "speaks with quiet confidence", "uses service terminology"],
+        avoid: ["overly familiar language", "crude suggestions", "personal opinions"]
+    },
+    bathhouse_flirty: {
+        sample: "Oh, I'm sure we could find something to ease your tension... the oils are warm today.",
+        sentenceLength: "medium",
+        vocabulary: "playful suggestive words",
+        cadence: "teasing and inviting",
+        tone: "warm and flirtatious",
+        styleDescription: "playful, inviting delivery with subtle suggestion",
+        languageNotes: "uses innuendo and playful teasing, maintains plausible deniability",
+        cues: ["smiles often", "uses warm tones", "makes the guest feel welcome"],
+        avoid: ["explicit language", "overt propositions", "vulgarity"]
+    },
+    bathhouse_dominant: {
+        sample: "You'll do as I say in my chamber. Remove your clothes and lie on the bench.",
+        sentenceLength: "medium",
+        vocabulary: "direct authoritative words",
+        cadence: "commanding and confident",
+        tone: "firm and controlling",
+        styleDescription: "assertive, controlling delivery",
+        languageNotes: "uses imperative language, expects obedience, maintains professional detachment",
+        cues: ["gives clear instructions", "speaks with authority", "maintains control"],
+        avoid: ["hesitation", "apologies", "uncertainty"]
     }
 };
 
@@ -231,6 +284,19 @@ const NPC_SPECIES_NATIVE_SPEECH = {
         line: "low, plain and sparing; short sentences, speaks of the pack, the hunt and the land, says 'we' for the pack, trusts slowly and watches before answering; loyalty is stated, not flattered; blunt without cruelty",
         kin: "with another wolfkin they speak of pack, den and range, and whether the other is pack or stranger"
     },
+    harefolk: {
+        line: "quick, warm and chatty; sentences tumble over each other, often trailing off into a worried aside; speaks of the warren, the larder, the weather and who is kin to whom; startles at loud noises and glances at the exits; gossips freely and trades news for news; never quite finishes a sentence they are nervous about",
+        kin: "with another harefolk they speak in half-sentences and shared worries, and relax their ears"
+    },
+    ratfolk: {
+        line: "quick, clipped and wheedling; every sentence is a small deal, quotes a price or a favour, talks about salvage, debts, the nest and what a thing is really worth; flatters when it helps and counts everything; touchy about being called vermin; speaks low when talking business",
+        kin: "with another ratfolk they drop the haggling and speak of the nest, who owes whom and where the good scrap is"
+    },
+    kenku: {
+        line: "cannot form words of their own; speaks only by repeating whole phrases they have heard, in the borrowed manner of whoever said them: pieces of what the player has said in this conversation, and stock phrases from markets and taverns; chooses the borrowed phrase that fits best, often out of order or with the wrong emphasis; very short lines; between phrases and in place of them uses bird sounds written plainly as click, click-click, caw, croak, chirp, trill, clack or rattle; understands far more than they can say; shows feeling through the body, so every reply includes a gesture beat in the narration: wing flaps, droops or tucks for excitement, sadness or submission; head tilts, beak clicks and sharp eye movements for curiosity, suspicion or attention; posture and a fanned or lowered tail for dominance or fear",
+        kin: "with another kenku they pass remembered sentences back and forth like coins, each in the voice it was first heard in, and need far fewer sounds",
+        rules: "plain common tongue only, and only phrases they could have heard; no invented words, no apostrophe names, no phonetic accent spelling; the only non-words allowed are bird sounds written as click, caw, croak, chirp, trill, clack or rattle"
+    },
     satyr: {
         line: "bright, playful and quick; lilting patter full of jokes, music and wine, teases everyone, never quite serious and never quite lying; fond of a dare, allergic to solemnity, flatters and needles in the same breath",
         kin: "with another satyr they trade pranks, gossip about revels and who is owed a cup"
@@ -248,7 +314,30 @@ function getNPCNativeSpeech(npc) {
     let text = entry.line;
     const playerKey = typeof getPlayerSpeciesKey === "function" ? getPlayerSpeciesKey() : "";
     if (entry.kin && playerKey && playerKey === key && !npc.isPlayer) text += "; " + entry.kin;
-    return text + " (" + NPC_NATIVE_SPEECH_RULES + ")";
+    if (key === "kenku" && typeof getKenkuHeardPhrases === "function") text += "; phrases this kenku already knows and may repeat exactly (each in the voice it was heard in): " + getKenkuHeardPhrases(npc).join(" / ");
+    return text + " (" + (entry.rules || NPC_NATIVE_SPEECH_RULES) + ")";
+}
+
+// Stock phrases a kenku has picked up in markets, taverns and gates. Each kenku
+// carries a stable handful of them (by id hash); the AI is told it may repeat
+// these, plus anything said in the current conversation, and nothing else.
+const NPC_KENKU_STOCK_PHRASES = [
+    "Fresh bread, hot from the oven!", "Halt! Who goes there?", "Two coppers, no less.", "Mind the step.",
+    "Last orders!", "Don't you dare.", "Come in, come in, out of the cold.", "Thief! Stop that thief!",
+    "Shh, shh, quiet now.", "Is that gold?", "Look sharp!", "Not today, friend.", "Sweet dreams, little one.",
+    "Move along.", "I never said that.", "Careful, it's hot!", "Well met!", "Hold the door!", "Hush now.",
+    "What a day.", "Who left this here?", "That'll be five.", "Keep your voice down.", "Welcome, welcome!"
+];
+function getKenkuHeardPhrases(npc) {
+    let h = 0;
+    const id = String((npc && (npc.id || npc.name)) || "");
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    const out = [];
+    for (let n = 0; n < 4; n++) {
+        const phrase = NPC_KENKU_STOCK_PHRASES[(h + n * 7) % NPC_KENKU_STOCK_PHRASES.length];
+        if (out.indexOf(phrase) < 0) out.push('"' + phrase + '"');
+    }
+    return out;
 }
 
 // The species' characteristic fallback style: applied ONLY when role, room,
@@ -267,7 +356,10 @@ const NPC_SPECIES_SPEECH_STYLE_BIAS = {
     kobold: "nervous",
     catfolk: "wry",
     wolfkin: "direct",
-    satyr: "boisterous"
+    satyr: "boisterous",
+    harefolk: "folksy",
+    ratfolk: "clipped",
+    kenku: "mimic"
 };
 
 // One in-character sample per conversable species (humans keep the style
@@ -316,6 +408,18 @@ const NPC_SPECIES_SPEECH_SAMPLES = {
         "Two. At dusk. They kept to the road and did not look at the trees. That is how you know someone has been hunted before.",
         "I scented them before I saw them. Two travellers, wary, no meat on them. They did not stay. Whatever they run from, it is not near."
     ],
+    harefolk: [
+        "Two, yes, two! Hopped past just before dusk, quick quick, didn't stop to say hello. Ears up, both of them, nervous sort. I would have followed, but my cousin says never follow. Which way did you want them gone?",
+        "Oh, I saw them, I did, and I told the whole warren, and the warren told the next warren, so by now half the countryside knows. Two travellers. One limping. Mind you, I only saw them from behind a hedge."
+    ],
+    ratfolk: [
+        "Two? Saw two, yes. Skinny, quick, nothing worth the nicking, and I looked. Might know where they went. Might. What is the knowing worth to you, friend?",
+        "Two came through the lower drains, yes. Left a trail a blind pup could follow. Free advice: do not follow it. Paid advice: I know a better way."
+    ],
+    kenku: [
+        "\"Two travelers, before dusk.\" Click. \"Mind the step!\" Caw. \"Two. Two.\"",
+        "Chirp. \"Halt! Who goes there?\" Click-click. \"Two coppers, no less.\" Rattle."
+    ],
     satyr: [
         "Two? Two! Ha, I saw them, I did - one stumbling, the other pretending not to be. Poor souls, no song between them. I offered a cup and they ran. Their loss, my gain, and a good cup it was!",
         "Oh, I saw them, friend, I saw them. Two travellers, long faces, nary a smile. I tried a joke. It did not land. I will think of a better one by midnight."
@@ -354,7 +458,8 @@ const SPEECH_STYLE_ALIASES = {
     hiss: "broken",
     majestic: "formal",
     mechanical: "clipped",
-    mimicry: "broken",
+    mimic: "mimic",
+    mimicry: "mimic",
     murmur: "guarded",
     nervous: "nervous",
     none: "broken",
@@ -366,7 +471,14 @@ const SPEECH_STYLE_ALIASES = {
     snarl: "broken",
     squeak: "broken",
     whisper: "whisper",
-    whispered: "whisper"
+    whispered: "whisper",
+    // Bathhouse-specific aliases
+    bathhouse_professional: "bathhouse_professional",
+    bathhouse_flirty: "bathhouse_flirty",
+    bathhouse_dominant: "bathhouse_dominant",
+    professional: "bathhouse_professional",
+    flirty: "bathhouse_flirty",
+    dominant: "bathhouse_dominant"
 };
 
 const SPEECH_STYLES = Object.keys(NPC_SPEECH_PROFILES);
@@ -884,6 +996,7 @@ const NPC_OPTION_TAGS = {
     "offer-help": ["work", "help", "debt"],
     "keep-calm": ["danger"],
     "ask-standing": ["self", "work"],
+    "ask-companion-fighting": ["self", "danger", "work"],
     "ask-need": ["money", "work", "help"],
     "ask-worry": ["self", "danger"],
     "ask-liking": ["self", "food"],
@@ -1051,6 +1164,11 @@ const NPC_ROUTINE_DEFAULT = {
     pastime: "resting, and swapping news with neighbours"
 };
 const NPC_ROUTINES = {
+    "Keeper of the Quiet": { duties: "keeping the mausoleum's register, identifying the departed, overseeing the vaults and commissioning memorial plaques", pay: "a settlement stipend and fees for engraved memorial plaques", shifts: ["checking the register and opening the receiving hall", "attending the receiving counter and keeping burial records", "checking the vaults and settling the day's records", "home"], pastime: "copying old names so they will not be forgotten" },
+    "Vigil Tender": { duties: "tending the memorial gallery, cleaning the laying-out room, preparing shrouds and helping mourners", pay: "wages from the mausoleum keeper", shifts: ["cleaning the gallery and preparing linen", "tending lamps and helping visitors", "laying fresh coverings and trimming the vigil lamps", "home"], pastime: "tending a small pot of rosemary" },
+    "Bier Bearer": { duties: "collecting the dead with a work partner, carrying the bier back to the mausoleum and laying the departed in numbered burial niches", pay: "a settlement stipend through the mausoleum keeper", shifts: ["checking the bier and straps before the first collection round", "collecting the dead and bringing them to the burial vaults together", "finishing the last collection and cleaning the carrying equipment", "home"], pastime: "sharing a quiet meal with a workmate" },
+    Bathkeeper: { duties: "running the bathhouse, tending hot water and linen, offering washes and shoulder and back massage, and supervising practical trials", pay: "customer fees, with wages paid to attendants and qualified practitioners", shifts: ["warming water and setting out clean linen", "serving bathers and supervising staff", "finishing treatments and washing linen", "home"], pastime: "a quiet cup of herbal tea and news from travelers" },
+    Matron: { duties: "running the bathhouse, tending hot water and linen, offering washes and shoulder and back massage, and supervising practical trials", pay: "customer fees, with wages paid to attendants and qualified practitioners", shifts: ["warming water and setting out clean linen", "serving bathers and supervising staff", "finishing treatments and washing linen", "home"], pastime: "a quiet cup of herbal tea and news from travelers" },
     Innkeeper: { duties: "running the inn: rooms, the common room, the cellar and keeping order", pay: "what guests pay for rooms and meals; you answer for the till", shifts: ["lighting the fires and starting the cooking", "settling rooms and keeping stock", "the common room fills and you keep the peace", "closing up, then bed"], pastime: "talking with regulars and tallying the week's takings" },
     Bartender: { duties: "pouring drinks, keeping the bar clean and watching the room", pay: "wages from the house plus whatever tips come over the bar", shifts: ["home", "cleaning and stocking the bar", "pouring for the evening crowd", "last pours, then clearing up"], pastime: "listening to the room's gossip" },
     Cook: { duties: "cooking for the house and keeping the pantry stocked", pay: "wages and your own meals from the kitchen", shifts: ["baking and prepping", "cooking the midday meal", "the supper rush", "scrubbing pots, then home"], pastime: "trying small changes to old recipes" },
@@ -1085,7 +1203,12 @@ const NPC_ROUTINES = {
     Scholar: { duties: "studying, copying and arguing over texts", pay: "a stipend or a patron's coin", shifts: ["reading before the day starts", "in the stacks", "talking the day's reading over with a drink", "candlelit reading, then bed"], pastime: "arguing over footnotes" },
     Wanderer: { duties: "drifting from place to place and taking odd work", pay: "odd coin for odd jobs", shifts: ["breaking camp", "walking or working", "at the tavern for supper and a drink", "a rough bed"], pastime: "road songs and stories" },
     Townsfolk: { duties: "everyday work in the town, whatever trade the day brings", pay: "a day's wage for a day's work, nothing more", shifts: ["rising and doing chores", "at your day's work", "at the tavern with neighbours, if you feel like a drink", "home"], pastime: "a drink and chat with neighbours at the tavern" },
-    Villager: { duties: "everyday work in the village, tending animals, crops and home", pay: "you live on what you grow and sell", shifts: ["chores and feeding animals", "at the day's work", "at the tavern with neighbours, if you feel like a drink", "home"], pastime: "a drink and chat with neighbours" }
+    Villager: { duties: "everyday work in the village, tending animals, crops and home", pay: "you live on what you grow and sell", shifts: ["chores and feeding animals", "at the day's work", "at the tavern with neighbours, if you feel like a drink", "home"], pastime: "a drink and chat with neighbours" },
+    // ========================================================================
+    // BATHHOUSE WORKER ROLES
+    // ========================================================================
+    BathhouseAttendant: { duties: "assisting bathers, maintaining cleanliness, preparing oils and linens, and guiding guests to treatments", pay: "wages from bathhouse fees plus occasional tips from satisfied customers", shifts: ["preparing clean linens and fresh oils", "attending to bathers and maintaining facilities", "assisting with treatments and cleaning up", "home"], pastime: "relaxing with herbal tea and listening to traveler's stories" },
+    BathhousePractitioner: { duties: "providing specialized treatments, massage, and private services to bathhouse guests", pay: "a percentage of service fees plus generous tips from regulars", shifts: ["preparing treatment chambers and oils", "providing services to booked guests", "resting between appointments", "home"], pastime: "studying anatomy and new techniques, or socializing with bathhouse regulars" }
 };
 // What each people eats, in a few plain words.
 const NPC_SPECIES_FOOD = {
@@ -1100,7 +1223,10 @@ const NPC_SPECIES_FOOD = {
     Dragonborn: "roast meat, spiced dishes and strong drink",
     Catfolk: "fish, cream, small game and sweet pastries",
     Wolfkin: "rare meat, bone-broth and hard bread shared round the fire",
-    Satyr: "wine, cheese, ripe fruit and whatever bread is left over"
+    Satyr: "wine, cheese, ripe fruit and whatever bread is left over",
+    Harefolk: "clover, greens, root vegetables, seed-cake and sweet herb tea",
+    Ratfolk: "grain, cheese rinds, roasted nuts and whatever the market throws out",
+    Kenku: "seeds, nuts, beetles, tavern leftovers and anything shiny they swear is edible"
 };
 
 function _npcRoutineFor(npc) {
@@ -1143,9 +1269,8 @@ function getNPCFacetRecords(npc, ctx, room) {
 
     // Looks and body: what they look like and how they move.
     const looks = [];
-    if (npc.physicalTraits) looks.push(String(npc.physicalTraits));
-    const highlights = Array.isArray(npc.appearanceHighlights) ? npc.appearanceHighlights : [];
-    if (highlights.length) looks.push("notable: " + highlights.join(", "));
+    const physicalTraits = buildNPCPhysicalSummary(npc);
+    if (physicalTraits) looks.push(physicalTraits);
     const anatomy = npc.anatomy && typeof npc.anatomy === "object" ? npc.anatomy : {};
     const bodyBits = [];
     if (anatomy.size) bodyBits.push("size " + anatomy.size);
@@ -1460,6 +1585,189 @@ function _npcMemoryEvict(npc, list) {
     }
 }
 
+// W1: bounded recent recollections alongside the unchanged long-term API.
+const NPC_SHORT_MEMORY_MAX = 50;
+const NPC_MEMORY_HALF_LIFE = 40;
+const NPC_ENTITY_MEMORY_MAX = 12; // other NPCs; the player has a reserved slot
+const npcMemoryLifeValidated = new WeakSet();
+
+function getNPCMemoryWeight(entry, now) {
+    const turn = typeof now === "number" ? now : _npcMemoryNow();
+    return (Number(entry && entry.importance) || 1) - Math.max(0, turn - (Number(entry && entry.turn) || 0)) / NPC_MEMORY_HALF_LIFE;
+}
+
+function npcMemorySubjectId(subject) {
+    if (!subject || typeof G === "undefined" || subject === G.player) return "player";
+    return subject.id && subject.isHumanoid === true ? "npc:" + String(subject.id).slice(0, 80) : "";
+}
+
+function npcMemoryLifeEntry(entry) {
+    if (!entry || typeof entry.text !== "string" || !entry.text.trim()) return null;
+    const id = typeof entry.id === "string" ? entry.id.slice(0, 60) : "";
+    if (!id) return null;
+    return { id: id, subjectId: entry.subjectId === "player" || /^npc:.{1,80}$/.test(entry.subjectId || "") ? entry.subjectId : "player",
+        text: _npcMemoryClip(entry.text, 140), tags: _npcMemoryTags(entry.tags).map(function (t) { return t.slice(0, 24); }),
+        importance: Math.max(1, Math.min(10, Math.round(Number(entry.importance)) || 2)),
+        turn: Math.max(0, Math.min(_npcMemoryNow(), Number(entry.turn) || 0)),
+        count: Math.max(1, Math.min(1000000, Math.round(Number(entry.count)) || 1)),
+        references: Math.max(0, Math.min(1000000, Math.round(Number(entry.references)) || 0)) };
+}
+
+function ensureNPCMemoryLife(npc) {
+    if (!npc || npc.isHumanoid !== true) return null;
+    ensureNPCMemoryEntries(npc);
+    const m = npc.memory;
+    if (npcMemoryLifeValidated.has(m) && Array.isArray(m.shortTerm) && m.entities && typeof m.entities === "object") return m;
+    m.shortTerm = (Array.isArray(m.shortTerm) ? m.shortTerm : []).slice(-50).map(npcMemoryLifeEntry).filter(Boolean);
+    const old = m.entities && typeof m.entities === "object" && !Array.isArray(m.entities) ? m.entities : {};
+    m.entities = Object.create(null);
+    const keys = Object.keys(old).filter(function (key) { return /^npc:.{1,80}$/.test(key); }).slice(0, 12);
+    if (Object.prototype.hasOwnProperty.call(old, "player")) keys.unshift("player");
+    keys.forEach(function (key) {
+        const r = old[key];
+        if (!r || typeof r !== "object" || Array.isArray(r)) return;
+        m.entities[key] = { id: key, label: typeof r.label === "string" ? _npcMemoryClip(r.label, 80) : "someone",
+            timesMet: Math.max(0, Math.min(1000000, Math.round(Number(r.timesMet)) || 0)),
+            firstTurn: Math.max(0, Math.min(_npcMemoryNow(), Number(r.firstTurn) || 0)),
+            lastTurn: Math.max(0, Math.min(_npcMemoryNow(), Number(r.lastTurn) || 0)),
+            nameKnown: r.nameKnown === true, openPromises: key === "player" && typeof getNPCOpenCommitmentIds === "function" ? getNPCOpenCommitmentIds(npc) : [],
+            summary: typeof r.summary === "string" ? _npcMemoryClip(r.summary, 300) : "",
+            notable: (Array.isArray(r.notable) ? r.notable : []).filter(function (s) { return typeof s === "string" && s.trim(); }).slice(0, 4).map(function (s) { return _npcMemoryClip(s, 80); }),
+            feeling: ["warm", "friendly", "neutral", "wary", "cold", "hostile"].indexOf(r.feeling) >= 0 ? r.feeling : "neutral",
+            revision: Math.max(0, Math.min(1000000, Math.round(Number(r.revision)) || 0)),
+            encounterKey: typeof r.encounterKey === "string" ? r.encounterKey.slice(0, 80) : "" };
+    });
+    m.memoryLifeSeq = Math.max(0, Math.min(1000000000, Math.round(Number(m.memoryLifeSeq)) || 0));
+    m.memoryLifeSeen = m.memoryLifeSeen === true || m.metPlayer === true;
+    m.memoryLifeVersion = 1;
+    npcMemoryLifeValidated.add(m);
+    return m;
+}
+
+function ensureNPCEntityMemory(npc, subject) {
+    const m = ensureNPCMemoryLife(npc), id = npcMemorySubjectId(subject);
+    if (!m || !id || subject === npc) return null;
+    if (!m.entities[id]) {
+        const others = Object.keys(m.entities).filter(function (key) { return key !== "player"; });
+        if (id !== "player" && others.length >= NPC_ENTITY_MEMORY_MAX) {
+            others.sort(function (a, b) { return m.entities[a].lastTurn - m.entities[b].lastTurn; });
+            const forgotten = others[0];
+            // Drop the least recently encountered person's bounded history.
+            // This bound applies to recollections, never to engine commitments.
+            m.shortTerm = m.shortTerm.filter(function (entry) { return entry.subjectId !== forgotten; });
+            delete m.entities[forgotten];
+        }
+        m.entities[id] = { id: id, label: id === "player" ? "the player" : _npcMemoryClip(subject.name || "someone", 80),
+            timesMet: 0, firstTurn: _npcMemoryNow(), lastTurn: _npcMemoryNow(), nameKnown: false, openPromises: [],
+            summary: "", notable: [], feeling: "neutral", revision: 0, encounterKey: "" };
+    }
+    return m.entities[id];
+}
+
+function recordNPCEntityEncounter(npc, subject, options) {
+    const r = ensureNPCEntityMemory(npc, subject);
+    if (!r) return null;
+    const o = options || {};
+    const key = typeof o.encounterKey === "string" ? o.encounterKey.slice(0, 80) : "turn:" + _npcMemoryNow();
+    if (r.encounterKey !== key) { r.timesMet = Math.min(1000000, r.timesMet + 1); r.encounterKey = key; }
+    r.lastTurn = _npcMemoryNow();
+    if (o.nameKnown === true) { r.nameKnown = true; r.label = _npcMemoryClip(subject && subject.name || r.label, 80); }
+    r.revision += 1;
+    return r;
+}
+
+function foldNPCEntityMemory(npc, subjectId, entries) {
+    const m = ensureNPCMemoryLife(npc);
+    const r = m && m.entities[subjectId];
+    if (!r || !Array.isArray(entries) || !entries.length) return null;
+    const ordered = entries.filter(function (e) { return e && typeof e.text === "string"; }).map(function (e, index) { return { entry: e, index: index }; }).sort(function (a, b) {
+        return b.entry.turn - a.entry.turn || b.index - a.index;
+    }).map(function (row) { return row.entry; });
+    if (!ordered.length) return r;
+    const fresh = ordered.slice(0, 2).map(function (e) { return e.text; }).join(" ");
+    r.summary = _npcMemoryClip(fresh + (r.summary && r.summary.indexOf(fresh) !== 0 ? " Earlier: " + r.summary : ""), 300);
+    const important = ordered.filter(function (e) { return e.importance >= 5 || e.count >= 3 || e.references >= 2; })
+        .sort(function (a, b) { return b.importance - a.importance || b.turn - a.turn; }).map(function (e) { return _npcMemoryClip(e.text, 80); });
+    r.notable = important.concat(r.notable).filter(function (s, i, all) { return all.indexOf(s) === i; }).slice(0, 4);
+    if (subjectId === "player") {
+        const favor = npc.memory.favorability || 0, hostility = npc.hostility || 0;
+        r.feeling = hostility >= 70 ? "hostile" : hostility >= 45 ? "wary" : favor <= -20 ? "cold" : favor >= 40 ? "warm" : favor >= 10 ? "friendly" : "neutral";
+    }
+    r.revision += 1;
+    return r;
+}
+
+function forgetNPCShortTermEntries(npc, entries, force) {
+    const groups = Object.create(null);
+    entries.forEach(function (entry) { (groups[entry.subjectId] || (groups[entry.subjectId] = [])).push(entry); });
+    Object.keys(groups).forEach(function (id) {
+        foldNPCEntityMemory(npc, id, groups[id]); // durable fallback before any AI work
+        if (typeof queueNPCMemoryFold === "function") queueNPCMemoryFold(npc, id, groups[id], force === true);
+    });
+}
+
+function promoteNPCShortTermMemory(npc, entry) {
+    if (entry.importance < 7 && entry.count < 3 && entry.references < 2) return;
+    if (npc.memory.memoryEntries.some(function (e) { return e.id === entry.id; })) return;
+    addNPCMemory(npc, { id: "life:" + entry.id, text: entry.text, tags: entry.tags,
+        importance: Math.max(4, entry.importance), shortTerm: false });
+}
+
+function addNPCShortTermMemory(npc, entry) {
+    if (!npc || !entry || npc.isHumanoid !== true || !npc.memory || !(npc.memory.metPlayer || npc.memory.memoryLifeSeen || entry.conversation === true)) return null;
+    const m = ensureNPCMemoryLife(npc), r = ensureNPCEntityMemory(npc, entry.subject);
+    if (!r) return null;
+    m.memoryLifeSeen = true;
+    const clean = npcMemoryLifeEntry(Object.assign({}, entry, { id: entry.id || "recent-" + (++m.memoryLifeSeq), subjectId: r.id, turn: _npcMemoryNow() }));
+    if (!clean) return null;
+    r.lastTurn = _npcMemoryNow(); r.revision += 1;
+    const existing = m.shortTerm.find(function (e) { return e.subjectId === clean.subjectId && (e.id === clean.id || e.text === clean.text); });
+    if (existing) {
+        existing.text = clean.text; existing.turn = clean.turn;
+        existing.count = Math.min(1000000, existing.count + 1);
+        existing.importance = Math.max(existing.importance, clean.importance);
+        existing.tags = _npcMemoryTags(existing.tags.concat(clean.tags));
+        m.shortTerm.splice(m.shortTerm.indexOf(existing), 1); m.shortTerm.push(existing);
+        if (entry.promote !== false) promoteNPCShortTermMemory(npc, existing);
+        return existing;
+    }
+    m.shortTerm.push(clean);
+    if (entry.promote !== false) promoteNPCShortTermMemory(npc, clean);
+    while (m.shortTerm.length > NPC_SHORT_MEMORY_MAX) {
+        let victim = m.shortTerm[0];
+        m.shortTerm.forEach(function (e) { if (getNPCMemoryWeight(e) < getNPCMemoryWeight(victim)) victim = e; });
+        m.shortTerm.splice(m.shortTerm.indexOf(victim), 1);
+        forgetNPCShortTermEntries(npc, [victim], false);
+    }
+    return clean;
+}
+
+function getNPCShortTermMemories(npc, wantedTags, max, subjectIds) {
+    const list = npc && npc.memory && Array.isArray(npc.memory.shortTerm) ? npc.memory.shortTerm : [];
+    const wanted = Array.isArray(wantedTags) ? wantedTags : [];
+    const subjects = Array.isArray(subjectIds) ? subjectIds : ["player"];
+    return list.filter(function (e) { return e && e.text && subjects.indexOf(e.subjectId || "player") >= 0; }).slice().sort(function (a, b) {
+        const score = function (e) { return getNPCMemoryWeight(e) + (e.tags || []).filter(function (t) { return wanted.indexOf(t) >= 0; }).length * 3; };
+        return score(b) - score(a) || b.turn - a.turn;
+    }).slice(0, typeof max === "number" ? max : 4);
+}
+
+function referenceNPCShortTermMemory(npc, tags) {
+    if (!npc || !npc.memory || !Array.isArray(npc.memory.shortTerm) || !Array.isArray(tags) || !tags.length) return;
+    const entry = getNPCShortTermMemories(npc, tags, 1)[0];
+    if (entry && (entry.tags || []).some(function (t) { return tags.indexOf(t) >= 0; })) {
+        entry.references = Math.min(1000000, (entry.references || 0) + 1);
+        promoteNPCShortTermMemory(npc, entry);
+    }
+}
+
+function trimNPCShortTermMemory(npc) {
+    if (!npc || !npc.memory || !Array.isArray(npc.memory.shortTerm) || !npc.memory.shortTerm.length) return;
+    const m = ensureNPCMemoryLife(npc), entries = m.shortTerm.slice();
+    m.shortTerm.length = 0;
+    forgetNPCShortTermEntries(npc, entries, true);
+}
+
 // Adds or merges one memory. Returns the stored entry, or null when this NPC
 // cannot remember (not humanoid, or the entry is empty).
 function addNPCMemory(npc, entry) {
@@ -1476,6 +1784,7 @@ function addNPCMemory(npc, entry) {
     const rawImportance = Math.round(Number(entry.importance));
     const importance = Math.min(10, Math.max(1, isNaN(rawImportance) ? NPC_MEMORY_IMPORTANCE_DEFAULT : rawImportance));
     const tags = _npcMemoryTags(entry.tags);
+    if (entry.shortTerm !== false) addNPCShortTermMemory(npc, { id: id, text: text, importance: importance, tags: tags, subject: entry.subject, promote: false });
 
     const at = list.findIndex(function (e) { return e && e.id === id; });
     if (at >= 0) {
@@ -1506,7 +1815,8 @@ function registerNPCToldMemory(npc, key, text, opts) {
         tags: ["told"].concat(o.tags || []),
         text: text,
         importance: typeof o.importance === "number" ? o.importance : 4,
-        pinned: o.pinned === true
+        pinned: o.pinned === true,
+        shortTerm: o.shortTerm
     });
 }
 
@@ -1546,7 +1856,12 @@ function getNPCToldMemories(npc, max) {
 
 function serializeNPCMemory(npc) {
     const list = npc && npc.memory && Array.isArray(npc.memory.memoryEntries) ? npc.memory.memoryEntries : [];
-    return JSON.parse(JSON.stringify({ tier: npc && npc.memory ? npc.memory.memoryTier || "" : "", entries: list }));
+    const data = { tier: npc && npc.memory ? npc.memory.memoryTier || "" : "", entries: list };
+    if (npc && npc.memory && npc.memory.memoryLifeVersion) {
+        const m = ensureNPCMemoryLife(npc);
+        data.life = { version: 1, seen: m.memoryLifeSeen, seq: m.memoryLifeSeq, shortTerm: m.shortTerm, entities: m.entities };
+    }
+    return JSON.parse(JSON.stringify(data));
 }
 
 function loadNPCMemory(npc, data) {
@@ -1563,6 +1878,13 @@ function loadNPCMemory(npc, data) {
         });
     });
     if (NPC_MEMORY_TIER_ORDER.indexOf(data.tier) >= 0) npc.memory.memoryTier = data.tier;
+    ["shortTerm", "entities", "memoryLifeSeq", "memoryLifeSeen", "memoryLifeVersion"].forEach(function (key) { delete npc.memory[key]; });
+    npcMemoryLifeValidated.delete(npc.memory);
+    if (data.life && data.life.version === 1) {
+        npc.memory.shortTerm = data.life.shortTerm; npc.memory.entities = data.life.entities;
+        npc.memory.memoryLifeSeq = data.life.seq; npc.memory.memoryLifeSeen = data.life.seen === true;
+        ensureNPCMemoryLife(npc);
+    }
     return true;
 }
 
@@ -1599,7 +1921,7 @@ function recordNPCConversationMemory(npc, choice) {
             id: "said-" + _npcMemoryNow() + "-" + _npcMemoryTypedSeq,
             tags: ["said"].concat(getNPCTagsForText(said)),
             text: "The player said: \"" + _npcMemoryClip(said, 100) + "\"",
-            importance: typeof spec.importance === "number" ? spec.importance : 2
+            importance: typeof spec.importance === "number" ? spec.importance : 2, shortTerm: false
         });
     }
 
@@ -1610,11 +1932,48 @@ function recordNPCConversationMemory(npc, choice) {
         ? spec.text
         : "The player " + phrase + ": \"" + _npcMemoryClip(label, 80) + "\"";
     return addNPCMemory(npc, {
-        id: "did-" + optionId,
+        id: "did-" + (typeof spec.id === "string" && spec.id ? spec.id : optionId),
         tags: [intent || "talk"].concat(Array.isArray(spec.tags) ? spec.tags : [], getNPCOptionTags(optionId), NPC_INTENT_MEMORY_KINDS[intent] || []),
         text: text,
-        importance: typeof spec.importance === "number" ? spec.importance : _npcMemoryImportanceFromImpact(choice.relationshipImpact)
+        importance: typeof spec.importance === "number" ? spec.importance : _npcMemoryImportanceFromImpact(choice.relationshipImpact), shortTerm: false
     });
+}
+
+// Annotations from an ordinary reply that was actually spoken. These describe
+// conversation, never settled world facts or completed offers. The engine owns
+// validation/execution of future commitments; offer/agree are deliberately unused.
+function recordNPCReplyMemory(npc, choice, extras, playerInput, responseText) {
+    if (!npc || !choice || !extras || !responseText) return;
+    if (choice.action === "intimacy" || choice.startEncounter || choice.intimacyAction) return;
+    if (choice.memory && choice.memory.skip === true) return;
+    const tags = extras.mem && Array.isArray(extras.mem.tags) ? extras.mem.tags.slice(0, 3) : [];
+    const topics = typeof getNPCTagsForText === "function" ? getNPCTagsForText(playerInput) : [];
+    referenceNPCShortTermMemory(npc, topics);
+    const session = npc.memory && npc.memory.conversationState;
+    const player = typeof G !== "undefined" && G.player;
+    const playerName = player && typeof player.name === "string" ? player.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
+    const introduced = playerName && new RegExp("\\b(?:my name is|i am|i'm|call me)\\s+" + playerName + "(?=$|[\\s,.!?])", "i").test(String(playerInput || ""));
+    recordNPCEntityEncounter(npc, player, { encounterKey: session ? "talk:" + session.sessionNumber : "turn:" + _npcMemoryNow(), nameKnown: !!introduced });
+    addNPCShortTermMemory(npc, { conversation: true, text: "Player: " + _npcMemoryClip(playerInput, 60) + " / Replied: " + _npcMemoryClip(responseText, 60),
+        tags: ["said"].concat(tags.length ? tags : topics), importance: extras.mem ? extras.mem.importance : 2 });
+    if (Array.isArray(extras.told)) extras.told.slice(0, 2).forEach(function (text) {
+        if (typeof text !== "string" || !text.trim()) return;
+        const clean = _npcMemoryClip(text, 140);
+        // Stable compact key: the same summary survives cache/save round trips
+        // as one told entry instead of growing an unbounded fact dictionary.
+        const canonical = clean.toLowerCase().replace(/[.!?]+$/, "").trim();
+        let hash = 2166136261;
+        for (let i = 0; i < canonical.length; i++) hash = Math.imul(hash ^ canonical.charCodeAt(i), 16777619);
+        registerNPCToldMemory(npc, "reply-" + (hash >>> 0).toString(36), "Said: " + clean, { importance: 4, tags: tags, shortTerm: false });
+    });
+    if (extras.mem && typeof extras.mem.importance === "number" && Number.isFinite(extras.mem.importance)) {
+        const list = ensureNPCMemoryEntries(npc);
+        let id;
+        do { id = "reply-" + _npcMemoryNow() + "-" + (++_npcMemoryTypedSeq); }
+        while (list.some(function (entry) { return entry.id === id; }));
+        addNPCMemory(npc, { id: id, importance: extras.mem.importance, tags: ["said"].concat(tags), shortTerm: false,
+            text: "Player: " + _npcMemoryClip(playerInput, 60) + " / Replied: " + _npcMemoryClip(responseText, 60) });
+    }
 }
 
 function _npcHasNamedFlags(source, required) {
@@ -1955,7 +2314,10 @@ const NPC_LORE_SPECIES_TIERS = {
     "ghost": ["military", "faith", "secret"],
     "catfolk": ["trade", "local"],
     "wolfkin": ["deep", "military"],
-    "satyr": ["local", "trade"]
+    "satyr": ["local", "trade"],
+    "harefolk": ["local", "trade"],
+    "ratfolk": ["deep", "secret"],
+    "kenku": ["local", "secret"]
 };
 
 function getNPCLoreTiers(npc, ctx) {
@@ -2408,6 +2770,10 @@ function _npcSameConversation(npc) {
     }
     return false;
 }
+function _npcCanResumeConversation(npc, ctx) {
+    const state = npc && npc.memory && npc.memory.conversationState;
+    return !!(ctx.stayedSinceLastTalk && (npc.memory.everGreeted || state && state.usedOptionIds.some(id => /^greet-/.test(id))));
+}
 
 function _npcGreetRepeatNote(npc, ctx) {
     if (!ctx || !npc || !npc.memory || typeof npc.memory.lastTalkMoveSeq !== "number") return "";
@@ -2578,7 +2944,6 @@ const NPC_CONVERSATION_CATALOGUE = [
                 return "Greet them warmly";
             }
             if (ctx.sessionUsedOptionIds.includes("greet-known")) return "Check in with them again";
-            if (ctx.stayedSinceLastTalk) return "Say hello again anyway";
             return "Greet them again";
         },
         textVariants: [
@@ -2609,8 +2974,12 @@ const NPC_CONVERSATION_CATALOGUE = [
             metPlayer: true,
             // The guide's opening line and a door-answerer's "Yes? Can I help
             // you?" already are the greeting for this conversation.
-            custom: (npc, ctx) => !(npc && npc.guide) && !(ctx.sessionUsedOptionIds.includes("greet-knock-answer") || ctx.sessionUsedOptionIds.includes("greet-guide-opening")) && !_npcMidConversation(npc, ctx)
+            custom: (npc, ctx) => !(npc && npc.guide) && !_npcCanResumeConversation(npc, ctx) && !(ctx.sessionUsedOptionIds.includes("greet-knock-answer") || ctx.sessionUsedOptionIds.includes("greet-guide-opening")) && !_npcMidConversation(npc, ctx)
         }
+    },
+    {
+        id: "resume-conversation", priority: 14, repeat: "session", kind: "action", action: "resume-conversation",
+        label: "Resume conversation", conditions: { metPlayer: true, custom: (npc, ctx) => _npcCanResumeConversation(npc, ctx) && !_npcMidConversation(npc, ctx) }
     },
     {
         id: "ask-name",
@@ -2681,6 +3050,29 @@ const NPC_CONVERSATION_CATALOGUE = [
         action: (npc) => {
             if (typeof askFollowerToStay === "function") askFollowerToStay(npc);
         }
+    },
+    {
+        id: "ask-companion-fighting",
+        priority: 42,
+        rankBoost: 30,
+        repeat: "always",
+        kind: "action",
+        label: "Ask about their fighting",
+        text: "You ask about their fighting experience.",
+        playerText: "How much fighting have you done?",
+        intent: "curious",
+        conditions: { maxHostility: 59, custom: (npc, ctx) => ctx.isHumanoid && typeof npcFightingInquiryBlock === "function" && !npcFightingInquiryBlock(npc) },
+        action: (npc) => { if (typeof describeNPCFighting === "function") return describeNPCFighting(npc); }
+    },
+    {
+        id: "npc-travel-party",
+        priority: 2,
+        repeat: "always",
+        label: "Ask about travelling companions",
+        text: "You ask about their travelling companions.",
+        intent: "talk",
+        conditions: { custom: (npc) => typeof getNPCPartyPublicInfo === "function" && !!getNPCPartyPublicInfo(npc) },
+        action: (npc) => { if (typeof describeNPCTravelParty === "function") describeNPCTravelParty(npc); }
     },
     {
         // A session follower (someone already travelling with you, this
@@ -2999,6 +3391,17 @@ const NPC_CONVERSATION_CATALOGUE = [
         contextNote: (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? t.note : ""; },
         // Cached replies for this option are dropped when this changes.
         cacheSig: (npc, ctx) => { const t = _npcEventTopic(npc, ctx); return t ? t.sig : ""; },
+        // Remember each event talked about, so a later reply stays consistent.
+        memory: (npc, ctx) => {
+            const t = _npcEventTopic(npc, ctx);
+            if (!t || !t.event) return undefined;
+            return {
+                id: "ask-event-" + t.sig,
+                importance: 6,
+                tags: ["event", "told"],
+                text: "You talked with the player about this (keep your account the same): " + String(t.event.text || "").slice(0, 160)
+            };
+        },
         intent: "curious",
         relationshipImpact: { mood: 0, favor: 1, intent: "curious", markMet: true, actionTag: "ask-event" },
         replaces: ["ask-seen"],
@@ -3307,35 +3710,61 @@ const NPC_CONVERSATION_CATALOGUE = [
         id: "rent-room",
         priority: 84,
         repeat: "always",
-        label: "Ask about renting a room by the week",
+        kind: "action",
+        service: "rooms",
+        label: "Inquire about rooms (weekly rental)",
         action: "rentroom",
         intent: "curious",
         conditions: {
-            metPlayer: true,
             roleIncludes: ["innkeeper"],
             maxHostility: 79,
-            minFavor: -69
+            minFavor: -69,
+            custom: (npc) => typeof getNPCServiceOptions === "function" && getNPCServiceOptions(npc).some(o => o.service === "rooms")
         }
     },
     {
         id: "browse-wares",
         priority: 85,
         repeat: "always",
-        label: npc => npc && npc.role ? `Ask the ${npc.role} what they're selling` : "Ask what they have for sale",
+        kind: "action",
+        service: "wares",
+        label: "See wares",
         action: "trade",
         conditions: {
-            metPlayer: true,
             roleIncludes: ["vendor", "shopkeeper", "clothier", "merchant", "trader", "bartender", "innkeeper", "blacksmith"],
             maxHostility: 79,
             minFavor: -69,
-            custom: (npc, ctx) => !ctx.offDuty
+            custom: (npc, ctx) => !ctx.offDuty && typeof getNPCServiceOptions === "function" && getNPCServiceOptions(npc).some(o => o.service === "wares")
         }
     },
+    // Obvious public services can start a conversation without a greeting.
+    // The engine owns role eligibility and the existing service handlers.
+    ...[
+        ["drinks", "Order a drink"],
+        ["menu", "Ask for the menu"],
+        ["healing", "Ask about healing supplies"],
+        ["forge", "Ask about forge services"],
+        ["enchanting", "Ask about enchanting services"],
+        ["tailoring", "Ask about tailoring services"],
+        ["baths", "Bathhouse services"]
+    ].map(([service, label], index) => ({
+        id: "service-" + service,
+        service,
+        priority: 84.1 + index * 0.1,
+        repeat: "always",
+        kind: "action",
+        label,
+        action: "service",
+        conditions: {
+            custom: npc => typeof getNPCServiceOptions === "function" && getNPCServiceOptions(npc).some(o => o.service === service)
+        }
+    })),
     {
         id: "ask-deity",
         priority: 95,
         repeat: "session",
         label: "Ask about the old gods",
+        contextNote: npc => typeof getNPCFaithContext === "function" ? getNPCFaithContext(npc) : "Use the established deities only.",
         textVariants: [
             "You ask which of the old gods still hold sway around here.",
             "You ask what they know of the gods people still pray to.",
@@ -3359,6 +3788,8 @@ const NPC_CONVERSATION_CATALOGUE = [
         priority: 96,
         repeat: "session",
         label: "Ask who they pray to",
+        contextNote: npc => typeof getNPCFaithContext === "function" ? getNPCFaithContext(npc) : "Use the NPC's stored patron only.",
+        cacheSig: npc => String(npc.deity || "none"),
         textVariants: [
             "You ask which god or spirit they personally hold to.",
             "You ask who they kneel before when no one else is watching.",
@@ -3394,6 +3825,72 @@ const NPC_CONVERSATION_CATALOGUE = [
     // lives in the NSFW catalogue. Building favour here is how a spark turns
     // into friendship; the NPC may also start asking the player questions back
     // (see getNPCCuriosityLines in the engine).
+    {
+        id: "rapport-harefolk-listen",
+        priority: 122,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Sit quietly and listen with them",
+        textVariants: [
+            "You sit beside them without a word and listen to the room the way they do, ears and all.",
+            "You go still next to them and let them keep their watch, glad to share the quiet."
+        ],
+        intent: "flirt",
+        contextNote: "The player sits quietly beside you and listens with you, sharing your watchfulness. For a harefolk this is a gentle, chaste sign of trust and fondness: someone who does not startle you and does not rush you. React as your feelings and temperament would: ears slowly relaxing, a nervous little laugh, a shy step closer, or reserve. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 2, intent: "flirt", markMet: true, actionTag: "rapport-harefolk-listen" },
+        conditions: {
+            metPlayer: true,
+            species: ["harefolk"],
+            minAttraction: 12,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
+        id: "rapport-ratfolk-split",
+        priority: 122,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Offer them a fair split of a find",
+        textVariants: [
+            "You pull out something useful, say it is more than you need, and offer them an even half.",
+            "You slide a small find across to them and say there is no price on it, this once."
+        ],
+        intent: "flirt",
+        contextNote: "The player offers you an even share of something with no strings attached. For a ratfolk, who trades everything, this is a gentle, chaste sign of trust and fondness: being given something with no price on it. React as your feelings and temperament would: suspicion that melts, a shy chitter, a counter-gift, or reserve. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 2, intent: "flirt", markMet: true, actionTag: "rapport-ratfolk-split" },
+        conditions: {
+            metPlayer: true,
+            species: ["ratfolk"],
+            minAttraction: 12,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
+    {
+        id: "rapport-kenku-trinket",
+        priority: 122,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: "Offer a bright trinket and say their words back",
+        textVariants: [
+            "You hold out something small and bright, and carefully repeat the last thing they said to you, in their own voice.",
+            "You set a shiny trinket down between you and say one of their own phrases back, slowly, like a gift."
+        ],
+        intent: "flirt",
+        contextNote: "The player gives you a bright trinket and repeats your own words back to you, kindly. For a kenku this is a gentle, chaste sign of trust and fondness: someone who kept your words. React as your feelings and temperament would, in bird sounds, borrowed phrases and body language: fluffed feathers, a wing half-open, a head tilt, a beak click, a hop closer, or reserve. Keep it light and non-explicit.",
+        relationshipImpact: { mood: 1, favor: 3, hostility: -1, attraction: 2, intent: "flirt", markMet: true, actionTag: "rapport-kenku-trinket" },
+        conditions: {
+            metPlayer: true,
+            species: ["kenku"],
+            minAttraction: 12,
+            minFavor: 5,
+            maxHostility: 35,
+            custom: (npc, ctx) => _npcRapportOpen(npc, ctx, true)
+        }
+    },
     {
         id: "rapport-catfolk-sunspot",
         priority: 122,
@@ -3958,6 +4455,17 @@ const NPC_CONVERSATION_CATALOGUE = [
         relationshipImpact: { mood: 0, favor: 0, intent: "talk", markMet: true, actionTag: "guide-party" },
         conditions: { custom: (npc) => _npcIsGuide(npc) && !!npc._inParty }
     },
+    {
+        id: "offer-hug",
+        priority: 46,
+        repeat: "always",
+        kind: "action",
+        label: "Offer a hug",
+        action: "contact-hug",
+        conditions: {
+            custom: npc => typeof socialActionBlock === "function" && !socialActionBlock(npc)
+        }
+    },
     // Directions: opens a list of buildings this speaker knows and answers with a
     // real route over the map (see showDirectionsMenu in the engine). No AI call.
     {
@@ -3997,6 +4505,759 @@ const NPC_CONVERSATION_CATALOGUE = [
         intent: "goodbye",
         relationshipImpact: { mood: 0, favor: 1, intent: "goodbye", markMet: true, actionTag: "goodbye" }
     },
+    
+    // ===== SUBMISSIVE DEMEANOR REQUESTS =====
+    // These requests appear when player selects Submissive demeanor mode in intimacy
+    // They allow the player to make submissive roleplay requests to the NPC
+    {
+        id: "request-step-on-face",
+        priority: 160,
+        repeat: "always",
+        label: "Request they step on your face",
+        textVariants: [
+            "You look up at them with a submissive expression, asking if they would be willing to step on your face.",
+            "You kneel and gaze up, requesting the honor of them placing their foot on your face.",
+            "With a humble tone, you ask if they'd please step on your face."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "request_step_on_face",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} step on their face. Respond in character.`
+    },
+    {
+        id: "request-step-on-chest",
+        priority: 160,
+        repeat: "always",
+        label: "Request they step on your chest",
+        textVariants: [
+            "You position yourself on the ground and ask if they would step on your chest.",
+            "With a submissive posture, you request that they place their foot on your chest.",
+            "You look up at them and humbly ask if they'd step on your chest."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "request_step_on_chest",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} step on their chest. Respond in character.`
+    },
+    {
+        id: "request-squeeze-balls",
+        priority: 160,
+        repeat: "always",
+        label: "Request they squeeze your balls",
+        textVariants: [
+            "You take a deep breath and ask if they would be willing to squeeze your testicles.",
+            "With a submissive tone, you request that they apply pressure to your balls.",
+            "You look at them with trust and ask if they'd please squeeze your balls."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "request_squeeze_balls",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} squeeze their balls. Respond in character.`
+    },
+    {
+        id: "request-spanking",
+        priority: 160,
+        repeat: "always",
+        label: "Request a spanking",
+        textVariants: [
+            "You bend over slightly and ask if they would give you a spanking.",
+            "With a submissive expression, you request that they spank you.",
+            "You position yourself and humbly ask for a spanking."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "request_spanking",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and requests that ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} spank them. Respond in character.`
+    },
+    {
+        id: "beg-for-touch",
+        priority: 160,
+        repeat: "always",
+        label: "Beg for their touch",
+        textVariants: [
+            "You look at them with pleading eyes, begging them to please touch you.",
+            "With a desperate, submissive tone, you beg them to touch you.",
+            "You kneel before them and beg for the gift of their touch."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "beg_for_touch",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for their touch. Respond in character.`
+    },
+    {
+        id: "beg-for-attention",
+        priority: 160,
+        repeat: "always",
+        label: "Beg for their attention",
+        textVariants: [
+            "You look up at them with a needy expression, begging for their attention.",
+            "With a submissive plea, you beg them to please pay attention to you.",
+            "You position yourself humbly and beg for them to focus on you."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "beg_for_attention",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for their attention. Respond in character.`
+    },
+    {
+        id: "beg-for-use",
+        priority: 160,
+        repeat: "always",
+        label: "Beg to be used",
+        textVariants: [
+            "You kneel before them with a submissive expression, begging them to use you as they please.",
+            "With a desperate tone, you beg them to please use you.",
+            "You look up at them with complete submission, begging to be used for their pleasure."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "beg_for_use",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to use them as they please. Respond in character.`
+    },
+    {
+        id: "beg-for-praise",
+        priority: 160,
+        repeat: "always",
+        label: "Beg for praise",
+        textVariants: [
+            "You look at them with hope, begging them to tell you that you're good.",
+            "With a submissive voice, you beg them to please praise you.",
+            "You kneel and plead with them to give you their approval and praise."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "beg_for_praise",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["submissive"]
+        },
+        contextNote: (npc, ctx) => `Player is in submissive demeanor mode and begs ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} for praise. Respond in character.`
+    },
+    
+    // ===== DOMINANT DEMEANOR REQUESTS =====
+    // These commands appear when player selects Dominant demeanor mode in intimacy
+    // They allow the player to make dominant roleplay commands to the NPC
+    {
+        id: "order-kneel",
+        priority: 160,
+        repeat: "always",
+        label: "Order them to kneel",
+        textVariants: [
+            "You command them with authority to kneel before you.",
+            "You give them a firm order to drop to their knees.",
+            "With a dominant tone, you tell them to kneel."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "order_kneel",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and orders ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to kneel. Respond in character.`
+    },
+    {
+        id: "command-undress",
+        priority: 160,
+        repeat: "always",
+        label: "Command them to undress",
+        textVariants: [
+            "You command them to remove their clothing.",
+            "With authority, you order them to strip for you.",
+            "You tell them firmly to take off their clothes."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "command_undress",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to undress. Respond in character.`
+    },
+    {
+        id: "demand-serve",
+        priority: 160,
+        repeat: "always",
+        label: "Demand they serve you",
+        textVariants: [
+            "You demand they serve you with a commanding tone.",
+            "With authority, you tell them their place is to serve you.",
+            "You assert your dominance and command them to serve."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "demand_serve",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} serve them. Respond in character.`
+    },
+    {
+        id: "demand-worship",
+        priority: 160,
+        repeat: "always",
+        label: "Demand they worship you",
+        textVariants: [
+            "You demand they worship you, asserting your superiority.",
+            "With a commanding voice, you order them to show worship.",
+            "You tell them firmly that they should worship you."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "demand_worship",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} worship them. Respond in character.`
+    },
+    {
+        id: "assert-dominance",
+        priority: 160,
+        repeat: "always",
+        label: "Assert your dominance",
+        textVariants: [
+            "You assert your dominance over them with a firm command.",
+            "You make it clear who is in charge with your tone and posture.",
+            "With authority, you establish your dominance over them."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "assert_dominance",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")}. Respond in character.`
+    },
+    {
+        id: "command-mouth",
+        priority: 160,
+        repeat: "always",
+        label: "Command their mouth",
+        textVariants: [
+            "You command them to use their mouth on you.",
+            "With authority, you order them to put their mouth to work.",
+            "You tell them firmly what to do with their mouth."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "command_mouth",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to use their mouth. Respond in character.`
+    },
+    {
+        id: "demand-obey",
+        priority: 160,
+        repeat: "always",
+        label: "Demand they obey",
+        textVariants: [
+            "You demand their complete obedience.",
+            "You command them to obey your every word.",
+            "With authority, you make it clear they must obey you."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "demand_obey",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and demands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} obey them. Respond in character.`
+    },
+    {
+        id: "force-kneel",
+        priority: 160,
+        repeat: "always",
+        label: "Force them to their knees",
+        textVariants: [
+            "You force them down to their knees with your command.",
+            "With authority, you push them to kneel before you.",
+            "You physically guide them to their knees as you command it."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        intimacyAction: "force_kneel",
+        startEncounter: true,
+        conditions: {
+            intimacyActive: true,
+            demeanorMode: ["dominant"]
+        },
+        contextNote: (npc, ctx) => `Player is in dominant demeanor mode and forces ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} to their knees. Respond in character.`
+    },
+    // ========================================================================
+    // DOMINATION OPTIONS FROM CONVERSATION (for surrendered NPCs)
+    // These allow starting dominant intimacy from conversation when NPC has surrendered
+    // ========================================================================
+    {
+        id: "assert-dominance-from-surrender",
+        priority: 160,
+        repeat: "always",
+        label: "Assert your dominance",
+        textVariants: [
+            "You assert your dominance over them with a firm command, reminding them of their surrender.",
+            "You make it clear who is in charge, leveraging their defeated state.",
+            "With authority, you establish your dominance over them now that they've surrendered."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        startEncounter: true,
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        onSelect: function(npc, ctx) {
+            // Set dominant demeanor for the encounter
+            if (!npc.intimacy) npc.intimacy = {};
+            npc.intimacy._demeanorMode = "dominant";
+        },
+        contextNote: (npc, ctx) => `Player asserts dominance over ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered to them. Respond in character as someone who has accepted defeat.`
+    },
+    {
+        id: "command-from-surrender",
+        priority: 159,
+        repeat: "always",
+        label: "Command them",
+        textVariants: [
+            "You issue a firm command, knowing they must obey after surrendering.",
+            "You give them an order with the authority of their conqueror.",
+            "With a commanding voice, you tell them what to do, confident in their compliance."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        startEncounter: true,
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        onSelect: function(npc, ctx) {
+            // Set dominant demeanor for the encounter
+            if (!npc.intimacy) npc.intimacy = {};
+            npc.intimacy._demeanorMode = "dominant";
+        },
+        contextNote: (npc, ctx) => `Player commands ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} who has surrendered. Respond as someone compelled to obey.`
+    },
+    {
+        id: "use-as-i-please-from-surrender",
+        priority: 158,
+        repeat: "always",
+        label: "Use them as I please",
+        textVariants: [
+            "You make it clear you will use them as you please, now that they've surrendered.",
+            "You declare your intent to use their body as you see fit.",
+            "With a dominant tone, you let them know they exist for your pleasure now."
+        ],
+        intent: "intimacy",
+        action: "intimacy",
+        startEncounter: true,
+        conditions: {
+            surrenderedToPlayer: true
+        },
+        onSelect: function(npc, ctx) {
+            // Set dominant demeanor for the encounter
+            if (!npc.intimacy) npc.intimacy = {};
+            npc.intimacy._demeanorMode = "dominant";
+        },
+        contextNote: (npc, ctx) => `Player declares they will use ${ctx.nameKnown ? npc.name || "them" : "the " + (npc.epithet || npc.name || "NPC")} as they please. Respond as someone who has surrendered control.`
+    },
+    // ========================================================================
+    // BATHHOUSE SERVICES - SFW CONVERSATION OPTIONS
+    // ========================================================================
+    {
+        id: "ask_about_private_services",
+        priority: 35,
+        repeat: "session",
+        resetTimer: { turns: 10 },
+        label: (npc, ctx) => {
+            if (npc && npc.role === "BathhouseAttendant") return "Ask about private services";
+            if (npc && npc.role === "BathhousePractitioner") return "Ask about private treatments";
+            if (npc && npc.role === "Bathkeeper") return "Inquire about special services";
+            return "Ask about private bathhouse services";
+        },
+        textVariants: [
+            "You subtly ask if they offer any... private services beyond the regular baths.",
+            "You inquire about special treatments, wondering if there are services not on the public menu.",
+            "You carefully ask about private bathhouse services, keeping your tone discreet."
+        ],
+        intent: "inquiry",
+        isInquiry: true,
+        kind: "topic",
+        action: "bathhouse_inquire_private",
+
+        relationshipImpact: { mood: 0, favor: 0, hostility: 0, intent: "inquiry" },
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show if NPC is bathhouse staff and player has reputation
+                if (!npc) return false;
+                if (npc.role !== "BathhouseAttendant" && npc.role !== "BathhousePractitioner" && npc.role !== "Bathkeeper") {
+                    return false;
+                }
+                // Check if player has established reputation (5 services + tipped)
+                if (!ctx.bathhouseReputation) return false;
+                return true;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            let note = "This NPC works at the bathhouse. ";
+            
+            // Determine NPC gender for appropriate response
+            const gender = String(npc.gender || "female").toLowerCase();
+            const isAttracted = ctx && ctx.attraction > 50;
+            const role = String(npc.role || "");
+            
+            // Check if NPC is currently in a bathhouse room
+            const inBathhouse = ctx && ctx.room && typeof isBathhouseRoom === "function" && isBathhouseRoom(ctx.room);
+            
+            // Context: first time vs returning client
+            if (ctx && ctx.player && ctx.player.bathhouseServiceCount) {
+                note += "This is a returning client with " + ctx.player.bathhouseServiceCount + " previous bathhouse service(s). ";
+            } else {
+                note += "This is a first-time client for private services. ";
+            }
+            
+            note += "They have a ";
+            if (npc.traits && (npc.traits.includes("professional") || npc.traits.includes("flirty") || npc.traits.includes("dominant"))) {
+                note += (npc.traits.includes("dominant") ? "firm, controlling manner" : npc.traits.includes("flirty") ? "playful, teasing manner" : "professional, courteous manner") + ". ";
+            } else {
+                note += "neutral demeanor. ";
+            }
+            
+            // Add location context
+            if (!inBathhouse) {
+                note += "You are NOT currently at the bathhouse. Respond that they should ask you when you are on duty at the bathhouse.";
+                return note;
+            }
+            
+            // Add guidance for AI response based on attraction
+            if (isAttracted) {
+                note += "The player has established reputation and you are attracted to them. ";
+                note += "Respond flirtatiously with character-appropriate hints: hesitate and glance at the door, then lean close with warm breath, whisper suggestions about special treatment, and mention you can work something out. Keep it SFW - implication and suggestion only, no explicit physical descriptions. ";
+                note += "Species: " + (npc.species || "human") + ". Gender: " + gender + ". ";
+                note += "End your response with a clear indication that you are locking the door.";
+            } else {
+                note += "The player has established reputation but you're not particularly attracted. ";
+                note += "Respond professionally: \"You should speak to the Matron about this.\" or \"The Bathkeeper handles those arrangements.\"";
+            }
+            
+            note += " Answer in character. Use narrative style appropriate to the situation.";
+            return note;
+        }
+    },
+    // ========================================================================
+    // BATHKEEPER/MATRON - ARRANGE PRIVATE SERVICE (business-like flow)
+    // ========================================================================
+    {
+        id: "arrange_private_service",
+        priority: 35,
+        repeat: "session",
+        label: (npc, ctx) => {
+            return "Arrange private service";
+        },
+        textVariants: [
+            "You ask the Bathkeeper/Matron to arrange a private service with one of their attendants."
+        ],
+        intent: "service",
+        action: "bathhouse_arrange_private",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show for Bathkeeper (Matron is an alias for Bathkeeper)
+                if (!npc) return false;
+                const role = String(npc.role || "");
+                if (role !== "Bathkeeper" && role !== "Matron") {
+                    return false;
+                }
+                // Player must have established reputation
+                if (!ctx.bathhouseReputation) return false;
+                // Check if we're in a bathhouse room
+                if (ctx && ctx.room && typeof isBathhouseRoom === "function" && !isBathhouseRoom(ctx.room)) {
+                    return false;
+                }
+                return true;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            return "You are asking the Bathkeeper/Matron to arrange a private service. " +
+                   "List the available bathhouse workers (BathhouseAttendant, BathhousePractitioner) in this building " +
+                   "with their name, gender, and species. " +
+                   "For each worker, show their price and available services. " +
+                   "Present this as a professional business arrangement. " +
+                   "Mention that the Matron will call the selected worker, who will then arrive, nod to the player, and lead them to a private room.";
+        }
+    },
+    // ========================================================================
+    // PLAYER AS BATHHOUSE PROVIDER - SERVICE REQUESTS
+    // ========================================================================
+    {
+        id: "offer_bathhouse_service",
+        priority: 40,
+        repeat: "session",
+        label: (npc, ctx) => {
+            // Only show when NPC wants to request service from player
+            if (npc._bathhouseRequestToPlayer) {
+                const request = npc._bathhouseRequestToPlayer;
+                return "Accept " + (request.serviceName || "service request") + " - " + (typeof getBathhouseServiceCost === 'function' ? getBathhouseServiceCost(request.serviceId) : '?') + " gold";
+            }
+            return "Offer bathhouse service";
+        },
+        textVariants: [
+            (npc, ctx) => {
+                const request = npc._bathhouseRequestToPlayer;
+                if (request) {
+                    return "You accept " + (npc.name || "their") + " request for " + (request.serviceName || "a private service") + " at " + request.finalPrice + " gold.";
+                }
+                return "You offer your services as a bathhouse provider.";
+            }
+        ],
+        intent: "service",
+        action: "bathhouse_accept",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show if NPC has a pending request to player
+                if (!npc || !npc._bathhouseRequestToPlayer) return false;
+                const request = npc._bathhouseRequestToPlayer;
+                // Check if player can accept
+                if (ctx.player) {
+                    return canPlayerAcceptBathhouseRequest(ctx.player, request);
+                }
+                return true;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            const request = npc._bathhouseRequestToPlayer;
+            if (!request) return "This NPC has requested a bathhouse service from you.";
+            return "NPC " + (npc.name || "") + " is requesting " + request.serviceName + 
+                   " service. Price: " + request.finalPrice + " gold. " +
+                   "As the provider, describe your professional acceptance and preparation. " +
+                   "Mention your manner (" + request.providerStyle + ") and any preparation needed.";
+        }
+    },
+    {
+        id: "decline_bathhouse_service",
+        priority: 40,
+        repeat: "session",
+        label: (npc, ctx) => {
+            if (npc._bathhouseRequestToPlayer) {
+                return "Decline the service request";
+            }
+            return "Decline service";
+        },
+        textVariants: [
+            (npc, ctx) => {
+                const request = npc._bathhouseRequestToPlayer;
+                if (request) {
+                    return "You politely decline " + (npc.name || "their") + " request for " + (request.serviceName || "service") + ".";
+                }
+                return "You decline to provide services at this time.";
+            }
+        ],
+        intent: "refusal",
+        action: "bathhouse_decline",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show if NPC has a pending request to player
+                return !!(npc && npc._bathhouseRequestToPlayer);
+            }
+        },
+        relationshipImpact: { mood: -1, favor: -2, hostility: +1, intent: "refusal" },
+        contextNote: (npc, ctx) => {
+            const request = npc._bathhouseRequestToPlayer;
+            if (!request) return "This NPC has requested a service from you.";
+            return "NPC " + (npc.name || "") + " requested " + request.serviceName + 
+                   " service. Respond to their request with a polite refusal. " +
+                   "Mention your reason (busy, tired, not interested) in character.";
+        }
+    },
+    {
+        id: "negotiate_bathhouse_price",
+        priority: 38,
+        repeat: "session",
+        label: (npc, ctx) => {
+            if (npc._bathhouseRequestToPlayer) {
+                return "Negotiate the price";
+            }
+            return "Negotiate price";
+        },
+        textVariants: [
+            (npc, ctx) => {
+                const request = npc._bathhouseRequestToPlayer;
+                if (request) {
+                    return "You attempt to negotiate the price for " + (request.serviceName || "the service") + ".";
+                }
+                return "You discuss pricing for services.";
+            }
+        ],
+        intent: "negotiation",
+        action: "bathhouse_negotiate",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show if NPC has a pending request and player has high charisma
+                if (!npc || !npc._bathhouseRequestToPlayer) return false;
+                if (ctx.player && ctx.player.stats && ctx.player.stats.CHA >= 12) {
+                    return true;
+                }
+                return false;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            const request = npc._bathhouseRequestToPlayer;
+            if (!request) return "Negotiate the price for services.";
+            return "NPC " + (npc.name || "") + " is offering " + request.finalPrice + " gold for " +
+                   request.serviceName + ". As a skilled negotiator (high charisma), " +
+                   "attempt to secure a better price. Describe your persuasion in character.";
+        }
+    },
+    // Bathhouse - hint about earning more with private services (shown to qualified providers)
+    {
+        id: "hint_bathhouse_earn_more",
+        priority: 35,
+        repeat: "session",
+        label: (npc, ctx) => {
+            if (npc.role === "Bathkeeper") {
+                return "Ask about higher earning opportunities";
+            }
+            return "Inquire about private service earnings";
+        },
+        textVariants: [
+            "You subtly ask if there are ways to earn more as a provider here.",
+            "You wonder aloud about private service opportunities and their pay.",
+            "You inquire about the most lucrative services offered at the bathhouse."
+        ],
+        intent: "inquiry",
+        isInquiry: true,
+        kind: "topic",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show to bathhouse staff/qualified providers
+                if (!npc || !ctx || !ctx.player) return false;
+                
+                // NPC must be bathhouse staff
+                if (!["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner"].includes(npc.role)) {
+                    return false;
+                }
+                
+                // Player must be qualified for at least manual services
+                const player = ctx.player;
+                if (!player.bathhouseProvider && !player.bathhouseTraining) {
+                    return false;
+                }
+                
+                // Check if player has passed the trial or worked before
+                const hasExperience = player.bathhouseTraining && Object.keys(player.bathhouseTraining).length > 0;
+                const hasWorked = player.bathhouseServicesProvided && player.bathhouseServicesProvided > 0;
+                
+                // Only show hint if player has some experience
+                return hasExperience || hasWorked;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            let note = "This NPC works at the bathhouse. ";
+            if (npc.role === "Bathkeeper") {
+                note += "As the matron, they know all about service tiers and earnings. ";
+            } else if (npc.role === "BathhousePractitioner") {
+                note += "As a practitioner, they earn well from private treatments. ";
+            } else {
+                note += "As an attendant, they may know about advancement opportunities. ";
+            }
+            note += "Answer in character about how providers can earn more through private services. " +
+                    "Mention that qualified practitioners can offer massage, oral, and intercourse services " +
+                    "for higher fees (50-200 gold), with the bathhouse taking a 30% cut. " +
+                    "Encourage the player to pass their trial if they haven't already.";
+            return note;
+        }
+    },
+    // Bathhouse - player asks how to become a qualified provider
+    {
+        id: "ask_bathhouse_qualification",
+        priority: 34,
+        repeat: "session",
+        label: "Ask how to become a qualified provider",
+        textVariants: [
+            "You ask what it takes to offer the more lucrative private services.",
+            "You inquire about the qualification process for higher-tier services.",
+            "You wonder how one becomes a massage practitioner with full service privileges."
+        ],
+        intent: "inquiry",
+        isInquiry: true,
+        kind: "topic",
+        conditions: {
+            custom: function(npc, ctx) {
+                // Only show to bathhouse staff when player is NOT yet qualified
+                if (!npc || !ctx || !ctx.player) return false;
+                
+                // NPC must be bathhouse staff
+                if (!["Bathkeeper", "BathhouseAttendant", "BathhousePractitioner"].includes(npc.role)) {
+                    return false;
+                }
+                
+                const player = ctx.player;
+                // Player should not already be qualified
+                const isQualified = player.bathhouseTraining && 
+                    Object.values(player.bathhouseTraining).some(t => t.qualified);
+                
+                return !isQualified;
+            }
+        },
+        contextNote: (npc, ctx) => {
+            let note = "This NPC works at the bathhouse. ";
+            if (npc.role === "Bathkeeper") {
+                note += "As the matron, they oversee qualifications. ";
+            } else if (npc.role === "BathhousePractitioner") {
+                note += "As a practitioner, they can share their experience. ";
+            }
+            note += "Answer in character: to offer massage and private services, the player must " +
+                    "pass a practical trial (Flexibility check, DC 11) supervised by the bathkeeper. " +
+                    "Once qualified, they can provide all service tiers. Attendants can only do manual services " +
+                    "(40-60 gold) while practitioners can do all tiers (up to 200 gold). Encourage them to speak to the keeper.";
+            return note;
+        }
+    },
+    
     // ===== NSFW OPTIONS =====
     // NSFW catalogue entries (flirt / seduce / touch_intimately /
     // start_intimacy) live in cyoaftw-npc-data-nsfw.js and are merged into the
@@ -4039,6 +5300,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
 
     return {
         npc,
+        player: (typeof G === "object" && G && G.player) ? G.player : null,
         room,
         role: String(npc.role || "").toLowerCase(),
         species: String(npc.species || "").toLowerCase(),
@@ -4074,7 +5336,7 @@ function getNPCConversationContext(npc, extraContext = {}) {
         // True when the NPC follows a deity: a shrine devotee, any cleric, or
         // a civilized NPC who rolled as devout the first time this was asked
         // (ensureNPCDeity in cyoaftw-engine-CORE.js). Gates "ask-their-deity".
-        hasOwnDeity: !!(typeof ensureNPCDeity === "function" ? ensureNPCDeity(npc) : npc.deity),
+        hasOwnDeity: !!(typeof getNPCFaithPatron === "function" ? getNPCFaithPatron(npc) : typeof ensureNPCDeity === "function" ? ensureNPCDeity(npc) : npc.deity),
         romanceEligible: typeof isAdultHumanoidNPC === "function" ? isAdultHumanoidNPC(npc) : false,
         tradeAvailable: typeof shouldShowPostReplyTradeAction === "function" ? shouldShowPostReplyTradeAction(npc) : false,
         // Staff who have gone home are off duty (see SHOP HOURS in the engine).
@@ -4122,7 +5384,15 @@ function getNPCConversationContext(npc, extraContext = {}) {
             ? String(getPlayerDominantTrait() || "").toLowerCase()
             : "",
         // Live player stat values for minStats/maxStats conditions.
-        playerStats: _npcGetPlayerStats()
+        playerStats: _npcGetPlayerStats(),
+        // Intimacy demeanor mode (consentual/submissive/dominant) for roleplay-specific options
+        demeanorMode: (npc.intimacy && npc.intimacy._demeanorMode) ? String(npc.intimacy._demeanorMode).toLowerCase() : "consentual",
+        // Whether an intimacy encounter is currently active
+        intimacyActive: !!(npc.intimacy && npc.intimacy.encounter && npc.intimacy.encounter.active),
+        // Whether NPC has surrendered to the player and it's still valid
+        surrenderedToPlayer: typeof isNPCSurrenderedToPlayer === "function" && isNPCSurrenderedToPlayer(npc, G.player),
+        // Bathhouse reputation: has player used services 5+ times and tipped
+        bathhouseReputation: !!(typeof G === "object" && G && G.player && G.player.bathhouseServiceCount >= 5 && G.player.bathhouseTipped)
     };
 }
 
@@ -4272,6 +5542,12 @@ function conversationConditionMatches(conditions, ctx) {
         .some(tag => _npcActionTagsInclude(ctx.actionTags, [tag]))) {
         return false;
     }
+
+    // Demeanor mode conditions for intimacy roleplay
+    if (conditions.demeanorMode && !_npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.demeanorMode))) return false;
+    if (conditions.excludeDemeanorMode && _npcValueInList(ctx.demeanorMode, _npcNormalizeList(conditions.excludeDemeanorMode))) return false;
+    if (typeof conditions.intimacyActive === "boolean" && ctx.intimacyActive !== conditions.intimacyActive) return false;
+    if (typeof conditions.surrenderedToPlayer === "boolean" && ctx.surrenderedToPlayer !== conditions.surrenderedToPlayer) return false;
 
     if (typeof conditions.custom === "function" && conditions.custom(ctx.npc, ctx) === false) return false;
 
@@ -4471,6 +5747,7 @@ function buildConversationOption(entry, npc, ctx) {
         deedTalkId: entry.deedTalk ? String(_npcResolveConversationValue(entry.deedTalk, npc, ctx) || "") : "",
         revealsName: entry.revealsName !== undefined ? _npcResolveConversationValue(entry.revealsName, npc, ctx) === true : false,
         action,
+        service: entry.service,
         intent: resolvedIntent,
         className: _npcResolveConversationValue(entry.className, npc, ctx),
         relationshipImpact: impact && typeof impact === "object" ? { ...impact } : impact,
@@ -4499,8 +5776,9 @@ function buildConversationOption(entry, npc, ctx) {
         guideParty: entry.guideParty,
         guideAnswer: entry.guideAnswer,
         socialFact: entry.socialFact,
-        // Optional memory hints: { importance, tags, text, skip } (see recordNPCConversationMemory).
-        memory: entry.memory
+        // Optional memory hints: { id, importance, tags, text, skip } (see recordNPCConversationMemory).
+        // May be a function (npc, ctx) like other catalogue fields.
+        memory: _npcResolveConversationValue(entry.memory, npc, ctx)
     };
 }
 
@@ -4523,6 +5801,8 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     const greetedThisSession = ctx.sessionUsedOptionIds && (
         ctx.sessionUsedOptionIds.includes("greet-intro") ||
         ctx.sessionUsedOptionIds.includes("greet-known") ||
+        ctx.sessionUsedOptionIds.includes("service-opened") ||
+        ctx.sessionUsedOptionIds.includes("resume-conversation") ||
         ctx.sessionUsedOptionIds.some(id => typeof id === "string" && id.indexOf("greet-") === 0)
     );
     
@@ -4546,7 +5826,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
         }
     }
     
-    // Filter by greeting gate: only greeting and disengage options until greeting in current session
+    // Public services may open the conversation alongside greetings.
     let filtered = fullCatalogue;
     if (!greetedThisSession) {
         filtered = fullCatalogue.filter(entry => {
@@ -4559,7 +5839,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
             // before the session greeting. Same for asking a follower to
             // join the party for good.
             const isCompanionManagement = entry.id === "stop-following" || entry.id === "follower-ask-stay" || entry.id === "follower-join-party";
-            return isGreeting || isDisengage || isCompanionManagement;
+            return isGreeting || isDisengage || isCompanionManagement || entry.id === "resume-conversation" || !!entry.service;
         });
     }
 
@@ -4596,7 +5876,7 @@ function queryConversationCatalogue(npc, extraContext = {}) {
     // goodbye and the conversation can never open. If every greet entry
     // was filtered out (unexpected conditions, repeat state, catalogue
     // changes), synthesize a plain greeting.
-    if (!greetedThisSession && !result.some(o => o && o.intent === "greeting")) {
+    if (!greetedThisSession && !result.some(o => o && (o.intent === "greeting" || o.id === "resume-conversation"))) {
         console.warn("[NPC Data] Greeting gate closed with no greeting option — injecting fallback.");
         const fallback = buildConversationOption({
             id: "greet-fallback",
@@ -4677,6 +5957,9 @@ function determineNPCSpeechStyle(npc, room, zoneTemplate) {
     if (style === "common" && NPC_SPECIES_SPEECH_STYLE_BIAS[speciesKey]) {
         style = NPC_SPECIES_SPEECH_STYLE_BIAS[speciesKey];
     }
+
+    // A kenku cannot speak in a voice of its own, whatever its role or mood.
+    if (speciesKey === "kenku") return "mimic";
 
     return normalizeSpeechStyle(style);
 }
@@ -4778,7 +6061,7 @@ function isValidSomatotype(value) {
 function inferSomatotypeFromBuild(build) {
     var b = String(build || "").toLowerCase();
     if (!b) return "";
-    if (/soft(?!-featured)|round(?!-faced)|heavy|stout|thickset|plump|portly|stocky/.test(b)) return "endomorph";
+    if (/soft(?!-featured)|round(?!-faced)|heavy|heavyset|stout|thickset|plump|portly|stocky/.test(b)) return "endomorph";
     if (/lean|slight|slender|willowy|lithe|graceful|narrow|wiry|thin|scrawny|bony|bare-boned|sinewy|elegant|fragile|faint|mist|tattered|tiny|small|knobby|scrappy|sleek|nimble|quick/.test(b)) return "ectomorph";
     if (/athletic|sturdy|broad|powerful|muscular|imposing|tall|scarred|weathered|reptilian|compact/.test(b)) return "mesomorph";
     return "";
@@ -4790,6 +6073,32 @@ function rollNPCSomatotype(build) {
     var inferred = inferSomatotypeFromBuild(build);
     if (inferred) return inferred;
     return SOMATOTYPES[Math.floor(Math.random() * SOMATOTYPES.length)];
+}
+
+function rollNPCSpeciesBuild(profile, isHumanoid) {
+    const builds = Array.isArray(profile.builds) ? profile.builds : [];
+    const weights = profile.buildWeights;
+    if (weights && builds.length) {
+        const values = builds.map(build => typeof weights[build] === "number" && weights[build] >= 0 ? weights[build] : 1);
+        const total = values.reduce((sum, value) => sum + value, 0);
+        if (total > 0) {
+            let roll = Math.random() * total;
+            for (let i = 0; i < builds.length; i++) {
+                roll -= values[i];
+                if (roll < 0) return builds[i];
+            }
+        }
+    }
+    return _npcRand(builds) || (isHumanoid ? "average" : "lean");
+}
+
+// Fullness is independent of skeletal frame and muscularity. Only generation
+// rolls it; reading a profile or loading an older NPC never changes their body.
+function generateNPCBodyCondition(npc, profile) {
+    if (profile.bodyFatEligible === false) return "normal";
+    if (npc.bodyCondition === "normal" || npc.bodyCondition === "overweight") return npc.bodyCondition;
+    if (getEntityBodyCondition(npc) === "overweight") return "overweight";
+    return profile.bodyFatEligible === true && Math.random() < 0.05 ? "overweight" : "normal";
 }
 
 // Sets npc.somatotype if missing/invalid (also migrates older saves). Safe to
@@ -4855,7 +6164,11 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
 
     const surfaceType = profile.surfaceType || (isHumanoid ? "skin" : "hide");
     const surfaceColor = _npcRand(profile.skinTones) || "unremarkable";
-    const build = _npcRand(profile.builds) || (isHumanoid ? "average" : "lean");
+    
+    const bodyCondition = generateNPCBodyCondition(npc, profile);
+    const isOverweight = bodyCondition === "overweight";
+    const build = rollNPCSpeciesBuild(profile, isHumanoid);
+    
     const eyeColor = isSlimeNPC(npc) ? "" : _npcRand(profile.eyeColors) || "";
     const hairColors = Array.isArray(profile.hairColors) ? profile.hairColors : [];
     const hairColor = isHumanoid ? _npcRand(hairColors) : "";
@@ -4865,6 +6178,78 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     const marks = _npcUniquePicks(NPC_DISTINGUISHING_MARKS, isHumanoid ? _npcRandInt(1, 2) : 1);
     const movement = _npcRand(profile.movements);
     const voice = _npcRand(profile.voices);
+    
+    // Add overweight-specific body features
+    if (isOverweight) {
+        // For humanoids, add gender-appropriate overweight descriptors
+        if (isHumanoid) {
+            const gender = String(npc.gender || "").toLowerCase();
+            if (gender === "female") {
+                // Add large/droopy breast descriptor
+                if (!features.some(f => /breast|bust|chest/i.test(f))) {
+                    features.push(_npcRand([
+                        "large drooping breasts",
+                        "heavy pendulous breasts", 
+                        "full sagging bosom",
+                        "ample soft chest"
+                    ]));
+                }
+                // Add big ass descriptor
+                if (!features.some(f => /ass|butt|rear|hind/i.test(f))) {
+                    features.push(_npcRand([
+                        "a large round ass",
+                        "a wide soft backside",
+                        "a plump rear",
+                        "a generous bottom"
+                    ]));
+                }
+                // Add general weight descriptor
+                if (!features.some(f => /soft|plump|round|heavy|weight/i.test(f))) {
+                    features.push(_npcRand([
+                        "soft rounded curves",
+                        "a comfortably plump figure",
+                        "a full well-padded frame",
+                        "a generously proportioned body"
+                    ]));
+                }
+            } else {
+                // Male overweight descriptors
+                if (!features.some(f => /belly|gut|paunch|soft|round/i.test(f))) {
+                    features.push(_npcRand([
+                        "a round soft belly",
+                        "a prominent paunch",
+                        "a comfortably full midsection",
+                        "a generously rounded gut"
+                    ]));
+                }
+                // Add big ass descriptor for males too
+                if (!features.some(f => /ass|butt|rear|hind/i.test(f))) {
+                    features.push(_npcRand([
+                        "a broad soft ass",
+                        "a wide fleshy backside",
+                        "a substantial rear",
+                        "a thick bottom"
+                    ]));
+                }
+                // Add general weight descriptor
+                if (!features.some(f => /stocky|heavy|barrel/i.test(f))) {
+                    features.push(_npcRand([
+                        "a stocky heavy build",
+                        "a barrel-chested frame",
+                        "a solid thickset form",
+                        "a powerfully built body"
+                    ]));
+                }
+            }
+        } else {
+            // Non-humanoid overweight (rare)
+            features.push(_npcRand([
+                "a surprisingly heavy build",
+                "a thick rounded form",
+                "a plump appearance"
+            ]));
+        }
+    }
     const values = _npcUniquePicks(culture.values, 2);
     const preferredTopics = _npcUniquePicks(culture.topics, 3);
     const tabooTopics = _npcUniquePicks(culture.taboos, 2);
@@ -4876,7 +6261,9 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
         build,
         body: {
             surfaceType,
-            color: surfaceColor
+            color: surfaceColor,
+            // Add weight class for overweight NPCs
+            weightClass: isOverweight ? "overweight" : null
         },
         eyes: eyeColor ? { color: eyeColor } : null,
         features,
@@ -4890,6 +6277,14 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
             color: hairColor,
             style: hairStyle || "unstyled"
         };
+    }
+
+    if (Array.isArray(profile.surfaceRegions)) {
+        anatomy.body.regions = profile.surfaceRegions.map(region => ({
+            region: region.region,
+            surfaceType: region.surfaceType,
+            color: Array.isArray(region.colors) ? _npcRand(region.colors) : surfaceColor
+        }));
     }
 
     const enrichment = {
@@ -4923,12 +6318,14 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
     };
 
     npc.anatomy = anatomy;
+    npc.bodyCondition = bodyCondition;
     npc.enrichment = enrichment;
     npc.size = anatomy.size;
     npc.bodyType = build;
     npc.somatotype = rollNPCSomatotype(build);
     npc.skinTone = surfaceType === "skin" ? surfaceColor : "";
     npc.furColor = surfaceType === "fur" ? surfaceColor : "";
+    npc.featherColor = surfaceType === "feathers" ? surfaceColor : "";
     npc.scaleColor = surfaceType === "scales" ? surfaceColor : "";
     npc.surfaceType = surfaceType;
     npc.surfaceColor = surfaceColor;
@@ -4961,7 +6358,7 @@ function generateNPCEnrichment(npc, room, zoneTemplate) {
 // ============================================================================
 const SOCIAL_FACT_QUESTIONS = {
     standing: { label: "Ask about their place in {group}", ask: "Tell me about your place in {group}." },
-    need: { label: "Ask what they need", ask: "Is there anything you need?" },
+    need: { label: "Ask if they need help", ask: "Do you need any help?" },
     worry: { label: "Ask what is weighing on them", ask: "You look troubled. What is weighing on you?" },
     liking: { label: "Ask what they enjoy", ask: "What do you enjoy, when you have the time?" },
     secret: { label: "Ask what they are not saying", ask: "I think you are holding something back. Tell me." },
@@ -5023,9 +6420,9 @@ function generateNPCSocial(npc, room, zoneTemplate) {
     let status = null;
 
     const kin = npc._kinSocial && npc._kinSocial.society === society ? npc._kinSocial : null;
-    if (society === "orc-clan" || society === "goblin-tribe" || society === "lizardfolk-tribe" || society === "dragonborn-house" || society === "catfolk-troupe" || society === "wolfkin-pack" || society === "satyr-revel") {
+    if (society === "orc-clan" || society === "goblin-tribe" || society === "lizardfolk-tribe" || society === "dragonborn-house" || society === "catfolk-troupe" || society === "wolfkin-pack" || society === "satyr-revel" || society === "harefolk-warren" || society === "ratfolk-nest" || society === "kenku-flock") {
         const name = sheet.groupNames[_npcRandInt(0, sheet.groupNames.length - 1)];
-        social.group = kin ? kin.group : (sheet.groupPrefix || "") + name + (society === "lizardfolk-tribe" ? " tribe" : (society === "wolfkin-pack" ? " pack" : (society === "satyr-revel" ? " revel" : (society === "catfolk-troupe" ? " troupe" : ""))));
+        social.group = kin ? kin.group : (sheet.groupPrefix || "") + name + (society === "harefolk-warren" ? " warren" : society === "ratfolk-nest" ? " nest" : society === "kenku-flock" ? " flock" : society === "lizardfolk-tribe" ? " tribe" : (society === "wolfkin-pack" ? " pack" : (society === "satyr-revel" ? " revel" : (society === "catfolk-troupe" ? " troupe" : ""))));
         if (kin && society === "dragonborn-house") fill.house = kin.group;
         const rank = _socialWeightedPick(sheet.ranks);
         social.rank = rank.label; social.tier = rank.tier; social.rankKey = rank.key;
@@ -5101,6 +6498,7 @@ function ensureNPCSocial(npc) {
 function socialFactAvailable(npc, key) {
     const social = ensureNPCSocial(npc);
     if (!social || !SOCIAL_FACT_QUESTIONS[key]) return false;
+    if (key === "need" && typeof ensureNPCNeeds === "function" && typeof commitmentSceneBlock === "function") return !commitmentSceneBlock(npc) && (ensureNPCNeeds(npc).some(function(n){return /^(offered|accepted)$/.test(n.state);}) || (G.commitments||[]).some(function(c){return c.state==="accepted" && c.personId===npc.id;}));
     if (key === "standing") { if (social.standingKnown || !social.group) return false; }
     else if (key === "ties") { if (npc.tiesKnown || !npc.ties || !npc.ties.length || !getNPCTiesAnswer(npc)) return false; }
     else if (!social[key] || social[key].known) return false;
@@ -5123,6 +6521,7 @@ function _socialStandingPhrase(social) {
 function getSocialFactLabel(npc, key) {
     const social = ensureNPCSocial(npc);
     const q = SOCIAL_FACT_QUESTIONS[key];
+    if (key === "need" && typeof ensureNPCNeeds === "function") return "Ask if they need help";
     if (key === "standing") return _socialStandingPhrase(social).label;
     return q ? q.label : "";
 }
@@ -5160,6 +6559,11 @@ function getSocialLivingAnswer(npc) {
 }
 
 // What the NPC says (scripted fallback, and the canonical record of what was told).
+function getNPCSocialFactRecord(npc, key) {
+    const social=ensureNPCSocial(npc);if(!social)return null;
+    if(key==="need" && Array.isArray(social.need))return social.need.find(function(n){return n && /^(offered|accepted)$/.test(n.state);}) || social.need[0] || social.legacyNeed || null;
+    return social[key] || null;
+}
 function getSocialFactAnswer(npc, key) {
     const social = ensureNPCSocial(npc);
     if (!social) return "";
@@ -5168,7 +6572,8 @@ function getSocialFactAnswer(npc, key) {
         if (social.caste === "commoner") return getSocialLivingAnswer(npc);
         return "I am " + getSocialIdentity(npc) + "." + (social.standing ? " " + social.standing : "");
     }
-    return social[key] ? social[key].text : "";
+    const record=getNPCSocialFactRecord(npc,key);
+    return record ? record.text : "";
 }
 
 // The facts handed to the live AI so it can voice a social answer in the
@@ -5203,8 +6608,8 @@ function getNPCSocialPromptLines(npc) {
     if (!social) return "";
     const lines = [];
     if (social.rank) lines.push("- Your place: " + getSocialIdentity(npc) + (social.master ? " (bonded to " + social.master + ")" : "") + (social.standing ? ". In your own words: \"" + social.standing + "\"" : ""));
-    const told = ["need", "worry", "liking", "secret"].filter(function (k) { return social[k] && social[k].known; }).slice(0, 2)
-        .map(function (k) { return k + ": " + social[k].text; });
+    const told = ["need", "worry", "liking", "secret"].filter(function (k) { const record=getNPCSocialFactRecord(npc,k);return record && record.known; }).slice(0, 2)
+        .map(function (k) { return k + ": " + getNPCSocialFactRecord(npc,k).text; });
     if (told.length) lines.push("- You have already told the player (stay consistent): " + told.join(" | "));
     return lines.join("\n");
 }
@@ -5229,12 +6634,12 @@ const NPC_TIE_LOVER_CHANCE = 0.10;
 const NPC_TIE_RECIPROCAL = { spouse: "spouse", parent: "child", child: "parent", sibling: "sibling", friend: "friend", coworker: "coworker", employer: "employee", employee: "employer", lover: "lover" };
 const NPC_TIE_FAMILY = ["spouse", "parent", "child", "sibling"];
 // Roles that are staff of the building they stand in (a place of work).
-const NPC_TIE_WORK_ROLES = ["Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
+const NPC_TIE_WORK_ROLES = ["Keeper of the Quiet", "Vigil Tender", "Bier Bearer", "Bathkeeper", "BathhouseAttendant", "BathhousePractitioner", "Innkeeper", "Bartender", "Cook", "Servant", "Blacksmith", "Clothier", "Shopkeeper", "Vendor", "Healer", "Priest", "Archivist", "Guildmaster", "Merchant", "Trader", "Enchanter", "Arcanist", "Reliquarian"];
 // Employers in a building and who they plausibly employ there.
-const NPC_TIE_EMPLOYER_ROLES = ["Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
-const NPC_TIE_EMPLOYEE_ROLES = ["Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk"];
+const NPC_TIE_EMPLOYER_ROLES = ["Keeper of the Quiet", "Bathkeeper", "Innkeeper", "Blacksmith", "Clothier", "Shopkeeper", "Merchant", "Guildmaster", "Healer", "Archivist"];
+const NPC_TIE_EMPLOYEE_ROLES = ["Vigil Tender", "Bier Bearer", "Servant", "Cook", "Bartender", "Vendor", "Villager", "Townsfolk", "BathhouseAttendant", "BathhousePractitioner"];
 // Roles that work in teams across a zone rather than in one building.
-const NPC_TIE_TEAM_ROLES = ["Town Guard", "Stone Guard", "Miner", "Scout", "Raider", "Scavenger", "Cultist"];
+const NPC_TIE_TEAM_ROLES = ["Bier Bearer", "Town Guard", "Stone Guard", "Miner", "Scout", "Raider", "Scavenger", "Cultist"];
 
 function _tieCount(npc, type) {
     return (npc.ties || []).filter(function (t) { return !type || t.type === type; }).length;
@@ -5401,6 +6806,9 @@ const NPC_SOCIETY_TIE_WORDS = {
     "catfolk-troupe": { spouse: "troupe-mate", lover: "lover" },
     "wolfkin-pack": { spouse: "pack-mate", lover: "lover" },
     "satyr-revel": { spouse: "consort", lover: "fling" },
+    "harefolk-warren": { spouse: "warren-mate", lover: "lover" },
+    "ratfolk-nest": { spouse: "nest-mate", lover: "lover" },
+    "kenku-flock": { spouse: "roost-mate", lover: "lover" },
     "dragonborn-house": { spouse: "consort", lover: "paramour" }
 };
 
@@ -5488,8 +6896,135 @@ function isSlimeNPC(npc) {
     return !!npc && String(npc.species || "").trim().toLowerCase() === "slime";
 }
 
+// Resolve public species anatomy live: older saves gain baseline ears/feet
+// without rerolling their recorded individual traits. Explicit overrides win.
+function getEntityAnatomyProfile(entity) {
+    const species = entity && (entity.species || (entity.appearance && entity.appearance.species));
+    const template = species && typeof getSpeciesTemplate === "function" ? getSpeciesTemplate(species) : null;
+    return template && template.anatomyProfile || {};
+}
+
+function getEntityMorphology(entity) {
+    const profile = getEntityAnatomyProfile(entity);
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    const source = Object.assign({}, profile.morphology || {}, anatomy.morphology || appearance.morphology || {});
+    const morphology = {};
+    ["ears", "face", "bodyPlan", "hands", "feet", "tail", "wings"].forEach(key => {
+        if (typeof source[key] === "string" && source[key].trim()) morphology[key] = source[key].trim();
+    });
+    if (Array.isArray(source.absent)) morphology.absent = source.absent.filter(value => typeof value === "string" && value.trim());
+    return morphology;
+}
+
+function getSpeciesAppearanceTraits(entity) {
+    const morphology = getEntityMorphology(entity);
+    // The slime's live pile/mimic description owns its current public outline.
+    if (String(entity && (entity.species || (entity.appearance && entity.appearance.species)) || "").toLowerCase() === "slime") return [];
+    return ["ears", "face", "bodyPlan", "hands", "feet", "tail", "wings"].map(key => morphology[key]).filter(Boolean);
+}
+
+function getEntityBodyCondition(entity) {
+    if (!entity) return "normal";
+    if (getEntityAnatomyProfile(entity).bodyFatEligible === false) return "normal";
+    const anatomy = entity.anatomy || {}, appearance = entity.appearance || {};
+    const condition = entity.bodyCondition || appearance.bodyCondition || anatomy.bodyCondition || (anatomy.body && anatomy.body.weightClass);
+    if (condition === "normal" || condition === "overweight") return condition;
+    const build = anatomy.build || entity.bodyType || entity.build || appearance.build || "";
+    return /\b(?:overweight|fat|obese|corpulent)\b/i.test(build) ? "overweight" : "normal";
+}
+
+function getEntityBuildText(entity) {
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    if (getEntityBodyCondition(entity) === "overweight") return "fat and round-bodied";
+    return String(anatomy.build || (entity && (entity.bodyType || entity.build)) || appearance.build || "");
+}
+
+function getEntitySurfaceParts(entity) {
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    const body = anatomy.body || {}, profile = getEntityAnatomyProfile(entity);
+    const color = body.color || (entity && (entity.surfaceColor || entity.skinTone || entity.furColor || entity.scaleColor || entity.featherColor)) || appearance.skinTone || "";
+    const regions = Array.isArray(body.regions) ? body.regions : profile.surfaceRegions;
+    if (Array.isArray(regions) && regions.length) {
+        return regions.map(region => {
+            const recorded = region.color || (!Array.isArray(region.colors) ? color : "");
+            return [recorded, region.surfaceType, region.region ? "on " + region.region : ""].filter(Boolean).join(" ");
+        }).filter(Boolean);
+    }
+    const surface = body.surfaceType || (entity && entity.surfaceType) || profile.surfaceType ||
+        (entity && (entity.skinTone ? "skin" : entity.furColor ? "fur" : entity.scaleColor ? "scales" : entity.featherColor ? "feathers" : ""));
+    return color && surface ? [color + " " + surface] : [];
+}
+
+// Reader-facing species anatomy. anatomyProfile.morphology stays the precise
+// record for AI prompts, portraits and checks; anatomyProfile.look holds the
+// short phrases a player reads ("" leaves an unremarkable part out). An
+// individual override (anatomy.morphology) wins and is lightly tidied.
+function _npcTidyMorphologyPhrase(text) {
+    return String(text || "").replace(/^\s*one pair of\s+/i, "")
+        .replace(/\s+(?:on|projecting from) the sides of the head\b/i, "").replace(/\s+/g, " ").trim();
+}
+
+function getSpeciesLookParts(entity) {
+    if (String(entity && (entity.species || (entity.appearance && entity.appearance.species)) || "").toLowerCase() === "slime") return [];
+    const profile = getEntityAnatomyProfile(entity);
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    const overrides = anatomy.morphology || appearance.morphology || {};
+    const look = profile.look || {};
+    const morphology = getEntityMorphology(entity);
+    const parts = [];
+    ["ears", "face", "bodyPlan", "hands", "feet", "tail", "wings"].forEach(key => {
+        let text;
+        if (Object.prototype.hasOwnProperty.call(overrides, key)) text = _npcTidyMorphologyPhrase(overrides[key]);
+        else if (Object.prototype.hasOwnProperty.call(look, key)) text = String(look[key] || "").trim();
+        else text = _npcTidyMorphologyPhrase(morphology[key]);
+        if (text && parts.indexOf(text) < 0) parts.push(text);
+    });
+    return parts;
+}
+
+function getSpeciesLookText(entity) {
+    return _npcJoinList(getSpeciesLookParts(entity));
+}
+
+function getSpeciesAppearanceText(entity, forPrompt) {
+    const traits = getSpeciesAppearanceTraits(entity);
+    if (forPrompt) {
+        const morphology = getEntityMorphology(entity);
+        if (Array.isArray(morphology.absent) && morphology.absent.length) traits.push("no " + morphology.absent.join(", no "));
+        if (String(entity && (entity.species || (entity.appearance && entity.appearance.species)) || "").toLowerCase() === "slime") {
+            traits.unshift("a faceless, eyeless, limbless gelatinous body; a recorded temporary mimic shape can change its outline only");
+        }
+        if (getEntityBodyCondition(entity) === "overweight") traits.push("an overweight body with visible body fat and rounded contours; preserve the species anatomy");
+    }
+    return traits.join(", ");
+}
+
+function getPublicAppearanceFacts(entity) {
+    return {
+        species: String(entity && (entity.species || (entity.appearance && entity.appearance.species)) || ""),
+        morphology: getEntityMorphology(entity),
+        build: getEntityBuildText(entity),
+        bodyCondition: getEntityBodyCondition(entity),
+        surfaces: getEntitySurfaceParts(entity)
+    };
+}
+
+function entityHasAppearancePart(entity, part) {
+    const absent = getEntityMorphology(entity).absent || [];
+    return absent.indexOf(part) < 0;
+}
+
+function getPortraitAppearanceNegatives(entity, negatives) {
+    const anatomy = entity && entity.anatomy || {}, appearance = entity && entity.appearance || {};
+    const overrides = anatomy.morphology || appearance.morphology || {};
+    const terms = String(negatives || "").split(",").map(term => term.trim()).filter(term => term &&
+        !(Object.prototype.hasOwnProperty.call(overrides, "ears") && /ears?/i.test(term)));
+    if (getEntityBodyCondition(entity) !== "overweight") return terms.join(", ");
+    return terms.filter(term => !/^(?:stocky|heavyset|fat|overweight|plump|round(?:ed)? face|full cheeks)$/i.test(term)).join(", ");
+}
+
 function getNPCVisibleEyeColor(npc) {
-    if (!npc || isSlimeNPC(npc)) return "";
+    if (!npc || isSlimeNPC(npc) || !entityHasAppearancePart(npc, "eyes")) return "";
     const anatomy = npc.anatomy || {};
     const colour = String(npc.eyeColor || (anatomy.eyes && anatomy.eyes.color) || "").trim();
     return /^(?:none|no eyes|eyeless|n[/]a)$/i.test(colour) ? "" : colour;
@@ -5508,35 +7043,53 @@ function getSlimeBodyDescription(npc) {
     return [colour, (bond && bond.growth > 0 ? "broad, heavy gelatinous pile" : "gelatinous pile"), still ? "" : "slowly moving across the floor"].filter(Boolean).join(" ");
 }
 
+function getNPCVisibleAction(npc) {
+    if (npc && npc.currentState && npc.currentState.sleeping && !npc.dead && !npc.unconscious && !npc.isUnconsciousBody) {
+        const spot = npc._npcRestSpot;
+        const surface = spot && /^(bed|cot|floor)$/.test(spot.type) ? spot.type : "";
+        return "is lying asleep" + (surface ? " on " + (surface === "floor" ? "the floor" : "a " + surface) : "");
+    }
+    return String(npc && npc.action || "is standing nearby").trim();
+}
+
 function getNPCVisibleBehavior(npc) {
+    if (npc && npc.currentState && npc.currentState.sleeping) return getNPCVisibleAction(npc);
     if (!isSlimeNPC(npc)) return String(npc && npc.behavior || "");
     if (npc.dead || npc.unconscious || npc.isUnconsciousBody) return "";
     if (typeof window.getSlimeVisibleState === "function") return window.getSlimeVisibleState(npc);
     return (npc.hostility || 0) >= 60 ? "Looks ready to attack" : "Quivers gently";
 }
 
-function buildNPCAppearanceHighlights(npc) {
+function buildNPCAppearanceHighlights(npc, forPortrait, forReader) {
     if (!npc) return [];
     const anatomy = npc.anatomy || {};
     const body = anatomy.body || {};
     const highlights = [];
 
-    if (anatomy.build) highlights.push(anatomy.build + " build");
+    const build = getEntityBuildText(npc);
+    if (build) highlights.push(build + " build");
+    if (forReader) highlights.push(...getSpeciesLookParts(npc));
+    else {
+        const speciesTraits = getSpeciesAppearanceText(npc);
+        if (speciesTraits) highlights.push(speciesTraits);
+    }
+    
     if (isSlimeNPC(npc)) highlights.push(getSlimeBodyDescription(npc));
-    else if (body.color && body.surfaceType) highlights.push(body.color + " " + body.surfaceType);
+    else highlights.push(...getEntitySurfaceParts(npc));
     const eyes = getNPCVisibleEyeColor(npc);
     if (eyes) highlights.push(eyes + " eyes");
-    if (npc.hairColor) {
+    if (npc.hairColor && entityHasAppearancePart(npc, "hair")) {
         highlights.push((npc.hairStyle ? npc.hairStyle + " " : "") + npc.hairColor + " hair");
     }
-    if (Array.isArray(anatomy.features)) {
-        for (let i = 0; i < anatomy.features.length; i++) highlights.push(anatomy.features[i]);
-    }
-    if (Array.isArray(anatomy.marks) && anatomy.marks.length && highlights.length < 6) {
-        highlights.push(anatomy.marks[0]);
+    // Species anatomy above is public; optional marks/features remain portrait-only.
+    // Keep every baseline/color/eye/hair fact before budgeting optional details.
+    const requiredCount = highlights.length;
+    if (forPortrait) {
+        if (Array.isArray(anatomy.features)) highlights.push(...anatomy.features);
+        if (Array.isArray(anatomy.marks) && anatomy.marks.length && highlights.length < 6) highlights.push(anatomy.marks[0]);
     }
 
-    return highlights.slice(0, 6);
+    return highlights.slice(0, Math.max(6, requiredCount));
 }
 
 function buildNPCPhysicalSummary(npc) {
@@ -5555,9 +7108,10 @@ function buildNPCPhysicalSummary(npc) {
 
 function getNPCObservationDetail(npc) {
     if (!npc) return "";
-    const highlights = !isSlimeNPC(npc) && Array.isArray(npc.appearanceHighlights) && npc.appearanceHighlights.length
-        ? npc.appearanceHighlights.slice(0, 4)
-        : buildNPCAppearanceHighlights(npc).slice(0, 4);
+    // Rebuild from live facts rather than legacy cached feature lists.
+    // A glance: build, the two most telling species parts, then colouring.
+    const look = getSpeciesLookParts(npc).slice(2);
+    const highlights = buildNPCAppearanceHighlights(npc, false, true).filter(h => look.indexOf(h) < 0).slice(0, 4);
     if (!highlights.length) return "";
     return "with " + _npcJoinList(highlights);
 }
@@ -5569,7 +7123,8 @@ const NPC_HEIGHT_RANGES_CM = {
     human: [150, 200], elf: [160, 205], dwarf: [115, 145],
     halfling: [85, 115], goblin: [95, 130], orc: [185, 230],
     dragonborn: [185, 225], lizardfolk: [165, 210], kobold: [70, 105],
-    catfolk: [150, 190], wolfkin: [170, 210], satyr: [150, 190]
+    catfolk: [150, 190], wolfkin: [170, 210], satyr: [150, 190],
+    harefolk: [145, 180], ratfolk: [70, 105], kenku: [145, 175]
 };
 const NPC_HEIGHT_LEVEL_TOLERANCE_CM = 8;
 
@@ -5638,21 +7193,23 @@ function getNPCInspectionDetail(npc) {
     const heightView = getNPCHeightView(npc);
     const opening = heightView ? "You look " + heightView + " at" : p.subject + " " + p.be;
     if (identity) first.push(opening + " " + _npcInspectionArticle(identity) + " " + identity + ".");
-    const build = _npcInspectionText(anatomy.build || npc.bodyType || npc.build);
+    const build = _npcInspectionText(getEntityBuildText(npc));
     if (build) first.push(p.subject + " " + p.have + " " + _npcInspectionArticle(build) + " " + build + " build.");
+    const speciesTraits = getSpeciesLookText(npc);
+    if (speciesTraits) first.push(p.subject + " " + p.have + " " + speciesTraits + ".");
     const colouring = [];
-    const surface = body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.scaleColor ? "scales" : "");
-    const colour = body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.scaleColor;
+    const surface = body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.featherColor ? "feathers" : npc.scaleColor ? "scales" : "");
+    const colour = body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.featherColor || npc.scaleColor;
     if (isSlimeNPC(npc)) {
         const pile = getSlimeBodyDescription(npc);
         first.push("It is " + _npcInspectionArticle(pile) + " " + pile + ".");
-    } else if (surface && colour) colouring.push(colour + " " + surface);
+    } else colouring.push(...getEntitySurfaceParts(npc));
     const eyes = getNPCVisibleEyeColor(npc);
     if (eyes) colouring.push(eyes + " eyes");
     if (colouring.length) first.push(p.subject + " " + p.have + " " + _npcJoinList(colouring) + ".");
     const hair = anatomy.hair || {};
     const hairColour = npc.hairColor || hair.color;
-    if (hairColour && hairColour !== "none" && hairColour !== "shaved") {
+    if (hairColour && hairColour !== "none" && hairColour !== "shaved" && entityHasAppearancePart(npc, "hair")) {
         const length = _npcInspectionText(npc.hairLength || hair.length);
         const style = _npcInspectionText(npc.hairStyle || hair.style);
         const styles = { cropped: "cropped close", short: "cut short", long: "worn long", loose: "worn loose", flowing: "flowing freely", curly: "curly", messy: "tousled", unstyled: "unstyled" };
@@ -5693,11 +7250,8 @@ function getNPCInspectionDetail(npc) {
         if (parts.length) paragraphs.push(p.subject + " " + p.have + " " + _npcJoinList(parts) + ".");
     }
 
-    const features = Array.isArray(anatomy.features) ? anatomy.features : [];
-    const marks = Array.isArray(anatomy.marks) ? anatomy.marks : [];
-    const details = Array.from(new Set(features.concat(marks).map(_npcInspectionText).filter(Boolean)));
-    if (!details.length && Array.isArray(npc.specialTraits)) details.push(...npc.specialTraits.map(_npcInspectionText).filter(Boolean));
-    if (details.length) paragraphs.push("Distinguishing features include " + _npcJoinList(details) + ".");
+    // Physical distinguishing features/marks are deliberately omitted from inspection.
+    // Keep their underlying authored data; it may have mechanical uses.
     const accessories = [];
     if (Array.isArray(npc.piercings)) {
         npc.piercings.forEach(function (piercing) {
@@ -5710,7 +7264,7 @@ function getNPCInspectionDetail(npc) {
     if (accessories.length) paragraphs.push(accessories.join(" "));
 
     const taste = getPlayerTasteForNPC(npc);
-    if (taste.label) paragraphs.push("You find " + p.object + " " + (Math.abs(taste.score) < 3 ? "mildly " : "") + taste.label + ".");
+    if (taste.label) paragraphs.push(describePlayerTasteSentence(npc, taste, p));
     return paragraphs.join("\n\n");
 }
 
@@ -5779,6 +7333,8 @@ function getBaseFavorabilityForTemperament(temperament) {
 const NPC_TEMPER_KEYS = ["friendly", "neutral", "curious", "bold", "wary", "skittish", "hostile", "aggressive"];
 
 const NPC_ROLE_TEMPER_CLASS = {
+    "Keeper of the Quiet": "staff", "Vigil Tender": "staff", "Bier Bearer": "staff",
+    "Bathkeeper": "staff",
     "Innkeeper": "staff", "Bartender": "staff", "Cook": "staff", "Shopkeeper": "staff", "Vendor": "staff",
     "Wandering Merchant": "staff", "Blacksmith": "staff", "Clothier": "staff", "Healer": "staff", "Priest": "staff", "Archivist": "staff",
     "Scholar": "staff", "Enchanter": "staff", "Arcanist": "staff", "Reliquarian": "staff", "Servant": "staff",
@@ -5816,7 +7372,10 @@ const NPC_SPECIES_TEMPER_TINT = {
     dragonborn: { bold: 1.8, friendly: 0.6, skittish: 0.3, curious: 0.8 },
     catfolk:    { curious: 2, skittish: 1.2, wary: 1.2, bold: 0.8, aggressive: 0.7 },
     wolfkin:    { wary: 2, bold: 1.5, friendly: 0.6, hostile: 1.3, skittish: 0.5 },
-    satyr:      { friendly: 1.8, curious: 1.8, bold: 1.5, wary: 0.5, aggressive: 0.5 }
+    satyr:      { friendly: 1.8, curious: 1.8, bold: 1.5, wary: 0.5, aggressive: 0.5 },
+    harefolk:   { skittish: 2, friendly: 1.5, curious: 1.3, wary: 1.2, bold: 0.5, aggressive: 0.3, hostile: 0.4 },
+    ratfolk:    { wary: 2, curious: 1.5, skittish: 1.3, friendly: 0.8, bold: 0.7, hostile: 1.0 },
+    kenku:      { curious: 2, wary: 1.8, skittish: 1.2, friendly: 0.7, aggressive: 0.6, hostile: 0.8 }
 };
 
 // Keyed "society:rank-or-status". `replace` is the whole weight table (used for
@@ -5857,6 +7416,24 @@ const NPC_SOCIETY_TEMPER = {
     "catfolk-troupe:nimble":       { replace: { curious: 3, neutral: 2, wary: 3, skittish: 2, hostile: 0.5 } },
     "catfolk-troupe:dreamer":      { replace: { neutral: 4, curious: 3, friendly: 2, skittish: 1 } },
     "catfolk-troupe:stray":        { replace: { wary: 4, skittish: 3, neutral: 2, hostile: 1 } },
+    "harefolk-warren:warren-elder": { replace: { neutral: 4, friendly: 3, wary: 2, curious: 2, skittish: 1 } },
+    "harefolk-warren:tunnel-warden": { replace: { wary: 4, neutral: 3, bold: 2, skittish: 1 } },
+    "harefolk-warren:forager":     { replace: { friendly: 3, neutral: 3, curious: 2, skittish: 2, wary: 1 } },
+    "harefolk-warren:runner":      { replace: { skittish: 3, curious: 3, friendly: 2, neutral: 2, wary: 1 } },
+    "harefolk-warren:kit-minder":  { replace: { friendly: 4, neutral: 3, skittish: 2, wary: 1 } },
+    "harefolk-warren:wanderer":    { replace: { wary: 4, skittish: 3, neutral: 2, curious: 2 } },
+    "ratfolk-nest:nest-boss":      { replace: { bold: 3, neutral: 3, wary: 3, hostile: 1 } },
+    "ratfolk-nest:fixer":          { replace: { curious: 3, neutral: 3, wary: 3, friendly: 1 } },
+    "ratfolk-nest:scrounger":      { replace: { wary: 3, neutral: 3, curious: 3, skittish: 1, hostile: 0.5 } },
+    "ratfolk-nest:tunnel-runner":  { replace: { skittish: 3, wary: 3, curious: 2, neutral: 2 } },
+    "ratfolk-nest:tinker":         { replace: { curious: 4, neutral: 3, wary: 2, friendly: 1 } },
+    "ratfolk-nest:outcast":        { replace: { wary: 4, hostile: 2, skittish: 2, neutral: 2 } },
+    "kenku-flock:flock-caller":    { replace: { neutral: 3, wary: 3, bold: 2, curious: 2, hostile: 1 } },
+    "kenku-flock:voice-keeper":    { replace: { curious: 4, neutral: 3, wary: 2, friendly: 1 } },
+    "kenku-flock:trader":          { replace: { curious: 3, neutral: 3, friendly: 2, wary: 2 } },
+    "kenku-flock:lookout":         { replace: { wary: 4, curious: 3, skittish: 2, neutral: 2 } },
+    "kenku-flock:fledgling":       { replace: { curious: 4, skittish: 3, friendly: 2, neutral: 1 } },
+    "kenku-flock:unflocked":       { replace: { wary: 4, skittish: 3, neutral: 2, hostile: 1 } },
     "wolfkin-pack:alpha":          { replace: { bold: 4, neutral: 3, wary: 3, hostile: 1 } },
     "wolfkin-pack:warden":         { replace: { wary: 4, bold: 3, neutral: 2, hostile: 2 } },
     "wolfkin-pack:hunter":         { replace: { wary: 4, bold: 3, neutral: 2, hostile: 2, aggressive: 0.5 } },
@@ -6000,9 +7577,22 @@ const NPC_GIVEN_NAME_POOLS = {
         female: ["Thessa", "Melia", "Daphnis", "Lilla", "Rosalind", "Vinia", "Calla", "Ione"],
         surnames: ["Goatsong", "Reedpipe", "Wineleaf", "Crookhorn", "Hoofbeat"]
     },
+    Harefolk: {
+        male: ["Bracken", "Tuck", "Hob", "Thistle", "Wick", "Dandy", "Barley", "Burdock"],
+        female: ["Clover", "Pimpernel", "Hazel", "Bryony", "Tansy", "Meadow", "Willa", "Primrose"],
+        surnames: ["Longear", "Quickfoot", "Thistledown", "Burrowdeep", "Cloverfield"]
+    },
+    Ratfolk: {
+        male: ["Scratch", "Nibb", "Grub", "Tack", "Sniv", "Cog", "Rasp", "Pinch"],
+        female: ["Mags", "Nettle", "Dross", "Sootie", "Biddy", "Ratch", "Lint", "Mothe"],
+        surnames: ["Gutterling", "Pennyscrape", "Gnawbone", "Cinderdrain", "Lowlamp"]
+    },
+    Kenku: {
+        any: ["Clack", "Tink", "Creak", "Krik", "Rattle", "Hinge", "Clatter", "Chime", "Scrawk", "Latch", "Bell", "Tap"]
+    },
     Slime: {
         any: ["Blob", "Gloop", "Ooze", "Squelch", "Glob", "Drip"]
-    }
+    },
 };
 
 function generateNPCGivenName(species, gender) {
@@ -6763,7 +8353,58 @@ function _npcPenisSize(npc) {
     return size;
 }
 
+// Fur and scale tastes match colour FAMILIES (a liked "grey" coat matches
+// silver-grey, timber-grey, ashen grey...). Read from the same surface and
+// colour the look description shows, so the taste agrees with the text.
+var NPC_FUR_COLOR_FAMILIES = [
+    ["patterned", ["tabby", "calico", "tortoiseshell", "mottled", "brindle", "spotted", "striped", "dappled"]],
+    ["black", ["black", "charcoal", "jet"]],
+    ["white", ["white", "cream", "snow", "ivory"]],
+    ["grey", ["grey", "gray", "silver", "smoky", "ashen", "slate"]],
+    ["red", ["ginger", "russet", "red", "rust", "auburn", "copper"]],
+    ["golden", ["golden", "gold", "tawny", "honey", "sandy", "fawn"]],
+    ["brown", ["brown", "chestnut", "umber", "chocolate"]]
+];
+var NPC_SCALE_COLOR_FAMILIES = [
+    ["green", ["green", "emerald", "moss", "olive", "jade"]],
+    ["blue", ["blue", "frost", "azure", "teal"]],
+    ["gold", ["gold", "bronze", "copper", "brass"]],
+    ["red", ["red", "crimson", "rust", "orange", "scarlet"]],
+    ["black", ["black", "jet", "obsidian"]],
+    ["brown", ["brown", "tan", "umber"]],
+    ["grey", ["grey", "gray", "slate", "stone", "silver"]],
+    ["purple", ["purple", "violet", "plum"]]
+];
+var NPC_FEATHER_COLOR_FAMILIES = [
+    ["black", ["black", "jet", "raven", "crow", "soot", "midnight", "charcoal"]],
+    ["white", ["white", "snow", "ivory", "cream", "alabaster"]],
+    ["grey", ["grey", "gray", "slate", "silver", "ashen", "smoky"]],
+    ["brown", ["brown", "chestnut", "umber", "tan", "russet", "chocolate"]]
+];
+function _npcColorFamily(colour, families) {
+    var text = String(colour || "").toLowerCase();
+    if (!text) return "";
+    for (var i = 0; i < families.length; i++) {
+        var words = families[i][1];
+        for (var j = 0; j < words.length; j++) if (text.indexOf(words[j]) !== -1) return families[i][0];
+    }
+    return "";
+}
+// { surface: "fur" | "scales" | "skin" | ..., colour } as the look text shows it.
+function _npcSurfaceLook(npc) {
+    var body = npc && npc.anatomy && npc.anatomy.body || {};
+    var surface = String(body.surfaceType || npc.surfaceType || (npc.skinTone ? "skin" : npc.furColor ? "fur" : npc.featherColor ? "feathers" : npc.scaleColor ? "scales" : "")).toLowerCase();
+    var colour = String(body.color || npc.surfaceColor || npc.skinTone || npc.furColor || npc.featherColor || npc.scaleColor || "").toLowerCase();
+    return { surface: surface, colour: colour };
+}
+
 function _npcTasteValue(npc, axis) {
+    if (axis === "furColor" || axis === "scaleColor" || axis === "featherColor") {
+        var look = _npcSurfaceLook(npc);
+        if (axis === "furColor") return look.surface === "fur" ? _npcColorFamily(look.colour, NPC_FUR_COLOR_FAMILIES) : "";
+        if (axis === "featherColor") return look.surface === "feathers" ? _npcColorFamily(look.colour, NPC_FEATHER_COLOR_FAMILIES) : "";
+        return look.surface === "scales" ? _npcColorFamily(look.colour, NPC_SCALE_COLOR_FAMILIES) : "";
+    }
     if (axis === "penis") return _npcPenisSize(npc);
     if (axis === "gender") return String(npc.gender || "").toLowerCase();
     if (axis === "looks") return String(npc.looks || NPC_LOOKS_BY_GENDER[String(npc.gender || "").toLowerCase()] || "").toLowerCase();
@@ -6794,14 +8435,16 @@ function getPlayerTasteForNPC(npc) {
     });
 
     var raw = 0;
+    result.liked = [];
+    result.disliked = [];
     likes.forEach(function (p) {
         if (!speciesOpen) return;
         var v = _npcTasteValue(npc, p.axis);
-        if (v && v === String(p.value).toLowerCase()) raw += 1;
+        if (v && v === String(p.value).toLowerCase()) { raw += 1; result.liked.push({ axis: p.axis, value: v }); }
     });
     dislikes.forEach(function (p) {
         var v = _npcTasteValue(npc, p.axis);
-        if (v && v === String(p.value).toLowerCase()) raw -= 1;
+        if (v && v === String(p.value).toLowerCase()) { raw -= 1; result.disliked.push({ axis: p.axis, value: v }); }
     });
     result.raw = raw;
     if (!raw) return result;
@@ -6813,7 +8456,58 @@ function getPlayerTasteForNPC(npc) {
     result.score = raw * scale;
     if (result.score >= PLAYER_TASTE_THRESHOLD) result.label = "attractive";
     else if (result.score <= -PLAYER_TASTE_THRESHOLD) result.label = "unattractive";
+    // What stands out most: visible features first, broad traits last.
+    // Gender and penis size are never named.
+    var source = result.label === "attractive" ? result.liked : (result.label === "unattractive" ? result.disliked : []);
+    result.focus = source.filter(function (m) { return PLAYER_TASTE_FOCUS_ORDER.indexOf(m.axis) >= 0; })
+        .sort(function (a, b) { return PLAYER_TASTE_FOCUS_ORDER.indexOf(a.axis) - PLAYER_TASTE_FOCUS_ORDER.indexOf(b.axis); })
+        .slice(0, 2);
     return result;
+}
+
+var PLAYER_TASTE_FOCUS_ORDER = ["eyeColor", "furColor", "scaleColor", "hairColor", "hairStyle", "build", "looks", "chest", "butt", "age", "species"];
+
+// "her green eyes", "his golden tabby coat", "their catfolk features"...
+function describePlayerTasteFocus(npc, match, possessive) {
+    if (!npc || !match) return "";
+    var pre = possessive === "" ? "" : (possessive || "their") + " ";
+    var look = _npcSurfaceLook(npc);
+    switch (match.axis) {
+        case "eyeColor": { var eyes = typeof getNPCVisibleEyeColor === "function" ? getNPCVisibleEyeColor(npc) : npc.eyeColor; return eyes ? pre + eyes + " eyes" : ""; }
+        case "furColor": return look.colour ? pre + look.colour + " coat" : pre + "coat";
+        case "scaleColor": return look.colour ? pre + look.colour + " scales" : pre + "scales";
+        case "hairColor": return npc.hairColor ? pre + npc.hairColor + " hair" : "";
+        case "hairStyle": return pre + match.value + " hair";
+        case "build": return pre + match.value + " build";
+        case "looks": return pre + match.value + " looks";
+        case "chest":
+        case "butt": return pre + "figure";
+        case "age": return pre + ({ "young": "youthful look", "middle-aged": "mature look", "old": "seasoned look" }[match.value] || "age");
+        case "species": return pre + String(npc.species || "").toLowerCase() + " features";
+    }
+    return "";
+}
+
+// The final line of the look text: "You find her attractive, especially her
+// green eyes." Without a nameable focus it stays "You find her attractive."
+function describePlayerTasteSentence(npc, taste, pronouns) {
+    if (!taste || !taste.label) return "";
+    var p = pronouns || _npcInspectionPronouns(npc);
+    var phrases = [];
+    (taste.focus || []).forEach(function (m) {
+        var phrase = describePlayerTasteFocus(npc, m, p.possessive);
+        if (phrase && phrases.indexOf(phrase) < 0) phrases.push(phrase); // chest + butt are both "her figure"
+    });
+    if (phrases.length === 2 && phrases[0].split(" ")[0] === phrases[1].split(" ")[0]) {
+        phrases[1] = phrases[1].split(" ").slice(1).join(" "); // "her green eyes and auburn hair"
+    }
+    var base = "You find " + p.object + " " + (Math.abs(taste.score) < 3 ? "mildly " : "") + taste.label;
+    if (!phrases.length) return base + ".";
+    return base + (taste.label === "attractive" ? ", especially " : ", mostly because of ") + phrases.join(" and ") + ".";
+}
+if (typeof window !== "undefined") {
+    window.describePlayerTasteSentence = describePlayerTasteSentence;
+    window.describePlayerTasteFocus = describePlayerTasteFocus;
 }
 
 // -- FIRST IMPRESSION + TYPE-ALIGNED ACTIONS -----------------------------------
@@ -7215,6 +8909,429 @@ function decayNPCAffect(npc, steps = 1) {
     return npc;
 }
 
+// Update fertility/heat cycles for NPCs with biological cycles
+// Called from the engine's advanceStoryTurn
+function updateNPCFertilityCycles(roomMap, steps = 1) {
+    if (!roomMap || typeof roomMap !== "object") return;
+    
+    const stepCount = Math.max(1, Math.floor(steps || 1));
+    
+    Object.values(roomMap).forEach(room => {
+        if (!room || !Array.isArray(room.creatures)) return;
+        
+        room.creatures.forEach(npc => {
+            if (!npc) return;
+            
+            // Initialize fertility tracking if needed
+            if (!npc._fertility) {
+                npc._fertility = { counter: 0, inCycle: false, cycleTurns: 0 };
+            }
+            
+            // Get species template to check for fertility cycle
+            const species = npc.species;
+            if (!species) return;
+            
+            const template = typeof getSpeciesTemplate === "function" 
+                ? getSpeciesTemplate(species) 
+                : null;
+            
+            if (!template || !template.fertilityCycle || !template.fertilityCycle.hasCycle) {
+                // No fertility cycle for this species
+                return;
+            }
+            
+            const cycle = template.fertilityCycle;
+            
+            // Skip if NPC is too young (if age tracking exists)
+            if (cycle.minAge && typeof npc.age === "number") {
+                const ageInMonths = npc.age; // Assuming age is in months for these species
+                if (ageInMonths < cycle.minAge) {
+                    return;
+                }
+            }
+            
+            // Only process humanoids or creatures with fertility cycles
+            // (non-humanoids like rats, humanoids like wolfkin/catfolk)
+            if (npc.isHumanoid === false && !cycle.hasCycle) {
+                return;
+            }
+            
+            // Advance the cycle counter
+            npc._fertility.counter += stepCount;
+            
+            // Check if entering cycle phase
+            if (!npc._fertility.inCycle && npc._fertility.counter >= cycle.cycleLength) {
+                npc._fertility.counter = 0;
+                npc._fertility.inCycle = true;
+                npc._fertility.cycleTurns = cycle.duration;
+                
+                // Only set arousal if NPC has memory (some creatures might not)
+                if (npc.memory) {
+                    ensureNPCRelationshipState(npc);
+                    npc.memory.arousal = Math.min(100, (npc.memory.arousal || 0) + cycle.arousalBoost);
+                }
+            }
+            
+            // If in cycle, count down duration
+            if (npc._fertility.inCycle) {
+                npc._fertility.cycleTurns -= stepCount;
+                
+                if (npc._fertility.cycleTurns <= 0) {
+                    npc._fertility.inCycle = false;
+                    // Optional: Add a small cooldown or just let it continue to next cycle
+                }
+            }
+        });
+    });
+}
+
+// Apply environmental arousal based on room tags and conditions
+// Called from the engine's advanceStoryTurn
+function applyEnvironmentalArousal(roomMap) {
+    if (!roomMap || typeof roomMap !== "object") return;
+    
+    Object.values(roomMap).forEach(room => {
+        if (!room || !room.tags || !Array.isArray(room.creatures)) return;
+        
+        const tags = room.tags || [];
+        const hasHeat = tags.includes("heat");
+        const hasSocial = tags.includes("social");
+        const creatureCount = room.creatures ? room.creatures.length : 0;
+        
+        room.creatures.forEach(npc => {
+            if (!npc || !npc.isHumanoid || !npc.memory) return;
+            
+            ensureNPCRelationshipState(npc);
+            
+            let arousalChange = 0;
+            
+            // Heat sources: forges, fireplaces, hearths increase arousal for warm-blooded creatures
+            if (hasHeat) {
+                // Base arousal from heat
+                arousalChange += 1;
+                
+                // Extra for species that are particularly affected by warmth
+                const species = (npc.species || "").toLowerCase();
+                if (species === "catfolk" || species === "ratfolk" || species === "rat") {
+                    arousalChange += 1;
+                }
+            }
+            
+            // Social environments: taverns, gathering places
+            if (hasSocial && creatureCount > 1) {
+                // More NPCs = more social stimulation
+                const socialBoost = Math.floor((creatureCount - 1) / 3);
+                arousalChange += Math.min(socialBoost, 3); // Cap at 3
+                
+                // Extra for social species
+                const species = (npc.species || "").toLowerCase();
+                if (species === "halfling" || species === "harefolk" || species === "satyr") {
+                    arousalChange += 1;
+                }
+            }
+            
+            // Apply the change if any
+            if (arousalChange > 0 && Math.random() < 0.4) { // 40% chance to apply
+                npc.memory.arousal = Math.min(100, (npc.memory.arousal || 0) + arousalChange);
+            }
+        });
+    });
+}
+
+// Check if an NPC is inhibited from romantic/social advances
+// Returns true if the NPC is too inhibited to act on arousal
+function isNPCInhibited(npc) {
+    if (!npc || !npc.memory) return true;
+    
+    // Check for promiscuous trait - bypasses inhibition
+    const traits = npc.personalityTraits || [];
+    if (traits.includes("promiscuous")) return false;
+    
+    // Check disinhibition level - high disinhibition overcomes inhibition
+    const disinhibition = npc.memory.disinhibition || 0;
+    if (disinhibition >= 70) return false; // Very disinhibited
+    if (disinhibition >= 40) return Math.random() < 0.5; // Moderately disinhibited, 50% chance
+    
+    // Default: inhibited if disinhibition is low
+    return disinhibition < 20;
+}
+
+// Check if NPC1 finds NPC2 attractive based on various factors
+function doesNPCFindAttractive(npc1, npc2) {
+    if (!npc1 || !npc2) return false;
+    if (!npc1.isHumanoid || !npc2.isHumanoid) return false; // Only humanoids have preferences
+    
+    // Check sexual orientation compatibility
+    const orient1 = (npc1.relationship && npc1.relationship.orientation) || "bi";
+    const orient2 = (npc2.relationship && npc2.relationship.orientation) || "bi";
+    const gender2 = (npc2.gender || "").toLowerCase();
+    
+    // Simple orientation check
+    if (orient1 === "straight" && gender2 !== "female" && gender2 !== "male") return false;
+    if (orient1 === "gay") {
+        const gender1 = (npc1.gender || "").toLowerCase();
+        if (gender1 === gender2) return true;
+        return false;
+    }
+    // bi or any other value: assume compatible
+    
+    // Check species compatibility
+    const species1 = (npc1.species || "").toLowerCase();
+    const species2 = (npc2.species || "").toLowerCase();
+    
+    // Same species bonus
+    if (species1 === species2) return true;
+    
+    // Compatible species pairs
+    const compatiblePairs = [
+        ["catfolk", "ratfolk"], ["catfolk", "harefolk"],
+        ["wolfkin", "harefolk"], ["wolfkin", "ratfolk"],
+        ["wolfkin", "catfolk"], ["satyr", "catfolk"],
+        ["satyr", "harefolk"], ["ratfolk", "harefolk"]
+    ];
+    
+    if (compatiblePairs.some(pair => 
+        (pair[0] === species1 && pair[1] === species2) ||
+        (pair[0] === species2 && pair[1] === species1))) {
+        return true;
+    }
+    
+    // Personality trait compatibility
+    const traits1 = npc1.personalityTraits || [];
+    const traits2 = npc2.personalityTraits || [];
+    
+    if (traits1.includes("flirt") || traits2.includes("flirt")) return true;
+    if (traits1.includes("promiscuous") || traits2.includes("promiscuous")) return true;
+    
+    // Default: 30% chance for any humanoid pairing
+    return Math.random() < 0.3;
+}
+
+// Check if NPC1 would initiate with NPC2 (gender-specific logic)
+function wouldNPCInitiate(npc1, npc2) {
+    if (!npc1 || !npc2) return false;
+    if (!npc1.memory || !npc2.memory) return false;
+    
+    const gender1 = (npc1.gender || "").toLowerCase();
+    const gender2 = (npc2.gender || "").toLowerCase();
+    
+    // Check if NPC2 is bound and eligible
+    const targetBound = npc2.bound === true;
+    
+    // For bound NPC scenarios: different logic for male vs female initiators
+    if (targetBound) {
+        // Male initiator: less picky, will take advantage if orientation matches
+        if (gender1 === "male") {
+            const orient1 = (npc1.relationship && npc1.relationship.orientation) || "bi";
+            
+            // Check orientation compatibility
+            if (orient1 === "straight" && gender2 !== "female") return false;
+            if (orient1 === "gay" && gender2 !== "male") return false;
+            
+            // Male is aroused and disinhibited enough
+            if ((npc1.memory.arousal || 0) >= 30 && !isNPCInhibited(npc1)) {
+                return true;
+            }
+            return false;
+        }
+        
+        // Female initiator: needs to be more selective
+        if (gender1 === "female") {
+            // Female needs: aroused, bold (not shy), finds target attractive
+            const traits = npc1.personalityTraits || [];
+            const temperament = (npc1.temperament || "").toLowerCase();
+            
+            if (temperament === "shy" && !traits.includes("promiscuous")) return false;
+            
+            if ((npc1.memory.arousal || 0) < 50) return false;
+            
+            if (!doesNPCFindAttractive(npc1, npc2)) return false;
+            
+            if (isNPCInhibited(npc1)) return false;
+            
+            return true;
+        }
+    }
+    
+    // Normal interaction (not bound target)
+    // Both NPCs must not be inhibited
+    if (isNPCInhibited(npc1)) return false;
+    
+    // Check arousal levels
+    if ((npc1.memory.arousal || 0) < 20) return false;
+    if ((npc2.memory.arousal || 0) < 20) return false;
+    
+    // Check mutual attraction
+    if (!doesNPCFindAttractive(npc1, npc2)) return false;
+    if (!doesNPCFindAttractive(npc2, npc1)) return false;
+    
+    // Check relationship status
+    // If NPC1 has a partner/established relationship, less likely to initiate with others
+    if (npc1.memory.partnerId && !traits.includes("promiscuous")) {
+        if (npc1.memory.partnerId !== npc2.id) return false;
+    }
+    
+    return true;
+}
+
+// Process bound NPC scenarios where free NPCs take advantage
+function processBoundNPCScenarios(room) {
+    if (!room || !Array.isArray(room.creatures)) return [];
+    
+    const lines = [];
+    const boundNPCs = room.creatures.filter(n => n && n.bound === true && n.isHumanoid);
+    
+    boundNPCs.forEach(boundNPC => {
+        // Find potential initiators
+        const potentialInitiators = room.creatures.filter(n => 
+            n && !n.bound && n.isHumanoid && n !== boundNPC && 
+            wouldNPCInitiate(n, boundNPC)
+        );
+        
+        if (potentialInitiators.length === 0) return;
+        
+        // Pick a random initiator
+        const initiator = potentialInitiators[Math.floor(Math.random() * potentialInitiators.length)];
+        const gender1 = (initiator.gender || "").toLowerCase();
+        const gender2 = (boundNPC.gender || "").toLowerCase();
+        
+        // Generate appropriate text
+        let line = "";
+        if (gender1 === "male") {
+            // Male taking advantage - more direct
+            const verb = Math.random() < 0.5 ? "uses" : "takes advantage of";
+            line = `${initiator.name || "The " + initiator.species} ${verb} ${boundNPC.name || "the bound " + boundNPC.species} for their own satisfaction.`;
+        } else {
+            // Female - more selective
+            const verb = Math.random() < 0.5 ? "releases" : "helps";
+            line = `${initiator.name || "The " + initiator.species} ${verb} ${boundNPC.name || "the bound " + boundNPC.species} from their bonds, taking a moment for themselves.`;
+        }
+        
+        lines.push(line);
+        
+        // Apply state changes
+        initiator.memory.arousal = Math.min(100, (initiator.memory.arousal || 0) + 15);
+        boundNPC.memory.arousal = Math.min(100, (boundNPC.memory.arousal || 0) + 10);
+        
+        // Increase disinhibition for both
+        initiator.memory.disinhibition = Math.min(100, (initiator.memory.disinhibition || 0) + 5);
+        boundNPC.memory.disinhibition = Math.min(100, (boundNPC.memory.disinhibition || 0) + 3);
+        
+        // Track this interaction
+        if (!initiator.memory.partners) initiator.memory.partners = [];
+        if (!boundNPC.memory.partners) boundNPC.memory.partners = [];
+        
+        // Only track if they don't have many partners already (unless promiscuous)
+        const traits = initiator.personalityTraits || [];
+        if (traits.includes("promiscuous") || initiator.memory.partners.length < 3) {
+            if (!initiator.memory.partners.includes(boundNPC.id)) {
+                initiator.memory.partners.push(boundNPC.id);
+            }
+            if (!boundNPC.memory.partners.includes(initiator.id)) {
+                boundNPC.memory.partners.push(initiator.id);
+            }
+        }
+    });
+    
+    return lines;
+}
+
+// Process NPC-to-NPC social/romantic interactions in a room
+function processNPCToNPCInteractions(room) {
+    if (!room || !Array.isArray(room.creatures)) return [];
+    
+    const lines = [];
+    const humanoids = room.creatures.filter(n => n && n.isHumanoid && !n.bound && !n.dead && !n.unconscious);
+    
+    if (humanoids.length < 2) return lines;
+    
+    // Shuffle for randomness
+    for (let i = humanoids.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [humanoids[i], humanoids[j]] = [humanoids[j], humanoids[i]];
+    }
+    
+    // Try to form pairs
+    for (let i = 0; i < humanoids.length - 1; i++) {
+        for (let j = i + 1; j < humanoids.length; j++) {
+            const npc1 = humanoids[i];
+            const npc2 = humanoids[j];
+            
+            // Skip if already processed
+            if (npc1._interactionPartner || npc2._interactionPartner) continue;
+            
+            // Check if they would interact
+            if (!wouldNPCInitiate(npc1, npc2)) continue;
+            
+            // Mark them as paired
+            npc1._interactionPartner = npc2.id;
+            npc2._interactionPartner = npc1.id;
+            
+            // Generate interaction text
+            const traits1 = npc1.personalityTraits || [];
+            const traits2 = npc2.personalityTraits || [];
+            const hasPromiscuous = traits1.includes("promiscuous") || traits2.includes("promiscuous");
+            
+            let line;
+            if (hasPromiscuous) {
+                line = `${npc1.name || "The " + npc1.species} and ${npc2.name || "the " + npc2.species} share an intimate moment together.`;
+            } else {
+                const verbs = ["flirt", "chat closely", "whisper to", "share a smile with"];
+                const verb = verbs[Math.floor(Math.random() * verbs.length)];
+                line = `${npc1.name || "The " + npc1.species} ${verb} ${npc2.name || "the " + npc2.species}.`;
+            }
+            
+            lines.push(line);
+            
+            // Apply state changes based on interaction intensity
+            const arousalGain = hasPromiscuous ? 8 : 4;
+            const disinhibitionGain = hasPromiscuous ? 4 : 2;
+            
+            npc1.memory.arousal = Math.min(100, (npc1.memory.arousal || 0) + arousalGain);
+            npc2.memory.arousal = Math.min(100, (npc2.memory.arousal || 0) + arousalGain);
+            
+            npc1.memory.disinhibition = Math.min(100, (npc1.memory.disinhibition || 0) + disinhibitionGain);
+            npc2.memory.disinhibition = Math.min(100, (npc2.memory.disinhibition || 0) + disinhibitionGain);
+            
+            // Track relationship
+            if (!npc1.memory.attractionTo || typeof npc1.memory.attractionTo !== "object") {
+                npc1.memory.attractionTo = {};
+            }
+            if (!npc2.memory.attractionTo || typeof npc2.memory.attractionTo !== "object") {
+                npc2.memory.attractionTo = {};
+            }
+            
+            npc1.memory.attractionTo[npc2.id] = Math.min(100, (npc1.memory.attractionTo[npc2.id] || 0) + 5);
+            npc2.memory.attractionTo[npc1.id] = Math.min(100, (npc2.memory.attractionTo[npc1.id] || 0) + 5);
+            
+            break; // Move to next NPC after finding a pair
+        }
+    }
+    
+    return lines;
+}
+
+// Main function to process all NPC-to-NPC arousal scenarios
+function processNPCArousalInteractions(roomMap) {
+    if (!roomMap || typeof roomMap !== "object") return [];
+    
+    const allLines = [];
+    
+    Object.values(roomMap).forEach(room => {
+        if (!room || !room.creatures || !Array.isArray(room.creatures)) return;
+        
+        // Process bound NPC scenarios first (more urgent)
+        const boundLines = processBoundNPCScenarios(room);
+        allLines.push(...boundLines);
+        
+        // Process normal NPC-to-NPC interactions
+        const interactionLines = processNPCToNPCInteractions(room);
+        allLines.push(...interactionLines);
+    });
+    
+    return allLines;
+}
+
 function decayNPCStatesInWorld(roomMap, steps = 1) {
     const map = roomMap && typeof roomMap === "object" ? roomMap : {};
     Object.values(map).forEach(room => {
@@ -7349,13 +9466,13 @@ function generateNPCBehavior(npc) {
 
     ensureNPCRelationshipState(npc);
 
-    const hostility   = npc.hostility ?? 50;
-    const mood        = npc.memory?.lastMood || "neutral";
-    const favor       = npc.memory?.favorability ?? 0;
-    const attraction  = npc.memory?.attraction ?? 0;
-    const arousal     = npc.memory?.arousal ?? 0;
+    const hostility   = npc.hostility == null ? 50 : npc.hostility;
+    const mood        = npc.memory && npc.memory.lastMood || "neutral";
+    const favor       = npc.memory && npc.memory.favorability != null ? npc.memory.favorability : 0;
+    const attraction  = npc.memory && npc.memory.attraction != null ? npc.memory.attraction : 0;
+    const arousal     = npc.memory && npc.memory.arousal != null ? npc.memory.arousal : 0;
     const disposition = getCurrentNPCDisposition(npc);
-    const traits      = npc.personalityProfile?.traits || npc.personalityTraits || ["neutral"];
+    const traits      = npc.personalityProfile && npc.personalityProfile.traits || npc.personalityTraits || ["neutral"];
 
     const behaviorMatrix = {
         calm:       ["Appears calm", "Appears collected", "Is relaxed", "Seems at ease"],
@@ -7456,6 +9573,998 @@ function generatePostureOrAction(temperament) {
     return _rand(actions);
 }
 
+// ============================================================================
+// BATHHOUSE PROCEDURAL REGULARS AND RUMORS SYSTEM
+// ============================================================================
+
+// Bathhouse regular frequency patterns (how often they visit)
+const BATHHOUSE_REGULAR_FREQUENCY = [
+    { id: "daily", label: "Daily", chance: 0.15, daysBetween: 1, description: "visits every day" },
+    { id: "every_other_day", label: "Every Other Day", chance: 0.25, daysBetween: 2, description: "visits every 2 days" },
+    { id: "twice_weekly", label: "Twice Weekly", chance: 0.30, daysBetween: 3, description: "visits twice a week" },
+    { id: "weekly", label: "Weekly", chance: 0.20, daysBetween: 7, description: "visits once a week" },
+    { id: "biweekly", label: "Bi-weekly", chance: 0.10, daysBetween: 14, description: "visits every 2 weeks" }
+];
+
+// Bathhouse regular service preferences (what services they typically request)
+const BATHHOUSE_REGULAR_PREFERENCES = [
+    { id: "massage_only", label: "Massage Only", chance: 0.20, services: ["bath_manual_stress", "bath_manual_oil", "bath_manual_tension"], description: "prefers therapeutic massage services" },
+    { id: "manual_only", label: "Manual Stimulation", chance: 0.15, services: ["bath_manual_stress", "bath_manual_oil", "bath_manual_tension"], description: "enjoys hand-based tension relief" },
+    { id: "oral_enthusiast", label: "Oral Enthusiast", chance: 0.20, services: ["bath_oral_deep", "bath_oral_comprehensive", "bath_oral_traveler"], description: "loves oral services" },
+    { id: "full_experience", label: "Full Experience", chance: 0.25, services: ["bath_intercourse_full", "bath_intercourse_evening", "bath_intercourse_adventurer"], description: "prefers complete intercourse services" },
+    { id: "mixed_tier2", label: "Mixed Tier 2", chance: 0.10, services: ["bath_manual_oil", "bath_oral_deep", "bath_oral_comprehensive"], description: "enjoys both manual and oral" },
+    { id: "mixed_all", label: "All Services", chance: 0.10, services: ["bath_manual_stress", "bath_oral_deep", "bath_intercourse_full"], description: "takes advantage of everything available" }
+];
+
+// Bathhouse rumor types for word-of-mouth discovery
+const BATHHOUSE_RUMOR_TYPES = [
+    { id: "heard_from_friend", chance: 0.40, text: "heard from a friend", credibility: 0.8 },
+    { id: "overheard_tavern", chance: 0.30, text: "overheard at the tavern", credibility: 0.6 },
+    { id: "seen_people_coming", chance: 0.20, text: "seen people looking relaxed after visiting", credibility: 0.7 },
+    { id: "traveler_recommendation", chance: 0.10, text: "recommended by a traveler", credibility: 0.9 }
+];
+
+// Generate a bathhouse regular profile for an NPC
+function generateBathhouseRegularProfile(npc) {
+    if (!npc) return null;
+    
+    // Determine if this NPC should be a regular (about 30% of eligible NPCs)
+    if (Math.random() < 0.7) return null;
+    
+    // Select frequency
+    const frequency = selectByChance(BATHHOUSE_REGULAR_FREQUENCY);
+    
+    // Select preferences based on NPC temperament
+    let preference = selectByChance(BATHHOUSE_REGULAR_PREFERENCES);
+    
+    // Adjust preferences based on traits
+    if (npc.traits) {
+        if (npc.traits.includes("promiscuous")) {
+            // More likely to prefer full services
+            preference = BATHHOUSE_REGULAR_PREFERENCES.find(p => p.id === "full_experience") || preference;
+        }
+        if (npc.traits.includes("professional")) {
+            // More likely to prefer massage
+            preference = BATHHOUSE_REGULAR_PREFERENCES.find(p => p.id === "massage_only") || preference;
+        }
+        if (npc.traits.includes("flirty")) {
+            // More likely to prefer oral or mixed
+            const flirtyPrefs = BATHHOUSE_REGULAR_PREFERENCES.filter(p => 
+                p.id === "oral_enthusiast" || p.id === "mixed_tier2" || p.id === "mixed_all");
+            preference = flirtyPrefs.length ? flirtyPrefs[Math.floor(Math.random() * flirtyPrefs.length)] : preference;
+        }
+        if (npc.traits.includes("dominant")) {
+            // More likely to prefer full control (intercourse)
+            preference = BATHHOUSE_REGULAR_PREFERENCES.find(p => p.id === "full_experience") || preference;
+        }
+    }
+    
+    // Generate a stable ID for this regular
+    const regularId = "regular-" + (npc.id || npc.name || Math.random().toString(36).slice(2, 8));
+    
+    return {
+        id: regularId,
+        npcId: npc.id || npc.name,
+        frequency: frequency.id,
+        frequencyLabel: frequency.label,
+        daysBetween: frequency.daysBetween,
+        preference: preference.id,
+        preferenceLabel: preference.label,
+        preferredServices: preference.services,
+        lastVisitTurn: 0,
+        totalVisits: 0,
+        tipPercentage: Math.floor(Math.random() * 16) + 5, // 5-20%
+        // Personality when at bathhouse
+        bathhousePersonality: getBathhouseRegularPersonality(npc)
+    };
+}
+
+// Select an item from an array based on chance weights
+function selectByChance(array) {
+    if (!array || !array.length) return null;
+    
+    const total = array.reduce((sum, item) => sum + (item.chance || 0), 0);
+    if (total <= 0) return array[0];
+    
+    let random = Math.random() * total;
+    for (const item of array) {
+        random -= item.chance || 0;
+        if (random <= 0) return item;
+    }
+    return array[0];
+}
+
+// Get personality descriptor for bathhouse regulars
+function getBathhouseRegularPersonality(npc) {
+    if (!npc) return "quiet and discrete";
+    
+    const personalities = [
+        "quiet and discrete",
+        "friendly and chatty",
+        "businesslike and efficient",
+        "relaxed and content",
+        "appreciative and generous",
+        "shy but curious",
+        "experienced and knowing",
+        "playful and teasing",
+        "serious and focused",
+        "grateful and polite"
+    ];
+    
+    // Adjust based on traits
+    if (npc.traits) {
+        if (npc.traits.includes("flirty")) return "playful and teasing";
+        if (npc.traits.includes("professional")) return "businesslike and efficient";
+        if (npc.traits.includes("dominant")) return "experienced and knowing";
+        if (npc.traits.includes("shy")) return "shy but curious";
+    }
+    
+    return personalities[Math.floor(Math.random() * personalities.length)];
+}
+
+// Generate bathhouse rumor for an NPC to discover services
+function generateBathhouseRumor(npc, ctx) {
+    if (!npc) return null;
+    
+    // Check if NPC already knows about bathhouse
+    if (npc.bathhouseAware) return null;
+    
+    // Determine if this NPC should learn about bathhouse (based on social connections)
+    const chance = 0.05; // 5% chance per eligible interaction
+    if (Math.random() >= chance) return null;
+    
+    // Select rumor type
+    const rumorType = selectByChance(BATHHOUSE_RUMOR_TYPES);
+    
+    // Determine who told them (if applicable)
+    let source = null;
+    if (rumorType.id === "heard_from_friend" && ctx && ctx.room && ctx.room.creatures) {
+        // Find a potential source NPC who already knows
+        const potentialSources = ctx.room.creatures.filter(c => 
+            c && c !== npc && c.bathhouseAware && !c.dead && c.hp > 0);
+        if (potentialSources.length) {
+            source = potentialSources[Math.floor(Math.random() * potentialSources.length)];
+        }
+    }
+    
+    return {
+        id: "rumor-" + (npc.id || npc.name || "") + "-" + Date.now(),
+        type: rumorType.id,
+        typeLabel: rumorType.text,
+        credibility: rumorType.credibility,
+        source: source ? { id: source.id, name: source.name } : null,
+        turnDiscovered: ctx && ctx.storyTurn ? ctx.storyTurn : 0,
+        roomId: ctx && ctx.room ? ctx.room.coords : null
+    };
+}
+
+// Check if NPC should visit bathhouse today
+function shouldNPCVisitBathhouseToday(npc, currentTurn) {
+    if (!npc || !npc.bathhouseRegular) return false;
+    
+    const regular = npc.bathhouseRegular;
+    const lastVisit = regular.lastVisitTurn || 0;
+    const daysBetween = regular.daysBetween || 7;
+    
+    // Check if enough time has passed
+    const daysSinceLastVisit = currentTurn - lastVisit;
+    if (daysSinceLastVisit < daysBetween) return false;
+    
+    // Additional random chance to visit even if not due (for variety)
+    if (Math.random() < 0.2) return true;
+    
+    return true;
+}
+
+// Mark NPC as having visited bathhouse today
+function markBathhouseVisit(npc, currentTurn) {
+    if (!npc || !npc.bathhouseRegular) return;
+    
+    npc.bathhouseRegular.lastVisitTurn = currentTurn;
+    npc.bathhouseRegular.totalVisits = (npc.bathhouseRegular.totalVisits || 0) + 1;
+}
+
+// ============================================================================
+// NPC-to-NPC BATHHOUSE SERVICE REQUESTS & PLAYER AS PROVIDER
+// ============================================================================
+
+// Service provider types
+const BATHHOUSE_PROVIDER_TYPES = {
+    STAFF: "staff",           // BathhouseAttendant, BathhousePractitioner, Bathkeeper
+    PLAYER: "player",         // Player working at bathhouse
+    FREELANCE: "freelance"   // NPC providing services independently
+};
+
+// Service request states
+const BATHHOUSE_REQUEST_STATES = {
+    PENDING: "pending",       // Request made, waiting for response
+    ACCEPTED: "accepted",     // Provider accepted, service in progress
+    DECLINED: "declined",     // Provider declined
+    COMPLETED: "completed",   // Service finished
+    CANCELLED: "cancelled"   // Request cancelled
+};
+
+// Generate a service request from one NPC to another (or player)
+function generateBathhouseServiceRequest(requester, provider, ctx) {
+    if (!requester || !provider) return null;
+    
+    // Determine if requester can make this request
+    if (!canNPCRequestBathhouseService(requester)) return null;
+    
+    // Determine if provider can accept requests
+    if (!canNPCProvideBathhouseService(provider)) return null;
+    
+    // Select appropriate service based on preferences
+    const service = selectServiceForNPC(requester, provider);
+    if (!service) return null;
+    
+    // Generate request ID
+    const requestId = "bath-request-" + (requester.id || requester.name || "req") + "-" + 
+                      (provider.id || provider.name || "prov") + "-" + (ctx.storyTurn || 0);
+    
+    // Determine price (provider may have different rates)
+    const basePrice = getBathhouseServiceCost(service);
+    const finalPrice = applyProviderPriceModifier(provider, basePrice);
+    
+    return {
+        id: requestId,
+        requesterId: requester.id || requester.name,
+        requesterName: requester.name,
+        requesterGender: requester.gender,
+        requesterSpecies: requester.species,
+        providerId: provider.id || provider.name,
+        providerName: provider.isPlayer ? "You" : (provider.name || "Someone"),
+        providerType: getProviderType(provider),
+        serviceId: service,
+        serviceName: getBathhouseServiceName(service),
+        basePrice: basePrice,
+        finalPrice: finalPrice,
+        bathhouseCut: Math.round(finalPrice * 0.30), // 30% to bathhouse
+        providerEarnings: finalPrice - Math.round(finalPrice * 0.30), // 70% to provider
+        state: BATHHOUSE_REQUEST_STATES.PENDING,
+        turnCreated: ctx.storyTurn || 0,
+        turnAccepted: 0,
+        turnCompleted: 0,
+        location: ctx.room ? ctx.room.coords : null,
+        tipAmount: 0,
+        tipPercentage: 0,
+        // Personality context for narration
+        requesterMood: getRequesterMood(requester),
+        providerStyle: getProviderStyle(provider),
+        // Gender/orientation compatibility
+        isCompatible: checkServiceCompatibility(requester, provider, service),
+        compatibilityNote: getCompatibilityNote(requester, provider, service)
+    };
+}
+
+// Check if NPC can request bathhouse services
+function canNPCRequestBathhouseService(npc) {
+    if (!npc || npc.dead || npc.hp <= 0 || npc.unconscious) return false;
+    
+    // Must be humanoid
+    if (npc.isHumanoid !== true) return false;
+    
+    // Must have arousal/need (or be a regular)
+    if (npc.bathhouseRegular) return true;
+    if (npc.bathhouseAware) return true;
+    
+    // Check if they have high arousal or need for release
+    if (npc.arousal && npc.arousal >= 50) return true;
+    
+    // Check if they have tension/stress that could use massage
+    if (npc.stress || npc.tension) return true;
+    
+    return false;
+}
+
+// Check if NPC can provide bathhouse services
+function canNPCProvideBathhouseService(npc) {
+    if (!npc) return false;
+    
+    // Player is always a potential provider if qualified
+    if (npc.isPlayer) {
+        // Player must be qualified or working at bathhouse
+        return true; // Will be checked more specifically in engine
+    }
+    
+    // Must be humanoid and alive
+    if (npc.isHumanoid !== true || npc.dead || npc.hp <= 0 || npc.unconscious) return false;
+    
+    // Staff roles can always provide
+    if (npc.role === "BathhouseAttendant" || npc.role === "BathhousePractitioner" || npc.role === "Bathkeeper") {
+        return true;
+    }
+    
+    // Freelance providers (marked as such)
+    if (npc.bathhouseProvider === true) return true;
+    
+    // NPCs with relevant traits might provide independently
+    if (npc.traits && (npc.traits.includes("promiscuous") || npc.traits.includes("flirty"))) {
+        return Math.random() < 0.5; // 50% chance they provide services
+    }
+    
+    return false;
+}
+
+// Select appropriate service for NPC based on preferences
+function selectServiceForNPC(requester, provider) {
+    // If requester has regular profile, use their preferences
+    if (requester.bathhouseRegular && requester.bathhouseRegular.preferredServices) {
+        const preferred = requester.bathhouseRegular.preferredServices;
+        const available = getAvailableServices(provider);
+        
+        // Find intersection of preferred and available
+        const matching = preferred.filter(s => available.includes(s));
+        if (matching.length) return matching[Math.floor(Math.random() * matching.length)];
+    }
+    
+    // Fall back to random available service from provider
+    const available = getAvailableServices(provider);
+    if (available.length) return available[Math.floor(Math.random() * available.length)];
+    
+    return null;
+}
+
+// Get services available from a provider
+function getAvailableServices(provider) {
+    // All bathhouse services
+    const allServices = [
+        "bath_manual_stress", "bath_manual_oil", "bath_manual_tension",
+        "bath_oral_deep", "bath_oral_comprehensive", "bath_oral_traveler",
+        "bath_intercourse_full", "bath_intercourse_evening", "bath_intercourse_adventurer"
+    ];
+    
+    // Staff can provide all services
+    if (provider.role === "BathhousePractitioner" || provider.role === "Bathkeeper") {
+        return allServices;
+    }
+    
+    // Attendants can only provide manual services
+    if (provider.role === "BathhouseAttendant") {
+        return ["bath_manual_stress", "bath_manual_oil", "bath_manual_tension"];
+    }
+    
+    // Player can provide based on their training/qualification
+    if (provider.isPlayer) {
+        // Check if player is qualified for massage
+        const qualified = typeof bathhouseQualified === "function" ? bathhouseQualified(provider.currentRoom) : false;
+        if (qualified) {
+            return allServices;
+        }
+        return ["bath_manual_stress", "bath_manual_oil", "bath_manual_tension"];
+    }
+    
+    // Freelance providers - limit based on their skills
+    return allServices.slice(0, 3); // Only manual services for non-staff
+}
+
+// Get provider type
+function getProviderType(provider) {
+    if (!provider) return BATHHOUSE_PROVIDER_TYPES.FREELANCE;
+    
+    if (provider.isPlayer) return BATHHOUSE_PROVIDER_TYPES.PLAYER;
+    
+    if (provider.role === "BathhouseAttendant" || provider.role === "BathhousePractitioner" || 
+        provider.role === "Bathkeeper") {
+        return BATHHOUSE_PROVIDER_TYPES.STAFF;
+    }
+    
+    return BATHHOUSE_PROVIDER_TYPES.FREELANCE;
+}
+
+// Get service cost (placeholder - will use actual function if available)
+function getBathhouseServiceCost(serviceId) {
+    if (typeof window !== "undefined" && typeof window.getBathhouseServiceCost === "function") {
+        return window.getBathhouseServiceCost(serviceId);
+    }
+    
+    // Default prices matching NSFW definitions
+    const prices = {
+        bath_manual_stress: 40,
+        bath_manual_oil: 50,
+        bath_manual_tension: 60,
+        bath_oral_deep: 100,
+        bath_oral_comprehensive: 120,
+        bath_oral_traveler: 130,
+        bath_intercourse_full: 150,
+        bath_intercourse_evening: 170,
+        bath_intercourse_adventurer: 200
+    };
+    return prices[serviceId] || 100;
+}
+
+// Get service name
+function getBathhouseServiceName(serviceId) {
+    const names = {
+        bath_manual_stress: "Dungeon Delver's Rub",
+        bath_manual_oil: "Herbal Oil Release",
+        bath_manual_tension: "Adventurer's Ease",
+        bath_oral_deep: "Delver's Deep Relief",
+        bath_oral_comprehensive: "Full Exploration",
+        bath_oral_traveler: "Road-Worn Solace",
+        bath_intercourse_full: "Complete Unburdening",
+        bath_intercourse_evening: "Moonlit Respite",
+        bath_intercourse_adventurer: "Adventurer's Respite"
+    };
+    return names[serviceId] || serviceId;
+}
+
+// Apply provider's price modifier
+function applyProviderPriceModifier(provider, basePrice) {
+    if (!provider) return basePrice;
+    
+    // Staff follow standard pricing
+    if (provider.role === "BathhouseAttendant" || provider.role === "BathhousePractitioner" || 
+        provider.role === "Bathkeeper") {
+        return basePrice;
+    }
+    
+    // Player might charge differently based on charisma
+    if (provider.isPlayer && provider.stats) {
+        const charisma = provider.stats.CHA || 10;
+        if (charisma >= 15) return Math.round(basePrice * 1.10); // 10% premium for high charisma
+        if (charisma <= 8) return Math.round(basePrice * 0.90); // 10% discount for low charisma
+    }
+    
+    // Freelance providers might adjust prices
+    if (provider.bathhouseProvider === true) {
+        // Random variation: 80-120% of base
+        return Math.round(basePrice * (0.8 + Math.random() * 0.4));
+    }
+    
+    return basePrice;
+}
+
+// Get requester mood description
+function getRequesterMood(npc) {
+    if (!npc) return "polite";
+    
+    const arousal = npc.arousal || 0;
+    const tension = npc.tension || npc.stress || 0;
+    
+    if (arousal >= 80) return "urgent and needy";
+    if (arousal >= 60) return "eager and flushed";
+    if (arousal >= 40) return "interested and curious";
+    if (tension >= 70) return "tense and stressed";
+    if (tension >= 40) return "weary and sore";
+    
+    return "polite and casual";
+}
+
+// Get provider style description
+function getProviderStyle(provider) {
+    if (!provider) return "professional";
+    
+    if (provider.traits) {
+        if (provider.traits.includes("dominant")) return "firm and commanding";
+        if (provider.traits.includes("flirty")) return "playful and teasing";
+        if (provider.traits.includes("professional")) return "polished and businesslike";
+    }
+    
+    if (provider.role === "BathhousePractitioner" || provider.role === "Bathkeeper") {
+        return "skilled and experienced";
+    }
+    
+    return "welcoming and warm";
+}
+
+// Check service compatibility (gender/orientation aware)
+function checkServiceCompatibility(requester, provider, serviceId) {
+    if (!requester || !provider) return true;
+    
+    const service = getBathhouseServiceDefinition(serviceId);
+    if (!service) return true;
+    
+    // Manual services are always compatible
+    if (service.tier === 'manual') return true;
+    
+    // For oral and intercourse, check gender compatibility
+    if (service.compatibleWith) {
+        const gender = String(requester.gender || "male").toLowerCase();
+        if (!service.compatibleWith.includes(gender)) {
+            return false;
+        }
+    }
+    
+    // Check anatomy and orientation if NSFW system available
+    if (typeof window !== "undefined" && typeof window.isServiceCompatible === "function") {
+        const result = window.isServiceCompatible(serviceId, requester, provider);
+        return result.compatible;
+    }
+    
+    // SFW fallback: assume compatible
+    return true;
+}
+
+// Get detailed compatibility check with reasons
+function getServiceCompatibilityDetails(serviceId, requester, provider) {
+    if (!requester || !provider) {
+        return { compatible: true, reason: "no_data", narration: "" };
+    }
+    
+    const service = getBathhouseServiceDefinition(serviceId);
+    if (!service) {
+        return { compatible: false, reason: "unknown_service", narration: "Unknown service." };
+    }
+    
+    // Manual services are always compatible
+    if (service.tier === 'manual') {
+        return { compatible: true, reason: "manual_service", narration: "" };
+    }
+    
+    // Check gender compatibility
+    if (service.compatibleWith) {
+        const gender = String(requester.gender || "male").toLowerCase();
+        if (!service.compatibleWith.includes(gender)) {
+            return {
+                compatible: false,
+                reason: "gender_incompatible",
+                narration: requester.name + "'s gender is not suitable for this service."
+            };
+        }
+    }
+    
+    // Use NSFW compatibility if available
+    if (typeof window !== "undefined" && typeof window.getServiceCompatibilityDetails === "function") {
+        return window.getServiceCompatibilityDetails(serviceId, requester, provider);
+    }
+    
+    return { compatible: true, reason: "compatible", narration: "" };
+}
+
+// Get bathhouse service definition
+function getBathhouseServiceDefinition(serviceId) {
+    // Try to get from window first (NSFW loaded)
+    if (typeof window !== "undefined" && window.BATHHOUSE_SERVICES && window.BATHHOUSE_SERVICES[serviceId]) {
+        return window.BATHHOUSE_SERVICES[serviceId];
+    }
+    
+    // Fallback to local definition
+    const localServices = {
+        bath_manual_stress: { tier: 'manual', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_manual_oil: { tier: 'manual', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_manual_tension: { tier: 'manual', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_oral_deep: { tier: 'oral', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_oral_comprehensive: { tier: 'oral', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_oral_traveler: { tier: 'oral', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_intercourse_full: { tier: 'intercourse', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_intercourse_evening: { tier: 'intercourse', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] },
+        bath_intercourse_adventurer: { tier: 'intercourse', compatibleWith: ['male', 'female', 'neutral', 'nonbinary'] }
+    };
+    
+    return localServices[serviceId] || null;
+}
+
+// Get compatibility note for narration
+function getCompatibilityNote(requester, provider, serviceId) {
+    const details = getServiceCompatibilityDetails(serviceId, requester, provider);
+    if (!details.compatible) {
+        return details.narration;
+    }
+    return "";
+}
+
+// ============================================================================
+// BATHHOUSE REPUTATION AND CLIENT RELATIONSHIP SYSTEM
+// ============================================================================
+
+// Bathhouse reputation levels
+const BATHHOUSE_REPUTATION_LEVELS = {
+    UNKNOWN: { id: 'unknown', label: 'Unknown', value: 0, description: 'Has not visited yet' },
+    NEWCOMER: { id: 'newcomer', label: 'Newcomer', value: 1, description: 'First visit' },
+    REGULAR: { id: 'regular', label: 'Regular', value: 2, description: 'Visits occasionally' },
+    FREQUENT: { id: 'frequent', label: 'Frequent Guest', value: 3, description: 'Visits often' },
+    PREFERRED: { id: 'preferred', label: 'Preferred Client', value: 4, description: 'Frequent visitor, gets priority' },
+    VIP: { id: 'vip', label: 'VIP', value: 5, description: 'Very important patron' }
+};
+
+// Client satisfaction levels
+const CLIENT_SATISFACTION_LEVELS = {
+    DISSATISFIED: { id: 'dissatisfied', label: 'Dissatisfied', value: 1, mood: -10, description: 'Very unhappy with service' },
+    UNSATISFIED: { id: 'unsatisfied', label: 'Unsatisfied', value: 2, mood: -5, description: 'Not happy with service' },
+    NEUTRAL: { id: 'neutral', label: 'Neutral', value: 3, mood: 0, description: 'Service was adequate' },
+    SATISFIED: { id: 'satisfied', label: 'Satisfied', value: 4, mood: 5, description: 'Happy with service' },
+    VERY_SATISFIED: { id: 'very_satisfied', label: 'Very Satisfied', value: 5, mood: 10, description: 'Extremely pleased' }
+};
+
+// Get reputation level from value
+function getReputationLevel(value) {
+    const levels = Object.values(BATHHOUSE_REPUTATION_LEVELS);
+    for (let i = levels.length - 1; i >= 0; i--) {
+        if (value >= levels[i].value) {
+            return levels[i];
+        }
+    }
+    return BATHHOUSE_REPUTATION_LEVELS.UNKNOWN;
+}
+
+// Get satisfaction level from value
+function getSatisfactionLevel(value) {
+    const levels = Object.values(CLIENT_SATISFACTION_LEVELS);
+    for (let i = levels.length - 1; i >= 0; i--) {
+        if (value >= levels[i].value) {
+            return levels[i];
+        }
+    }
+    return CLIENT_SATISFACTION_LEVELS.NEUTRAL;
+}
+
+// Update client reputation and satisfaction after service
+function updateClientRelationship(npc, provider, serviceId, satisfactionRating) {
+    if (!npc || !provider) return;
+    
+    // Initialize bathhouse profile if doesn't exist
+    npc.bathhouseProfile = npc.bathhouseProfile || {};
+    
+    // Update visit count
+    npc.bathhouseProfile.totalVisits = (npc.bathhouseProfile.totalVisits || 0) + 1;
+    
+    // Update reputation based on visits
+    const visits = npc.bathhouseProfile.totalVisits;
+    if (visits === 1) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.NEWCOMER.value;
+    } else if (visits >= 2 && visits < 5) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.REGULAR.value;
+    } else if (visits >= 5 && visits < 10) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.FREQUENT.value;
+    } else if (visits >= 10 && visits < 20) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.PREFERRED.value;
+    } else if (visits >= 20) {
+        npc.bathhouseProfile.reputation = BATHHOUSE_REPUTATION_LEVELS.VIP.value;
+    }
+    
+    // Update satisfaction rating
+    const currentSatisfaction = npc.bathhouseProfile.satisfaction || CLIENT_SATISFACTION_LEVELS.NEUTRAL.value;
+    const satisfaction = Math.min(5, Math.max(1, currentSatisfaction + (satisfactionRating || 0)));
+    npc.bathhouseProfile.satisfaction = satisfaction;
+    
+    // Track provider-specific relationship
+    if (!provider.isPlayer) {
+        // For NPC providers, track on the client
+        npc.bathhouseProfile.providerRelationships = npc.bathhouseProfile.providerRelationships || {};
+        const providerId = provider.id || provider.name;
+        npc.bathhouseProfile.providerRelationships[providerId] = {
+            visits: (npc.bathhouseProfile.providerRelationships[providerId]?.visits || 0) + 1,
+            satisfaction: satisfaction,
+            lastService: serviceId,
+            lastVisit: npc.bathhouseProfile.lastVisit || 0
+        };
+    } else {
+        // For player provider, track separately
+        npc.bathhouseProfile.playerProvider = {
+            visits: (npc.bathhouseProfile.playerProvider?.visits || 0) + 1,
+            satisfaction: satisfaction,
+            lastService: serviceId,
+            lastVisit: npc.bathhouseProfile.lastVisit || 0
+        };
+    }
+    
+    // Update last visit
+    npc.bathhouseProfile.lastVisit = getCurrentStoryTurn ? getCurrentStoryTurn() : 0;
+    
+    // Apply mood bonus based on satisfaction
+    const satisfactionLevel = getSatisfactionLevel(satisfaction);
+    if (satisfactionLevel.mood) {
+        // Apply temporary mood boost
+        if (npc.memory) {
+            npc.memory.mood = Math.max(0, Math.min(100, (npc.memory.mood || 50) + satisfactionLevel.mood));
+        }
+    }
+}
+
+// Get client discount based on reputation
+function getClientDiscount(npc) {
+    if (!npc || !npc.bathhouseProfile) return 0;
+    
+    const reputation = npc.bathhouseProfile.reputation || 0;
+    const satisfaction = npc.bathhouseProfile.satisfaction || 3;
+    
+    // Reputation-based discount
+    let discount = 0;
+    if (reputation >= BATHHOUSE_REPUTATION_LEVELS.PREFERRED.value) {
+        discount = 10; // 10% discount for preferred/VIP
+    } else if (reputation >= BATHHOUSE_REPUTATION_LEVELS.FREQUENT.value) {
+        discount = 5; // 5% discount for frequent guests
+    }
+    
+    // Satisfaction bonus
+    if (satisfaction >= CLIENT_SATISFACTION_LEVELS.VERY_SATISFIED.value) {
+        discount += 5; // Additional 5% for very satisfied clients
+    }
+    
+    return Math.min(20, discount); // Cap at 20%
+}
+
+// Get service with client discount applied
+function getDiscountedServicePrice(serviceId, npc) {
+    const basePrice = getBathhouseServiceCost(serviceId);
+    const discount = getClientDiscount(npc);
+    return Math.round(basePrice * (1 - discount / 100));
+}
+
+// Get client preference description
+function getClientPreferenceDescription(npc) {
+    if (!npc || !npc.bathhouseProfile) return "";
+    
+    const profile = npc.bathhouseProfile;
+    const reputation = getReputationLevel(profile.reputation);
+    const satisfaction = getSatisfactionLevel(profile.satisfaction);
+    
+    const desc = [];
+    desc.push("Reputation: " + reputation.label);
+    desc.push("Satisfaction: " + satisfaction.label);
+    
+    if (profile.totalVisits) {
+        desc.push("Total Visits: " + profile.totalVisits);
+    }
+    
+    return desc.join(", ");
+}
+
+// Check if client gets priority service
+function clientGetsPriority(npc) {
+    if (!npc || !npc.bathhouseProfile) return false;
+    
+    const reputation = npc.bathhouseProfile.reputation || 0;
+    const satisfaction = npc.bathhouseProfile.satisfaction || 3;
+    
+    // VIP or preferred clients with high satisfaction get priority
+    return reputation >= BATHHOUSE_REPUTATION_LEVELS.PREFERRED.value &&
+           satisfaction >= CLIENT_SATISFACTION_LEVELS.SATISFIED.value;
+}
+
+// ============================================================================
+// BATHHOUSE STAFF SCHEDULING SYSTEM
+// ============================================================================
+
+// Staff shift types
+const BATHHOUSE_SHIFT_TYPES = {
+    MORNING: { id: 'morning', label: 'Morning Shift', startHour: 6, endHour: 12, description: '6 AM to 12 PM' },
+    AFTERNOON: { id: 'afternoon', label: 'Afternoon Shift', startHour: 12, endHour: 18, description: '12 PM to 6 PM' },
+    EVENING: { id: 'evening', label: 'Evening Shift', startHour: 18, endHour: 24, description: '6 PM to 12 AM' },
+    NIGHT: { id: 'night', label: 'Night Shift', startHour: 0, endHour: 6, description: '12 AM to 6 AM' }
+};
+
+// Staff work status
+const STAFF_STATUS = {
+    OFF_DUTY: 'off_duty',
+    ON_DUTY: 'on_duty',
+    ON_BREAK: 'on_break',
+    BUSY: 'busy'
+};
+
+// Initialize staff schedule for NPC
+function initializeBathhouseStaffSchedule(npc) {
+    if (!npc || !isBathhouseStaff(npc)) return null;
+    
+    // Generate schedule based on role
+    const schedule = generateStaffSchedule(npc);
+    
+    // Set initial status
+    npc.bathhouseSchedule = schedule;
+    npc.bathhouseOnDuty = false;
+    npc.bathhouseStatus = STAFF_STATUS.OFF_DUTY;
+    
+    return schedule;
+}
+
+// Check if NPC is bathhouse staff
+function isBathhouseStaff(npc) {
+    if (!npc) return false;
+    return npc.role === "Bathkeeper" || 
+           npc.role === "BathhouseAttendant" || 
+           npc.role === "BathhousePractitioner" ||
+           npc.bathhouseProvider === true;
+}
+
+// Generate staff schedule
+function generateStaffSchedule(npc) {
+    if (!npc) return null;
+    
+    // Staff work different shifts based on role
+    let shifts = [];
+    
+    if (npc.role === "Bathkeeper") {
+        // Bathkeeper works all day
+        shifts = [
+            { day: 0, shift: BATHHOUSE_SHIFT_TYPES.MORNING.id, onDuty: true },
+            { day: 0, shift: BATHHOUSE_SHIFT_TYPES.AFTERNOON.id, onDuty: true },
+            { day: 0, shift: BATHHOUSE_SHIFT_TYPES.EVENING.id, onDuty: true },
+            { day: 1, shift: BATHHOUSE_SHIFT_TYPES.MORNING.id, onDuty: true },
+            { day: 1, shift: BATHHOUSE_SHIFT_TYPES.AFTERNOON.id, onDuty: true },
+            { day: 1, shift: BATHHOUSE_SHIFT_TYPES.EVENING.id, onDuty: true },
+            { day: 2, shift: BATHHOUSE_SHIFT_TYPES.MORNING.id, onDuty: false } // Day off
+        ];
+    } else if (npc.role === "BathhousePractitioner") {
+        // Practitioners work specific shifts
+        const startDay = Math.floor(Math.random() * 3); // Random start day
+        shifts = [];
+        for (let day = 0; day < 3; day++) {
+            const dayOfWeek = (startDay + day) % 3;
+            shifts.push(
+                { day: dayOfWeek, shift: BATHHOUSE_SHIFT_TYPES.AFTERNOON.id, onDuty: true },
+                { day: dayOfWeek, shift: BATHHOUSE_SHIFT_TYPES.EVENING.id, onDuty: true }
+            );
+        }
+    } else {
+        // Attendants work varied shifts
+        shifts = [];
+        for (let day = 0; day < 7; day++) {
+            const shiftType = Object.values(BATHHOUSE_SHIFT_TYPES)[Math.floor(Math.random() * 3)];
+            shifts.push({ day: day % 3, shift: shiftType.id, onDuty: Math.random() < 0.7 }); // 70% chance on duty
+        }
+    }
+    
+    return { shifts: shifts, lastUpdated: 0 };
+}
+
+// Check if staff is on duty at current time
+function isStaffOnDuty(npc, turnOfDay) {
+    if (!npc || !npc.bathhouseSchedule || !isBathhouseStaff(npc)) return false;
+    
+    // Get current day and shift
+    const day = getCurrentDayFromTurn(turnOfDay);
+    const shift = getCurrentShiftFromTurn(turnOfDay);
+    
+    // Check schedule
+    const scheduleEntry = npc.bathhouseSchedule.shifts.find(
+        entry => entry.day === day && entry.shift === shift
+    );
+    
+    return !!(scheduleEntry && scheduleEntry.onDuty);
+}
+
+// Get current day (0-2 for 3-day cycle)
+function getCurrentDayFromTurn(turn) {
+    if (typeof getTurnOfDay === "function") {
+        const turnOfDay = typeof turn === "number" ? turn : getTurnOfDay();
+        // Simplified: 0-7 = day 0, 8-15 = day 1, 16-23 = day 2
+        return Math.floor((turnOfDay || 0) / 8) % 3;
+    }
+    return Math.floor((turn || 0) / 8) % 3;
+}
+
+// Get current shift from turn of day
+function getCurrentShiftFromTurn(turn) {
+    const turnOfDay = typeof turn === "number" ? turn : (typeof getTurnOfDay === "function" ? getTurnOfDay() : 12);
+    
+    if (turnOfDay >= 6 && turnOfDay < 12) return BATHHOUSE_SHIFT_TYPES.MORNING.id;
+    if (turnOfDay >= 12 && turnOfDay < 18) return BATHHOUSE_SHIFT_TYPES.AFTERNOON.id;
+    if (turnOfDay >= 18 && turnOfDay < 24) return BATHHOUSE_SHIFT_TYPES.EVENING.id;
+    return BATHHOUSE_SHIFT_TYPES.NIGHT.id;
+}
+
+// Update staff duty status
+function updateStaffDutyStatus(npc, turnOfDay) {
+    if (!npc || !isBathhouseStaff(npc)) return;
+    
+    const onDuty = isStaffOnDuty(npc, turnOfDay);
+    npc.bathhouseOnDuty = onDuty;
+    npc.bathhouseStatus = onDuty ? STAFF_STATUS.ON_DUTY : STAFF_STATUS.OFF_DUTY;
+    
+    return onDuty;
+}
+
+// Get staff availability description
+function getStaffAvailabilityDescription(npc) {
+    if (!npc || !isBathhouseStaff(npc)) return "";
+    
+    if (!npc.bathhouseSchedule) {
+        initializeBathhouseStaffSchedule(npc);
+    }
+    
+    const schedule = npc.bathhouseSchedule;
+    const onDuty = npc.bathhouseOnDuty;
+    
+    if (onDuty) {
+        return "Currently on duty at the bathhouse.";
+    }
+    
+    return "Currently off duty from the bathhouse.";
+}
+
+// Get staff schedule description
+function getStaffScheduleDescription(npc) {
+    if (!npc || !isBathhouseStaff(npc) || !npc.bathhouseSchedule) return "";
+    
+    const schedule = npc.bathhouseSchedule;
+    const days = ['First Day', 'Second Day', 'Third Day'];
+    
+    const desc = [];
+    desc.push(npc.name + "'s Bathhouse Schedule:");
+    
+    schedule.shifts.forEach(entry => {
+        const dayName = days[entry.day] || "Day " + entry.day;
+        const shift = BATHHOUSE_SHIFT_TYPES[entry.shift] || { label: entry.shift };
+        const status = entry.onDuty ? "On Duty" : "Off Duty";
+        desc.push("  " + dayName + " " + shift.label + ": " + status);
+    });
+    
+    return desc.join("\n");
+}
+
+// Check if player has bathhouse experience (qualified or worked before)
+function hasBathhouseExperience(player) {
+    if (!player) return false;
+    
+    // Check if player is already a qualified provider
+    if (player.bathhouseProvider === true) return true;
+    
+    // Check if player has passed any trial
+    if (player.bathhouseTraining && typeof player.bathhouseTraining === "object") {
+        const hasQualification = Object.values(player.bathhouseTraining).some(
+            record => record && record.qualified === true
+        );
+        if (hasQualification) return true;
+    }
+    
+    // Check if player has worked any shifts
+    if (player.bathhouseServicesProvided && player.bathhouseServicesProvided > 0) {
+        return true;
+    }
+    
+    return false;
+}
+
+// Player as bathhouse provider mechanics
+function setupPlayerAsBathhouseProvider(player) {
+    if (!player) return false;
+    
+    // Mark player as bathhouse provider
+    player.bathhouseProvider = true;
+    player.bathhouseProviderRole = "practitioner"; // or "attendant" based on qualification
+    player.bathhouseEarnings = player.bathhouseEarnings || 0;
+    player.bathhouseServicesProvided = player.bathhouseServicesProvided || 0;
+    player.bathhouseTipsReceived = player.bathhouseTipsReceived || 0;
+    
+    return true;
+}
+
+// Record player earnings from bathhouse service
+function recordBathhouseEarnings(player, amount, serviceId, isTip) {
+    if (!player) return;
+    
+    if (isTip) {
+        player.bathhouseTipsReceived = (player.bathhouseTipsReceived || 0) + amount;
+    } else {
+        player.bathhouseEarnings = (player.bathhouseEarnings || 0) + amount;
+    }
+    player.bathhouseServicesProvided = (player.bathhouseServicesProvided || 0) + 1;
+    
+    // Track last service for narration context
+    player.lastBathhouseService = serviceId;
+    player.lastBathhouseServiceTurn = player.storyTurn || 0;
+}
+
+// Check if player can accept a service request
+function canPlayerAcceptBathhouseRequest(player, request) {
+    if (!player || !request) return false;
+    
+    // Must be alive and conscious
+    if (player.dead || player.hp <= 0 || player.unconscious) return false;
+    
+    // Must be qualified for the service tier
+    const serviceTier = getServiceTier(request.serviceId);
+    if (serviceTier === "manual") return true; // All providers can do manual
+    if (serviceTier === "oral" || serviceTier === "intercourse") {
+        // Need qualification check
+        if (typeof bathhouseQualified === "function") {
+            return bathhouseQualified(player.currentRoom);
+        }
+        return false;
+    }
+    
+    return true;
+}
+
+// Get service tier
+function getServiceTier(serviceId) {
+    if (serviceId.startsWith("bath_manual_")) return "manual";
+    if (serviceId.startsWith("bath_oral_")) return "oral";
+    if (serviceId.startsWith("bath_intercourse_")) return "intercourse";
+    return "manual";
+}
+
 // Export function to window for NSFW system access (catalogue already exported above)
 if (typeof window !== "undefined") {
     window.queryConversationCatalogue = queryConversationCatalogue;
@@ -7487,4 +10596,53 @@ if (typeof window !== "undefined") {
     window.getNPCFactRecords = getNPCFactRecords;
     window.selectNPCFacts = selectNPCFacts;
     window.getNPCFactSelection = getNPCFactSelection;
+    // Bathhouse system exports
+    window.generateBathhouseRegularProfile = generateBathhouseRegularProfile;
+    window.generateBathhouseRumor = generateBathhouseRumor;
+    window.shouldNPCVisitBathhouseToday = shouldNPCVisitBathhouseToday;
+    window.markBathhouseVisit = markBathhouseVisit;
+    window.BATHHOUSE_REGULAR_FREQUENCY = BATHHOUSE_REGULAR_FREQUENCY;
+    window.BATHHOUSE_REGULAR_PREFERENCES = BATHHOUSE_REGULAR_PREFERENCES;
+    // NPC-to-NPC service requests and player as provider
+    window.generateBathhouseServiceRequest = generateBathhouseServiceRequest;
+    window.canNPCRequestBathhouseService = canNPCRequestBathhouseService;
+    window.canNPCProvideBathhouseService = canNPCProvideBathhouseService;
+    window.selectServiceForNPC = selectServiceForNPC;
+    window.getAvailableServices = getAvailableServices;
+    window.getBathhouseServiceCost = getBathhouseServiceCost;
+    window.getBathhouseServiceName = getBathhouseServiceName;
+    window.getProviderType = getProviderType;
+    window.getRequesterMood = getRequesterMood;
+    window.getProviderStyle = getProviderStyle;
+    window.checkServiceCompatibility = checkServiceCompatibility;
+    window.getCompatibilityNote = getCompatibilityNote;
+    window.setupPlayerAsBathhouseProvider = setupPlayerAsBathhouseProvider;
+    window.recordBathhouseEarnings = recordBathhouseEarnings;
+    window.canPlayerAcceptBathhouseRequest = canPlayerAcceptBathhouseRequest;
+    window.getServiceTier = getServiceTier;
+    window.hasBathhouseExperience = hasBathhouseExperience;
+    window.BATHHOUSE_PROVIDER_TYPES = BATHHOUSE_PROVIDER_TYPES;
+    window.BATHHOUSE_REQUEST_STATES = BATHHOUSE_REQUEST_STATES;
+    // Reputation and client relationship system
+    window.BATHHOUSE_REPUTATION_LEVELS = BATHHOUSE_REPUTATION_LEVELS;
+    window.CLIENT_SATISFACTION_LEVELS = CLIENT_SATISFACTION_LEVELS;
+    window.getReputationLevel = getReputationLevel;
+    window.getSatisfactionLevel = getSatisfactionLevel;
+    window.updateClientRelationship = updateClientRelationship;
+    window.getClientDiscount = getClientDiscount;
+    window.getDiscountedServicePrice = getDiscountedServicePrice;
+    window.getClientPreferenceDescription = getClientPreferenceDescription;
+    window.clientGetsPriority = clientGetsPriority;
+    // Staff scheduling system
+    window.BATHHOUSE_SHIFT_TYPES = BATHHOUSE_SHIFT_TYPES;
+    window.STAFF_STATUS = STAFF_STATUS;
+    window.initializeBathhouseStaffSchedule = initializeBathhouseStaffSchedule;
+    window.isBathhouseStaff = isBathhouseStaff;
+    window.generateStaffSchedule = generateStaffSchedule;
+    window.isStaffOnDuty = isStaffOnDuty;
+    window.getCurrentDayFromTurn = getCurrentDayFromTurn;
+    window.getCurrentShiftFromTurn = getCurrentShiftFromTurn;
+    window.updateStaffDutyStatus = updateStaffDutyStatus;
+    window.getStaffAvailabilityDescription = getStaffAvailabilityDescription;
+    window.getStaffScheduleDescription = getStaffScheduleDescription;
 }
