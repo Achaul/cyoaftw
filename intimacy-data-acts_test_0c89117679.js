@@ -833,17 +833,41 @@ var INTIMACY_STAGES = {
 // ============================================================================
 
 /**
+ * Dynamic acts (inventory-driven, e.g. sex toys / lube bought from a
+ * merchant) live in a side registry so the static SEX_ACTS table stays
+ * untouched. getAct/hasAct consult it, so dynamic acts flow through the
+ * whole pipeline (menu, validation, arousal, narration) like built-ins.
+ */
+var DYNAMIC_SEX_ACTS = {};
+
+function registerDynamicAct(act) {
+    if (act && act.id) DYNAMIC_SEX_ACTS[act.id] = act;
+    return act;
+}
+
+function unregisterDynamicAct(actId) {
+    if (actId) delete DYNAMIC_SEX_ACTS[actId];
+}
+
+function clearDynamicSexActs(prefix) {
+    // Always delete in place so window.DYNAMIC_SEX_ACTS stays the same object.
+    Object.keys(DYNAMIC_SEX_ACTS).forEach(function (id) {
+        if (!prefix || id.indexOf(prefix) === 0) delete DYNAMIC_SEX_ACTS[id];
+    });
+}
+
+/**
  * Get act by ID
  */
 function getAct(actId) {
-    return SEX_ACTS[actId];
+    return SEX_ACTS[actId] || DYNAMIC_SEX_ACTS[actId];
 }
 
 /**
  * Check if act exists
  */
 function hasAct(actId) {
-    return SEX_ACTS.hasOwnProperty(actId);
+    return SEX_ACTS.hasOwnProperty(actId) || DYNAMIC_SEX_ACTS.hasOwnProperty(actId);
 }
 
 /**
@@ -1365,6 +1389,10 @@ if (typeof window !== 'undefined') {
     window.PRONOUNS = PRONOUNS;
     window.getAct = getAct;
     window.hasAct = hasAct;
+    window.registerDynamicAct = registerDynamicAct;
+    window.unregisterDynamicAct = unregisterDynamicAct;
+    window.clearDynamicSexActs = clearDynamicSexActs;
+    window.DYNAMIC_SEX_ACTS = DYNAMIC_SEX_ACTS;
     window.getAllActIds = getAllActIds;
     window.getIntimacyStage = getIntimacyStage;
     window.isActionValid = isActionValid;

@@ -85893,13 +85893,17 @@ function getNPCPortraitClothing(npc) {
 
 // Bump when the prompt wording changes enough that existing portraits should
 // refresh the next time you meet the NPC (it is part of the stored hash).
-const PORTRAIT_PROMPT_VERSION = 13;
+const PORTRAIT_PROMPT_VERSION = 14;
+
+// Short style anchor placed FIRST in every prompt (and the full suffix last):
+// long identity text otherwise pushes the style past the model's token window.
+const PORTRAIT_STYLE_LEAD = "dark painted portrait, black background, dramatic rim light, ";
 
 // Shared look for every portrait: tweak these two strings to retune the style.
 // Dark, painterly dark-fantasy, subject lit out of near-black so it sits well
 // on the game's dark UI.
 const PORTRAIT_STYLE_SUFFIX = "moody low-key lighting, dramatic rim light, very dark background, " +
-    "black background, no environment visible, high detail, fantasy realism";
+    "black background, no environment visible, high detail, painterly realism";
 // Candle/fire/smoke terms are here because "candlelight" style words once made
 // the model draw candles and pipes in mouths.
 const PORTRAIT_STYLE_NEGATIVES = "bright background, white background, light background, gray background, " +
@@ -85921,6 +85925,25 @@ function getNPCPortraitTasteLabel(npc) {
         if (playerKey && npcKey === playerKey && typeof isAdultHumanoidNPC === "function" && isAdultHumanoidNPC(npc)) return "kin";
     } catch (e) { /* no kin read */ }
     return "";
+}
+
+// Ears from the species anatomy data, stated positively and up front: image
+// models default to elf ears unless the ears are named. Pointed/long ears get
+// no negative; anything else gets "pointed ears, elf ears" so the negative
+// always matches the ear phrase actually in the prompt.
+function getPortraitEarCue(entity) {
+    let morph = {};
+    try { morph = typeof getEntityMorphology === "function" ? getEntityMorphology(entity) || {} : {}; } catch (e) { morph = {}; }
+    const absent = Array.isArray(morph.absent) ? morph.absent : [];
+    if (!morph.ears && absent.some(function (part) { return /^(?:external |outer )?ears?$/i.test(String(part).trim()); })) return { text: "no external ears", negatives: "ears, pointed ears, elf ears", visible: false };
+    let phrase = "";
+    try {
+        phrase = typeof getSpeciesLookParts === "function" ? (getSpeciesLookParts(entity).filter(function (p) { return /\bears?\b/i.test(p); })[0] || "") : "";
+    } catch (e) { phrase = ""; }
+    if (!phrase) phrase = String(morph.ears || "").trim();
+    if (!phrase) return { text: "small rounded human ears", negatives: "pointed ears, elf ears", visible: true };
+    const pointedOk = /point|elf|elven|tuft|long|upright|tall|cat|feline|wolf|lupine|bat|goat|fox|hare|rabbit|fin|spike|swept/i.test(phrase);
+    return { text: /\bears?\b/i.test(phrase) ? phrase : phrase + " ears", negatives: pointedOk ? "" : "pointed ears, elf ears", visible: true };
 }
 
 // Builds the identity part of the prompt plus extra negative terms.
@@ -86026,10 +86049,19 @@ function buildNPCPortraitSubject(npc) {
         } catch (e) { nsfwAnatomy = ""; }
     }
 
+    // Ears go right after the species, and are not repeated if the face text
+    // already names them. The prompt is long enough that late terms get cut.
+    const earCue = getPortraitEarCue(npc);
+    const earText = /\bears?\b/i.test(faceText) ? "" : earCue.text;
+    if (earCue.negatives) negatives.push(earCue.negatives);
+    // Keep the identity compact so the style terms are not truncated.
+    let identityText = [subject, earText, buildPhrase, faceText, tasteText, wrinkleText].concat(others.slice(0, 2)).filter(Boolean).join(", ");
+    if (identityText.length > 380) identityText = identityText.slice(0, 380).replace(/,[^,]*$/, "");
     return {
-        text: [subject, faceText, tasteText, wrinkleText, buildPhrase].concat(others, [nsfwAnatomy]).filter(Boolean).join(", "),
+        text: [identityText, nsfwAnatomy].filter(Boolean).join(", "),
         negatives: negatives.join(", "),
-        nsfwAnatomy: nsfwAnatomy
+        nsfwAnatomy: nsfwAnatomy,
+        earsVisible: earCue.visible
     };
 }
 
@@ -86122,10 +86154,10 @@ function loadNPCPanelPortrait(npc, force) {
     // Topless NPC with NSFW anatomy terms: drop the generic clothing phrase
     // for that case only; every other prompt stays byte-identical.
     const clothingClause = subjectInfo.nsfwAnatomy ? "" : "upper torso clothing clearly visible, ";
-    const prompt = (subjectInfo.slime ? "fantasy creature portrait, entire slime visible resting on the ground, " + identity + ", subject centered, " + PORTRAIT_STYLE_SUFFIX : ("bust portrait, head, neck, shoulders and upper chest visible, " + clothingClause + "close-up of " + identity +
+    const prompt = (PORTRAIT_STYLE_LEAD + (subjectInfo.slime ? "fantasy creature portrait, entire slime visible resting on the ground, " + identity + ", subject centered, " + PORTRAIT_STYLE_SUFFIX : ("bust portrait of " + identity +
         (clothing ? ", " + clothing : "") +
-        ", " + expression + ", face fully visible, subject centered, chest-up framing, " +
-        PORTRAIT_STYLE_SUFFIX)).replace(/\s+/g, " ").trim();
+        ", " + expression + ", face fully visible" + (subjectInfo.earsVisible ? ", both ears visible" : "") + ", head, neck, shoulders and upper chest visible, " + clothingClause + "subject centered, chest-up framing, " +
+        PORTRAIT_STYLE_SUFFIX))).replace(/\s+/g, " ").trim();
     // Identity seed is fixed per NPC; only the low bits move with the
     // expression/clothing, so a refresh stays recognisably the same person.
     const identitySeed = npcPortraitHash("npc::" + (npc.id || npc.name || "") + "::" + (npc.species || ""));
@@ -86201,9 +86233,14 @@ function buildPlayerPortraitSubject(player) {
     }, true);
     const baseline = typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(player) : "";
     const speciesAppearance = typeof getSpeciesAppearanceText === "function" ? getSpeciesAppearanceText(player, true) : "";
+    const faceText = speciesAppearance || profile.face || "";
+    const earCue = getPortraitEarCue(player);
+    const earText = /\bears?\b/i.test(faceText) ? "" : earCue.text;
+    const baseNegatives = typeof getPortraitAppearanceNegatives === "function" ? getPortraitAppearanceNegatives(player, profile.negatives) : (profile.negatives || "");
     return {
-        text: ["adult", player.gender, species, speciesAppearance || profile.face].concat(highlights.filter(text => text !== baseline)).filter(Boolean).join(", "),
-        negatives: typeof getPortraitAppearanceNegatives === "function" ? getPortraitAppearanceNegatives(player, profile.negatives) : (profile.negatives || "")
+        text: ["adult", player.gender, species, earText, faceText].concat(highlights.filter(text => text !== baseline)).filter(Boolean).join(", "),
+        negatives: [baseNegatives, earCue.negatives].filter(Boolean).join(", "),
+        earsVisible: earCue.visible
     };
 }
 const PLAYER_PORTRAIT_REGENERATING = new WeakSet();
@@ -86313,9 +86350,9 @@ function getPlayerPortraitLook(player) {
 }
 function buildPlayerPortraitPrompt(look) {
     if (look.customPrompt) return look.customPrompt;
-    return ("bust portrait, head, neck, shoulders and upper chest visible, upper torso clothing clearly visible, close-up of " +
+    return (PORTRAIT_STYLE_LEAD + "bust portrait of " +
         look.subject.text + (look.clothing ? ", " + look.clothing : ", wearing a plain fantasy tunic") +
-        ", natural composed expression, face fully visible, subject centered, chest-up framing, " + PORTRAIT_STYLE_SUFFIX).replace(/\s+/g, " ").trim();
+        ", natural composed expression, face fully visible" + (look.subject.earsVisible ? ", both ears visible" : "") + ", head, neck, shoulders and upper chest visible, upper torso clothing clearly visible, subject centered, chest-up framing, " + PORTRAIT_STYLE_SUFFIX).replace(/\s+/g, " ").trim();
 }
 function loadPlayerPortrait(player) {
     if (!player || !playerPortraitEnabled()) return Promise.resolve(null);
@@ -86453,10 +86490,10 @@ function loadNPCFullPortrait(npc, force) {
     const gear = getNPCFullPortraitGear(npc);
     const hashKey = getNPCFullPortraitHashKey(npc);
     const gearClause = subjectInfo.nsfwAnatomy ? "" : "full outfit and gear clearly visible, ";
-    const prompt = (subjectInfo.slime ? "fantasy creature portrait, entire slime visible resting on the ground, " + subjectInfo.text + ", subject centered, " + PORTRAIT_STYLE_SUFFIX : ("full body portrait, standing pose, entire body visible from head to feet, " + gearClause +
+    const prompt = (PORTRAIT_STYLE_LEAD + (subjectInfo.slime ? "fantasy creature portrait, entire slime visible resting on the ground, " + subjectInfo.text + ", subject centered, " + PORTRAIT_STYLE_SUFFIX : ("full body portrait of " +
         subjectInfo.text + (gear ? ", " + gear : "") +
-        ", natural composed expression, subject centered, full-length framing, " +
-        PORTRAIT_STYLE_SUFFIX)).replace(/\s+/g, " ").trim();
+        ", natural composed expression, standing pose, entire body visible from head to feet, " + gearClause + "subject centered, full-length framing, " +
+        PORTRAIT_STYLE_SUFFIX))).replace(/\s+/g, " ").trim();
     const identitySeed = npcPortraitHash("npc::" + (npc.id || npc.name || "") + "::" + (npc.species || ""));
     const seed = (identitySeed ^ (npcPortraitHash(hashKey) & 0xFFFF)) >>> 0;
 

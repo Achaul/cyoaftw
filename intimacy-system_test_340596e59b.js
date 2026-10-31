@@ -29,6 +29,111 @@ window.__INTIMACY_SYSTEM_VERSION = "2026-10-28-004";
 
 
 // ============================================================================
+// INVENTORY-DRIVEN DYNAMIC ACTS (sex toys, lube)
+// ============================================================================
+// Items carried by the player OR the NPC (e.g. bought from the Shady
+// Merchant) become usable intimacy options. Each one is registered as a
+// dynamic act (DYNAMIC_SEX_ACTS in intimacy-data-acts.js) so the standard
+// pipeline — menu sectioning, validation, arousal, narration — treats it
+// like a built-in act. Toys offer a Head-tab (mouth) and a Midsection-tab
+// (groin) variant; lube offers a Midsection (groin) and a Head (lips) one.
+// Nothing is consumed: toys stay reusable, lube stays in the pack.
+
+function _intimacyItemKey(item) {
+    return String((item && (item._uid || item.id)) || "").replace(/[^a-z0-9_-]/gi, "");
+}
+
+function _isToyItem(item) {
+    if (!item || item.hidden || item.isHidden || item.broken || item.ruined) return false;
+    const types = [].concat(item.type || []);
+    return types.indexOf("adult-toy") >= 0;
+}
+
+function _isLubeItem(item) {
+    if (!item || item.hidden || item.isHidden || item.broken || item.ruined) return false;
+    const types = [].concat(item.type || []);
+    if (types.indexOf("nsfw") < 0 && types.indexOf("consumable") < 0) return false;
+    return /lube|lubricant/i.test(String(item.id || "") + " " + String(item.name || ""));
+}
+
+function collectIntimacyItemActs(npc, player) {
+    if (typeof clearDynamicSexActs !== "function" || typeof registerDynamicAct !== "function") return [];
+    clearDynamicSexActs("toy_");
+    clearDynamicSexActs("lube_");
+    const acts = [];
+    const owners = [player, npc];
+    for (let o = 0; o < owners.length; o++) {
+        const owner = owners[o];
+        if (!owner || !Array.isArray(owner.inventory)) continue;
+        for (const item of owner.inventory) {
+            if (!item) continue;
+            const key = _intimacyItemKey(item);
+            if (!key) continue;
+            const name = String(item.name || "item");
+            const lower = name.toLowerCase();
+            if (_isToyItem(item)) {
+                acts.push(registerDynamicAct({
+                    id: "toy_" + key + "_head", menuSection: "Head", tool: "toy", target: "mouth", verb: "use",
+                    type: ACT_TYPES.TEASE, label: "Use " + name + " on their mouth",
+                    desc: "Use your " + lower + " on their mouth and lips",
+                    arousal: { p: 6, n: 14 }, pos: [], reqCloth: CLOTHING_REQUIREMENTS.ANY, sleepingSafe: true,
+                    itemUid: item._uid || item.id, itemName: name, itemKind: "toy"
+                }));
+                acts.push(registerDynamicAct({
+                    id: "toy_" + key + "_mid", menuSection: "Midsection", tool: "toy", target: "groin", verb: "use",
+                    type: ACT_TYPES.TEASE, label: "Use " + name + " on their groin",
+                    desc: "Press your " + lower + " against their groin and genitals",
+                    arousal: { p: 8, n: 18 }, pos: [], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF,
+                    itemUid: item._uid || item.id, itemName: name, itemKind: "toy"
+                }));
+            } else if (_isLubeItem(item)) {
+                acts.push(registerDynamicAct({
+                    id: "lube_" + key + "_mid", menuSection: "Midsection", tool: "lubricant", target: "groin", verb: "apply",
+                    type: ACT_TYPES.TEASE, label: "Apply " + name,
+                    desc: "Rub " + lower + " over their groin and genitals",
+                    arousal: { p: 4, n: 8 }, pos: [], reqCloth: CLOTHING_REQUIREMENTS.BOTTOM_OFF,
+                    itemUid: item._uid || item.id, itemName: name, itemKind: "lube"
+                }));
+                acts.push(registerDynamicAct({
+                    id: "lube_" + key + "_head", menuSection: "Head", tool: "lubricant", target: "lips", verb: "apply",
+                    type: ACT_TYPES.TEASE, label: "Apply " + name + " to their lips",
+                    desc: "Coat their lips with a little " + lower,
+                    arousal: { p: 3, n: 6 }, pos: [], reqCloth: CLOTHING_REQUIREMENTS.ANY, sleepingSafe: true,
+                    itemUid: item._uid || item.id, itemName: name, itemKind: "lube"
+                }));
+            }
+        }
+    }
+    return acts.map(function (a) { return a.id; });
+}
+
+// Push the currently-registered item acts into the flat menu list, marking
+// them disabled (with the validity reason as hint) when the current state
+// does not allow them — same treatment as built-in acts.
+function injectIntimacyItemActs(flatActions, npc, player, positionId) {
+    const ids = collectIntimacyItemActs(npc, player);
+    if (!ids.length) return;
+    const clothingState = npc && npc.intimacy && npc.intimacy.clothing;
+    for (const id of ids) {
+        const act = (typeof getAct === "function") ? getAct(id) : null;
+        if (!act) continue;
+        const check = (typeof checkActionValidity === "function")
+            ? checkActionValidity(id, npc, player, positionId, clothingState)
+            : { valid: true };
+        if (check.hidden) continue;
+        flatActions.push({
+            id: id,
+            label: act.label,
+            description: act.desc,
+            type: act.type,
+            disabled: !check.valid,
+            disabledHint: check.valid ? null : (check.reason || "Not available now")
+        });
+    }
+}
+
+
+// ============================================================================
 // PLAYER GENDER RESOLUTION
 // ============================================================================
 // The engine stores the player's gender at the player object root
@@ -3845,6 +3950,9 @@ function _updateEngagedActsForAct(npc, act) {
 }
 
 async function executeIntimacyAction(npc, player, actId, positionId = null) {
+    // Rebuild inventory-driven dynamic acts (toys/lube) first so their ids
+    // resolve even if the menu was not re-rendered since the inventory changed.
+    if (typeof collectIntimacyItemActs === "function") collectIntimacyItemActs(npc, player);
     if (!npc || !player || !hasAct(actId)) return null;
     
     const act = getAct(actId);
@@ -9454,6 +9562,10 @@ function getMenuActions(npc, player, room = null, positionId = null) {
         });
     }
 
+    // Inventory-driven acts (toys / lube carried by player or NPC): they
+    // land in the Head and Midsection tabs via their menuSection field.
+    injectIntimacyItemActs(flatActions, npc, player, positionId);
+
     // Intensity rank for ordering: act type first (tease, clothing, then
     // escalating types), the disinhibition tier within a type (a kiss before
     // chest contact before hand/fingers/mouth on genitals), and "Receive"
@@ -12388,6 +12500,8 @@ function getRoomMessNotes(room) {
     window.handleClimax = handleClimax;
     window.executeIntimacyAction = executeIntimacyAction;
     window.getMenuActions = getMenuActions;
+    window.collectIntimacyItemActs = collectIntimacyItemActs;
+    window.injectIntimacyItemActs = injectIntimacyItemActs;
     window.getIntimacyActionAccent = getIntimacyActionAccent;
     window.getIntimacyLustDelta = getIntimacyLustDelta;
     window.applyIntimacyLustGain = applyIntimacyLustGain;
